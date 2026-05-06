@@ -2761,7 +2761,10 @@
     "gender": "여",
     "signed": "✓ 서명완료",
     "recordId": "2026-05-06_1778029610435|dev_moqo9i6n_ly7owa|113031800|수술실|2026-05-06",
-    "deviceId": "dev_moqo9i6n_ly7owa"
+    "deviceId": "dev_moqo9i6n_ly7owa",
+    "approved": true,
+    "approvedAt": "2026-05-06T03:40:55.600Z",
+    "approverName": "보건관리자"
   },
   {
     "no": 146,
