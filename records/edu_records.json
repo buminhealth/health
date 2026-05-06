@@ -2739,7 +2739,10 @@
     "gender": "여",
     "signed": "✓ 서명완료",
     "recordId": "2026-05-06_1778026656822|dev_moqo9i6n_ly7owa|121042601|총무팀|2026-05-06",
-    "deviceId": "dev_moqo9i6n_ly7owa"
+    "deviceId": "dev_moqo9i6n_ly7owa",
+    "approved": true,
+    "approvedAt": "2026-05-06T03:21:14.132Z",
+    "approverName": "보건관리자"
   },
   {
     "no": 145,
