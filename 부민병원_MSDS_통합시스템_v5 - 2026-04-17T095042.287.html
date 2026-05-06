@@ -19,6 +19,7 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 body{font-family:'Nanum Gothic','나눔고딕','Malgun Gothic','맑은 고딕',sans-serif;background:#f1f5f9;color:#111827;margin:0;padding:0;font-size:14px}
@@ -238,6 +239,16 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     <button class="btn btn-s" onclick="closeCfg()">닫기</button>
     <button class="btn btn-o" onclick="testEmail()" style="font-size:11px">📧 이메일 테스트</button>
   </div>
+  <!-- ★ 결재 탭 전용 도장 이름 -->
+  <div style="margin-top:14px;border-top:2px solid #c8372d;padding-top:12px;background:#fef2f2;padding:12px;border-radius:8px;border-left:4px solid #c8372d">
+    <div style="font-size:11.5px;font-weight:800;color:#c8372d;margin-bottom:6px">🔴 결재 탭 도장 이름 (✅ 결재 PDF에 표시)</div>
+    <div style="font-size:10px;color:#7f1d1d;margin-bottom:6px;line-height:1.5">
+      ※ 결재 탭에서 일괄 결재 처리 시 PDF의 결재칸에 찍히는 도장 안 이름입니다.<br>
+      ※ 변경 즉시 다음 결재부터 반영됩니다 (재시작 불필요).
+    </div>
+    <input id="cfg-stampname" class="fc" style="margin-top:2px;border-color:#c8372d;font-weight:600" placeholder="장은선">
+  </div>
+
   <!-- ★ 결재자 설정 -->
   <div style="margin-top:14px;border-top:1px solid #e2e8f0;padding-top:12px">
     <div style="font-size:11px;font-weight:800;color:#475569;margin-bottom:5px">🔏 결재자 이름 / 이메일 (날인 도장에 반영)</div>
@@ -306,6 +317,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
   <div class="tb"    id="tab-edu2"  onclick="goTab('edu2')">📋 MSDS 교육일지</div>
   <div class="tb" id="tab-ppe"   onclick="goTab('ppe')">🦺 보호구 지급수령증</div>
   <div class="tb" id="tab-chem"  onclick="goTab('chem')">⚗️ 화학물질 보고서</div>
+  <div class="tb" id="tab-apv"   onclick="goTab('apv')">✅ 결재</div>
   <div class="tb" id="tab-admin" onclick="goTab('admin')">🔐 관리자</div>
   <div id="sync-info" onclick="diagEdu()" title="클릭하면 부서별 시트값 진단" class="flex items-center ml-auto pr-3 text-[10px] text-slate-400 whitespace-nowrap flex-shrink-0 cursor-pointer hover:text-emerald-600"></div>
 </div>
@@ -851,9 +863,10 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
       <label class="chem-chip"><input type="radio" name="chem-msds-new" id="chem-msds-new-y" value="예" onchange="chemMsdsToggle('new', true)"> 예</label>
       <label class="chem-chip"><input type="radio" name="chem-msds-new" id="chem-msds-new-n" value="아니오" onchange="chemMsdsToggle('new', false)"> 아니오</label>
       <div id="chem-msds-file-wrap-new" style="display:none;margin-top:8px;padding:10px;background:#f0fdf4;border:1px dashed #86efac;border-radius:7px">
-        <div style="font-size:11px;font-weight:600;color:#15803d;margin-bottom:5px">📎 MSDS 파일 첨부 (PDF·이미지 등)</div>
+        <div style="font-size:11px;font-weight:600;color:#15803d;margin-bottom:5px">📎 MSDS 파일 첨부 (PDF·이미지·문서)</div>
         <input type="file" id="chem-msds-file-new" accept=".pdf,.png,.jpg,.jpeg,.gif,.bmp,.doc,.docx,.hwp" onchange="chemMsdsFile('new', this)" style="font-size:11px;width:100%">
         <div id="chem-msds-fname-new" style="font-size:10.5px;color:#475569;margin-top:5px"></div>
+        <div style="font-size:10px;color:#64748b;margin-top:4px">최대 15MB · 초과 시 <a href="https://smallpdf.com/kr/compress-pdf" target="_blank" style="color:#2563eb">smallpdf.com</a> 에서 압축</div>
       </div>
     </div>
     <div>
@@ -861,9 +874,10 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
       <label class="chem-chip"><input type="radio" name="chem-msds-stop" id="chem-msds-stop-y" value="예" onchange="chemMsdsToggle('stop', true)"> 예</label>
       <label class="chem-chip"><input type="radio" name="chem-msds-stop" id="chem-msds-stop-n" value="아니오" onchange="chemMsdsToggle('stop', false)"> 아니오</label>
       <div id="chem-msds-file-wrap-stop" style="display:none;margin-top:8px;padding:10px;background:#f0fdf4;border:1px dashed #86efac;border-radius:7px">
-        <div style="font-size:11px;font-weight:600;color:#15803d;margin-bottom:5px">📎 MSDS 파일 첨부 (PDF·이미지 등)</div>
+        <div style="font-size:11px;font-weight:600;color:#15803d;margin-bottom:5px">📎 MSDS 파일 첨부 (PDF·이미지·문서)</div>
         <input type="file" id="chem-msds-file-stop" accept=".pdf,.png,.jpg,.jpeg,.gif,.bmp,.doc,.docx,.hwp" onchange="chemMsdsFile('stop', this)" style="font-size:11px;width:100%">
         <div id="chem-msds-fname-stop" style="font-size:10.5px;color:#475569;margin-top:5px"></div>
+        <div style="font-size:10px;color:#64748b;margin-top:4px">최대 15MB · 초과 시 <a href="https://smallpdf.com/kr/compress-pdf" target="_blank" style="color:#2563eb">smallpdf.com</a> 에서 압축</div>
       </div>
     </div>
   </div>
@@ -902,8 +916,12 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
   <div style="margin-top:14px;background:#f1f5f9;padding:12px 14px;border-radius:8px;border:1px solid #cbd5e1">
     <div style="font-size:12px;font-weight:700;color:#1c3557;margin-bottom:6px">📧 메일 발송</div>
     <div style="font-size:11.5px;color:#475569">수신: <span id="chem-mail-to" style="font-weight:600;color:#1c3557">clover8477@bumin.co.kr</span> (관리자 설정의 ⚗️ 유해화학물질 수신 이메일)</div>
-    <div style="font-size:11px;color:#64748b;margin-top:5px">📎 메일 첨부:</div>
+    <div style="font-size:11px;color:#64748b;margin-top:5px">📎 메일에 포함될 다운로드 링크:</div>
     <div id="chem-attach-info" style="font-size:11px;color:#475569;margin-top:3px;padding:6px 10px;background:#fff;border:1px dashed #cbd5e1;border-radius:5px"></div>
+    <div style="font-size:10.5px;color:#94a3b8;margin-top:6px;line-height:1.5">
+      ※ PDF·MSDS 파일은 GitHub에 자동 업로드된 후, 메일에는 <b>다운로드 링크</b>가 포함됩니다.<br>
+      ※ EmailJS 50KB 변수 한도 때문에 base64 첨부 대신 링크 방식으로 처리됩니다.
+    </div>
   </div>
 
   <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap">
@@ -917,6 +935,97 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
 
 </div>
 </div>
+</div>
+
+
+<!-- ══ ✅ 결재 (Approval) ══ -->
+<div id="pg-apv" style="display:none;background:#f1f5f9;padding:14px 16px;min-height:calc(100vh - 110px)">
+
+  <!-- 헤더 -->
+  <div style="background:#fff;border-radius:10px;padding:14px 18px;margin-bottom:12px;border:1px solid #e2e8f0">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-size:15px;font-weight:700;color:#1c3557">✅ 교육일지 결재 <span id="apv-mode-badge" style="display:none;font-size:10.5px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:5px;margin-left:6px;font-weight:700;vertical-align:middle">📦 아카이브 모드</span></div>
+        <div style="font-size:11px;color:#64748b;margin-top:2px">특별안전보건교육일지 · MSDS 교육일지 · 일괄 결재 처리</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <!-- 용량 사용량 배지 -->
+        <div id="apv-storage-badge" onclick="apvShowStorageGuide()" style="cursor:pointer;display:flex;align-items:center;gap:5px;padding:4px 10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:7px;font-size:10.5px;color:#15803d;font-weight:600" title="저장 용량 상세 보기">
+          <span id="apv-storage-icon">💾</span>
+          <span id="apv-storage-text">0KB / 5MB (0%)</span>
+        </div>
+        <div style="font-size:11px;color:#64748b">
+          결재자: <b id="apv-approver-name" style="color:#1c3557">보건관리자</b>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 검색·필터 -->
+  <div style="background:#fff;border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid #e2e8f0">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;align-items:end">
+      <div>
+        <div style="font-size:10.5px;color:#64748b;margin-bottom:3px">교육일 시작</div>
+        <input type="date" id="apv-date-from" oninput="apvRender()" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11.5px">
+      </div>
+      <div>
+        <div style="font-size:10.5px;color:#64748b;margin-bottom:3px">교육일 종료</div>
+        <input type="date" id="apv-date-to" oninput="apvRender()" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11.5px">
+      </div>
+      <div>
+        <div style="font-size:10.5px;color:#64748b;margin-bottom:3px">교육종류</div>
+        <select id="apv-type" onchange="apvRender()" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11.5px">
+          <option value="">전체</option>
+          <option value="특별안전보건교육">📝 특별안전보건교육</option>
+          <option value="MSDS교육">📋 MSDS 교육</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:10.5px;color:#64748b;margin-bottom:3px">부서</div>
+        <input type="text" id="apv-dept" oninput="apvRender()" placeholder="부서명" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11.5px">
+      </div>
+      <div>
+        <div style="font-size:10.5px;color:#64748b;margin-bottom:3px">참석자 이름</div>
+        <input type="text" id="apv-name" oninput="apvRender()" placeholder="이름 (부분일치)" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11.5px">
+      </div>
+      <div>
+        <div style="font-size:10.5px;color:#64748b;margin-bottom:3px">결재상태</div>
+        <select id="apv-status" onchange="apvRender()" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11.5px">
+          <option value="">전체</option>
+          <option value="pending">⏳ 결재대기</option>
+          <option value="approved">✅ 결재완료</option>
+        </select>
+      </div>
+      <div>
+        <button onclick="apvResetFilter()" style="padding:6px 12px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;cursor:pointer">초기화</button>
+      </div>
+    </div>
+    <!-- 아카이브 검색 토글 (GitHub records.json 통째로 검색) -->
+    <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #e2e8f0;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11.5px;color:#475569;font-weight:600">
+        <input type="checkbox" id="apv-archive-mode" onchange="apvToggleArchive()" style="width:14px;height:14px;accent-color:#1c3557">
+        📦 GitHub 전체 검색 (정리된 옛 일지 포함)
+      </label>
+      <span id="apv-archive-status" style="font-size:10.5px;color:#94a3b8"></span>
+    </div>
+  </div>
+
+  <!-- 일괄 작업 바 -->
+  <div style="background:#fff;border-radius:10px;padding:10px 14px;margin-bottom:10px;border:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+    <div style="font-size:12px;color:#475569">
+      <label style="cursor:pointer"><input type="checkbox" id="apv-check-all" onchange="apvToggleAll(this.checked)" style="margin-right:5px"> 전체 선택</label>
+      <span style="margin-left:14px">선택: <b id="apv-sel-count" style="color:#1c3557">0</b>건 / 결재대기: <b id="apv-pending-count" style="color:#f59e0b">0</b>건 / 완료: <b id="apv-done-count" style="color:#16a34a">0</b>건</span>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button onclick="apvBatchApprove()" id="apv-btn-approve" style="padding:7px 16px;background:#1c3557;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">✅ 일괄 결재 + PDF 다운로드</button>
+      <button onclick="apvBatchDelete()" id="apv-btn-delete" style="padding:7px 14px;background:#fff;color:#b91c1c;border:1px solid #fecaca;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer" title="선택한 일지를 영구 삭제 (localStorage + GitHub records.json)">🗑 영구 삭제</button>
+    </div>
+  </div>
+
+  <!-- 일지 목록 -->
+  <div style="background:#fff;border-radius:10px;border:1px solid #e2e8f0;overflow:hidden">
+    <div id="apv-list" style="max-height:calc(100vh - 320px);overflow-y:auto"></div>
+  </div>
 </div>
 
 
@@ -1221,6 +1330,8 @@ const DEFAULT_CFG = {
   apv3Name: '행정부원장', apv3Email: '',                         // 행정부원장
   apv4Name: '병원장',     apv4Email: '',                         // 병원장
   apv1Stamp: '', apv2Stamp: '', apv3Stamp: '', apv4Stamp: '',    // 도장 이미지 URL
+  // ★ 결재 도장에 표시될 이름 (apv1Name과 별개로 관리)
+  stampName: '장은선',
 };
 let CFG={
   url:     localStorage.getItem('bm_url')     || DEFAULT_CFG.url,
@@ -1244,6 +1355,7 @@ let CFG={
   apv2Stamp: localStorage.getItem('bm_apv2Stamp') || DEFAULT_CFG.apv2Stamp,
   apv3Stamp: localStorage.getItem('bm_apv3Stamp') || DEFAULT_CFG.apv3Stamp,
   apv4Stamp: localStorage.getItem('bm_apv4Stamp') || DEFAULT_CFG.apv4Stamp,
+  stampName: localStorage.getItem('bm_stampName') || DEFAULT_CFG.stampName,  // ★ 결재 도장 이름
 };
 let empList=[], DEPT_EDU={}, MSDS_EDU={};
 let curChem=null, srchQ='', deptF='all';
@@ -1417,6 +1529,12 @@ function goTab(t){
   const chemTab=document.getElementById('tab-chem');
   if(chemTab) chemTab.className='tb'+(t==='chem'?' on':'');
 
+  // ★ 결재 탭
+  const apvEl=document.getElementById('pg-apv');
+  if(apvEl) apvEl.style.display=t==='apv'?'block':'none';
+  const apvTab=document.getElementById('tab-apv');
+  if(apvTab) apvTab.className='tb'+(t==='apv'?' on':'');
+
   document.getElementById('pg-msds').style.display=t==='msds'?'flex':'none';
   ['edu1','edu2'].forEach(p=>document.getElementById('pg-'+p).style.display=t===p?'block':'none');
   const adm=document.getElementById('pg-admin');if(adm)adm.style.display=t==='admin'?'block':'none';
@@ -1426,6 +1544,7 @@ function goTab(t){
   if(t==='edu1') e1Reset();
   if(t==='edu2') e2Reset();
   if(t==='chem') chemReset();  // ★ 화학물질 보고서 초기화
+  if(t==='apv') apvInit();     // ★ 결재 탭 초기화
 }
 
 /* ══ 교육 템플릿 GAS 로드 (구글시트 변경 즉시 반영) ══ */
@@ -2106,12 +2225,9 @@ function chemReset(){
   if(document.getElementById('chem-d-new')) document.getElementById('chem-d-new').value = today;
   // ★ 작성일도 오늘로 초기화
   if(document.getElementById('chem-doc-date')) document.getElementById('chem-doc-date').value = today;
-  // 작성자 기본값 (현재 로그인 보건관리자 또는 CFG)
-  const writerName = CFG.apv1Name || '';
-  if(writerName){
-    if(document.getElementById('chem-writer-new')) document.getElementById('chem-writer-new').value = writerName;
-    if(document.getElementById('chem-writer-stop')) document.getElementById('chem-writer-stop').value = writerName;
-  }
+  // ★ 작성자 자동 입력 제거 — 사용자가 직접 부서의 장 이름 입력
+  if(document.getElementById('chem-writer-new')) document.getElementById('chem-writer-new').value = '';
+  if(document.getElementById('chem-writer-stop')) document.getElementById('chem-writer-stop').value = '';
   // 부서 셀렉트 채우기
   chemFillDeptSelects();
   // 용량 체크박스 렌더
@@ -2309,13 +2425,18 @@ function chemMsdsFile(side, input){
     if(fnameDiv) fnameDiv.textContent = '';
     return;
   }
-  // 파일 크기 제한 (메일 첨부 한도 고려: 5MB)
-  if(file.size > 5*1024*1024){
-    toast('파일 크기는 5MB 이하여야 합니다','err');
+  // ★ 파일 크기 제한 15MB (GitHub 링크 방식이라 EmailJS 한도와 무관, GitHub API 안전선)
+  const sizeMB = file.size / 1024 / 1024;
+  if(sizeMB > 15){
+    toast(`📄 파일이 ${sizeMB.toFixed(1)}MB로 한도(15MB) 초과 — smallpdf.com 또는 ilovepdf.com 에서 압축 후 재첨부`, 'err');
     input.value = '';
     chemState[side].msdsFile = null;
-    if(fnameDiv) fnameDiv.textContent = '';
+    if(fnameDiv) fnameDiv.innerHTML = `<span style="color:#dc2626">⚠ 한도 초과 (${sizeMB.toFixed(1)}MB / 15MB)</span>`;
     return;
+  }
+  // ★ 5MB 이상이면 업로드 시간 안내 (모바일 PWA 메모리 부담 + GitHub 업로드 시간)
+  if(sizeMB > 5){
+    toast(`☁️ ${sizeMB.toFixed(1)}MB 파일 읽는 중… (큰 파일이라 10~20초 소요)`, 'info');
   }
   // base64로 읽어 저장
   const reader = new FileReader();
@@ -2327,10 +2448,11 @@ function chemMsdsFile(side, input){
       dataURL: e.target.result // data:application/pdf;base64,...
     };
     if(fnameDiv){
-      const sizeKB = (file.size/1024).toFixed(1);
-      fnameDiv.innerHTML = `✅ <b>${file.name}</b> <span style="color:#94a3b8">(${sizeKB} KB)</span>`;
+      const sizeStr = sizeMB > 1 ? sizeMB.toFixed(2)+' MB' : (file.size/1024).toFixed(1)+' KB';
+      const warn = sizeMB > 5 ? ` <span style="color:#f59e0b;font-weight:600">(큰 파일)</span>` : '';
+      fnameDiv.innerHTML = `✅ <b>${file.name}</b> <span style="color:#94a3b8">(${sizeStr})</span>${warn}`;
     }
-    toast(`📎 ${file.name} 첨부됨`,'ok');
+    toast(`📎 ${file.name} 첨부됨 (${sizeMB.toFixed(2)} MB)`,'ok');
   };
   reader.onerror = () => {
     toast('파일 읽기 오류','err');
@@ -2728,10 +2850,10 @@ async function chemSendEmail(d, fname, pdfB64){
   const N='#1c3557', LB='#e8ecf2', BD='#b0bece';
   const summaryRows = [];
   if(d.isNew){
-    summaryRows.push(`<tr><td style="padding:6px 10px;border:1px solid ${BD};background:${LB};font-weight:bold">신규사용</td><td style="padding:6px 10px;border:1px solid ${BD}">${d.new.product||''} (${d.new.dept||''}) · ${d.new.date||''}</td></tr>`);
+    summaryRows.push(`<tr><td style="padding:5px 9px;border:1px solid ${BD};background:${LB};font-weight:700;width:70px;color:${N};font-size:11px">신규사용</td><td style="padding:5px 9px;border:1px solid ${BD};font-size:11px">${d.new.product||''} <span style="color:#94a3b8">(${d.new.dept||''} · ${d.new.date||''})</span></td></tr>`);
   }
   if(d.isStop){
-    summaryRows.push(`<tr><td style="padding:6px 10px;border:1px solid ${BD};background:${LB};font-weight:bold">사용중단</td><td style="padding:6px 10px;border:1px solid ${BD}">${d.stop.product||''} (${d.stop.dept||''}) · ${d.stop.date||''}</td></tr>`);
+    summaryRows.push(`<tr><td style="padding:5px 9px;border:1px solid ${BD};background:${LB};font-weight:700;width:70px;color:${N};font-size:11px">사용중단</td><td style="padding:5px 9px;border:1px solid ${BD};font-size:11px">${d.stop.product||''} <span style="color:#94a3b8">(${d.stop.dept||''} · ${d.stop.date||''})</span></td></tr>`);
   }
   const allMats = [...d.new.mats, ...d.stop.mats].filter(m=>m.name);
   const matStr = allMats.map(m=>m.name+(m.cas?` (CAS: ${m.cas})`:'')).join(', ');
@@ -2745,29 +2867,22 @@ async function chemSendEmail(d, fname, pdfB64){
     ? attachedFiles.map(a=>`📎 ${a.file.name} (${(a.file.size/1024).toFixed(1)} KB)`).join('<br>')
     : '없음';
 
-  const msgHtml = `<div style="font-family:'Malgun Gothic',sans-serif;color:#222;padding:10px">
-    <div style="background:${N};color:#fff;padding:12px 16px;border-radius:6px 6px 0 0;display:flex;justify-content:space-between;align-items:center">
-      <div>
-        <div style="font-size:11px;opacity:0.85">인당의료재단 부민병원</div>
-        <div style="font-size:15px;font-weight:bold;margin-top:2px">유해화학물질 신규 사용 및 중단 보고서</div>
-      </div>
-      <div style="background:rgba(255,255,255,0.18);padding:5px 10px;border-radius:5px;font-size:11px">
-        <div style="opacity:0.85;font-size:9px">작성일</div>
-        <div style="font-weight:700">${d.docDate||''}</div>
+  // ★ 컴팩트 메일 본문 (padding·폰트·간격 모두 축소)
+  const msgHtml = `<div style="font-family:'Malgun Gothic',sans-serif;color:#222;padding:6px;max-width:680px">
+    <div style="background:${N};color:#fff;padding:8px 14px;border-radius:4px 4px 0 0;display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:12px;font-weight:700;letter-spacing:0.3px">⚗️ 유해화학물질 신규 사용 및 중단 보고서<span style="opacity:0.7;font-weight:400;font-size:10px;margin-left:6px">· 인당의료재단 부민병원</span></div>
+      <div style="font-size:10.5px;opacity:0.95;white-space:nowrap">작성일 <b>${d.docDate||''}</b></div>
+    </div>
+    <div style="border:1px solid ${BD};border-top:none;padding:10px 14px;background:#fff">
+      <p style="font-size:11.5px;margin:0 0 8px;color:#475569">아래와 같이 유해화학물질 사용 보고서를 제출합니다.</p>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px">${summaryRows.join('')}</table>
+      <div style="font-size:11px;color:#444;line-height:1.65;background:#fafbfc;padding:8px 10px;border-radius:4px;border:1px solid #eef2f6">
+        <b style="color:${N}">물질</b> ${matStr||'-'}<br>
+        <b style="color:${N}">보고서 PDF</b> ${fname}
       </div>
     </div>
-    <div style="border:1px solid ${BD};border-top:none;padding:14px 16px;background:#fff">
-      <p style="font-size:13px;margin:0 0 10px">아래와 같이 유해화학물질 사용 보고서를 제출합니다.</p>
-      <table style="width:100%;border-collapse:collapse;font-size:12px">${summaryRows.join('')}</table>
-      <div style="margin-top:14px;font-size:12px;color:#444">
-        <b>물질:</b> ${matStr||'-'}<br>
-        <b>작성일:</b> ${d.docDate}<br>
-        <b>보고서 PDF:</b> ${fname}<br>
-        <b>MSDS 첨부:</b><br>${attachInfo}
-      </div>
-    </div>
-    <div style="font-size:10px;color:#888;text-align:center;margin-top:8px;padding:6px">
-      본 보고서는 산업안전보건법 제41조에 의거한 화학물질 관리 문서입니다.
+    <div style="font-size:9.5px;color:#94a3b8;text-align:center;margin-top:6px;padding:3px">
+      ※ 본 보고서는 산업안전보건법 제41조에 의거한 화학물질 관리 문서입니다.
     </div>
   </div>`;
 
@@ -2792,7 +2907,53 @@ async function chemSendEmail(d, fname, pdfB64){
                 || (CFG.emailPpe && CFG.emailPpe.trim())
                 || CFG.email;
 
-    // ★ EmailJS의 attachment 파라미터 — 보고서 PDF + MSDS 파일들
+    // ★ STEP 1/3: GitHub에 PDF·MSDS 먼저 업로드하여 다운로드 링크 확보
+    //    (EmailJS 50KB 변수 한도 때문에 base64 첨부 대신 링크 방식)
+    toast('☁️ GitHub 업로드 중…','info');
+
+    let pdfUrl = '';
+    if(CFG.ghToken){
+      pdfUrl = await chemUploadPdfToGitHub(pdfB64, fname);
+    }
+
+    let msdsNewUrl = '';
+    let msdsStopUrl = '';
+    if(CFG.ghToken){
+      if(d.new.msdsFile){
+        const path = `records/chem_msds/신규_${Date.now()}_${d.new.msdsFile.name}`;
+        msdsNewUrl = await uploadFileToGitHub(d.new.msdsFile.dataURL, path) || '';
+      }
+      if(d.stop.msdsFile){
+        const path = `records/chem_msds/중단_${Date.now()}_${d.stop.msdsFile.name}`;
+        msdsStopUrl = await uploadFileToGitHub(d.stop.msdsFile.dataURL, path) || '';
+      }
+    }
+
+    // ★ 메일 본문에 다운로드 링크 섹션 추가 (HTML 클릭 가능, 한 줄 구조)
+    const linkRow = (label, url, fileName, sizeKb) => {
+      if(!url) return `<tr><td style="padding:5px 9px;border:1px solid ${BD};background:#fafbfc;color:#94a3b8;font-size:11px">${label}: <i>업로드 실패 — GitHub 토큰 확인 필요</i></td></tr>`;
+      const sizeStr = sizeKb ? `<span style="color:#94a3b8;font-size:10px;margin-left:4px">(${sizeKb} KB)</span>` : '';
+      return `<tr><td style="padding:6px 10px;border:1px solid ${BD};background:#fafbfc;font-size:11px;line-height:1.5">
+        <span style="font-weight:700;color:${N};display:inline-block;min-width:80px">📎 ${label}</span>
+        <a href="${url}" style="color:#2563eb;text-decoration:underline;word-break:break-all">${fileName}</a>${sizeStr}
+      </td></tr>`;
+    };
+
+    const downloadRows = [
+      linkRow('보고서 PDF', pdfUrl, fname),
+      d.new.msdsFile ? linkRow('신규 MSDS', msdsNewUrl, d.new.msdsFile.name, (d.new.msdsFile.size/1024).toFixed(1)) : '',
+      d.stop.msdsFile ? linkRow('중단 MSDS', msdsStopUrl, d.stop.msdsFile.name, (d.stop.msdsFile.size/1024).toFixed(1)) : ''
+    ].filter(Boolean).join('');
+
+    // 본문 HTML 갱신: 보고서 PDF 라인 뒤에 다운로드 섹션 삽입 (대체)
+    const msgHtmlWithLinks = msgHtml.replace(
+      `<b style="color:${N}">보고서 PDF</b> ${fname}`,
+      `<b style="color:${N}">📎 첨부 다운로드</b>
+       <table style="width:100%;border-collapse:collapse;margin-top:5px">${downloadRows}</table>
+       <div style="margin-top:4px;font-size:9.5px;color:#94a3b8">※ 링크 클릭 시 GitHub에서 다운로드 · 사내망에서 GitHub 접속 가능 여부 확인 필요</div>`
+    );
+
+    // ★ EmailJS params — base64 첨부 변수 모두 제거 (50KB 한도 안에 들어감)
     const params = {
       to_email: chemTo,
       subject: `[유해화학물질보고서] ${tag} · ${dept} · ${prod} · ${date}`,
@@ -2802,38 +2963,19 @@ async function chemSendEmail(d, fname, pdfB64){
       participants: '1명',
       sig_count: '서명완료',
       names: writer,
-      message: msgHtml,
-      // ★ 보고서 PDF (교육일지처럼 메일에 직접 첨부)
-      attachment_pdf: pdfB64,
-      attachment_pdf_name: fname
+      message: msgHtmlWithLinks
+      // ※ attachment_pdf 등 base64 변수 제거 — GitHub 링크로 대체
     };
-
-    // ★ MSDS 첨부 파일 (최대 2개)
-    if(d.new.msdsFile){
-      params.attachment_msds_new = d.new.msdsFile.dataURL;
-      params.attachment_msds_new_name = '신규_'+d.new.msdsFile.name;
-    }
-    if(d.stop.msdsFile){
-      params.attachment_msds_stop = d.stop.msdsFile.dataURL;
-      params.attachment_msds_stop_name = '중단_'+d.stop.msdsFile.name;
-    }
 
     await emailjs.send(CFG.ejsSvc, CFG.ejsTpl, params);
 
-    const cnt = 1 + (d.new.msdsFile?1:0) + (d.stop.msdsFile?1:0);
-    toast(`📧 메일 발송 완료 — PDF + MSDS ${cnt-1}개 첨부 (${chemTo})`,'ok');
+    const cntMsds = (d.new.msdsFile?1:0) + (d.stop.msdsFile?1:0);
+    toast(`📧 메일 발송 완료 — PDF + MSDS ${cntMsds}개 다운로드 링크 (${chemTo})`,'ok');
 
-    // GitHub PDF 백업
+    // GitHub 업로드 결과 토스트
     if(CFG.ghToken){
-      const gl = await uploadPdfToGitHub(pdfB64, fname);
-      if(gl) toast('✅ GitHub PDF 백업 완료','ok');
-      // MSDS 파일도 GitHub에 백업
-      if(d.new.msdsFile){
-        try{ await uploadFileToGitHub(d.new.msdsFile.dataURL, 'records/chem_msds/신규_'+Date.now()+'_'+d.new.msdsFile.name); }catch(e){}
-      }
-      if(d.stop.msdsFile){
-        try{ await uploadFileToGitHub(d.stop.msdsFile.dataURL, 'records/chem_msds/중단_'+Date.now()+'_'+d.stop.msdsFile.name); }catch(e){}
-      }
+      if(pdfUrl) toast('✅ GitHub PDF 백업 완료','ok');
+      else toast('⚠ GitHub PDF 백업 실패 — 토큰/저장소 권한 확인','err');
     }
   } catch(err){
     toast('이메일 오류: '+(err.text||err.message||err),'err');
@@ -2868,8 +3010,39 @@ async function uploadFileToGitHub(dataURL, path){
     console.warn('uploadFileToGitHub 실패:', res.status);
     return null;
   }
-  const j = await res.json();
-  return j.content && j.content.html_url;
+  // ★ raw URL 반환 (직접 다운로드 가능, 메일 링크용)
+  const [owner, repoName] = CFG.ghRepo.split('/');
+  return `https://raw.githubusercontent.com/${owner}/${repoName}/main/${path}`;
+}
+
+/* ── chem 전용: PDF를 화학물질/YYYY-MM 폴더에 업로드 후 raw URL 반환 ── */
+async function chemUploadPdfToGitHub(pdfBase64, fileName){
+  if(!CFG.ghToken) return '';
+  const repo = CFG.ghRepo || 'buminhealth/health';
+  const base64 = pdfBase64.includes(',') ? pdfBase64.split(',')[1] : pdfBase64;
+  const ym = new Date().toISOString().slice(0,7);
+  const path = `화학물질/${ym}/${fileName}`;
+  const url = `https://api.github.com/repos/${repo}/contents/${encodeURIComponent(path)}`;
+  try{
+    let sha = '';
+    try{
+      const check = await fetch(url, {headers:{'Authorization':'token '+CFG.ghToken}});
+      if(check.ok){ const j=await check.json(); sha=j.sha||''; }
+    }catch(e){}
+    const body = {message:`화학물질 보고서 업로드: ${fileName}`, content: base64};
+    if(sha) body.sha = sha;
+    const res = await fetch(url, {
+      method:'PUT',
+      headers:{'Authorization':'token '+CFG.ghToken,'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    if(!res.ok) return '';
+    const [owner, repoName] = repo.split('/');
+    return `https://raw.githubusercontent.com/${owner}/${repoName}/main/${path}`;
+  }catch(err){
+    console.error('chemUploadPdfToGitHub error:', err);
+    return '';
+  }
 }
 
 /* ── localStorage + GitHub 백업 ── */
@@ -3687,9 +3860,9 @@ async function e1GenPDF(){
       </div>
       <table style="width:100%;border-collapse:collapse">
         <thead><tr style="background:${P.bgHead}">
-          <th style="border:1.2px solid ${P.borderHd};padding:8px 4px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:30px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle">번호</th>
-          <th style="border:1.2px solid ${P.borderHd};padding:8px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle">성 명</th>
-          <th style="border:1.2px solid ${P.borderHd};padding:8px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle">서 명</th>
+          <th style="border:1.2px solid ${P.borderHd};padding:6px 4px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:36px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle;white-space:nowrap">번호</th>
+          <th style="border:1.2px solid ${P.borderHd};padding:6px 4px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:60px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle;white-space:nowrap">성명</th>
+          <th style="border:1.2px solid ${P.borderHd};padding:6px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle;white-space:nowrap">서명</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>`;
@@ -3823,6 +3996,7 @@ async function e1GenPDF(){
       pdf.save(`특별안전보건교육일지-${dept}-${e1NmStr}-${ds}.pdf`);
     toast('PDF 저장 완료 ✓  Drive 업로드 중…','ok');
     // ★ 교육이력 로컬 저장 → 관리자 즉시 업데이트
+    const _e1FileName = `특별안전보건교육일지-${dept}-${e1NmStr}-${ds}.pdf`;
     saveEduRecord({
       type:'특별안전보건교육',
       dept, chem,
@@ -3833,7 +4007,8 @@ async function e1GenPDF(){
       names: e1.parts.map(p=>p.name).join('|'),
       empNos: e1.parts.map(p=>p.empNo||'').join('|'),
       joinDates: e1.parts.map(p=>p.join||'').join('|'),
-      genders: e1.parts.map(p=>p.gender||'').join('|')
+      genders: e1.parts.map(p=>p.gender||'').join('|'),
+      fileName: _e1FileName  // ★ 결재 시 PDF 가져오기 위해 저장
     });
     // ★ Drive 업로드 → 이메일 발송
     const e1PdfB64 = pdf.output('datauristring');
@@ -3921,7 +4096,7 @@ async function e2GenPDF(){
     const sig = e2.sigData[i]||null;
     const bg  = i%2===0 ? P.bgWhite : P.bgStripe;
     partRows += `<tr style="height:52px" data-sig-row="1">
-      <td style="border:1.2px solid ${P.border};text-align:center;font-size:12px;font-weight:700;color:${P.navy};background:${P.bgHead};width:26px;vertical-align:middle;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif">${p?i+1:''}</td>
+      <td style="border:1.2px solid ${P.border};text-align:center;font-size:12px;font-weight:700;color:${P.navy};background:${P.bgHead};width:36px;vertical-align:middle;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif">${p?i+1:''}</td>
       <td style="border:1.2px solid ${P.border};font-size:12px;font-weight:700;text-align:center;background:${bg};color:${P.txt};vertical-align:middle;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif">${p?.name||''}</td>
       <td style="border:1.2px solid ${P.border};font-size:12px;font-weight:400;text-align:center;background:${bg};color:${P.txtSub};vertical-align:middle;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;font-variant-numeric:tabular-nums">${p?.join||''}</td>
       <td style="border:1.2px solid ${P.border};font-size:12px;font-weight:400;text-align:center;background:${bg};color:${P.txtSub};vertical-align:middle;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;font-variant-numeric:tabular-nums">${p?.edu||ds||''}</td>
@@ -4007,11 +4182,11 @@ async function e2GenPDF(){
     <table style="width:100%;border-collapse:collapse">
       <thead>
         <tr style="background:${P.bgHead}">
-          <th style="border:1.2px solid ${P.borderHd};padding:8px 4px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:26px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle">번호</th>
-          <th style="border:1.2px solid ${P.borderHd};padding:8px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle">성 명</th>
-          <th style="border:1.2px solid ${P.borderHd};padding:8px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:90px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle">입사일</th>
-          <th style="border:1.2px solid ${P.borderHd};padding:8px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:90px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle">교육일</th>
-          <th style="border:1.2px solid ${P.borderHd};padding:8px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:130px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle">서 명</th>
+          <th style="border:1.2px solid ${P.borderHd};padding:6px 4px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:36px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle;white-space:nowrap">번호</th>
+          <th style="border:1.2px solid ${P.borderHd};padding:6px 4px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:60px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle;white-space:nowrap">성명</th>
+          <th style="border:1.2px solid ${P.borderHd};padding:6px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:90px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle;white-space:nowrap">입사일</th>
+          <th style="border:1.2px solid ${P.borderHd};padding:6px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:90px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle;white-space:nowrap">교육일</th>
+          <th style="border:1.2px solid ${P.borderHd};padding:6px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:130px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle;white-space:nowrap">서명</th>
         </tr>
       </thead>
       <tbody>${partRows}</tbody>
@@ -4038,6 +4213,7 @@ async function e2GenPDF(){
       pdf.save(`MSDS교육일지-${dept}-${e2NmStr}-${ds}.pdf`);
     toast('PDF 저장 완료 ✓  Drive 업로드 중…','ok');
     // ★ 교육이력 로컬 저장 → 관리자 즉시 업데이트
+    const _e2FileName = `MSDS교육일지-${dept}-${e2NmStr}-${ds}.pdf`;
     saveEduRecord({
       type:'MSDS교육',
       dept, chem,
@@ -4048,7 +4224,8 @@ async function e2GenPDF(){
       names: e2.parts.map(p=>p.name).join('|'),
       empNos: e2.parts.map(p=>p.empNo||'').join('|'),
       joinDates: e2.parts.map(p=>p.join||'').join('|'),
-      genders: e2.parts.map(p=>p.gender||'').join('|')
+      genders: e2.parts.map(p=>p.gender||'').join('|'),
+      fileName: _e2FileName  // ★ 결재 시 PDF 가져오기 위해 저장
     });
     // ★ Drive 업로드 → 이메일 발송
     const e2PdfB64 = pdf.output('datauristring');
@@ -4137,6 +4314,1186 @@ async function e2SendEmail(){
   const dept=document.getElementById('e2-dept').value,ds=document.getElementById('e2-ds').value;
   await e2SendEmailAuto(dept, e2.chems.join(', '), ds, '');
 }
+
+/* ════════════════════════════════════════════════════════
+   ✅ 결재 모듈 (Approval) — e1/e2만, 본인 결재, 일괄 PDF
+   ════════════════════════════════════════════════════════ */
+
+const apvState = {
+  groups: [],      // 일지 단위로 그룹화된 데이터
+  selected: new Set(),  // 선택된 그룹 키
+  resizeBound: false,  // resize 이벤트 1회 바인딩
+  archiveMode: false,  // ★ GitHub 전체 검색 모드
+  archiveRecords: null // GitHub에서 로드한 records 캐시
+};
+
+/* ── 결재탭 진입 시 호출 ── */
+/* ── 결재 탭이 열려있으면 즉시 재렌더 (관리자 삭제/수정 시 호출) ── */
+window.apvRefreshIfOpen = function(){
+  try{
+    const apvPage = document.getElementById('pg-apv');
+    if(apvPage && apvPage.style.display !== 'none'){
+      // 아카이브 모드면 archiveRecords도 함께 갱신
+      if(apvState.archiveMode && apvState.archiveRecords){
+        // 묘비 처리된 records가 GitHub에 반영됐을 수 있으니 다시 fetch
+        apvLoadFromGitHub().then(()=>{
+          apvLoadAndRender();
+        }).catch(()=>apvLoadAndRender());
+      }else{
+        apvLoadAndRender();
+      }
+      console.log('[apvRefreshIfOpen] 결재 탭 자동 갱신');
+    }
+  }catch(e){ console.warn('[apvRefreshIfOpen] 실패:',e); }
+};
+
+function apvInit(){
+  // 결재자 이름 표시 (stampName 우선 → apv1Name → 기본)
+  const nameEl = document.getElementById('apv-approver-name');
+  if(nameEl) nameEl.textContent = (CFG.stampName && CFG.stampName.trim()) || CFG.apv1Name || '장은선';
+  // 용량 체크 + 알람
+  apvCheckStorage();
+  // 화면 폭 변경 시 자동 재렌더 (디바운스)
+  if(!apvState.resizeBound){
+    let _t;
+    window.addEventListener('resize', ()=>{
+      clearTimeout(_t);
+      _t = setTimeout(()=>{
+        if(document.getElementById('pg-apv').style.display !== 'none'){
+          apvRender();
+        }
+      }, 250);
+    });
+    apvState.resizeBound = true;
+  }
+  // 첫 렌더링 (즉시 화면 표시)
+  apvLoadAndRender();
+  // ★ 백그라운드: 다른 PC에서 결재한 정보 자동 머지 (네트워크 응답 대기 안 함)
+  setTimeout(async ()=>{
+    try{
+      const merged = await apvSyncApprovalsFromGitHub();
+      if(merged > 0){
+        toast(`🔄 다른 기기 결재 정보 ${merged}건 자동 동기화`,'info');
+        apvLoadAndRender();
+      }
+    }catch(e){ console.warn('apvSyncApprovalsFromGitHub:',e); }
+  }, 500);
+}
+
+/* ── localStorage 사용량 측정 + 임계값 알람 ── */
+function apvGetStorageInfo(){
+  // localStorage 전체 사용량 (UTF-16 = 2bytes per char)
+  let totalBytes = 0;
+  for(let key in localStorage){
+    if(localStorage.hasOwnProperty(key)){
+      totalBytes += (localStorage[key].length + key.length) * 2;
+    }
+  }
+  // edu_records만 별도 측정
+  const eduRecords = localStorage.getItem('bm_edu_records') || '[]';
+  const eduBytes = eduRecords.length * 2;
+  let recordCount = 0;
+  try{ recordCount = JSON.parse(eduRecords).length; }catch(e){}
+
+  const limitBytes = 5 * 1024 * 1024;  // 5MB (브라우저 표준 한도)
+  const totalKB = Math.round(totalBytes / 1024);
+  const limitKB = Math.round(limitBytes / 1024);
+  const percent = Math.round((totalBytes / limitBytes) * 100);
+
+  // 1년 = 약 1,800행 가정. 현재 행 수로 사용 기간 추정
+  const yearsUsed = recordCount / 1800;
+  // 추정 남은 기간: (5MB - 사용량) / (현재 평균 사용량/년)
+  const usedBytesPerYear = yearsUsed > 0.1 ? totalBytes / yearsUsed : 900000; // 기본 900KB/년
+  const yearsLeft = Math.max(0, (limitBytes - totalBytes) / usedBytesPerYear);
+
+  // 임계 단계
+  let level = 'safe';        // < 60% 안전
+  let icon = '💾';
+  let color = '#15803d';
+  let bg = '#f0fdf4';
+  let border = '#bbf7d0';
+  if(percent >= 80){
+    level = 'danger';        // ≥ 80% 위험
+    icon = '🚨';
+    color = '#b91c1c';
+    bg = '#fef2f2';
+    border = '#fecaca';
+  }else if(percent >= 60){
+    level = 'warning';       // 60~79% 경고
+    icon = '⚠️';
+    color = '#b45309';
+    bg = '#fffbeb';
+    border = '#fde68a';
+  }
+  return {
+    totalKB, limitKB, percent, level, icon, color, bg, border,
+    recordCount, yearsUsed: yearsUsed.toFixed(1), yearsLeft: yearsLeft.toFixed(1),
+    eduKB: Math.round(eduBytes/1024)
+  };
+}
+
+/* ── 결재탭 헤더 용량 배지 갱신 + 위험 시 알람 ── */
+function apvCheckStorage(){
+  const info = apvGetStorageInfo();
+  const badge = document.getElementById('apv-storage-badge');
+  const iconEl = document.getElementById('apv-storage-icon');
+  const textEl = document.getElementById('apv-storage-text');
+  if(badge){
+    badge.style.background = info.bg;
+    badge.style.borderColor = info.border;
+    badge.style.color = info.color;
+    iconEl.textContent = info.icon;
+    textEl.textContent = `${info.totalKB.toLocaleString()}KB / ${(info.limitKB/1024).toFixed(0)}MB (${info.percent}%)`;
+  }
+  // 위험 단계 한 번만 토스트 (세션당 1회)
+  if(info.level === 'danger' && !sessionStorage.getItem('_apv_storage_warned')){
+    sessionStorage.setItem('_apv_storage_warned','1');
+    setTimeout(()=>{
+      toast(`🚨 저장 용량 ${info.percent}% 사용 중! 정리 권장`,'err');
+      apvShowStorageGuide();
+    }, 800);
+  }else if(info.level === 'warning' && !sessionStorage.getItem('_apv_storage_warned_l2')){
+    sessionStorage.setItem('_apv_storage_warned_l2','1');
+    setTimeout(()=>{
+      toast(`⚠️ 저장 용량 ${info.percent}% — 1년 내 정리 필요`,'info');
+    }, 800);
+  }
+}
+
+/* ── 용량 가이드 모달 표시 ── */
+function apvShowStorageGuide(){
+  const info = apvGetStorageInfo();
+  // 기존 모달 있으면 제거
+  const old = document.getElementById('apv-storage-modal');
+  if(old) old.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'apv-storage-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:12px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,.2)">
+      <div style="background:${info.bg};border-bottom:1px solid ${info.border};padding:14px 20px;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:15px;font-weight:800;color:${info.color}">${info.icon} 저장 용량 현황</div>
+          <div style="font-size:11px;color:#64748b;margin-top:2px">localStorage 사용량 분석</div>
+        </div>
+        <button onclick="document.getElementById('apv-storage-modal').remove()" style="background:none;border:none;font-size:22px;color:#64748b;cursor:pointer;padding:0 4px">✕</button>
+      </div>
+      <div style="padding:20px">
+        <!-- 게이지 -->
+        <div style="margin-bottom:18px">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b;margin-bottom:5px">
+            <span>현재 사용</span>
+            <span><b style="color:${info.color}">${info.totalKB.toLocaleString()}KB</b> / 5,120KB</span>
+          </div>
+          <div style="height:14px;background:#f1f5f9;border-radius:7px;overflow:hidden">
+            <div style="height:100%;width:${Math.min(100,info.percent)}%;background:${info.color};transition:width .5s"></div>
+          </div>
+          <div style="font-size:11px;color:${info.color};margin-top:5px;font-weight:600">${info.percent}% 사용 중 — ${info.level==='safe'?'✅ 안전':info.level==='warning'?'⚠️ 정리 권장':'🚨 즉시 정리 필요'}</div>
+        </div>
+
+        <!-- 통계 -->
+        <div style="background:#f8fafc;border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div><span style="color:#64748b">📋 누적 records</span><br><b style="color:#1c3557;font-size:14px">${info.recordCount.toLocaleString()}건</b></div>
+            <div><span style="color:#64748b">📅 사용 기간</span><br><b style="color:#1c3557;font-size:14px">${info.yearsUsed}년</b></div>
+            <div><span style="color:#64748b">💾 records 용량</span><br><b style="color:#1c3557;font-size:14px">${info.eduKB}KB</b></div>
+            <div><span style="color:#64748b">⏳ 추정 남은 기간</span><br><b style="color:${info.level==='safe'?'#15803d':info.color};font-size:14px">${info.yearsLeft}년</b></div>
+          </div>
+        </div>
+
+        <!-- 임계값 단계 안내 -->
+        <div style="font-size:11.5px;color:#475569;margin-bottom:8px;font-weight:700">📊 임계값 단계</div>
+        <div style="font-size:11.5px;line-height:1.7;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;margin-bottom:14px">
+          <div><span style="color:#15803d;font-weight:700">✅ 안전 (~60%)</span>: 그대로 사용 가능</div>
+          <div><span style="color:#b45309;font-weight:700">⚠️ 경고 (60~79%)</span>: 1년 이내 정리 권장</div>
+          <div><span style="color:#b91c1c;font-weight:700">🚨 위험 (80%+)</span>: 즉시 정리 필요 — 한도 도달 시 신규 일지 저장 실패</div>
+        </div>
+
+        <!-- 대응 방법 -->
+        <div style="font-size:11.5px;color:#475569;margin-bottom:8px;font-weight:700">🛠 한도 도달 시 대응 방법</div>
+        <div style="font-size:11.5px;line-height:1.7;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px">
+          <div style="margin-bottom:7px"><b style="color:#1c3557">방법 1. 옛 records 정리 (권장)</b><br>
+            <span style="color:#64748b;display:block;margin-left:8px">→ 관리자 모드 → 교육이력 → 1~2년 전 데이터 일괄 삭제</span>
+            <span style="color:#64748b;display:block;margin-left:8px">→ GitHub records/edu_records.json에는 자동 백업되어 있음 (영구 보관)</span>
+          </div>
+          <div style="margin-bottom:7px"><b style="color:#1c3557">방법 2. localStorage 완전 초기화</b><br>
+            <span style="color:#64748b;display:block;margin-left:8px">→ 새 기기에서 GitHub 동기화로 최신 데이터만 다시 받음</span>
+            <span style="color:#64748b;display:block;margin-left:8px">→ 옛 데이터는 GitHub에서 언제든 조회 가능</span>
+          </div>
+          <div><b style="color:#1c3557">방법 3. 결재완료 records 별도 보관</b><br>
+            <span style="color:#64748b;display:block;margin-left:8px">→ 결재 완료된 일지는 GitHub PDF로 영구 저장됨</span>
+            <span style="color:#64748b;display:block;margin-left:8px">→ localStorage에서는 최근 1~2년치만 유지</span>
+          </div>
+        </div>
+
+        <!-- 자동 알람 안내 -->
+        <div style="font-size:10.5px;color:#94a3b8;background:#f8fafc;border-radius:6px;padding:8px 12px">
+          ℹ️ 60% 이상 시 결재탭 진입 때 자동 알림 · 80% 이상 시 강한 경고
+        </div>
+
+        <!-- 버튼 -->
+        <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+          ${info.level !== 'safe' ? `<button onclick="goTab('admin');document.getElementById('apv-storage-modal').remove()" style="padding:8px 16px;background:#1c3557;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">관리자 모드로 이동</button>` : ''}
+          <button onclick="document.getElementById('apv-storage-modal').remove()" style="padding:8px 16px;background:#f1f5f9;color:#1c3557;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">닫기</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+/* ── records 로드 + 일지 단위 그룹화 ── */
+function apvLoadAndRender(){
+  // ★ 아카이브 모드: GitHub records.json 사용 (캐시됨)
+  // 일반 모드: localStorage 사용
+  let records = [];
+  if(apvState.archiveMode && apvState.archiveRecords){
+    records = apvState.archiveRecords;
+  }else{
+    try{ records = JSON.parse(localStorage.getItem('bm_edu_records')||'[]'); }catch(e){}
+  }
+
+  // 일지 단위 그룹화 (submitted 시각 + dept + chem + dateStart 기준)
+  const groupMap = new Map();
+  records.forEach(r => {
+    const key = `${r.submitted}__${r.dept}__${r.dateStart}__${r.type}`;
+    if(!groupMap.has(key)){
+      groupMap.set(key, {
+        groupKey: key,
+        type: r.type || '특별안전보건교육',
+        dept: r.dept || '',
+        chem: r.chem || '',
+        dateStart: r.dateStart || '',
+        dateEnd: r.dateEnd || r.dateStart || '',
+        days: r.days || '1',
+        time: r.time || '',
+        totalHours: r.totalHours || '',
+        submitted: r.submitted || '',
+        pdfFileName: r.pdfFileName || '',  // ★ 결재 시 GitHub PDF 다운로드용
+        members: [],
+        approved: !!r.approved,
+        approvedAt: r.approvedAt || '',
+        approverName: r.approverName || '',
+        isArchive: apvState.archiveMode  // ★ 아카이브 모드에서 로드된 그룹 표시
+      });
+    }
+    const g = groupMap.get(key);
+    g.members.push({
+      name: r.name||'', empNo: r.empNo||'', joinDate: r.joinDate||'',
+      gender: r.gender||'', signed: r.signed||''
+    });
+    // 그룹 내 한 명이라도 결재되어 있으면 그룹 결재됨
+    if(r.approved) {
+      g.approved = true;
+      g.approvedAt = r.approvedAt || g.approvedAt;
+      g.approverName = r.approverName || g.approverName;
+    }
+  });
+
+  apvState.groups = Array.from(groupMap.values()).sort((a,b)=>{
+    return (b.dateStart||'').localeCompare(a.dateStart||'');
+  });
+
+  // 용량 배지 갱신
+  apvCheckStorage();
+
+  // ★ 아카이브 모드 배지 토글
+  const modeBadge = document.getElementById('apv-mode-badge');
+  if(modeBadge) modeBadge.style.display = apvState.archiveMode ? 'inline-block' : 'none';
+
+  apvRender();
+}
+
+/* ── 검색·필터 적용해서 목록 렌더링 ── */
+function apvRender(){
+  const dateFrom = document.getElementById('apv-date-from').value;
+  const dateTo   = document.getElementById('apv-date-to').value;
+  const typeFlt  = document.getElementById('apv-type').value;
+  const deptFlt  = document.getElementById('apv-dept').value.trim().toLowerCase();
+  const nameFlt  = (document.getElementById('apv-name')?.value||'').trim();  // ★ 이름 검색
+  const statFlt  = document.getElementById('apv-status').value;
+
+  const filtered = apvState.groups.filter(g => {
+    if(dateFrom && g.dateStart && g.dateStart < dateFrom) return false;
+    if(dateTo   && g.dateStart && g.dateStart > dateTo)   return false;
+    if(typeFlt  && !((g.type||'').includes(typeFlt) || (typeFlt==='MSDS교육' && (g.type||'').includes('MSDS')))) return false;
+    if(deptFlt  && !(g.dept||'').toLowerCase().includes(deptFlt)) return false;
+    if(nameFlt  && !g.members.some(m => (m.name||'').includes(nameFlt))) return false;  // ★ 이름 부분일치
+    if(statFlt==='pending'  && g.approved)  return false;
+    if(statFlt==='approved' && !g.approved) return false;
+    return true;
+  });
+
+  // 카운트 갱신
+  const pending = apvState.groups.filter(g=>!g.approved).length;
+  const done    = apvState.groups.filter(g=> g.approved).length;
+  document.getElementById('apv-pending-count').textContent = pending;
+  document.getElementById('apv-done-count').textContent    = done;
+
+  // 목록 렌더링
+  const list = document.getElementById('apv-list');
+  if(filtered.length===0){
+    list.innerHTML = `<div style="padding:40px;text-align:center;color:#94a3b8;font-size:13px">
+      ${apvState.groups.length===0 ? '저장된 교육일지가 없습니다.' : '검색 조건에 해당하는 일지가 없습니다.'}
+    </div>`;
+    apvUpdateSelCount();
+    return;
+  }
+
+  // ★ 화면 폭에 따라 분기: 768px 미만은 모바일 카드형, 이상은 데스크탑 한 줄 테이블
+  const isMobile = window.innerWidth < 768;
+  if(isMobile){
+    apvRenderMobile(filtered);
+    return;
+  }
+
+  // 컬럼 헤더 (한 줄 표시)
+  const headerHtml = `<div style="display:grid;grid-template-columns:28px 90px minmax(90px,1fr) 130px 60px 70px minmax(150px,1.4fr) 80px auto;gap:10px;align-items:center;padding:9px 14px 9px 18px;background:#f8fafc;border-bottom:1.5px solid #cbd5e1;font-size:10.5px;font-weight:700;color:#475569;letter-spacing:0.3px;position:sticky;top:0;z-index:5">
+    <div></div>
+    <div>종류</div>
+    <div>부서</div>
+    <div>교육일</div>
+    <div style="text-align:center">인원</div>
+    <div style="text-align:center">시간</div>
+    <div>취급물질</div>
+    <div style="text-align:center">상태</div>
+    <div style="text-align:right;min-width:170px">결재정보</div>
+  </div>`;
+
+  const rows = filtered.map((g, idx) => {
+    const isSelected = apvState.selected.has(g.groupKey);
+    const dispDate = g.dateStart === g.dateEnd
+      ? g.dateStart
+      : `${g.dateStart}~${g.dateEnd.slice(5)}`;
+    const isMSDS = (g.type||'').includes('MSDS');
+    const typeIcon = isMSDS ? '📋' : '📝';
+    const typeShort = isMSDS ? 'MSDS' : '특별교육';
+    const typeColor = isMSDS ? '#92400e' : '#1e40af';
+    const typeBg    = isMSDS ? '#fef3c7' : '#dbeafe';
+    const sideBar   = g.approved ? '#16a34a' : '#f59e0b';
+    const rowBg     = isSelected ? '#eff6ff' : (idx%2===0 ? '#fff' : '#fafbfc');
+    const memberStr = g.members.slice(0,3).map(m=>m.name).join(', ') + (g.members.length>3?` 외 ${g.members.length-3}명`:'');
+    const sigCount = g.members.filter(m=>(m.signed||'').includes('서명완료')).length;
+    const chemShort = (g.chem||'-').length > 30 ? (g.chem||'').slice(0,28)+'…' : (g.chem||'-');
+
+    // 우측 결재정보 셀
+    const apvCell = g.approved
+      ? `<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;min-width:170px">
+          <span style="font-size:10.5px;color:#15803d;font-weight:600;white-space:nowrap" title="결재일시: ${(g.approvedAt||'').slice(0,16).replace('T',' ')}">
+            ✓ ${g.approverName||'장은선'} · ${(g.approvedAt||'').slice(5,10)}
+          </span>
+          <button onclick="apvReprint('${g.groupKey}')" style="padding:3px 8px;background:#1c3557;color:#fff;border:none;border-radius:4px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap" title="결재 도장 합성 PDF 재출력">📄</button>
+        </div>`
+      : `<div style="min-width:170px;text-align:right;font-size:10.5px;color:#94a3b8">결재대기</div>`;
+
+    return `<div title="참석자: ${memberStr}" style="display:grid;grid-template-columns:28px 90px minmax(90px,1fr) 130px 60px 70px minmax(150px,1.4fr) 80px auto;gap:10px;align-items:center;padding:8px 14px 8px 18px;background:${rowBg};border-bottom:1px solid #f1f5f9;border-left:4px solid ${sideBar};font-size:12px;transition:background 0.1s">
+      <input type="checkbox" ${isSelected?'checked':''} ${g.approved?'disabled':''} 
+             onchange="apvToggle('${g.groupKey}', this.checked)"
+             style="width:16px;height:16px;cursor:${g.approved?'not-allowed':'pointer'};accent-color:#1c3557">
+      <span style="font-size:10.5px;background:${typeBg};color:${typeColor};padding:3px 7px;border-radius:4px;font-weight:700;text-align:center;white-space:nowrap">${typeIcon} ${typeShort}</span>
+      <span style="font-weight:700;color:#1c3557;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${g.dept||'-'}</span>
+      <span style="color:#64748b;white-space:nowrap;font-variant-numeric:tabular-nums">${dispDate}</span>
+      <span style="text-align:center;color:#1c3557;font-weight:600">${g.members.length}/${sigCount}</span>
+      <span style="text-align:center;color:#475569;white-space:nowrap">${g.totalHours||g.time||'-'}</span>
+      <span style="color:#475569;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${g.chem||''}">${chemShort}</span>
+      <span style="text-align:center">${g.approved 
+        ? `<span style="background:#dcfce7;color:#15803d;padding:3px 8px;border-radius:9px;font-size:10.5px;font-weight:700;white-space:nowrap">✅ 완료</span>`
+        : `<span style="background:#fef3c7;color:#92400e;padding:3px 8px;border-radius:9px;font-size:10.5px;font-weight:700;white-space:nowrap">⏳ 대기</span>`
+      }</span>
+      ${apvCell}
+    </div>`;
+  }).join('');
+
+  list.innerHTML = headerHtml + rows;
+  apvUpdateSelCount();
+}
+
+/* ── 결재 완료 일지 재출력 (도장 합성 PDF 다운로드) ── */
+async function apvReprint(groupKey){
+  const group = apvState.groups.find(g => g.groupKey === groupKey);
+  if(!group){
+    toast('일지를 찾을 수 없습니다','err');
+    return;
+  }
+  if(!group.pdfFileName){
+    toast('⚠ 옛 일지(PDF URL 미저장) — 재출력 불가','err');
+    return;
+  }
+  toast(`📄 ${group.dept} 재출력 중…`,'info');
+  try{
+    // 결재 시점의 날짜로 도장 생성 (현재 날짜 X)
+    const stampPng = await apvStampToImage(group.approvedAt);
+    if(!stampPng) throw new Error('결재 도장 생성 실패');
+    const ok = await apvStampOriginalPdf(group, stampPng);
+    if(ok) toast(`✅ ${group.dept} 재출력 완료`,'ok');
+    else throw new Error('PDF 도장 합성 실패');
+  }catch(err){
+    console.error('apvReprint error:',err);
+    toast(`❌ 재출력 오류: ${err.message}`,'err');
+  }
+}
+
+/* ── 모바일 카드형 렌더 (768px 미만) ── */
+/* ── 아카이브 모드 토글 (GitHub records.json 통째로 검색) ── */
+async function apvToggleArchive(){
+  const cb = document.getElementById('apv-archive-mode');
+  const statusEl = document.getElementById('apv-archive-status');
+
+  if(cb.checked){
+    // ON: GitHub에서 records 가져오기
+    apvState.archiveMode = true;
+    statusEl.textContent = '⏳ GitHub에서 전체 데이터 로드 중…';
+    statusEl.style.color = '#0284c7';
+    try{
+      await apvLoadFromGitHub();
+      const archiveCount = apvState.archiveRecords ? apvState.archiveRecords.length : 0;
+      statusEl.textContent = `✅ 아카이브 ${archiveCount.toLocaleString()}건 로드됨 (옛 일지 결재/재출력 가능)`;
+      statusEl.style.color = '#15803d';
+      apvLoadAndRender();
+    }catch(err){
+      console.error('apvLoadFromGitHub error:', err);
+      cb.checked = false;
+      apvState.archiveMode = false;
+      apvState.archiveRecords = null;
+      statusEl.textContent = '❌ 로드 실패: '+(err.message||'네트워크 오류');
+      statusEl.style.color = '#b91c1c';
+      toast('GitHub 아카이브 로드 실패: '+(err.message||''),'err');
+    }
+  }else{
+    // OFF: 로컬로 복귀
+    apvState.archiveMode = false;
+    apvState.archiveRecords = null;
+    statusEl.textContent = '';
+    apvLoadAndRender();
+    toast('💾 로컬 모드 (최근 records)','info');
+  }
+}
+
+/* ── GitHub records.json fetch ── */
+async function apvLoadFromGitHub(){
+  const repo = CFG.ghRepo || 'buminhealth/health';
+  const [owner, repoName] = repo.split('/');
+  // raw URL (캐시 회피용 timestamp)
+  const url = `https://raw.githubusercontent.com/${owner}/${repoName}/main/records/edu_records.json?_t=${Date.now()}`;
+  const res = await fetch(url);
+  if(!res.ok){
+    if(res.status === 404){
+      throw new Error('records 백업 파일이 GitHub에 없음 (records/edu_records.json)');
+    }
+    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  }
+  let raw = await res.json();
+  // ★ admin_cfg.json 형식 호환: {records: [...]} 또는 [...] 모두 지원
+  const records = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.records) ? raw.records : null);
+  if(!records){
+    throw new Error('records 형식 오류 (배열 아님)');
+  }
+  // ★ 묘비 처리: 영구 삭제된 records 필터링
+  if(typeof BM !== 'undefined'){
+    BM.ensureIds(records);
+    const tombs = BM.getTombstones('edu');
+    if(tombs.size){
+      const before = records.length;
+      const filtered = records.filter(r => !tombs.has(r.recordId));
+      console.log(`[아카이브] 묘비 필터: ${before} → ${filtered.length}`);
+      apvState.archiveRecords = filtered;
+      console.log(`📦 아카이브 ${filtered.length}건 로드 완료`);
+      return;
+    }
+  }
+  apvState.archiveRecords = records;
+  console.log(`📦 아카이브 ${records.length}건 로드 완료`);
+}
+
+/* ── 다중 기기 결재 정보 동기화 (백그라운드, 본체는 유지하고 결재 정보만 머지) ── */
+async function apvSyncApprovalsFromGitHub(){
+  if(!CFG.ghRepo) return 0;
+  try{
+    const repo = CFG.ghRepo;
+    const [owner, repoName] = repo.split('/');
+    const url = `https://raw.githubusercontent.com/${owner}/${repoName}/main/records/edu_records.json?_t=${Date.now()}`;
+    const res = await fetch(url);
+    if(!res.ok) return 0;
+    let raw = await res.json();
+    const ghRecords = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.records) ? raw.records : null);
+    if(!ghRecords) return 0;
+
+    // ★ recordId 기준 결재 정보 맵 생성
+    const apvMap = new Map();
+    ghRecords.forEach(r => {
+      if(r.recordId && r.approved){
+        apvMap.set(r.recordId, {
+          approved: true,
+          approvedAt: r.approvedAt || '',
+          approverName: r.approverName || ''
+        });
+      }
+    });
+
+    // ★ localStorage records에 결재 정보만 머지 (본체는 유지하여 사이즈 증가 X)
+    let local = [];
+    try{ local = JSON.parse(localStorage.getItem('bm_edu_records')||'[]'); }catch(e){ return 0; }
+    if(typeof BM !== 'undefined') BM.ensureIds(local);
+
+    let merged = 0;
+    local.forEach(r => {
+      if(r.recordId && apvMap.has(r.recordId) && !r.approved){
+        const apv = apvMap.get(r.recordId);
+        r.approved = apv.approved;
+        r.approvedAt = apv.approvedAt;
+        r.approverName = apv.approverName;
+        merged++;
+      }
+    });
+
+    if(merged > 0){
+      localStorage.setItem('bm_edu_records', JSON.stringify(local));
+      console.log(`[다중기기 동기화] 결재 정보 ${merged}건 머지됨`);
+    }
+    return merged;
+  }catch(err){
+    console.warn('[apvSyncApprovalsFromGitHub] 실패:', err);
+    return 0;
+  }
+}
+
+
+/* ── 모바일 카드형 렌더 (768px 미만) ── */
+function apvRenderMobile(filtered){
+  const list = document.getElementById('apv-list');
+  const cards = filtered.map((g, idx) => {
+    const isSelected = apvState.selected.has(g.groupKey);
+    const dispDate = g.dateStart === g.dateEnd ? g.dateStart : `${g.dateStart}~${g.dateEnd.slice(5)}`;
+    const isMSDS = (g.type||'').includes('MSDS');
+    const typeIcon = isMSDS ? '📋' : '📝';
+    const typeShort = isMSDS ? 'MSDS' : '특별교육';
+    const typeColor = isMSDS ? '#92400e' : '#1e40af';
+    const typeBg    = isMSDS ? '#fef3c7' : '#dbeafe';
+    const sideBar   = g.approved ? '#16a34a' : '#f59e0b';
+    const cardBg    = isSelected ? '#eff6ff' : '#fff';
+    const memberStr = g.members.slice(0,2).map(m=>m.name).join(', ') + (g.members.length>2?` 외 ${g.members.length-2}명`:'');
+    const sigCount = g.members.filter(m=>(m.signed||'').includes('서명완료')).length;
+    const chemShort = (g.chem||'-').length > 25 ? (g.chem||'').slice(0,23)+'…' : (g.chem||'-');
+
+    const apvFooter = g.approved
+      ? `<div style="display:flex;justify-content:space-between;align-items:center;background:#f0fdf4;border-top:1px solid #bbf7d0;padding:6px 10px;margin:8px -10px -8px;border-radius:0 0 7px 7px">
+          <div style="font-size:10.5px;color:#15803d;font-weight:600">
+            ✓ ${g.approverName||'장은선'} · ${(g.approvedAt||'').slice(5,10)}
+          </div>
+          <button onclick="apvReprint('${g.groupKey}')" style="padding:4px 10px;background:#1c3557;color:#fff;border:none;border-radius:5px;font-size:10.5px;font-weight:600;cursor:pointer">📄 재출력</button>
+        </div>`
+      : '';
+
+    return `<div style="background:${cardBg};border:1px solid #e2e8f0;border-left:4px solid ${sideBar};border-radius:8px;margin:8px;padding:10px 12px">
+      <!-- 1행: 체크박스 + 종류 + 상태 -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <input type="checkbox" ${isSelected?'checked':''} ${g.approved?'disabled':''} 
+               onchange="apvToggle('${g.groupKey}', this.checked)"
+               style="width:16px;height:16px;cursor:${g.approved?'not-allowed':'pointer'};accent-color:#1c3557;flex-shrink:0">
+        <span style="font-size:10.5px;background:${typeBg};color:${typeColor};padding:3px 7px;border-radius:4px;font-weight:700;flex-shrink:0">${typeIcon} ${typeShort}</span>
+        <div style="flex:1"></div>
+        ${g.approved
+          ? `<span style="background:#dcfce7;color:#15803d;padding:3px 8px;border-radius:9px;font-size:10.5px;font-weight:700">✅ 완료</span>`
+          : `<span style="background:#fef3c7;color:#92400e;padding:3px 8px;border-radius:9px;font-size:10.5px;font-weight:700">⏳ 대기</span>`}
+      </div>
+
+      <!-- 2행: 부서 + 교육일 (큰 글씨) -->
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;padding-left:24px">
+        <span style="font-size:14px;font-weight:700;color:#1c3557">${g.dept||'-'}</span>
+        <span style="font-size:11px;color:#64748b">${dispDate}</span>
+      </div>
+
+      <!-- 3행: 정보 (인원/시간/물질) -->
+      <div style="font-size:11px;color:#475569;padding-left:24px;line-height:1.6">
+        <div>👥 ${g.members.length}명 (서명 ${sigCount}/${g.members.length}) · ⏰ ${g.totalHours||g.time||'-'}</div>
+        <div title="${g.chem||''}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">⚗️ ${chemShort}</div>
+      </div>
+      ${apvFooter}
+    </div>`;
+  }).join('');
+
+  list.innerHTML = `<div style="padding:4px 0">${cards}</div>`;
+  apvUpdateSelCount();
+}
+
+/* ── 체크박스 토글 ── */
+function apvToggle(key, checked){
+  if(checked) apvState.selected.add(key);
+  else apvState.selected.delete(key);
+  apvUpdateSelCount();
+}
+
+/* ── 전체 선택 토글 (현재 필터 결과 기준, 결재대기만) ── */
+function apvToggleAll(checked){
+  document.querySelectorAll('#apv-list input[type=checkbox]:not(:disabled)').forEach(cb => {
+    cb.checked = checked;
+    const onchange = cb.getAttribute('onchange');
+    const m = onchange && onchange.match(/apvToggle\('([^']+)'/);
+    if(m){
+      if(checked) apvState.selected.add(m[1]);
+      else apvState.selected.delete(m[1]);
+    }
+  });
+  apvUpdateSelCount();
+}
+
+/* ── 선택 카운트 갱신 ── */
+function apvUpdateSelCount(){
+  document.getElementById('apv-sel-count').textContent = apvState.selected.size;
+}
+
+/* ── 필터 초기화 ── */
+function apvResetFilter(){
+  document.getElementById('apv-date-from').value = '';
+  document.getElementById('apv-date-to').value   = '';
+  document.getElementById('apv-type').value      = '';
+  document.getElementById('apv-dept').value      = '';
+  const nameEl = document.getElementById('apv-name');
+  if(nameEl) nameEl.value = '';
+  document.getElementById('apv-status').value    = '';
+  apvRender();
+}
+
+/* ── 결재 도장 SVG → 이미지 dataURL 변환 ── */
+async function apvStampToImage(dateOverride){
+  // BuminApproval 도장 스타일 SVG (빨간 이중원, 도장 표시 이름)
+  // ★ dateOverride 있으면 해당 날짜로, 없으면 오늘 날짜로
+  const targetDate = dateOverride ? new Date(dateOverride) : new Date();
+  const dateStr = `${String(targetDate.getMonth()+1).padStart(2,'0')}.${String(targetDate.getDate()).padStart(2,'0')}`;
+  // ★ 도장 이름 우선순위: stampName(별도 설정) → apv1Name → 기본값
+  const apv = (CFG.stampName && CFG.stampName.trim()) || CFG.apv1Name || '장은선';
+  const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+    <circle cx="60" cy="60" r="52" fill="none" stroke="#c8372d" stroke-width="3"/>
+    <circle cx="60" cy="60" r="44" fill="none" stroke="#c8372d" stroke-width="2"/>
+    <text x="60" y="42" text-anchor="middle" font-family="serif" font-size="13" font-weight="bold" fill="#c8372d">결 재</text>
+    <text x="60" y="65" text-anchor="middle" font-family="serif" font-size="14" font-weight="bold" fill="#c8372d">${apv}</text>
+    <text x="60" y="85" text-anchor="middle" font-family="serif" font-size="11" fill="#c8372d">${dateStr}</text>
+  </svg>`;
+  // SVG → Canvas → PNG
+  return new Promise(resolve => {
+    const blob = new Blob([svgStr], {type:'image/svg+xml'});
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement('canvas');
+      cv.width = 240; cv.height = 240;
+      const ctx = cv.getContext('2d');
+      ctx.drawImage(img, 0, 0, 240, 240);
+      URL.revokeObjectURL(url);
+      resolve(cv.toDataURL('image/png'));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(''); };
+    img.src = url;
+  });
+}
+
+/* ── 영구 삭제 (BM 묘비 시스템 활용) ── */
+async function apvBatchDelete(){
+  if(apvState.selected.size === 0){
+    toast('⚠ 삭제할 일지를 먼저 선택하세요','err');
+    return;
+  }
+
+  const selectedGroups = apvState.groups.filter(g => apvState.selected.has(g.groupKey));
+  // 모든 인원의 recordId 수집
+  let recordIds = [];
+  let recordsRef = apvState.archiveMode && apvState.archiveRecords
+    ? apvState.archiveRecords
+    : (function(){ try{ return JSON.parse(localStorage.getItem('bm_edu_records')||'[]'); }catch(e){ return []; } })();
+
+  if(typeof BM !== 'undefined') BM.ensureIds(recordsRef);
+
+  selectedGroups.forEach(g => {
+    recordsRef.forEach(r => {
+      const key = `${r.submitted}__${r.dept}__${r.dateStart}__${r.type}`;
+      if(key === g.groupKey && r.recordId){
+        recordIds.push(r.recordId);
+      }
+    });
+  });
+
+  if(recordIds.length === 0){
+    toast('⚠ 삭제할 records를 찾을 수 없음 (recordId 없음)','err');
+    return;
+  }
+
+  // 자체 확인 모달 (PWA 안전)
+  const confirmed = await apvConfirmDelete(selectedGroups, recordIds.length);
+  if(!confirmed) return;
+
+  toast(`🗑 ${recordIds.length}건 영구 삭제 중…`,'info');
+
+  try{
+    if(typeof BM === 'undefined' || !BM.markDeleted){
+      throw new Error('BM 묘비 시스템 사용 불가');
+    }
+    // BM.markDeleted: localStorage 정리 + GitHub admin_cfg 묘비 동기화 + 감사 로그 자동
+    const reason = `결재 탭에서 영구 삭제 (사용자: ${(CFG.stampName||CFG.apv1Name||'장은선')})`;
+    await BM.markDeleted('edu', recordIds, reason);
+
+    // 아카이브 모드면 archiveRecords에서도 제거
+    if(apvState.archiveRecords){
+      apvState.archiveRecords = apvState.archiveRecords.filter(r => !recordIds.includes(r.recordId));
+    }
+
+    // GitHub records.json 갱신 (묘비 처리된 records 제거)
+    if(CFG.ghToken && CFG.ghRepo){
+      try{
+        toast('☁ GitHub records.json 갱신 중…','info');
+        const dataToUpload = apvState.archiveMode && apvState.archiveRecords
+          ? apvState.archiveRecords
+          : JSON.parse(localStorage.getItem('bm_edu_records')||'[]');
+        const path = `records/edu_records.json`;
+        const dataURL = 'data:application/json;base64,'+btoa(unescape(encodeURIComponent(JSON.stringify(dataToUpload,null,2))));
+        await uploadFileToGitHub(dataURL, path);
+      }catch(e){ console.warn('GitHub records 갱신 실패:',e); }
+    }
+
+    // 선택 초기화 + 재렌더링
+    apvState.selected.clear();
+    apvLoadAndRender();
+
+    toast(`✅ ${recordIds.length}건 영구 삭제 완료 — 용량 갱신됨`,'ok');
+  }catch(err){
+    console.error('apvBatchDelete error:',err);
+    toast(`❌ 삭제 오류: ${err.message}`,'err');
+  }
+}
+
+/* ── 영구 삭제 확인 모달 (PWA 안전 자체 모달) ── */
+function apvConfirmDelete(groups, recordCount){
+  return new Promise(resolve => {
+    const old = document.getElementById('apv-delete-modal');
+    if(old) old.remove();
+
+    const summary = groups.slice(0,5).map(g =>
+      `· ${g.dept} (${g.dateStart}) ${g.members.length}명`
+    ).join('<br>');
+    const more = groups.length > 5 ? `<br>… 외 ${groups.length-5}건` : '';
+
+    const modal = document.createElement('div');
+    modal.id = 'apv-delete-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:12px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,.25)">
+        <div style="background:#fef2f2;border-bottom:1px solid #fecaca;padding:14px 20px;border-radius:12px 12px 0 0">
+          <div style="font-size:15px;font-weight:800;color:#b91c1c">🗑 영구 삭제 확인</div>
+          <div style="font-size:11px;color:#dc2626;margin-top:2px">복구 불가능 — 신중히 결정하세요</div>
+        </div>
+        <div style="padding:18px 20px">
+          <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;padding:11px 14px;margin-bottom:14px;font-size:11.5px;line-height:1.6">
+            <b style="color:#92400e">⚠ 삭제되는 항목</b>
+            <div style="color:#475569;margin-top:6px">${summary}${more}</div>
+            <div style="margin-top:8px;color:#1c3557;font-weight:700">총 일지 ${groups.length}건 · 인원 ${recordCount}건</div>
+          </div>
+
+          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:7px;padding:11px 14px;margin-bottom:14px;font-size:11px;line-height:1.7">
+            <b style="color:#15803d">🛡 안전 사항</b>
+            <div style="color:#475569;margin-top:5px">
+              ✅ <b>GitHub PDF 원본은 그대로 유지</b> (영구 보관)<br>
+              ✅ 다른 기기에서 다시 나타나지 않음 (묘비 시스템)<br>
+              ✅ localStorage 용량 즉시 감소<br>
+              ⚠ records 데이터는 복구 불가
+            </div>
+          </div>
+
+          <div style="font-size:11px;color:#64748b;margin-bottom:8px">계속하려면 아래에 <b style="color:#b91c1c">"삭제"</b>를 입력하세요:</div>
+          <input type="text" id="apv-delete-confirm-input" placeholder="삭제" autocomplete="off" style="width:100%;padding:9px 12px;border:1.5px solid #cbd5e1;border-radius:7px;font-size:13px;outline:none;font-family:inherit" oninput="document.getElementById('apv-delete-confirm-btn').disabled=this.value.trim()!=='삭제'">
+
+          <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+            <button id="apv-delete-cancel-btn" style="padding:8px 16px;background:#f1f5f9;color:#1c3557;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">취소</button>
+            <button id="apv-delete-confirm-btn" disabled style="padding:8px 16px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;opacity:0.5">🗑 영구 삭제</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    document.getElementById('apv-delete-cancel-btn').onclick = ()=>{
+      modal.remove();
+      resolve(false);
+    };
+    document.getElementById('apv-delete-confirm-btn').onclick = ()=>{
+      const v = document.getElementById('apv-delete-confirm-input').value.trim();
+      if(v !== '삭제'){
+        toast('"삭제"를 정확히 입력해주세요','err');
+        return;
+      }
+      modal.remove();
+      resolve(true);
+    };
+    // 입력값 변경 시 버튼 활성화
+    const input = document.getElementById('apv-delete-confirm-input');
+    input.addEventListener('input', ()=>{
+      const btn = document.getElementById('apv-delete-confirm-btn');
+      const ok = input.value.trim() === '삭제';
+      btn.disabled = !ok;
+      btn.style.opacity = ok ? '1' : '0.5';
+    });
+    setTimeout(()=>input.focus(), 100);
+  });
+}
+
+/* ── 일괄 결재 + PDF 생성 + 다운로드 ── */
+async function apvBatchApprove(){
+  if(apvState.selected.size === 0){
+    toast('⚠ 결재할 일지를 먼저 선택하세요','err');
+    return;
+  }
+
+  const btn = document.getElementById('apv-btn-approve');
+  btn.disabled = true;
+  btn.textContent = '⏳ 처리 중…';
+
+  try{
+    toast(`📋 ${apvState.selected.size}건 결재 처리 시작…`,'info');
+
+    // 1) 결재 도장 이미지 생성
+    toast('🎨 결재 도장 생성 중…','info');
+    const stampPng = await apvStampToImage();
+    if(!stampPng){
+      throw new Error('결재 도장 생성 실패');
+    }
+
+    const selectedGroups = apvState.groups.filter(g => apvState.selected.has(g.groupKey));
+    if(selectedGroups.length === 0){
+      throw new Error('선택된 일지를 찾을 수 없음');
+    }
+    const now = new Date().toISOString();
+    // ★ 도장 이름 우선순위: stampName(별도) → apv1Name → 기본
+    const apvName = (CFG.stampName && CFG.stampName.trim()) || CFG.apv1Name || '장은선';
+
+    // 2) records 결재 정보 업데이트
+    // ★ 아카이브 모드면 archiveRecords(GitHub) + localStorage 둘 다 갱신
+    let records = [];
+    try{ records = JSON.parse(localStorage.getItem('bm_edu_records')||'[]'); }catch(e){}
+    selectedGroups.forEach(g => {
+      // localStorage records 갱신 (있으면)
+      records.forEach(r => {
+        const key = `${r.submitted}__${r.dept}__${r.dateStart}__${r.type}`;
+        if(key === g.groupKey){
+          r.approved = true;
+          r.approvedAt = now;
+          r.approverName = apvName;
+        }
+      });
+      // 아카이브 records도 갱신 (있으면)
+      if(apvState.archiveRecords){
+        apvState.archiveRecords.forEach(r => {
+          const key = `${r.submitted}__${r.dept}__${r.dateStart}__${r.type}`;
+          if(key === g.groupKey){
+            r.approved = true;
+            r.approvedAt = now;
+            r.approverName = apvName;
+          }
+        });
+      }
+    });
+    localStorage.setItem('bm_edu_records', JSON.stringify(records));
+
+    // 3) 그룹별 PDF 처리: pdfFileName 있으면 pdf-lib 도장 합성, 없으면 폴백
+    const withPdf = selectedGroups.filter(g => g.pdfFileName);
+    const withoutPdf = selectedGroups.filter(g => !g.pdfFileName);
+
+    let stampedCount = 0;
+    let failedCount = 0;
+
+    if(withPdf.length > 0){
+      toast(`📄 ${withPdf.length}건 원본 PDF에 도장 합성 중…`,'info');
+      for(let i=0; i<withPdf.length; i++){
+        const g = withPdf[i];
+        toast(`📄 PDF 합성 (${i+1}/${withPdf.length}): ${g.dept}`,'info');
+        const ok = await apvStampOriginalPdf(g, stampPng);
+        if(ok) stampedCount++;
+        else failedCount++;
+        // 다운로드 간격 (브라우저가 차단하지 않도록)
+        await new Promise(r => setTimeout(r, 800));
+      }
+    }
+
+    // 4) 옛 일지(pdfFileName 없음)는 결재 확인서 PDF로 폴백
+    if(withoutPdf.length > 0){
+      toast(`📋 ${withoutPdf.length}건 (옛 일지) 결재 확인서 발급…`,'info');
+      await apvGenApprovalPdf(withoutPdf, stampPng);
+    }
+
+    // 5) GitHub records 동기화
+    // ★ 아카이브 모드 결재면 archiveRecords(전체) 업로드, 아니면 localStorage records 업로드
+    if(CFG.ghToken && CFG.ghRepo){
+      try{
+        const path = `records/edu_records.json`;
+        const dataToUpload = apvState.archiveMode && apvState.archiveRecords
+          ? apvState.archiveRecords  // 아카이브 모드: 전체 records 업로드
+          : records;                   // 일반 모드: localStorage records 업로드
+        const dataURL = 'data:application/json;base64,'+btoa(unescape(encodeURIComponent(JSON.stringify(dataToUpload,null,2))));
+        await uploadFileToGitHub(dataURL, path);
+      }catch(e){ console.warn('GitHub records 동기화 실패:',e); }
+    }
+
+    // 6) 선택 초기화 + 재렌더링
+    apvState.selected.clear();
+    apvLoadAndRender();
+    const chkAll = document.getElementById('apv-check-all');
+    if(chkAll) chkAll.checked = false;
+
+    // 결과 요약 토스트
+    let summary = `✅ 결재 완료 — `;
+    if(stampedCount > 0)  summary += `원본 도장 ${stampedCount}건 `;
+    if(withoutPdf.length > 0) summary += `· 결재확인서 ${withoutPdf.length}건 `;
+    if(failedCount > 0)   summary += `· ⚠ 실패 ${failedCount}건`;
+    toast(summary, 'ok');
+  }catch(err){
+    console.error('apvBatchApprove error:',err);
+    toast('❌ 결재 오류: '+(err.message||err),'err');
+    alert('결재 처리 중 오류:\n\n'+(err.stack||err.message||err));
+  }finally{
+    btn.disabled = false;
+    btn.innerHTML = '✅ 일괄 결재 + PDF 다운로드';
+  }
+}
+
+/* ── 원본 PDF 다운로드 → pdf-lib 도장 합성 → 새 PDF 다운로드 ── */
+async function apvStampOriginalPdf(group, stampPngDataUrl){
+  try{
+    // pdf-lib 라이브러리 체크
+    if(typeof PDFLib === 'undefined' || !PDFLib.PDFDocument){
+      console.error('pdf-lib 미로드');
+      toast('❌ pdf-lib 미로드 — 새로고침 필요','err');
+      return false;
+    }
+
+    // GitHub PDF URL 빌드 (uploadPdfToGitHub와 동일 경로 규칙)
+    // submitted = "YYYY-MM-DD_타임스탬프", PDF 업로드 시점의 ym = YYYY-MM
+    const ym = (group.submitted||'').slice(0,7); // "2026-05-06_..." → "2026-05"
+    const repo = CFG.ghRepo || 'buminhealth/health';
+    const [owner, repoName] = repo.split('/');
+    const path = `교육일지/${ym}/${group.pdfFileName}`;
+    const pdfUrl = `https://raw.githubusercontent.com/${owner}/${repoName}/main/${path}`;
+
+    // PDF 다운로드
+    const resp = await fetch(pdfUrl);
+    if(!resp.ok){
+      console.warn(`PDF 다운로드 실패 (${resp.status}):`, pdfUrl);
+      toast(`⚠ ${group.dept} PDF 다운로드 실패 (HTTP ${resp.status})`,'err');
+      return false;
+    }
+    const pdfBytes = await resp.arrayBuffer();
+
+    // pdf-lib로 PDF 로드
+    const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+    const page = pdfDoc.getPages()[0];
+    const { width, height } = page.getSize();
+
+    // 결재 도장 PNG 임베드
+    const stampBase64 = stampPngDataUrl.split(',')[1];
+    const stampBytes = Uint8Array.from(atob(stampBase64), c => c.charCodeAt(0));
+    const stampImage = await pdfDoc.embedPng(stampBytes);
+
+    // ★ 결재칸 정밀 좌표 (e1/e2 PDF 헤더 우측 결재 박스의 "담당" 칸 안)
+    //   컨테이너 width 794px, padding 18px 22px (HTML 좌표)
+    //   결재 박스: 우측 끝~우측-78px, 페이지 상단 18~82px (HTML)
+    //   "담당" 헤더(~13.5px) 제외 도장 영역: HTML y 31.5~82, x 708~772
+    //   HTML 1px = PDF 0.749pt (페이지 폭 595pt / HTML 794px)
+    //   → 도장 영역 (PDF pt): x 530.6~578.5 (폭 47.9), y(상단) 23.6~61.4 (높이 37.8)
+    //   v15.19 미세조정: 도장 크기 34→28 (담당 글자 안 가리기), 약간 아래로
+    const stampSize = 28;        // 박스 안 도장 영역(37.8)에 충분한 마진 확보
+    const stampX = width - 55;   // 도장 가로 가운데 (좌측 마진 9.4pt, 우측 10.5pt)
+    const stampY = height - 62;  // 도장 상단 32pt (헤더 끝 31.5 아래) ~ 하단 60pt (영역 안)
+
+    page.drawImage(stampImage, {
+      x: stampX,
+      y: stampY,
+      width: stampSize,
+      height: stampSize
+    });
+
+    // 새 PDF 저장
+    const stampedBytes = await pdfDoc.save();
+    const blob = new Blob([stampedBytes], { type: 'application/pdf' });
+    const fname = `결재완료_${group.pdfFileName.replace(/\.pdf$/,'')}.pdf`;
+
+    // 다운로드 트리거
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 1000);
+
+    return true;
+  }catch(err){
+    console.error('apvStampOriginalPdf error:', err);
+    toast(`⚠ ${group.dept} 도장 합성 오류: ${err.message}`,'err');
+    return false;
+  }
+}
+
+/* ── 결재 확인서 PDF 생성 (html2canvas + jsPDF, 한글 폰트 안전) ── */
+async function apvGenApprovalPdf(groups, stampPng){
+  // ★ 라이브러리 사전 체크
+  if(typeof html2canvas === 'undefined'){
+    throw new Error('html2canvas 라이브러리 미로드 — 페이지 새로고침 후 재시도');
+  }
+  if(!window.jspdf || !window.jspdf.jsPDF){
+    throw new Error('jsPDF 라이브러리 미로드 — 페이지 새로고침 후 재시도');
+  }
+
+  // ★ 폰트 로드 완료 대기 (Nanum Gothic CSS 폰트)
+  if(document.fonts && document.fonts.ready){
+    await document.fonts.ready;
+  }
+
+  const today = new Date().toISOString().slice(0,10);
+  const apvName = (CFG.stampName && CFG.stampName.trim()) || CFG.apv1Name || '장은선';
+
+  // HTML로 결재 확인서 빌드 (Nanum Gothic CSS 폰트 활용)
+  const N = '#1c3557', LB = '#e8ecf2', BD = '#b0bece';
+  const FF = `'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif`;
+
+  const rowsHtml = groups.map((g, idx) => {
+    const typeShort = (g.type||'').includes('MSDS') ? 'MSDS교육' : '특별교육';
+    const dispDate = g.dateStart === g.dateEnd ? g.dateStart : `${g.dateStart}~${g.dateEnd}`;
+    return `<tr style="background:${idx%2===0?'#fff':'#fafbfc'}">
+      <td style="padding:7px 8px;border:1px solid ${BD};text-align:center;font-size:12px;color:${N};font-weight:700;font-family:${FF}">${idx+1}</td>
+      <td style="padding:7px 10px;border:1px solid ${BD};font-size:12px;font-family:${FF}">${typeShort}</td>
+      <td style="padding:7px 10px;border:1px solid ${BD};font-size:12px;font-weight:600;font-family:${FF}">${g.dept||'-'}</td>
+      <td style="padding:7px 10px;border:1px solid ${BD};font-size:12px;font-family:${FF}">${dispDate}</td>
+      <td style="padding:7px 10px;border:1px solid ${BD};text-align:center;font-size:12px;font-family:${FF}">${g.members.length}명</td>
+      <td style="padding:7px 10px;border:1px solid ${BD};text-align:center;font-size:12px;font-family:${FF}">${g.totalHours||g.time||'-'}</td>
+      <td style="padding:7px 10px;border:1px solid ${BD};font-size:11.5px;font-family:${FF};max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${g.chem||''}">${(g.chem||'-').slice(0,20)}${(g.chem||'').length>20?'…':''}</td>
+      <td style="padding:7px 10px;border:1px solid ${BD};text-align:center;font-size:12px;color:#16a34a;font-weight:700;font-family:${FF}">✓ 완료</td>
+    </tr>`;
+  }).join('');
+
+  const html = `<div style="width:780px;background:#fff;padding:30px 28px;font-family:${FF};color:#222;box-sizing:border-box">
+    <!-- 헤더 -->
+    <div style="text-align:center;border-bottom:3px solid ${N};padding-bottom:14px;margin-bottom:18px;position:relative">
+      <div style="font-size:22px;font-weight:900;color:${N};letter-spacing:6px;font-family:${FF}">교육일지 결재 확인서</div>
+      <div style="font-size:11px;color:#888;margin-top:5px;font-family:${FF}">인당의료재단 부민병원 · 산업안전보건법 시행규칙 제28조 별표4</div>
+      ${stampPng ? `<img src="${stampPng}" style="position:absolute;right:10px;top:-5px;width:80px;height:80px">` : ''}
+    </div>
+
+    <!-- 결재 정보 -->
+    <div style="background:${LB};border:1px solid ${BD};border-radius:6px;padding:12px 16px;margin-bottom:16px;font-family:${FF}">
+      <div style="font-size:13px;font-weight:700;color:${N};margin-bottom:6px;font-family:${FF}">■ 결재 정보</div>
+      <table style="width:100%;font-size:12px;font-family:${FF}">
+        <tr>
+          <td style="padding:3px 0;color:#475569;width:80px;font-family:${FF}">결재자</td>
+          <td style="padding:3px 0;font-weight:700;color:${N};font-family:${FF}">${apvName}</td>
+          <td style="padding:3px 0;color:#475569;width:80px;font-family:${FF}">결재일</td>
+          <td style="padding:3px 0;font-weight:700;color:${N};font-family:${FF}">${today}</td>
+        </tr>
+        <tr>
+          <td style="padding:3px 0;color:#475569;font-family:${FF}">결재 건수</td>
+          <td style="padding:3px 0;font-weight:700;color:${N};font-family:${FF}" colspan="3">${groups.length}건</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- 일지 목록 -->
+    <div style="font-size:13px;font-weight:700;color:${N};margin-bottom:6px;font-family:${FF}">■ 결재 대상 교육일지</div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:18px;font-family:${FF}">
+      <thead>
+        <tr style="background:${N};color:#fff">
+          <th style="padding:8px;font-size:12px;border:1px solid ${N};font-family:${FF};width:35px">No</th>
+          <th style="padding:8px;font-size:12px;border:1px solid ${N};font-family:${FF};width:80px">교육종류</th>
+          <th style="padding:8px;font-size:12px;border:1px solid ${N};font-family:${FF}">부서</th>
+          <th style="padding:8px;font-size:12px;border:1px solid ${N};font-family:${FF};width:140px">교육일</th>
+          <th style="padding:8px;font-size:12px;border:1px solid ${N};font-family:${FF};width:50px">인원</th>
+          <th style="padding:8px;font-size:12px;border:1px solid ${N};font-family:${FF};width:70px">교육시간</th>
+          <th style="padding:8px;font-size:12px;border:1px solid ${N};font-family:${FF}">취급물질</th>
+          <th style="padding:8px;font-size:12px;border:1px solid ${N};font-family:${FF};width:70px">상태</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+
+    <!-- 푸터 -->
+    <div style="border-top:1px solid ${BD};padding-top:14px;margin-top:14px;text-align:center;font-family:${FF}">
+      <div style="font-size:11.5px;color:#475569;line-height:1.6;font-family:${FF}">
+        본 확인서는 위 ${groups.length}건의 교육일지가 보건관리자에 의해 결재되었음을 확인합니다.<br>
+        결재된 일지는 산업안전보건법 시행규칙 제28조 별표4에 의거 3년간 보관됩니다.
+      </div>
+      <div style="font-size:10.5px;color:#888;margin-top:8px;font-family:${FF}">
+        발행일: ${today} · 인당의료재단 부민병원 보건관리실
+      </div>
+    </div>
+  </div>`;
+
+  // pdf-area에 임시 삽입 후 캡처
+  let area = document.querySelector('.pdf-area');
+  if(!area){
+    area = document.createElement('div');
+    area.className = 'pdf-area';
+    document.body.appendChild(area);
+  }
+  // ★ 캡처 영역 화면 밖이지만 가시 상태로 (left:-9999px는 일부 브라우저에서 캡처 X)
+  area.style.cssText = 'position:fixed;left:0;top:0;width:794px;background:#fff;z-index:-1;opacity:0.01;pointer-events:none';
+  area.innerHTML = html;
+
+  // ★ DOM 안정화 + 이미지(도장) 로드 대기
+  await new Promise(r => setTimeout(r, 300));
+  const stampImg = area.querySelector('img');
+  if(stampImg && !stampImg.complete){
+    await new Promise(r => { stampImg.onload = r; stampImg.onerror = r; setTimeout(r, 1500); });
+  }
+
+  try{
+    const cv = await html2canvas(area.firstElementChild, {
+      scale: 2, useCORS: true, allowTaint: true, logging: false, windowWidth: 780, backgroundColor:'#ffffff'
+    });
+    const {jsPDF} = window.jspdf;
+    const pdf = new jsPDF('p','mm','a4');
+    const pageW = 210, pageH = 297;
+    const imgW = pageW - 20;
+    const imgH = (cv.height / cv.width) * imgW;
+    const imgData = cv.toDataURL('image/jpeg', 0.92);
+    if(imgH <= pageH - 20){
+      pdf.addImage(imgData, 'JPEG', 10, 10, imgW, imgH);
+    }else{
+      // 큰 이미지 — 여러 페이지로 분할 (단순 추가, 첫 페이지만 보이는 부분)
+      pdf.addImage(imgData, 'JPEG', 10, 10, imgW, imgH);
+    }
+
+    const fname = `교육일지결재확인서_${today}_${groups.length}건.pdf`;
+
+    // ★ 다운로드: pdf.save 우선, 실패 시 Blob 다운로드 폴백
+    try{
+      pdf.save(fname);
+    }catch(saveErr){
+      console.warn('pdf.save 실패, Blob 폴백:', saveErr);
+      const blob = pdf.output('blob');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(()=>{
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 1000);
+    }
+
+    toast(`📄 PDF 저장됨: ${fname}`,'ok');
+
+    // GitHub 백업 (선택)
+    if(CFG.ghToken){
+      try{
+        const pdfB64 = pdf.output('datauristring');
+        await uploadPdfToGitHub(pdfB64, fname);
+      }catch(e){ console.warn('GitHub 백업 실패:',e); }
+    }
+  }finally{
+    area.innerHTML = '';
+    area.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:#fff';
+  }
+}
+
 
 /* ══ GAS 연동 ══ */
 function syncAll(){
@@ -4295,8 +5652,41 @@ async function uploadPdfAndSendEmail(opts){
 
     toast('✅ 업로드 완료! 이메일 발송 중…','ok');
 
-    // ── PDF 링크 이메일 발송
+    // ── PDF 링크 이메일 발송 (chem 메일과 통일된 컴팩트 디자인)
     const eduType = (type||'').includes('MSDS') ? 'MSDS 교육일지' : '특별안전보건교육일지';
+    const N='#1c3557', LB='#e8ecf2', BD='#b0bece';
+    const docDate = new Date().toISOString().slice(0,10);
+
+    // 컴팩트 본문 HTML (chem과 동일 톤)
+    const eduMsgHtml = `<div style="font-family:'Malgun Gothic',sans-serif;color:#222;padding:6px;max-width:680px">
+      <div style="background:${N};color:#fff;padding:8px 14px;border-radius:4px 4px 0 0;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:12px;font-weight:700;letter-spacing:0.3px">📚 ${eduType}<span style="opacity:0.7;font-weight:400;font-size:10px;margin-left:6px">· 인당의료재단 부민병원</span></div>
+        <div style="font-size:10.5px;opacity:0.95;white-space:nowrap">발송일 <b>${docDate}</b></div>
+      </div>
+      <div style="border:1px solid ${BD};border-top:none;padding:10px 14px;background:#fff">
+        <p style="font-size:11.5px;margin:0 0 8px;color:#475569">아래와 같이 ${eduType}를 제출합니다.</p>
+        <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px">
+          <tr><td style="padding:5px 9px;border:1px solid ${BD};background:${LB};font-weight:700;width:70px;color:${N};font-size:11px">교육부서</td><td style="padding:5px 9px;border:1px solid ${BD};font-size:11px">${dept||'-'}</td></tr>
+          <tr><td style="padding:5px 9px;border:1px solid ${BD};background:${LB};font-weight:700;width:70px;color:${N};font-size:11px">교육일</td><td style="padding:5px 9px;border:1px solid ${BD};font-size:11px">${date||'-'}</td></tr>
+          <tr><td style="padding:5px 9px;border:1px solid ${BD};background:${LB};font-weight:700;width:70px;color:${N};font-size:11px">교육인원</td><td style="padding:5px 9px;border:1px solid ${BD};font-size:11px">${participants||'-'} <span style="color:#94a3b8">(${sigCount||''})</span></td></tr>
+          <tr><td style="padding:5px 9px;border:1px solid ${BD};background:${LB};font-weight:700;width:70px;color:${N};font-size:11px">취급물질</td><td style="padding:5px 9px;border:1px solid ${BD};font-size:11px;line-height:1.5">${(chem||'').length>120?(chem||'').slice(0,117)+'…':(chem||'-')}</td></tr>
+        </table>
+        <div style="font-size:11px;color:#444;line-height:1.65;background:#fafbfc;padding:8px 10px;border-radius:4px;border:1px solid #eef2f6">
+          <b style="color:${N}">📎 첨부 다운로드</b>
+          <table style="width:100%;border-collapse:collapse;margin-top:5px">
+            <tr><td style="padding:6px 10px;border:1px solid ${BD};background:#fafbfc;font-size:11px;line-height:1.5">
+              <span style="font-weight:700;color:${N};display:inline-block;min-width:80px">📎 ${eduType}</span>
+              <a href="${ghLink}" style="color:#2563eb;text-decoration:underline;word-break:break-all">${fileName}</a>
+            </td></tr>
+          </table>
+          <div style="margin-top:4px;font-size:9.5px;color:#94a3b8">※ 링크 클릭 시 GitHub에서 다운로드 · 사내망에서 GitHub 접속 가능 여부 확인 필요</div>
+        </div>
+      </div>
+      <div style="font-size:9.5px;color:#94a3b8;text-align:center;margin-top:6px;padding:3px">
+        ※ 본 일지는 산업안전보건법 시행규칙 제28조 별표4에 의거한 법정 보존 서류입니다.
+      </div>
+    </div>`;
+
     await emailjs.send(CFG.ejsSvc, CFG.ejsTpl, {
       to_email:    (CFG.email&&CFG.email.trim())||DEFAULT_CFG.email,
       subject:     '[PDF] '+emailSubject,
@@ -4306,23 +5696,7 @@ async function uploadPdfAndSendEmail(opts){
       participants: participants||'',
       sig_count:   sigCount||'',
       names:       (names||'').length>100?(names||'').slice(0,97)+'…':(names||''),
-      message: `<div style="font-family:'맑은 고딕',sans-serif;max-width:600px;margin:0 auto">
-        <div style="background:#1c3557;color:#fff;padding:20px;text-align:center;border-radius:8px 8px 0 0">
-          <div style="font-size:17px;font-weight:900;letter-spacing:3px">📎 ${eduType}</div>
-          <div style="font-size:12px;opacity:0.8;margin-top:4px">${emailSubject||''}</div>
-        </div>
-        <div style="background:#f8faff;border:1px solid #b0bece;border-top:none;padding:24px;text-align:center;border-radius:0 0 8px 8px">
-          <div style="font-size:13px;color:#374151;margin-bottom:6px">
-            부서: <b>${dept||''}</b> &nbsp;|&nbsp; 교육일: <b>${date||''}</b> &nbsp;|&nbsp; 인원: <b>${participants||''}</b>
-          </div>
-          <div style="font-size:12px;color:#64748b;margin-bottom:16px">아래 버튼을 클릭하여 PDF를 다운로드하세요</div>
-          <a href="${ghLink}" target="_blank"
-            style="background:#1c3557;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;display:inline-block">
-            📥 PDF 다운로드
-          </a>
-          <div style="margin-top:12px;font-size:10px;color:#94a3b8;word-break:break-all">${ghLink}</div>
-        </div>
-      </div>`
+      message:     eduMsgHtml
     });
 
     toast('📧 이메일 발송 완료 ✓','ok');
@@ -4655,85 +6029,71 @@ async function ppeGenOnePDF(idx){
 async function ppeSendEmailOne(p, fname, pdfB64, sigImg){
   if(!CFG.ejsKey||!CFG.ejsSvc||!CFG.ejsTpl) return;
   const N='#1c3557',LB='#e8ecf2',BD='#b0bece';
-  const t=`border:1px solid ${BD}`;
-  const lbl=`background:${LB};${t};padding:7px 10px;font-weight:bold;color:${N};font-size:12px;text-align:center`;
-  const val=`background:#fff;${t};padding:7px 10px;font-size:12px`;
-  // ★ 지급물품 목록 테이블
-  const itemsTableHtml = `
-    <table style="width:100%;border-collapse:collapse;margin-top:0">
-      <thead>
-        <tr style="background:${N};color:#fff">
-          <th style="padding:7px 10px;font-size:12px;text-align:center;border:1px solid ${N};width:40px">번호</th>
-          <th style="padding:7px 10px;font-size:12px;text-align:left;border:1px solid ${N}">지급 물품명</th>
-          <th style="padding:7px 10px;font-size:12px;text-align:center;border:1px solid ${N};width:60px">수량</th>
-          <th style="padding:7px 10px;font-size:12px;text-align:center;border:1px solid ${N};width:90px">수령 확인</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${p.items.map((i,idx)=>`
-        <tr style="background:${idx%2===0?'#fff':LB}">
-          <td style="padding:7px 10px;font-size:12px;text-align:center;border:1px solid ${BD};font-weight:700;color:${N}">${idx+1}</td>
-          <td style="padding:7px 12px;font-size:12px;border:1px solid ${BD};font-weight:600">${i.name}</td>
-          <td style="padding:7px 10px;font-size:12px;text-align:center;border:1px solid ${BD}">×${i.qty}개</td>
-          <td style="padding:7px 10px;font-size:12px;text-align:center;border:1px solid ${BD};color:#16a34a;font-weight:700">✓ 수령</td>
-        </tr>`).join('')}
-      </tbody>
-    </table>`;
-  const itemsFlat = p.items.map(i=>`${i.name} ×${i.qty}개`).join(', ');
-  const msgHtml=`<div style="font-family:sans-serif;max-width:650px;margin:0 auto">
-    <div style="text-align:center;border-bottom:3px solid ${N};padding-bottom:10px;margin-bottom:6px">
-      <div style="font-size:18px;font-weight:900;letter-spacing:4px;color:${N}">보 호 구 지 급 수 령 증</div>
-      <div style="font-size:11px;color:#888">산업안전보건법 제38조 | 인당의료재단 부민병원</div>
-    </div>
-    <table style="width:100%;border-collapse:collapse;margin-bottom:4px;table-layout:fixed">
-      <colgroup><col style="width:70px"><col><col style="width:70px"><col></colgroup>
-      <tr style="height:28px">
-        <td style="${lbl}">이&nbsp;&nbsp;름</td>
-        <td style="${val};font-weight:900;font-size:13px">${p.name}</td>
-        <td style="${lbl}">부&nbsp;&nbsp;서</td>
-        <td style="${val}">${p.dept}</td>
-      </tr>
-      <tr style="height:36px">
-        <td style="${lbl}">입&nbsp;사&nbsp;일</td>
-        <td style="${val}">${p.join}</td>
-        <td style="${lbl}">수&nbsp;령&nbsp;일</td>
-        <td style="${val};font-weight:700">${p.date}</td>
-      </tr>
-      <tr>
-        <td style="${lbl};vertical-align:middle">서&nbsp;&nbsp;&nbsp;명</td>
-        <td style="background:#fafcff;${t};text-align:center;vertical-align:middle;height:60px" colspan="3">
-          ${sigImg?`<img src="${sigImg}" style="height:55px;max-width:150px;object-fit:contain">`:
-          '<span style="font-size:11px;color:#94a3b8">서명 없음</span>'}
-        </td>
-      </tr>
-      <tr>
-        <td colspan="4" style="padding:0;border:1px solid ${BD}">
-          <div style="background:${N};color:#fff;padding:7px 12px;font-size:12px;font-weight:700;text-align:center;letter-spacing:2px">지 급 물 품 목 록</div>
-          ${itemsTableHtml}
-        </td>
-      </tr>
-      <tr style="height:36px">
-        <td style="${lbl}">지&nbsp;급&nbsp;자</td>
-        <td style="${val};font-weight:900;color:${N};letter-spacing:1px" colspan="3">안 전 관 리 자</td>
-      </tr>
-    </table>
-    <div style="font-size:10px;color:#888;text-align:center;margin-top:8px;border-top:1px solid ${BD};padding-top:6px">
-      본 수령증은 보호구 지급 확인서로 법정 보관 서류입니다.
-    </div>
-  </div>`;
+
+  // ★ 지급물품 압축 텍스트
+  const itemsFlat = p.items.map(i=>`${i.name}×${i.qty}`).join(', ');
+
   try{
     if(!window.emailjs){const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js';document.head.appendChild(s);await new Promise(r=>s.onload=r);}
     emailjs.init(CFG.ejsKey);
+
+    // ★ STEP 1: GitHub에 PDF 먼저 업로드 → 다운로드 URL 확보
+    toast(`☁️ ${p.name} GitHub 업로드 중…`,'info');
+    let pdfUrl = '';
+    if(CFG.ghToken){
+      pdfUrl = await uploadPdfToGitHub(pdfB64, fname);
+    }
+
+    // ★ STEP 2: chem 메일 스타일 컴팩트 본문 + 지급물품 컴팩트 표 + 다운로드 링크
+    const itemRows = p.items.map((it,idx)=>`
+      <tr style="background:${idx%2===0?'#fff':'#fafbfc'}">
+        <td style="padding:5px 9px;border:1px solid ${BD};text-align:center;font-size:11px;font-weight:700;color:${N};width:30px">${idx+1}</td>
+        <td style="padding:5px 9px;border:1px solid ${BD};font-size:11px">${it.name}</td>
+        <td style="padding:5px 9px;border:1px solid ${BD};text-align:center;font-size:11px;width:50px">×${it.qty}</td>
+      </tr>`).join('');
+
+    const downloadRow = pdfUrl
+      ? `<tr><td style="padding:6px 10px;border:1px solid ${BD};background:#fafbfc;font-size:11px;line-height:1.5">
+          <span style="font-weight:700;color:${N};display:inline-block;min-width:90px">📎 수령증 PDF</span>
+          <a href="${pdfUrl}" style="color:#2563eb;text-decoration:underline;word-break:break-all">${fname}</a>
+        </td></tr>`
+      : `<tr><td style="padding:5px 9px;border:1px solid ${BD};background:#fafbfc;color:#94a3b8;font-size:11px"><i>PDF 업로드 실패 — GitHub 토큰 확인 필요</i></td></tr>`;
+
+    const msgHtml = `<div style="font-family:'Malgun Gothic',sans-serif;color:#222;padding:6px;max-width:680px">
+      <div style="background:${N};color:#fff;padding:8px 14px;border-radius:4px 4px 0 0;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:12px;font-weight:700;letter-spacing:0.3px">🦺 보호구 지급수령증<span style="opacity:0.7;font-weight:400;font-size:10px;margin-left:6px">· 인당의료재단 부민병원</span></div>
+        <div style="font-size:10.5px;opacity:0.95;white-space:nowrap">수령일 <b>${p.date||''}</b></div>
+      </div>
+      <div style="border:1px solid ${BD};border-top:none;padding:10px 14px;background:#fff">
+        <p style="font-size:11.5px;margin:0 0 8px;color:#475569">아래와 같이 보호구 지급 수령증을 제출합니다.</p>
+        <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px">
+          <tr><td style="padding:5px 9px;border:1px solid ${BD};background:${LB};font-weight:700;width:70px;color:${N};font-size:11px">이름</td><td style="padding:5px 9px;border:1px solid ${BD};font-size:11px;font-weight:700">${p.name||''}</td></tr>
+          <tr><td style="padding:5px 9px;border:1px solid ${BD};background:${LB};font-weight:700;width:70px;color:${N};font-size:11px">부서</td><td style="padding:5px 9px;border:1px solid ${BD};font-size:11px">${p.dept||''}</td></tr>
+          <tr><td style="padding:5px 9px;border:1px solid ${BD};background:${LB};font-weight:700;width:70px;color:${N};font-size:11px">입사일</td><td style="padding:5px 9px;border:1px solid ${BD};font-size:11px"><span style="color:#94a3b8">${p.join||'-'}</span></td></tr>
+        </table>
+        <div style="font-size:11px;font-weight:700;color:${N};margin:0 0 4px">📦 지급물품 (${p.items.length}종)</div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px">${itemRows}</table>
+        <div style="font-size:11px;color:#444;line-height:1.65;background:#fafbfc;padding:8px 10px;border-radius:4px;border:1px solid #eef2f6">
+          <b style="color:${N}">📎 첨부 다운로드</b>
+          <table style="width:100%;border-collapse:collapse;margin-top:5px">${downloadRow}</table>
+          <div style="margin-top:4px;font-size:9.5px;color:#94a3b8">※ 링크 클릭 시 GitHub에서 다운로드 · 사내망에서 GitHub 접속 가능 여부 확인 필요</div>
+        </div>
+      </div>
+      <div style="font-size:9.5px;color:#94a3b8;text-align:center;margin-top:6px;padding:3px">
+        ※ 본 수령증은 산업안전보건법 제38조에 의거한 법정 보존 서류입니다.
+      </div>
+    </div>`;
+
     await emailjs.send(CFG.ejsSvc,CFG.ejsTpl,{
       to_email:(CFG.emailPpe&&CFG.emailPpe.trim())||DEFAULT_CFG.emailPpe||CFG.email,
       subject:`[보호구지급수령증] ${p.dept} ${p.name} ${p.date}`,
-      department:p.dept, chemical:p.items.map(i=>i.name).join(', '),
+      department:p.dept, chemical:itemsFlat,
       date:p.date, participants:'1명', sig_count:'서명완료', names:p.name,
       message:msgHtml
     });
-    toast(`📧 ${p.name} 이메일 발송 완료`,'ok');
+    toast(`📧 ${p.name} 메일 발송 완료 (PDF 다운로드 링크 포함)`,'ok');
     showSendComplete('ppe');
-    if(CFG.ghToken){const gl=await uploadPdfToGitHub(pdfB64,fname);if(gl)toast('✅ GitHub 저장: '+p.name,'ok');}
+    if(pdfUrl) toast(`✅ GitHub 저장: ${p.name}`,'ok');
   }catch(err){toast('이메일 오류: '+(err.text||err.message),'err');}
 }
 
@@ -4856,7 +6216,8 @@ function saveEduRecord(params){
         name: name.trim(),
         joinDate: joinDates[i]||'',
         gender: genders[i]||'',
-        signed: i<sigCount ? '✓ 서명완료' : '- 미서명'
+        signed: i<sigCount ? '✓ 서명완료' : '- 미서명',
+        pdfFileName: params.fileName||''  // ★ 결재 시 GitHub PDF 다운로드용
       });
     });
     // ★ 글로벌 ID 자동 부여 + 묘비 필터 적용 (충돌·재출현 방지)
@@ -5041,13 +6402,43 @@ function updateEduRec(idx,field,val){
 function saveEduRecRow(idx){
   const target = adminRecords[idx];
   if(!target){ toast('대상 없음','err'); return; }
+
+  // ★ 결재 정보 보존: localStorage records에서 같은 record를 찾아 결재 정보 유지
+  try{
+    const localRecords = JSON.parse(localStorage.getItem('bm_edu_records')||'[]');
+    const matched = localRecords.find(r =>
+      (target.recordId && r.recordId===target.recordId) ||
+      (r.submitted===target.submitted && r.name===target.name && r.dateStart===target.dateStart)
+    );
+    if(matched && matched.approved){
+      // 결재 완료된 records는 결재 정보 보존
+      target.approved = matched.approved;
+      target.approvedAt = matched.approvedAt;
+      target.approverName = matched.approverName;
+      console.log('[saveEduRecRow] 결재 정보 보존:', target.name, target.approvedAt);
+    }
+    // localStorage records도 같은 데이터로 갱신 (결재 탭 즉시 반영)
+    let updatedLocal = false;
+    for(let j=0;j<localRecords.length;j++){
+      if((target.recordId && localRecords[j].recordId===target.recordId) ||
+         (localRecords[j].submitted===target.submitted && localRecords[j].name===target.name && localRecords[j].dateStart===target.dateStart)){
+        Object.assign(localRecords[j], target);
+        updatedLocal = true;
+        break;
+      }
+    }
+    if(updatedLocal){
+      localStorage.setItem('bm_edu_records', JSON.stringify(localRecords));
+    }
+  }catch(e){ console.warn('[saveEduRecRow] localStorage 동기화 실패:', e); }
+
   // GitHub 즉시 동기화 (있으면)
   if(CFG.ghToken && CFG.ghRepo){
     (async ()=>{
       try{
         const {data, sha} = await readGitHubJSON('records/edu_records.json');
         const remote = (data && Array.isArray(data.records)) ? data.records : [];
-        // 같은 ID 찾아서 업데이트
+        // 같은 ID 찾아서 업데이트 (결재 정보도 함께 머지됨, target이 이미 결재 정보 포함)
         let updated = false;
         for(let i=0;i<remote.length;i++){
           if((target.recordId && remote[i].recordId===target.recordId) ||
@@ -5059,14 +6450,18 @@ function saveEduRecRow(idx){
         }
         if(!updated) remote.push(target);
         await writeGitHubJSON('records/edu_records.json', {records:remote}, sha, `edu 수정: ${target.name||''} ${target.dateStart||''}`);
-        toast('💾 저장 완료 (다른 PC도 자동 반영)','ok');
+        toast('💾 저장 완료 (결재 정보 보존, 다른 PC 자동 반영)','ok');
         if(typeof BM!=='undefined'){
           BM.audit('UPDATE','edu',{name:target.name, dateStart:target.dateStart, reason:'관리자 수정'});
         }
+        // ★ 결재 탭 열려있으면 즉시 갱신
+        if(typeof apvRefreshIfOpen === 'function') apvRefreshIfOpen();
       }catch(e){ toast('GitHub 저장 실패: '+e.message,'err'); }
     })();
   } else {
     toast('💾 로컬 저장 완료 (GitHub 미설정)','ok');
+    // GitHub 없어도 localStorage 갱신은 위에서 했으므로 결재 탭 갱신
+    if(typeof apvRefreshIfOpen === 'function') apvRefreshIfOpen();
   }
 }
 
@@ -5075,13 +6470,19 @@ let _eduSaveTimer = null;
 function _scheduleEduSave(){
   clearTimeout(_eduSaveTimer);
   _eduSaveTimer = setTimeout(()=>{
-    if(!CFG.ghToken || !CFG.ghRepo) return;
+    if(!CFG.ghToken || !CFG.ghRepo){
+      // GitHub 미설정이어도 localStorage는 이미 갱신됨 → 결재 탭만 갱신
+      if(typeof apvRefreshIfOpen === 'function') apvRefreshIfOpen();
+      return;
+    }
     (async ()=>{
       try{
         const local = JSON.parse(localStorage.getItem('bm_edu_records')||'[]');
         const {sha} = await readGitHubJSON('records/edu_records.json');
         await writeGitHubJSON('records/edu_records.json', {records:local}, sha, 'edu 자동 동기화');
         console.log('[edu auto-sync] GitHub 동기화 완료');
+        // ★ 결재 탭 갱신
+        if(typeof apvRefreshIfOpen === 'function') apvRefreshIfOpen();
       }catch(e){ console.warn('[edu auto-sync] 실패:',e); }
     })();
   }, 3000);
@@ -5114,6 +6515,8 @@ function deleteAdminRecord(i){
     _adminLoading=false;
     adminLoaded=false;
     loadAdminRecords();  // 현재 필터 유지
+    // ★ 결재 탭 열려있으면 즉시 갱신
+    if(typeof apvRefreshIfOpen === 'function') apvRefreshIfOpen();
     toast('삭제 완료','ok');
   }catch(e){toast('삭제 오류','err');}
 }
@@ -5861,6 +7264,8 @@ BM.bulkDelete = async function(category, ids, reasonHint){
   if(category==='edu'){
     _adminLoading=false; adminLoaded=false;
     _adminDirectRender();
+    // ★ 결재 탭 열려있으면 즉시 갱신
+    if(typeof apvRefreshIfOpen === 'function') apvRefreshIfOpen();
   } else {
     _adminDirectRender();
   }
@@ -7315,6 +8720,9 @@ function openCfg(){
   const apvFields=[['apv1name','apv1Name'],['apv1email','apv1Email'],['apv2name','apv2Name'],['apv2email','apv2Email'],
                    ['apv3name','apv3Name'],['apv3email','apv3Email'],['apv4name','apv4Name'],['apv4email','apv4Email']];
   apvFields.forEach(([id,key])=>{ const el=document.getElementById('cfg-'+id); if(el) el.value=CFG[key]||DEFAULT_CFG[key]||''; });
+  // ★ 결재 탭 도장 이름
+  const stampEl=document.getElementById('cfg-stampname');
+  if(stampEl) stampEl.value=CFG.stampName||DEFAULT_CFG.stampName||'';
   document.getElementById('modal-cfg').style.display='flex';}
 function closeCfg(){document.getElementById('modal-cfg').style.display='none';}
 function openDriveAuth(){
@@ -7388,6 +8796,12 @@ function saveCfg(){
     const el=document.getElementById('cfg-'+id);
     if(el){ CFG[key]=el.value.trim(); localStorage.setItem('bm_'+key, CFG[key]); }
   });
+  // ★ 결재 탭 도장 이름 저장 (별도 관리)
+  const stampSaveEl=document.getElementById('cfg-stampname');
+  if(stampSaveEl){
+    CFG.stampName = stampSaveEl.value.trim() || DEFAULT_CFG.stampName;
+    localStorage.setItem('bm_stampName', CFG.stampName);
+  }
   _syncSettingsToGitHub();
   if(CFG.url){loadEmps();loadEduTemplate();loadChems();}}
 
