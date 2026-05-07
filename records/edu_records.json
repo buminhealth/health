@@ -1349,7 +1349,10 @@
     "gender": "여",
     "signed": "✓ 서명완료",
     "recordId": "2026-04-21_1776739694667|dev_moqo9i6n_ly7owa|126030311|총무팀|2026-03-03",
-    "deviceId": "dev_moqo9i6n_ly7owa"
+    "deviceId": "dev_moqo9i6n_ly7owa",
+    "approved": true,
+    "approvedAt": "2026-05-07T00:31:51.923Z",
+    "approverName": "장은선"
   },
   {
     "no": 72,
@@ -2189,44 +2192,6 @@
   },
   {
     "no": 116,
-    "submitted": "2026-04-16_1776326632981",
-    "type": "특별안전보건교육",
-    "dept": "총무팀",
-    "chem": "뉴젠자임폼",
-    "dateStart": "2021-07-26",
-    "dateEnd": "2021-07-26",
-    "days": "1",
-    "time": "",
-    "totalHours": "1시간",
-    "empNo": "121072604",
-    "name": "박한나",
-    "joinDate": "2021-07-26",
-    "gender": "여",
-    "signed": "✓ 서명완료",
-    "recordId": "2026-04-16_1776326632981|dev_moqo9i6n_ly7owa|121072604|총무팀|2021-07-26",
-    "deviceId": "dev_moqo9i6n_ly7owa"
-  },
-  {
-    "no": 117,
-    "submitted": "2026-04-16_1776325426527",
-    "type": "특별안전보건교육",
-    "dept": "총무팀",
-    "chem": "뉴젠자임폼",
-    "dateStart": "2021-04-26",
-    "dateEnd": "2021-04-26",
-    "days": "1",
-    "time": "",
-    "totalHours": "1시간",
-    "empNo": "121042601",
-    "name": "장은선",
-    "joinDate": "2021-04-26",
-    "gender": "여",
-    "signed": "✓ 서명완료",
-    "recordId": "2026-04-16_1776325426527|dev_moqo9i6n_ly7owa|121042601|총무팀|2021-04-26",
-    "deviceId": "dev_moqo9i6n_ly7owa"
-  },
-  {
-    "no": 118,
     "submitted": "2026-04-16_1776325777432",
     "type": "특별안전보건교육",
     "dept": "기획경영팀",
@@ -2245,7 +2210,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 119,
+    "no": 117,
     "submitted": "2026-04-21_1776741473184",
     "type": "MSDS교육",
     "dept": "51병동",
@@ -2264,7 +2229,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 120,
+    "no": 118,
     "submitted": "2026-04-21_1776741473184",
     "type": "MSDS교육",
     "dept": "51병동",
@@ -2283,7 +2248,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 121,
+    "no": 119,
     "submitted": "2026-04-21_1776741473184",
     "type": "MSDS교육",
     "dept": "51병동",
@@ -2302,7 +2267,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 122,
+    "no": 120,
     "submitted": "2026-04-21_1776741473184",
     "type": "MSDS교육",
     "dept": "51병동",
@@ -2321,7 +2286,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 123,
+    "no": 121,
     "submitted": "2026-04-21_1776740306365",
     "type": "MSDS교육",
     "dept": "61병동",
@@ -2340,7 +2305,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 124,
+    "no": 122,
     "submitted": "2026-04-21_1776740306365",
     "type": "MSDS교육",
     "dept": "61병동",
@@ -2359,7 +2324,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 125,
+    "no": 123,
     "submitted": "2026-04-21_1776740306365",
     "type": "MSDS교육",
     "dept": "61병동",
@@ -2378,7 +2343,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 126,
+    "no": 124,
     "submitted": "2026-04-22_1776899100506",
     "type": "MSDS교육",
     "dept": "61병동",
@@ -2397,7 +2362,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 127,
+    "no": 125,
     "submitted": "2026-04-22_1776899100506",
     "type": "MSDS교육",
     "dept": "61병동",
@@ -2416,7 +2381,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 128,
+    "no": 126,
     "submitted": "2026-04-21_1776740067215",
     "type": "MSDS교육",
     "dept": "61병동",
@@ -2435,7 +2400,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 129,
+    "no": 127,
     "submitted": "2026-04-21_1776740067215",
     "type": "MSDS교육",
     "dept": "61병동",
@@ -2454,7 +2419,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 130,
+    "no": 128,
     "submitted": "2026-04-21_1776740067215",
     "type": "MSDS교육",
     "dept": "61병동",
@@ -2473,7 +2438,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 131,
+    "no": 129,
     "submitted": "2026-04-21_1776740067215",
     "type": "MSDS교육",
     "dept": "61병동",
@@ -2492,7 +2457,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 132,
+    "no": 130,
     "submitted": "2026-04-21_1776740067215",
     "type": "MSDS교육",
     "dept": "61병동",
@@ -2511,7 +2476,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 133,
+    "no": 131,
     "submitted": "2026-04-21_1776740067215",
     "type": "MSDS교육",
     "dept": "61병동",
@@ -2530,7 +2495,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 134,
+    "no": 132,
     "submitted": "2026-04-21_1776740067215",
     "type": "MSDS교육",
     "dept": "61병동",
@@ -2549,7 +2514,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 135,
+    "no": 133,
     "submitted": "2026-04-21_1776740067215",
     "type": "MSDS교육",
     "dept": "61병동",
@@ -2568,7 +2533,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 136,
+    "no": 134,
     "submitted": "2026-04-21_1776740067215",
     "type": "MSDS교육",
     "dept": "61병동",
@@ -2587,7 +2552,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 137,
+    "no": 135,
     "submitted": "2026-04-21_1776740067215",
     "type": "MSDS교육",
     "dept": "61병동",
@@ -2606,7 +2571,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 138,
+    "no": 136,
     "submitted": "2026-04-21_1776740067215",
     "type": "MSDS교육",
     "dept": "61병동",
@@ -2625,7 +2590,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 139,
+    "no": 137,
     "submitted": "2026-04-17_1776386703806",
     "type": "특별안전보건교육",
     "dept": "진단검사의학실",
@@ -2644,7 +2609,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 140,
+    "no": 138,
     "submitted": "2026-04-21_1776738699020",
     "type": "MSDS교육",
     "dept": "51병동",
@@ -2663,7 +2628,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 141,
+    "no": 139,
     "submitted": "2026-04-21_1776738699020",
     "type": "MSDS교육",
     "dept": "51병동",
@@ -2682,7 +2647,7 @@
     "deviceId": "dev_moqo9i6n_ly7owa"
   },
   {
-    "no": 142,
+    "no": 140,
     "submitted": "2026-05-06_1778026566498",
     "type": "특별안전보건교육",
     "dept": "수술실",
@@ -2704,7 +2669,7 @@
     "approverName": "보건관리자"
   },
   {
-    "no": 143,
+    "no": 141,
     "submitted": "2026-05-06_1778026566498",
     "type": "특별안전보건교육",
     "dept": "수술실",
@@ -2726,29 +2691,7 @@
     "approverName": "보건관리자"
   },
   {
-    "no": 144,
-    "submitted": "2026-05-06_1778026656822",
-    "type": "MSDS교육",
-    "dept": "총무팀",
-    "chem": "뉴젠자임폼",
-    "dateStart": "2026-05-06",
-    "dateEnd": "2026-05-06",
-    "days": "1",
-    "time": "10:00~11:00(1시간)",
-    "totalHours": "1시간",
-    "empNo": "121042601",
-    "name": "장은선",
-    "joinDate": "2021-04-26",
-    "gender": "여",
-    "signed": "✓ 서명완료",
-    "recordId": "2026-05-06_1778026656822|dev_moqo9i6n_ly7owa|121042601|총무팀|2026-05-06",
-    "deviceId": "dev_moqo9i6n_ly7owa",
-    "approved": true,
-    "approvedAt": "2026-05-06T03:21:14.132Z",
-    "approverName": "보건관리자"
-  },
-  {
-    "no": 145,
+    "no": 142,
     "submitted": "2026-05-06_1778029610435",
     "type": "특별안전보건교육",
     "dept": "수술실",
@@ -2770,7 +2713,7 @@
     "approverName": "보건관리자"
   },
   {
-    "no": 146,
+    "no": 143,
     "submitted": "2026-05-06_1778030453621",
     "type": "특별안전보건교육",
     "dept": "진단검사의학실",
@@ -2792,30 +2735,7 @@
     "approverName": "보건관리자"
   },
   {
-    "no": 147,
-    "submitted": "2026-05-06_1778038899401",
-    "type": "MSDS교육",
-    "dept": "총무팀",
-    "chem": "뉴젠자임폼",
-    "dateStart": "2026-05-06",
-    "dateEnd": "2026-05-06",
-    "days": "1",
-    "time": "10:00~11:00(1시간)",
-    "totalHours": "1시간",
-    "empNo": "121042601",
-    "name": "장은선",
-    "joinDate": "2021-04-26",
-    "gender": "여",
-    "signed": "✓ 서명완료",
-    "pdfFileName": "MSDS교육일지-총무팀-장은선-2026-05-06.pdf",
-    "recordId": "2026-05-06_1778038899401|dev_moqo9i6n_ly7owa|121042601|총무팀|2026-05-06",
-    "deviceId": "dev_moqo9i6n_ly7owa",
-    "approved": true,
-    "approvedAt": "2026-05-06T03:42:14.360Z",
-    "approverName": "보건관리자"
-  },
-  {
-    "no": 148,
+    "no": 144,
     "submitted": "2026-05-06_1778039330638",
     "type": "특별안전보건교육",
     "dept": "수술실",
@@ -2838,76 +2758,7 @@
     "approverName": "보건관리자"
   },
   {
-    "no": 149,
-    "submitted": "2026-05-06_1778039568651",
-    "type": "MSDS교육",
-    "dept": "총무팀",
-    "chem": "뉴젠자임폼",
-    "dateStart": "2026-05-06",
-    "dateEnd": "2026-05-06",
-    "days": "1",
-    "time": "10:00~11:00(1시간)",
-    "totalHours": "1시간",
-    "empNo": "121042601",
-    "name": "장은선",
-    "joinDate": "2021-04-26",
-    "gender": "여",
-    "signed": "✓ 서명완료",
-    "pdfFileName": "MSDS교육일지-총무팀-장은선-2026-05-06.pdf",
-    "recordId": "2026-05-06_1778039568651|dev_moqo9i6n_ly7owa|121042601|총무팀|2026-05-06",
-    "deviceId": "dev_moqo9i6n_ly7owa",
-    "approved": true,
-    "approvedAt": "2026-05-06T03:53:38.135Z",
-    "approverName": "장은선"
-  },
-  {
-    "no": 150,
-    "submitted": "2026-05-06_1778039652385",
-    "type": "MSDS교육",
-    "dept": "총무팀",
-    "chem": "뉴젠자임폼",
-    "dateStart": "2026-05-06",
-    "dateEnd": "2026-05-06",
-    "days": "1",
-    "time": "10:00~11:00(1시간)",
-    "totalHours": "1시간",
-    "empNo": "124042900",
-    "name": "장종문",
-    "joinDate": "2024-04-29",
-    "gender": "남",
-    "signed": "✓ 서명완료",
-    "pdfFileName": "MSDS교육일지-총무팀-장종문-2026-05-06.pdf",
-    "recordId": "2026-05-06_1778039652385|dev_moqo9i6n_ly7owa|124042900|총무팀|2026-05-06",
-    "deviceId": "dev_moqo9i6n_ly7owa",
-    "approved": true,
-    "approvedAt": "2026-05-06T03:54:26.331Z",
-    "approverName": "장은선"
-  },
-  {
-    "no": 151,
-    "submitted": "2026-05-06_1778039802231",
-    "type": "특별안전보건교육",
-    "dept": "총무팀",
-    "chem": "뉴젠자임폼",
-    "dateStart": "2026-05-06",
-    "dateEnd": "2026-05-06",
-    "days": "1",
-    "time": "",
-    "totalHours": "1시간",
-    "empNo": "124042900",
-    "name": "장종문",
-    "joinDate": "2024-04-29",
-    "gender": "남",
-    "signed": "- 미서명",
-    "pdfFileName": "특별안전보건교육일지-총무팀-장종문-2026-05-06.pdf",
-    "recordId": "2026-05-06_1778039802231|dev_moqo9i6n_ly7owa|124042900|총무팀|2026-05-06",
-    "deviceId": "dev_moqo9i6n_ly7owa",
-    "approved": true,
-    "approvedAt": "2026-05-06T03:57:02.217Z",
-    "approverName": "장은선"
-  },
-  {
-    "no": 152,
+    "no": 145,
     "submitted": "2026-05-06_1778040010590",
     "type": "특별안전보건교육",
     "dept": "수술실",
