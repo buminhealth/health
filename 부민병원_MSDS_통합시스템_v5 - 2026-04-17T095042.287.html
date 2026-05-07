@@ -1369,6 +1369,23 @@ const INDIV_EDU=`     ○ 취급물질의 성질 및 상태에 관한 사항\n �
 
 /* ══ 초기화 ══ */
 window.addEventListener('DOMContentLoaded',()=>{
+  // ★ 글로벌 에러 핸들러 (강제 종료 원인 파악 + 알림)
+  window.addEventListener('error', (e) => {
+    console.error('[글로벌 에러]', e.message, e.filename, e.lineno);
+    try{ toast('⚠ 오류 발생: '+ (e.message||'알 수 없음'), 'err'); }catch(_){}
+    // ★ 페이지 새로고침이나 종료 시도하지 않음 (중요!)
+    return true;  // 기본 처리 허용
+  });
+  // ★ Promise rejection 핸들러 (메일 발송 실패 등 비동기 오류 처리)
+  window.addEventListener('unhandledrejection', (e) => {
+    console.error('[비동기 에러]', e.reason);
+    try{
+      const msg = (e.reason && e.reason.message) || String(e.reason);
+      toast('⚠ 비동기 오류: '+ msg.slice(0, 80), 'err');
+    }catch(_){}
+    e.preventDefault();  // ★ 기본 처리 (콘솔 에러) 무시 - 페이지 안정 유지
+  });
+
   // ★ GitHub settings.json 자동 읽기 (설정 자동 동기화)
   _loadSettingsFromGitHub();
   // ★ 결재 링크 접속 처리
@@ -1485,6 +1502,13 @@ function showSendComplete(tabId){
   const existing = document.getElementById('send-complete-overlay');
   if(existing) existing.remove();
 
+  // ★ 메모리 정리: 큰 변수 참조 해제 + 가비지 컬렉션 기회 (PWA 안정성)
+  // PDF 캡처 영역 정리
+  const pdfArea = document.getElementById('pdf-area');
+  if(pdfArea) pdfArea.innerHTML = '';
+  // 캐시 객체 정리
+  if(window._lastPdfBase64) window._lastPdfBase64 = null;
+
   const label = tabId==='ppe' ? '보호구 지급수령증' : tabId==='edu1' ? '특별안전보건교육일지' : 'MSDS 교육일지';
   const resetFn = tabId==='ppe' ? 'ppeReset()' : tabId==='edu1' ? 'e1Reset()' : 'e2Reset()';
 
@@ -1540,7 +1564,7 @@ function goTab(t){
   const adm=document.getElementById('pg-admin');if(adm)adm.style.display=t==='admin'?'block':'none';
   ['msds','edu1','edu2','admin'].forEach(p=>{const el=document.getElementById('tab-'+p);if(el)el.className='tb'+(p===t?' on':'');});
   if(t==='admin') initAdmin();
-  if(t==='ppe'){ ppeReset(); initPpeSig(); ppeBuildPreview(); loadPpeData(); }
+  if(t==='ppe'){ ppeReset(); initPpeSig(); if(typeof ppeBuildPreview==='function') ppeBuildPreview(); loadPpeData(); }
   if(t==='edu1') e1Reset();
   if(t==='edu2') e2Reset();
   if(t==='chem') chemReset();  // ★ 화학물질 보고서 초기화
@@ -2818,13 +2842,18 @@ async function chemGenPDF(){
     pdf.save(fname);
     toast(`📄 ${fname} PDF 저장 완료`,'ok');
 
-    // 메일 발송
-    await chemSendEmail(d, fname, pdf.output('datauristring'));
+    // ★ base64를 메일 발송 후 즉시 해제 (메모리 절약)
+    let pdfB64 = pdf.output('datauristring');
+    // 메일 발송 (chemSendEmail 안에서 GC 가능하도록)
+    await chemSendEmail(d, fname, pdfB64);
+    pdfB64 = null;  // ★ 즉시 메모리 해제
 
     // 로컬 + GitHub 저장
     chemSaveRecord(d, fname);
 
     area.innerHTML = '';
+    // ★ GC 기회 부여
+    await new Promise(r => setTimeout(r, 100));
   } catch(err){
     toast('PDF 오류: '+(err.message||err),'err');
     console.error('chemGenPDF error:', err);
@@ -2915,6 +2944,9 @@ async function chemSendEmail(d, fname, pdfB64){
     if(CFG.ghToken){
       pdfUrl = await chemUploadPdfToGitHub(pdfB64, fname);
     }
+    // ★ PDF base64 즉시 해제 (수 MB 메모리 절약)
+    pdfB64 = null;
+    await new Promise(r => setTimeout(r, 50));  // GC 기회
 
     let msdsNewUrl = '';
     let msdsStopUrl = '';
@@ -4011,10 +4043,10 @@ async function e1GenPDF(){
       fileName: _e1FileName  // ★ 결재 시 PDF 가져오기 위해 저장
     });
     // ★ Drive 업로드 → 이메일 발송
-    const e1PdfB64 = pdf.output('datauristring');
+    let e1PdfB64 = pdf.output('datauristring');
     const e1FileName = `특별안전보건교육일지-${dept}-${e1NmStr}-${ds}.pdf`;
     const e1SigCount = Object.values(e1.sigData).reduce((acc,d)=>acc+Object.keys(d).length,0);
-    await uploadPdfAndSendEmail({
+    const e1Opts = {
       pdfBase64: e1PdfB64,
       fileName:  e1FileName,
       type: '특별안전보건교육',
@@ -4033,15 +4065,22 @@ async function e1GenPDF(){
       partsDetail: await Promise.all(e1.parts.map(async (p,i)=>({
         no:i+1, name:p.name, join:p.join||'', gender:p.gender||'',
         signed: i<e1SigCount ? '✓' : '-',
-        // ★ 서명 이미지 JPEG 압축 (최대 5명)
         sigImg: i<3 ? await compressImg((e1.sigData[0]&&e1.sigData[0][i])||'') : ''
       }))),
-      // ★ 사진 JPEG 압축 (최대 2장)
       photos: await Promise.all((e1.photos.filter(Boolean)).slice(0,2).map(p=>compressPhoto(p))),
       eduDates: e1.dates
-    });
+    };
+    // ★ 메모리 해제: 로컬 변수만 사용, 아래 정리
+    e1PdfB64 = null;
+    await uploadPdfAndSendEmail(e1Opts);
+    // ★ 메일 발송 후 큰 객체 해제
+    e1Opts.pdfBase64 = null;
+    e1Opts.partsDetail = null;
+    e1Opts.photos = null;
   }catch(err){toast('PDF 오류: '+err.message,'err');}
+  // ★ 캡처 영역 정리 + GC 기회 부여
   area.innerHTML='';
+  await new Promise(r => setTimeout(r, 100));
 }
 
 async function e2GenPDF(){
@@ -4228,10 +4267,10 @@ async function e2GenPDF(){
       fileName: _e2FileName  // ★ 결재 시 PDF 가져오기 위해 저장
     });
     // ★ Drive 업로드 → 이메일 발송
-    const e2PdfB64 = pdf.output('datauristring');
+    let e2PdfB64 = pdf.output('datauristring');
     const e2FileName = `MSDS교육일지-${dept}-${e2NmStr}-${ds}.pdf`;
     const e2SigCount = Object.keys(e2.sigData).length;
-    await uploadPdfAndSendEmail({
+    const e2Opts = {
       pdfBase64: e2PdfB64,
       fileName:  e2FileName,
       type: 'MSDS교육',
@@ -4250,12 +4289,17 @@ async function e2GenPDF(){
       partsDetail: await Promise.all(e2.parts.map(async (p,i)=>({
         no:i+1, name:p.name, join:p.join||'', gender:p.gender||'',
         signed: i<e2SigCount ? '✓' : '-',
-        // ★ 서명 이미지 JPEG 압축 (최대 5명)
         sigImg: i<3 ? await compressImg(e2.sigData[i]||'') : ''
       })))
-    });
+    };
+    e2PdfB64 = null;
+    await uploadPdfAndSendEmail(e2Opts);
+    // ★ 메모리 해제
+    e2Opts.pdfBase64 = null;
+    e2Opts.partsDetail = null;
   }catch(err){toast('PDF 오류: '+err.message,'err');}
   area.innerHTML='';
+  await new Promise(r => setTimeout(r, 100));
 }
 
 /* ══ 이메일 ══ */
@@ -4679,18 +4723,24 @@ function apvRender(){
 
     // 우측 결재정보 셀
     const apvCell = g.approved
-      ? `<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;min-width:170px">
+      ? `<div style="display:flex;align-items:center;gap:4px;justify-content:flex-end;min-width:200px">
           <span style="font-size:10.5px;color:#15803d;font-weight:600;white-space:nowrap" title="결재일시: ${(g.approvedAt||'').slice(0,16).replace('T',' ')}">
             ✓ ${g.approverName||'장은선'} · ${(g.approvedAt||'').slice(5,10)}
           </span>
-          <button onclick="apvReprint('${g.groupKey}')" style="padding:3px 8px;background:#1c3557;color:#fff;border:none;border-radius:4px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap" title="결재 도장 합성 PDF 재출력">📄</button>
+          <button onclick="apvViewPdf('${g.groupKey}')" style="padding:3px 7px;background:#fff;color:#0891b2;border:1px solid #0891b2;border-radius:4px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap" title="PDF 새 창에서 보기">👁</button>
+          <button onclick="apvDownloadPdf('${g.groupKey}')" style="padding:3px 7px;background:#1c3557;color:#fff;border:none;border-radius:4px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap" title="결재 도장 합성 PDF 다운로드">📥</button>
         </div>`
-      : `<div style="min-width:170px;text-align:right;font-size:10.5px;color:#94a3b8">결재대기</div>`;
+      : `<div style="display:flex;align-items:center;gap:4px;justify-content:flex-end;min-width:200px">
+          <span style="font-size:10.5px;color:#94a3b8">결재대기</span>
+          ${g.pdfFileName ? `<button onclick="apvViewPdf('${g.groupKey}')" style="padding:3px 7px;background:#fff;color:#0891b2;border:1px solid #0891b2;border-radius:4px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap" title="원본 PDF 새 창에서 보기">👁</button>
+            <button onclick="apvDownloadPdf('${g.groupKey}')" style="padding:3px 7px;background:#fff;color:#1c3557;border:1px solid #1c3557;border-radius:4px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap" title="원본 PDF 다운로드">📥</button>` : ''}
+        </div>`;
 
     return `<div title="참석자: ${memberStr}" style="display:grid;grid-template-columns:28px 90px minmax(90px,1fr) 130px 60px 70px minmax(150px,1.4fr) 80px auto;gap:10px;align-items:center;padding:8px 14px 8px 18px;background:${rowBg};border-bottom:1px solid #f1f5f9;border-left:4px solid ${sideBar};font-size:12px;transition:background 0.1s">
-      <input type="checkbox" ${isSelected?'checked':''} ${g.approved?'disabled':''} 
+      <input type="checkbox" ${isSelected?'checked':''} 
              onchange="apvToggle('${g.groupKey}', this.checked)"
-             style="width:16px;height:16px;cursor:${g.approved?'not-allowed':'pointer'};accent-color:#1c3557">
+             title="${g.approved?'결재 완료됨 — 영구 삭제용으로만 선택 가능':'선택하여 결재 또는 삭제'}"
+             style="width:16px;height:16px;cursor:pointer;accent-color:${g.approved?'#dc2626':'#1c3557'}">
       <span style="font-size:10.5px;background:${typeBg};color:${typeColor};padding:3px 7px;border-radius:4px;font-weight:700;text-align:center;white-space:nowrap">${typeIcon} ${typeShort}</span>
       <span style="font-weight:700;color:#1c3557;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${g.dept||'-'}</span>
       <span style="color:#64748b;white-space:nowrap;font-variant-numeric:tabular-nums">${dispDate}</span>
@@ -4733,6 +4783,132 @@ async function apvReprint(groupKey){
     toast(`❌ 재출력 오류: ${err.message}`,'err');
   }
 }
+
+/* ── 통합 PDF URL 생성 (GitHub 경로) ── */
+function buildPdfUrl(pdfFileName, type, dateStart){
+  if(!pdfFileName) return '';
+  const repo = CFG.ghRepo || 'buminhealth/health';
+  const [owner, repoName] = repo.split('/');
+  // 파일명에 날짜가 포함되어 있어 ym 추정 (없으면 현재 month)
+  let ym = '';
+  // 파일명에 yyyy-mm-dd 패턴 추출
+  const m = pdfFileName.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if(m){
+    ym = `${m[1]}-${m[2]}`;
+  }else if(dateStart){
+    ym = (dateStart||'').slice(0,7);
+  }else{
+    const d = new Date();
+    ym = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  }
+  const folder = (type||'').includes('보호구') ? '보호구' : '교육일지';
+  return `https://raw.githubusercontent.com/${owner}/${repoName}/main/${folder}/${ym}/${encodeURIComponent(pdfFileName)}`;
+}
+
+/* ── PDF 새 창에서 보기 (결재/관리자 공용) ── */
+function apvViewPdf(groupKey){
+  const group = apvState.groups.find(g => g.groupKey === groupKey);
+  if(!group){ toast('일지를 찾을 수 없습니다','err'); return; }
+  if(!group.pdfFileName){
+    toast('⚠ 옛 일지(PDF 파일 정보 없음) — 보기 불가','err');
+    return;
+  }
+  const url = buildPdfUrl(group.pdfFileName, group.type, group.dateStart);
+  window.open(url, '_blank', 'noopener');
+  toast(`👁 ${group.dept} PDF 열림`,'info');
+}
+
+/* ── PDF 다운로드 (결재/관리자 공용) ── */
+async function apvSavePdf(groupKey){
+  const group = apvState.groups.find(g => g.groupKey === groupKey);
+  if(!group){ toast('일지를 찾을 수 없습니다','err'); return; }
+  if(!group.pdfFileName){
+    toast('⚠ 옛 일지(PDF 파일 정보 없음) — 저장 불가','err');
+    return;
+  }
+  const url = buildPdfUrl(group.pdfFileName, group.type, group.dateStart);
+  toast(`📥 ${group.dept} PDF 다운로드 중…`,'info');
+  try{
+    const res = await fetch(url);
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = group.pdfFileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+    toast(`✅ ${group.pdfFileName} 다운로드 완료`,'ok');
+  }catch(err){
+    console.error('apvSavePdf error:', err);
+    toast(`❌ 다운로드 실패: ${err.message}`,'err');
+  }
+}
+
+/* ── 관리자 모드 - record 단위 PDF 보기/저장 (e1/e2/ppe 공용) ── */
+function admViewPdfFromRecord(recordIdx, mode){
+  const r = (typeof adminRecords !== 'undefined' && adminRecords[recordIdx]) || null;
+  if(!r){ toast('대상 record를 찾을 수 없음','err'); return; }
+  if(!r.pdfFileName){
+    toast('⚠ 옛 일지(PDF 파일 정보 없음) — 사용 불가','err');
+    return;
+  }
+  const url = buildPdfUrl(r.pdfFileName, r.type, r.dateStart);
+  if(mode === 'view'){
+    window.open(url, '_blank', 'noopener');
+    toast(`👁 ${r.dept||'-'} PDF 열림`,'info');
+  }else{
+    // 다운로드 모드
+    toast(`📥 ${r.dept||'-'} PDF 다운로드 중…`,'info');
+    fetch(url)
+      .then(res => { if(!res.ok) throw new Error(`HTTP ${res.status}`); return res.blob(); })
+      .then(blob => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = r.pdfFileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+        toast(`✅ ${r.pdfFileName} 다운로드 완료`,'ok');
+      })
+      .catch(err => {
+        console.error('admViewPdfFromRecord error:', err);
+        toast(`❌ 다운로드 실패: ${err.message}`,'err');
+      });
+  }
+}
+
+/* ── 결재 탭 → PDF 새 창에서 보기 (👁) ── */
+function apvViewPdf(groupKey){
+  const group = apvState.groups.find(g => g.groupKey === groupKey);
+  if(!group){ toast('일지를 찾을 수 없음','err'); return; }
+  if(!group.pdfFileName){
+    toast('⚠ 옛 일지(PDF URL 미저장) — 보기 불가','err');
+    return;
+  }
+  const ym = (group.dateStart||'').slice(0,7) || undefined;
+  openPdfFromGitHub(group.pdfFileName, ym);
+}
+
+/* ── 결재 탭 → PDF 다운로드 (📥) ── */
+async function apvDownloadPdf(groupKey){
+  const group = apvState.groups.find(g => g.groupKey === groupKey);
+  if(!group){ toast('일지를 찾을 수 없음','err'); return; }
+  if(!group.pdfFileName){
+    toast('⚠ 옛 일지(PDF URL 미저장) — 다운로드 불가','err');
+    return;
+  }
+  // ★ 결재완료면 도장 합성 PDF 다운로드 (apvReprint 활용)
+  if(group.approved){
+    return await apvReprint(groupKey);
+  }
+  // 결재대기: 원본 PDF 다운로드
+  const ym = (group.dateStart||'').slice(0,7) || undefined;
+  await downloadPdfFromGitHub(group.pdfFileName, ym);
+}
+
 
 /* ── 모바일 카드형 렌더 (768px 미만) ── */
 /* ── 아카이브 모드 토글 (GitHub records.json 통째로 검색) ── */
@@ -4881,16 +5057,26 @@ function apvRenderMobile(filtered){
           <div style="font-size:10.5px;color:#15803d;font-weight:600">
             ✓ ${g.approverName||'장은선'} · ${(g.approvedAt||'').slice(5,10)}
           </div>
-          <button onclick="apvReprint('${g.groupKey}')" style="padding:4px 10px;background:#1c3557;color:#fff;border:none;border-radius:5px;font-size:10.5px;font-weight:600;cursor:pointer">📄 재출력</button>
+          <div style="display:flex;gap:4px">
+            <button onclick="apvViewPdf('${g.groupKey}')" style="padding:4px 8px;background:#fff;color:#0891b2;border:1px solid #0891b2;border-radius:5px;font-size:10.5px;font-weight:600;cursor:pointer" title="PDF 보기">👁 보기</button>
+            <button onclick="apvDownloadPdf('${g.groupKey}')" style="padding:4px 8px;background:#1c3557;color:#fff;border:none;border-radius:5px;font-size:10.5px;font-weight:600;cursor:pointer" title="PDF 다운로드">📥 저장</button>
+          </div>
         </div>`
-      : '';
+      : (g.pdfFileName
+          ? `<div style="display:flex;justify-content:flex-end;gap:4px;border-top:1px dashed #e2e8f0;padding:6px 0 0;margin-top:8px">
+              <button onclick="apvViewPdf('${g.groupKey}')" style="padding:4px 8px;background:#fff;color:#0891b2;border:1px solid #0891b2;border-radius:5px;font-size:10.5px;font-weight:600;cursor:pointer" title="원본 PDF 보기">👁 보기</button>
+              <button onclick="apvDownloadPdf('${g.groupKey}')" style="padding:4px 8px;background:#fff;color:#1c3557;border:1px solid #1c3557;border-radius:5px;font-size:10.5px;font-weight:600;cursor:pointer" title="원본 PDF 다운로드">📥 저장</button>
+            </div>`
+          : ''
+        );
 
     return `<div style="background:${cardBg};border:1px solid #e2e8f0;border-left:4px solid ${sideBar};border-radius:8px;margin:8px;padding:10px 12px">
       <!-- 1행: 체크박스 + 종류 + 상태 -->
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <input type="checkbox" ${isSelected?'checked':''} ${g.approved?'disabled':''} 
+        <input type="checkbox" ${isSelected?'checked':''} 
                onchange="apvToggle('${g.groupKey}', this.checked)"
-               style="width:16px;height:16px;cursor:${g.approved?'not-allowed':'pointer'};accent-color:#1c3557;flex-shrink:0">
+               title="${g.approved?'결재 완료됨 — 영구 삭제용으로만 선택 가능':'선택하여 결재 또는 삭제'}"
+               style="width:16px;height:16px;cursor:pointer;accent-color:${g.approved?'#dc2626':'#1c3557'};flex-shrink:0">
         <span style="font-size:10.5px;background:${typeBg};color:${typeColor};padding:3px 7px;border-radius:4px;font-weight:700;flex-shrink:0">${typeIcon} ${typeShort}</span>
         <div style="flex:1"></div>
         ${g.approved
@@ -5142,12 +5328,25 @@ async function apvBatchApprove(){
     return;
   }
 
+  // ★ 결재완료 항목은 자동 제외 (재결재 방지, 삭제용으로 선택된 것)
+  const allSelected = apvState.groups.filter(g => apvState.selected.has(g.groupKey));
+  const pendingOnly = allSelected.filter(g => !g.approved);
+  const skippedCount = allSelected.length - pendingOnly.length;
+
+  if(pendingOnly.length === 0){
+    toast('⚠ 선택된 항목이 모두 결재완료 상태 — 결재할 일지가 없음','err');
+    return;
+  }
+  if(skippedCount > 0){
+    toast(`ℹ️ 결재완료 ${skippedCount}건은 자동 제외 (대기 ${pendingOnly.length}건만 처리)`,'info');
+  }
+
   const btn = document.getElementById('apv-btn-approve');
   btn.disabled = true;
   btn.textContent = '⏳ 처리 중…';
 
   try{
-    toast(`📋 ${apvState.selected.size}건 결재 처리 시작…`,'info');
+    toast(`📋 ${pendingOnly.length}건 결재 처리 시작…`,'info');
 
     // 1) 결재 도장 이미지 생성
     toast('🎨 결재 도장 생성 중…','info');
@@ -5156,7 +5355,7 @@ async function apvBatchApprove(){
       throw new Error('결재 도장 생성 실패');
     }
 
-    const selectedGroups = apvState.groups.filter(g => apvState.selected.has(g.groupKey));
+    const selectedGroups = pendingOnly;  // ★ 결재 대기 일지만 처리
     if(selectedGroups.length === 0){
       throw new Error('선택된 일지를 찾을 수 없음');
     }
@@ -5616,7 +5815,7 @@ async function uploadEduImagesToGitHub(partsDetail, photos, type, dept, date){
 
 /* ══ 교육일지 이메일 즉시 발송 + Drive 업로드 통합 함수 ══ */
 async function uploadPdfAndSendEmail(opts){
-  const {pdfBase64, fileName, emailSubject, dept, chem, date,
+  let {pdfBase64, fileName, emailSubject, dept, chem, date,
          participants, sigCount, names, time, place, method,
          instructor, indiv, common, partsDetail, type, photos, eduDates} = opts;
 
@@ -5625,6 +5824,11 @@ async function uploadPdfAndSendEmail(opts){
     toast('⚙ EmailJS 미설정 — 설정에서 입력하세요','info');
     return;
   }
+
+  // ★ 메모리 안전: opts 큰 필드 제거 (PDF 처리 후 GC 가능)
+  opts.pdfBase64 = null;
+  opts.partsDetail = null;
+  opts.photos = null;
 
   try{
     // ── EmailJS 로드
@@ -5639,11 +5843,18 @@ async function uploadPdfAndSendEmail(opts){
     // ── GitHub에 PDF 업로드
     if(!CFG.ghToken || !pdfBase64){
       toast('⚠ GitHub 토큰 미설정 — PDF 링크 이메일 발송 불가','info');
+      pdfBase64 = null;  // ★ 메모리 해제
       return;
     }
 
     toast('📤 GitHub에 PDF 업로드 중…','info');
     const ghLink = await uploadPdfToGitHub(pdfBase64, fileName);
+
+    // ★ 핵심: PDF base64 즉시 메모리 해제 (수 MB 절약)
+    pdfBase64 = null;
+
+    // ★ GC 기회 부여 (메모리 정리 시간 확보)
+    await new Promise(r => setTimeout(r, 50));
 
     if(!ghLink){
       toast('⚠ GitHub 업로드 실패 — 토큰 확인','err');
@@ -5713,6 +5924,72 @@ async function uploadPdfAndSendEmail(opts){
 
 
 /* ══ GitHub에 PDF 업로드 → 링크 반환 ══ */
+/* ── PDF GitHub URL 생성 (보기/다운로드 공통) ── */
+function getGitHubPdfUrl(fileName, ymOverride){
+  const repo = CFG.ghRepo || 'buminhealth/health';
+  // ★ 폴더 추정: 화학물질은 화학물질/, 교육일지는 교육일지/
+  const isChem = (fileName||'').includes('유해화학물질');
+  const folder = isChem ? '화학물질' : '교육일지';
+  // ym은 record에서 가져오거나 파일명에서 추출
+  let ym = ymOverride;
+  if(!ym){
+    // 파일명 패턴: ...-2026-05-06.pdf → 2026-05
+    const m = (fileName||'').match(/(\d{4})-(\d{2})-\d{2}\.pdf$/i);
+    if(m) ym = `${m[1]}-${m[2]}`;
+    else ym = new Date().toISOString().slice(0,7);
+  }
+  return `https://raw.githubusercontent.com/${repo}/main/${encodeURIComponent(folder)}/${ym}/${encodeURIComponent(fileName)}`;
+}
+
+/* ── PDF 새 창에서 보기 (👁 보기) ── */
+function openPdfFromGitHub(fileName, ymOverride){
+  if(!fileName){
+    toast('⚠ PDF 파일명 없음 — 옛 일지일 수 있음','err');
+    return;
+  }
+  const url = getGitHubPdfUrl(fileName, ymOverride);
+  toast(`👁 PDF 새 창에서 열기…`,'info');
+  // 새 창에서 PDF 열기
+  const win = window.open(url, '_blank');
+  if(!win){
+    toast('⚠ 팝업 차단됨 — 브라우저 설정에서 팝업 허용 필요','err');
+  }
+}
+
+/* ── PDF 사용자 PC로 다운로드 (💾 저장) ── */
+async function downloadPdfFromGitHub(fileName, ymOverride){
+  if(!fileName){
+    toast('⚠ PDF 파일명 없음 — 옛 일지일 수 있음','err');
+    return;
+  }
+  const url = getGitHubPdfUrl(fileName, ymOverride);
+  toast(`💾 ${fileName} 다운로드 중…`,'info');
+  try{
+    const res = await fetch(url);
+    if(!res.ok){
+      if(res.status === 404){
+        throw new Error(`PDF가 GitHub에 없음 (${fileName})`);
+      }
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    }, 100);
+    toast(`✅ ${fileName} 다운로드 완료`,'ok');
+  }catch(err){
+    console.error('downloadPdfFromGitHub error:', err);
+    toast(`❌ 다운로드 실패: ${err.message}`,'err');
+  }
+}
+
 async function uploadPdfToGitHub(pdfBase64, fileName){
   const token = CFG.ghToken;
   const repo  = CFG.ghRepo || 'buminhealth/health';
@@ -6043,6 +6320,9 @@ async function ppeSendEmailOne(p, fname, pdfB64, sigImg){
     if(CFG.ghToken){
       pdfUrl = await uploadPdfToGitHub(pdfB64, fname);
     }
+    // ★ PDF base64 즉시 메모리 해제 (수 MB 절약)
+    pdfB64 = null;
+    await new Promise(r => setTimeout(r, 50));
 
     // ★ STEP 2: chem 메일 스타일 컴팩트 본문 + 지급물품 컴팩트 표 + 다운로드 링크
     const itemRows = p.items.map((it,idx)=>`
@@ -6368,10 +6648,37 @@ function renderAdminTable(data){
       <td style="text-align:center"><input type="text" style="width:70px;text-align:center" value="${r.totalHours||''}" onchange="updateEduRec(${i},'totalHours',this.value)"></td>
       <td style="text-align:center"><span class="${(r.signed||'').includes('✓')?'sig-ok':''}">${r.signed||''}</span></td>
       <td style="text-align:center" class="row-act">
-        <button onclick="saveEduRecRow(${i})" title="저장" style="color:#16a34a">💾</button>
+        <button onclick="openEduPdfFromAdmin(${i})" title="PDF 보기 (새 창)" style="color:#0891b2">👁</button>
+        <button onclick="downloadEduPdfFromAdmin(${i})" title="PDF 다운로드 (내 PC)" style="color:#1c3557">📥</button>
+        <button onclick="saveEduRecRow(${i})" title="수정사항 저장 (DB)" style="color:#16a34a">💾</button>
         <button onclick="deleteAdminRecord(${i})" title="삭제" style="color:#ef4444">✕</button>
       </td>
     </tr>`).join('');
+}
+
+/* ── 관리자 → 교육 현황 → PDF 새 창 보기 ── */
+function openEduPdfFromAdmin(idx){
+  const r = adminRecords[idx];
+  if(!r){ toast('대상 없음','err'); return; }
+  if(!r.pdfFileName){
+    toast('⚠ PDF 파일 정보 없음 (옛 일지) — 일지 다시 작성·발송 시 자동 등록','err');
+    return;
+  }
+  // ★ ym 추출 (record의 dateStart 기준)
+  const ym = (r.dateStart||'').slice(0,7) || undefined;
+  openPdfFromGitHub(r.pdfFileName, ym);
+}
+
+/* ── 관리자 → 교육 현황 → PDF 다운로드 ── */
+async function downloadEduPdfFromAdmin(idx){
+  const r = adminRecords[idx];
+  if(!r){ toast('대상 없음','err'); return; }
+  if(!r.pdfFileName){
+    toast('⚠ PDF 파일 정보 없음 (옛 일지) — 일지 다시 작성·발송 시 자동 등록','err');
+    return;
+  }
+  const ym = (r.dateStart||'').slice(0,7) || undefined;
+  await downloadPdfFromGitHub(r.pdfFileName, ym);
 }
 
 /* ── 교육이력 행 수정 (인라인 즉시 저장) ── */
@@ -6597,10 +6904,38 @@ function renderPpeAdminTable(data){
       <td><input type="text" style="width:100%;min-width:160px" value="${r.items||r.chem||''}" onchange="updatePpeRec(${i},'items',this.value)"></td>
       <td style="text-align:center;color:#16a34a;font-weight:700">${fmtSigned(r.signed)}</td>
       <td style="text-align:center" class="row-act">
-        <button onclick="savePpeRecRow(${i})" title="저장" style="color:#16a34a">💾</button>
+        <button onclick="openPpePdfFromAdmin(${i})" title="PDF 보기 (새 창)" style="color:#0891b2">👁</button>
+        <button onclick="downloadPpePdfFromAdmin(${i})" title="PDF 다운로드 (내 PC)" style="color:#1c3557">📥</button>
+        <button onclick="savePpeRecRow(${i})" title="수정사항 저장 (DB)" style="color:#16a34a">💾</button>
         <button onclick="deletePpeRecord(${i})" title="삭제" style="color:#ef4444">✕</button>
       </td>
     </tr>`).join('');
+}
+
+/* ── 관리자 → 보호구 → PDF 새 창 보기 ── */
+function openPpePdfFromAdmin(idx){
+  const all = JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');
+  const r = all[idx];
+  if(!r){ toast('대상 없음','err'); return; }
+  if(!r.pdfFileName){
+    toast('⚠ PDF 파일 정보 없음 (옛 기록) — 새 기록부터 자동 등록','err');
+    return;
+  }
+  const ym = (r.date||r.dateStart||'').slice(0,7) || undefined;
+  openPdfFromGitHub(r.pdfFileName, ym);
+}
+
+/* ── 관리자 → 보호구 → PDF 다운로드 ── */
+async function downloadPpePdfFromAdmin(idx){
+  const all = JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');
+  const r = all[idx];
+  if(!r){ toast('대상 없음','err'); return; }
+  if(!r.pdfFileName){
+    toast('⚠ PDF 파일 정보 없음 (옛 기록) — 새 기록부터 자동 등록','err');
+    return;
+  }
+  const ym = (r.date||r.dateStart||'').slice(0,7) || undefined;
+  await downloadPdfFromGitHub(r.pdfFileName, ym);
 }
 
 /* ── 보호구 행 수정 ── */
@@ -7239,7 +7574,13 @@ BM.getAuditLog = function(limit){
 
 /* ── 12. 체크박스 선택 — 선택된 행의 recordId 배열 반환 ── */
 BM.getCheckedIds = function(category){
-  const prefix = category==='edu' ? 'admchk' : 'ppechk';
+  // ★ 카테고리별 체크박스 prefix 매핑
+  const prefixMap = {
+    'edu':  'admchk',
+    'ppe':  'ppechk',
+    'chem': 'chemchk'
+  };
+  const prefix = prefixMap[category] || 'admchk';
   const ids = [];
   document.querySelectorAll(`input[type=checkbox][data-bmchk^="${prefix}"]:checked`).forEach(cb=>{
     const id = cb.getAttribute('data-rid');
