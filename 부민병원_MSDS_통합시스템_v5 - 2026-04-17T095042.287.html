@@ -2187,7 +2187,6 @@ async function loadAllPpeFromGitHub(){
       });
     }
 
-    let local=[]; try{local=JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');}catch(e){}
     // ★ 묘비 필터
     await BM.syncTombstonesFromGitHub('ppe');
     const ghFiltered  = BM.filterTombstoned(ghRecs, 'ppe');
@@ -6732,14 +6731,13 @@ async function uploadPdfToGitHub(pdfBase64, fileName){
   }
 }
 
-
 /* ══════════════════════════════════════════════════════
    보호구 지급수령증 기능 (다중 수령자 지원)
 ══════════════════════════════════════════════════════ */
-let ppe = { name:'', dept:'', join:'', items:[], date:'' };
-let ppePersons = []; // 다중 수령자 목록
-let PPE_DATA = {};
-
+ppe = { name:'', dept:'', join:'', items:[], date:'' }; 
+ppePersons = []; 
+PPE_DATA = {};
+  
 // GAS에서 보호구지급대장 로드
 function loadPpeData(){
   if(!CFG.url) return;
