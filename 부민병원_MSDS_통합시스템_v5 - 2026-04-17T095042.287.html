@@ -5066,24 +5066,67 @@ async function findGithubPdfByMeta(opts){
   const isMsds = (type||'').includes('MSDS');
   const isPpe = (type||'').includes('보호구');
   const folder = isPpe ? '보호구' : '교육일지';
-  const prefix = isMsds ? 'MSDS교육일지-' : (isPpe ? '보호구지급대장-' : '특별안전보건교육일지-');
+  // ★ v15.43: 다양한 prefix 패턴 지원 (옛 파일명도 매칭)
+  const prefixOptions = isMsds
+    ? ['MSDS교육일지-', 'MSDS교육-', 'MSDS-']
+    : (isPpe
+        ? ['보호구지급대장-', '보호구지급수령증-', '보호구수령증-', '보호구-']
+        : ['특별안전보건교육일지-', '특별교육일지-', '특별안전-', '안전보건교육-']);
 
   const files = await _listGithubFolder(folder, ym);
-  if(files.length === 0) return null;
+  console.log(`[findGithubPdfByMeta] ${folder}/${ym} 폴더 파일 수: ${files.length}`);
+  if(files.length === 0){
+    console.log(`  ⚠ 폴더가 비어있거나 존재하지 않음`);
+    return null;
+  }
+  console.log(`  파일 목록 (최대 10개):`, files.slice(0,10));
 
-  // 1차 후보: 종류 prefix + 부서명 포함
+  // ★ 부서명 매칭 — 정확 일치 + 짧은 부분 일치 (예: "시설관리팀" → "시설관리"도 일치)
+  const deptVariants = [dept];
+  if(dept.endsWith('팀') || dept.endsWith('실') || dept.endsWith('과') || dept.endsWith('부')){
+    deptVariants.push(dept.slice(0, -1));  // 마지막 글자 제거
+  }
+  if(dept.length >= 3){
+    deptVariants.push(dept.slice(0, dept.length-1));  // 1자 짧은 버전
+  }
+
   const namesArr = Array.isArray(names) ? names.filter(Boolean) : [];
-  const candidates = files.filter(f => f.startsWith(prefix) && f.includes(dept));
-  if(candidates.length === 0) return null;
 
-  // 2차 정확도 향상: 날짜 일치
+  // ★ 1차 후보: prefix 패턴 중 하나 + 부서명 변형 중 하나
+  let candidates = files.filter(f =>
+    prefixOptions.some(p => f.startsWith(p)) &&
+    deptVariants.some(d => f.includes(d))
+  );
+
+  // ★ 2차 후보 (1차 실패 시): prefix만 일치 (부서명 매칭 안 됐을 때)
+  if(candidates.length === 0 && namesArr.length > 0){
+    candidates = files.filter(f =>
+      prefixOptions.some(p => f.startsWith(p)) &&
+      namesArr.some(n => n && f.includes(n))
+    );
+    if(candidates.length > 0) console.log(`  ✓ 2차 매칭(이름 기반): ${candidates.length}건`);
+  }
+
+  // ★ 3차 후보 (2차 실패 시): 폴더 안 모든 파일 중 날짜+이름 포함
+  if(candidates.length === 0 && namesArr.length > 0){
+    candidates = files.filter(f =>
+      f.includes(dateStart) || namesArr.some(n => n && f.includes(n))
+    );
+    if(candidates.length > 0) console.log(`  ✓ 3차 매칭(완화 — 날짜OR이름): ${candidates.length}건`);
+  }
+
+  if(candidates.length === 0){
+    console.log(`  ❌ 모든 매칭 실패 (prefix=${prefixOptions[0]} dept=${dept} names=${namesArr.join(',')})`);
+    return null;
+  }
+
+  // 정확도 우선순위: 날짜 일치 → 이름 일치 → 첫 번째
   const exactDate = candidates.filter(f => f.includes(dateStart));
 
   let best = null;
   if(exactDate.length === 1){
     best = exactDate[0];
   }else if(exactDate.length > 1){
-    // 참석자 이름 중 하나라도 일치하는 것
     if(namesArr.length > 0){
       best = exactDate.find(f => namesArr.some(n => n && f.includes(n))) || exactDate[0];
     }else{
@@ -5092,11 +5135,11 @@ async function findGithubPdfByMeta(opts){
   }else if(candidates.length === 1){
     best = candidates[0];
   }else if(namesArr.length > 0){
-    // 날짜 매칭 실패 → 이름으로 시도
     best = candidates.find(f => namesArr.some(n => n && f.includes(n))) || candidates[0];
   }else{
     best = candidates[0];
   }
+  console.log(`  ✓ 최종 매칭: ${best}`);
 
   return best || null;
 }
@@ -7323,6 +7366,119 @@ function renderAdminTable(data){
     </tr>`).join('');
 }
 
+/* ★ v15.43: 교육일지 단일 record로 PDF 즉시 재생성 (옛 일지 / GitHub PDF 분실 대비) */
+async function _regenerateEduFromRecord(r){
+  if(!r){ toast('대상 없음','err'); return; }
+  toast('📄 records 데이터로 PDF 재생성 중…','info');
+  try{
+    // 단일 record를 group 형태로 변환해서 buildEduPreviewHTML 사용
+    const group = {
+      type: r.type || '특별안전보건교육',
+      dept: r.dept || '',
+      chem: r.chem || '',
+      dateStart: r.dateStart || '',
+      dateEnd: r.dateEnd || r.dateStart || '',
+      time: r.time || '',
+      totalHours: r.totalHours || '',
+      submitted: r.submitted || '',
+      approved: !!r.approved,
+      members: [{
+        name: r.name || '', empNo: r.empNo || '', joinDate: r.joinDate || '',
+        gender: r.gender || '', signed: r.signed || '',
+        sigImg: r.sigImg || '', photos: r.photos,
+        sigsByDay: r.sigsByDay, eduDates: r.eduDates,
+        time: r.time, totalHours: r.totalHours,
+        place: r.place || '', method: r.method || '',
+        instructor: r.instructor || '', indiv: r.indiv || '', common: r.common || '',
+        recordId: r.recordId || ''
+      }]
+    };
+    const html = buildEduPreviewHTML(group, null);
+    const area = document.getElementById('pdf-area');
+    if(!area){ toast('PDF 영역 없음','err'); return; }
+    area.innerHTML = `<div style="width:780px">${html}</div>`;
+    await new Promise(rs => setTimeout(rs, 200));
+    const cv = await html2canvas(area.firstElementChild, {scale:2, useCORS:true, allowTaint:true, logging:false, windowWidth:780});
+    const {jsPDF} = window.jspdf;
+    const pdf = new jsPDF('p','mm','a4');
+    const pw = pdf.internal.pageSize.getWidth();
+    const ph = pdf.internal.pageSize.getHeight();
+    const ratio = pw / cv.width;
+    const imgH = cv.height * ratio;
+    if(imgH <= ph){
+      pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, imgH);
+    } else {
+      let yPos = 0;
+      while(yPos < cv.height){
+        const pageCv = document.createElement('canvas');
+        pageCv.width = cv.width;
+        pageCv.height = Math.min(ph/ratio, cv.height - yPos);
+        pageCv.getContext('2d').drawImage(cv, 0, -yPos);
+        if(yPos > 0) pdf.addPage();
+        pdf.addImage(pageCv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, pageCv.height * ratio);
+        yPos += ph / ratio;
+      }
+    }
+    const eduLabel = (r.type||'').includes('MSDS') ? 'MSDS교육일지' : '특별안전보건교육일지';
+    const fileName = `${eduLabel}_${r.dept||'미정'}_${r.name||'무명'}_${r.dateStart||todayStr()}_재생성.pdf`;
+    pdf.save(fileName);
+    area.innerHTML = '';
+    toast(`✅ PDF 재생성 완료: ${r.name||''} ${r.dateStart||''}`, 'ok');
+  }catch(err){
+    console.error('교육 PDF 재생성 실패:', err);
+    toast('PDF 재생성 오류: '+err.message,'err');
+  }
+}
+
+/* ★ v15.43: 교육일지 PDF 미발견 안내 모달 (records 재생성 옵션 제공) */
+function _showEduPdfNotFoundModal(r){
+  const hasData = !!(r.sigImg || r.photos || r.place || r.instructor || r.indiv);
+  const folder = (r.type||'').includes('보호구') ? '보호구' : '교육일지';
+  const ym = (r.dateStart||'').slice(0,7);
+  const eduLabel = (r.type||'').includes('MSDS') ? 'MSDS 교육일지' : '특별안전보건교육일지';
+  const dataKey = `_eduNotFound_${Date.now()}`;
+  window[dataKey] = r;
+
+  const html = `
+<div style="padding:6px;font-family:'Nanum Gothic','Malgun Gothic',sans-serif">
+  <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:14px 16px;margin-bottom:14px">
+    <div style="font-size:14px;font-weight:800;color:#92400e;margin-bottom:6px">⚠ 원본 PDF 파일을 찾을 수 없습니다</div>
+    <div style="font-size:12px;color:#78350f;line-height:1.6">
+      GitHub 저장소의 <code style="background:#fff;padding:2px 6px;border-radius:3px;color:#dc2626">${folder}/${ym}</code> 폴더에 PDF가 없습니다.
+    </div>
+  </div>
+  <div style="background:#f1f5f9;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#475569;line-height:1.7">
+    <b style="color:#1c3557">📋 일지 정보</b><br>
+    종류: ${eduLabel}<br>
+    이름: <b>${r.name||'-'}</b> (${r.empNo||'-'})<br>
+    부서: ${r.dept||'-'}<br>
+    교육일: ${r.dateStart||'-'}<br>
+    교육시간: ${r.totalHours||r.time||'-'}<br>
+    데이터: ${hasData ? '✅ 신규 (서명·강사·내용 포함)' : '⚠ 옛 데이터 (서명·내용 일부 없음)'}
+  </div>
+  <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:14px">
+    <div style="font-size:12px;font-weight:700;color:#1e40af;margin-bottom:6px">💡 해결 방법</div>
+    <div style="font-size:11.5px;color:#1e3a8a;line-height:1.7">
+      ${hasData
+        ? '<b>"📄 records로 PDF 재생성"</b> → 저장된 데이터로 PDF 즉시 생성<br>또는 <b>"🔍 GitHub 폴더 직접 보기"</b> → 폴더에서 파일 직접 찾기'
+        : '옛 데이터는 서명·강사·교육내용이 일부 없습니다. <b>"🔍 GitHub 폴더 직접 보기"</b>로 원본 파일을 찾거나 일지를 다시 작성하세요.'}
+    </div>
+  </div>
+  <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:8px 10px;margin-bottom:14px;font-size:10.5px;color:#9a3412;line-height:1.55">
+    <b>🔧 매칭 실패 원인 (개발자 도구 F12 → Console 확인):</b><br>
+    ① 폴더가 비어있음 (메일발송 안 함 또는 GitHub 업로드 실패)<br>
+    ② 파일명 패턴 불일치 (옛 파일은 다른 이름일 수 있음)<br>
+    ③ 부서명 불일치 (예: "61병동" vs 파일명의 "병동6")
+  </div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+    <button onclick="document.getElementById('edu-pdf-not-found-modal').remove();delete window['${dataKey}']" style="padding:8px 14px;background:#fff;color:#475569;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">닫기</button>
+    <a href="https://github.com/${CFG.ghRepo||'buminhealth/health'}/tree/main/${encodeURIComponent(folder)}/${ym}" target="_blank" rel="noopener" style="padding:8px 14px;background:#fff;color:#0891b2;border:1px solid #0891b2;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none">🔍 GitHub 폴더 직접 보기</a>
+    <button onclick="document.getElementById('edu-pdf-not-found-modal').remove();_regenerateEduFromRecord(window['${dataKey}']);delete window['${dataKey}']" style="padding:8px 14px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">📄 records로 PDF 재생성</button>
+  </div>
+</div>`;
+  _showDataModal(`📁 PDF 미발견 — ${eduLabel} (${r.name||''} ${r.dateStart||''})`, html, 'edu-pdf-not-found-modal');
+}
+
 /* ── 관리자 → 교육 현황 → PDF 새 창 보기 (자동 검색 포함) ── */
 async function openEduPdfFromAdmin(idx){
   const r = adminRecords[idx];
@@ -7349,12 +7505,8 @@ async function openEduPdfFromAdmin(idx){
       }catch(e){}
       toast(`✅ 자동 매칭: ${found.slice(0,40)}…`,'ok');
     }else{
-      // 폴더 페이지 열어주기
-      const ym = (r.dateStart||'').slice(0,7);
-      const folder = (r.type||'').includes('보호구') ? '보호구' : '교육일지';
-      // ★ v15.43: GitHub 404 페이지로 보내지 않음 — 안내만 표시
-      console.log(`[PDF 미발견] ${folder}/${ym} 폴더 없음`);
-      toast('⚠ GitHub에 PDF 미업로드된 옛 일지 — \u0027👁 미리보기\u0027로 records 데이터 확인 가능','err');
+      // ★ v15.43: 친절한 모달로 records 재생성 옵션 제공
+      _showEduPdfNotFoundModal(r);
       return;
     }
   }
@@ -7388,11 +7540,8 @@ async function downloadEduPdfFromAdmin(idx){
       }catch(e){}
       toast(`✅ 자동 매칭: ${found.slice(0,40)}…`,'ok');
     }else{
-      const ym = (r.dateStart||'').slice(0,7);
-      const folder = (r.type||'').includes('보호구') ? '보호구' : '교육일지';
-      // ★ v15.43: GitHub 404 페이지로 보내지 않음 — 안내만 표시
-      console.log(`[PDF 미발견] ${folder}/${ym} 폴더 없음`);
-      toast('⚠ GitHub에 PDF 미업로드된 옛 일지 — \u0027👁 미리보기\u0027로 records 데이터 확인 가능','err');
+      // ★ v15.43: 친절한 모달로 records 재생성 옵션 제공
+      _showEduPdfNotFoundModal(r);
       return;
     }
   }
@@ -8551,7 +8700,99 @@ function renderPpeAdminTable(data){
     </tr>`).join('');
 }
 
-/* ── 관리자 → 보호구 → PDF 새 창 보기 ── */
+/* ★ v15.43: 보호구 단일 record로 PDF 즉시 재생성 (옛 일지 / GitHub PDF 분실 대비) */
+async function _regeneratePpeFromRecord(r){
+  if(!r){ toast('대상 없음','err'); return; }
+  toast('📄 records 데이터로 PDF 재생성 중…','info');
+  try{
+    const html = buildPpePreviewHTML({
+      dept: r.dept, name: r.name, empNo: r.empNo,
+      joinDate: r.joinDate, date: r.date || r.dateStart,
+      items: Array.isArray(r.items) ? r.items : (r.itemsStr ? r.itemsStr.split(',').map(s=>({name:s.trim(),qty:1})) : []),
+      itemsStr: r.itemsStr,
+      signed: r.signed, sigImg: r.sigImg
+    });
+    const area = document.getElementById('pdf-area');
+    if(!area){ toast('PDF 영역 없음','err'); return; }
+    area.innerHTML = `<div style="width:780px">${html}</div>`;
+    await new Promise(rs => setTimeout(rs, 200));
+    const cv = await html2canvas(area.firstElementChild, {scale:2, useCORS:true, allowTaint:true, logging:false, windowWidth:780});
+    const {jsPDF} = window.jspdf;
+    const pdf = new jsPDF('p','mm','a4');
+    const pw = pdf.internal.pageSize.getWidth();
+    const ph = pdf.internal.pageSize.getHeight();
+    const ratio = pw / cv.width;
+    const imgH = cv.height * ratio;
+    if(imgH <= ph){
+      pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, imgH);
+    } else {
+      let yPos = 0;
+      while(yPos < cv.height){
+        const pageCv = document.createElement('canvas');
+        pageCv.width = cv.width;
+        pageCv.height = Math.min(ph/ratio, cv.height - yPos);
+        pageCv.getContext('2d').drawImage(cv, 0, -yPos);
+        if(yPos > 0) pdf.addPage();
+        pdf.addImage(pageCv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, pageCv.height * ratio);
+        yPos += ph / ratio;
+      }
+    }
+    const fileName = `보호구지급대장_${r.dept||'미정'}_${r.name||'무명'}_${r.date||r.dateStart||todayStr()}_재생성.pdf`;
+    pdf.save(fileName);
+    area.innerHTML = '';
+    toast(`✅ PDF 재생성 완료: ${r.name||''} ${r.date||''}`, 'ok');
+  }catch(err){
+    console.error('PPE PDF 재생성 실패:', err);
+    toast('PDF 재생성 오류: '+err.message,'err');
+  }
+}
+
+/* ★ v15.43: 보호구 PDF 미발견 안내 모달 (records 재생성 옵션 제공) */
+function _showPpePdfNotFoundModal(r){
+  const hasData = !!(r.sigImg || r.items || r.itemsStr);
+  const dataKey = `_ppeNotFound_${Date.now()}`;
+  window[dataKey] = r;
+
+  const html = `
+<div style="padding:6px;font-family:'Nanum Gothic','Malgun Gothic',sans-serif">
+  <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:14px 16px;margin-bottom:14px">
+    <div style="font-size:14px;font-weight:800;color:#92400e;margin-bottom:6px">⚠ 원본 PDF 파일을 찾을 수 없습니다</div>
+    <div style="font-size:12px;color:#78350f;line-height:1.6">
+      GitHub 저장소의 <code style="background:#fff;padding:2px 6px;border-radius:3px;color:#dc2626">보호구/${(r.date||r.dateStart||'').slice(0,7)}</code> 폴더에 PDF가 없습니다.
+    </div>
+  </div>
+  <div style="background:#f1f5f9;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#475569;line-height:1.7">
+    <b style="color:#1c3557">📋 일지 정보</b><br>
+    이름: <b>${r.name||'-'}</b> (${r.empNo||'-'})<br>
+    부서: ${r.dept||'-'}<br>
+    지급일: ${r.date||r.dateStart||'-'}<br>
+    물품: ${r.itemsStr || (Array.isArray(r.items)?r.items.map(i=>i.name+'×'+i.qty).join(', '):'-')}<br>
+    데이터: ${hasData ? '✅ 신규 (서명·물품 포함)' : '⚠ 옛 데이터 (서명·물품 없음)'}
+  </div>
+  <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:14px">
+    <div style="font-size:12px;font-weight:700;color:#1e40af;margin-bottom:6px">💡 해결 방법</div>
+    <div style="font-size:11.5px;color:#1e3a8a;line-height:1.7">
+      ${hasData
+        ? '<b>"📄 records로 PDF 재생성"</b> → 저장된 데이터로 PDF를 즉시 만들기<br>또는 <b>"🔍 GitHub 폴더 직접 보기"</b> → 폴더에서 파일을 직접 찾기'
+        : '옛 데이터는 서명·물품이 없어 빈 PDF가 생성됩니다. <b>"🔍 GitHub 폴더 직접 보기"</b>로 원본 파일을 찾아보거나 일지를 다시 작성하세요.'}
+    </div>
+  </div>
+  <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:8px 10px;margin-bottom:14px;font-size:10.5px;color:#9a3412;line-height:1.55">
+    <b>🔧 매칭 실패 원인 (개발자 도구 F12 → Console 확인):</b><br>
+    ① 폴더가 비어있음 (메일발송 안 함 또는 GitHub 업로드 실패)<br>
+    ② 파일명 패턴 불일치 (옛 파일은 "보호구지급대장-"이 아닌 다른 이름일 수 있음)<br>
+    ③ 부서명 불일치 (예: "시설관리팀" vs 파일명의 "시설관리")
+  </div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+    <button onclick="document.getElementById('ppe-pdf-not-found-modal').remove();delete window['${dataKey}']" style="padding:8px 14px;background:#fff;color:#475569;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">닫기</button>
+    <a href="https://github.com/${CFG.ghRepo||'buminhealth/health'}/tree/main/${encodeURIComponent('보호구')}/${(r.date||r.dateStart||'').slice(0,7)}" target="_blank" rel="noopener" style="padding:8px 14px;background:#fff;color:#0891b2;border:1px solid #0891b2;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none">🔍 GitHub 폴더 직접 보기</a>
+    <button onclick="document.getElementById('ppe-pdf-not-found-modal').remove();_regeneratePpeFromRecord(window['${dataKey}']);delete window['${dataKey}']" style="padding:8px 14px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">📄 records로 PDF 재생성</button>
+  </div>
+</div>`;
+  _showDataModal(`📁 PDF 미발견 — 보호구 지급수령증 (${r.name||''} ${r.date||r.dateStart||''})`, html, 'ppe-pdf-not-found-modal');
+}
+
+/* ── 관리자 → 보호구 → PDF 새 창 보기 (자동 검색 포함) ── */
 async function openPpePdfFromAdmin(idx){
   const all = JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');
   const r = all[idx];
@@ -8570,9 +8811,8 @@ async function openPpePdfFromAdmin(idx){
       localStorage.setItem('bm_ppe_records', JSON.stringify(all));
       toast(`✅ 자동 매칭: ${found.slice(0,40)}…`,'ok');
     }else{
-      const ym = (r.date||r.dateStart||'').slice(0,7);
-      console.log(`[PDF 미발견] 보호구/${ym} 폴더 없음`);
-      toast('⚠ GitHub에 PDF 미업로드된 옛 일지 — \u0027👁 미리보기\u0027로 records 데이터 확인 가능','err');
+      // ★ v15.43: 친절한 모달로 records 재생성 옵션 제공
+      _showPpePdfNotFoundModal(r);
       return;
     }
   }
@@ -8599,9 +8839,8 @@ async function downloadPpePdfFromAdmin(idx){
       localStorage.setItem('bm_ppe_records', JSON.stringify(all));
       toast(`✅ 자동 매칭: ${found.slice(0,40)}…`,'ok');
     }else{
-      const ym = (r.date||r.dateStart||'').slice(0,7);
-      console.log(`[PDF 미발견] 보호구/${ym} 폴더 없음`);
-      toast('⚠ GitHub에 PDF 미업로드된 옛 일지 — \u0027👁 미리보기\u0027로 records 데이터 확인 가능','err');
+      // ★ v15.43: 친절한 모달로 records 재생성 옵션 제공
+      _showPpePdfNotFoundModal(r);
       return;
     }
   }
