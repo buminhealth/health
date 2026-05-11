@@ -1481,6 +1481,8 @@ let CFG={
   stampName: localStorage.getItem('bm_stampName') || DEFAULT_CFG.stampName,  // ★ 결재 도장 이름
 };
 let empList=[], DEPT_EDU={}, MSDS_EDU={};
+/* ── 전역 상태 변수 (중복 클릭 방지용) ── */
+let isProcessingSubmission = false;  
 let curChem=null, srchQ='', deptF='all';
 let productMap={};
 let e1={step:1,parts:[],photos:[null,null,null,null],photoSlot:0,dept:'',chems:[],dates:[],sigData:{},approval:{mgr:null}};
@@ -4137,114 +4139,131 @@ function e1BuildPdfHTML(){
   </div>`;
 }
 
-async function e1GenPDF(){
-  toast('PDF 생성 중…','info');
-  // ★ v15.42: PDF용 HTML은 e1BuildPdfHTML()로 분리 (미리보기와 재사용)
-  const dept = document.getElementById('e1-dept').value;
-  const chem = e1.chems.join(', ');
-  const ds   = document.getElementById('e1-ds').value;
-  const de   = document.getElementById('e1-de').value;
-  const area = document.getElementById('pdf-area');
-  area.innerHTML = e1BuildPdfHTML();
+async function e1GenPDF() {
+  // 1. [중복 클릭 방지] 이미 처리 중이면 경고를 띄우고 함수를 종료합니다.
+  if (isProcessingSubmission) {
+    toast('⏳ 이미 PDF 생성 및 메일 발송이 진행 중입니다.', 'info');
+    return;
+  }
 
+  const btn = event.currentTarget; 
+  const originalText = btn.innerHTML;
 
-  await new Promise(r=>setTimeout(r,100));
-  try{
-    const cv=await html2canvas(area.firstElementChild,{scale:2,useCORS:true,allowTaint:true,logging:false,windowWidth:780});
-    const {jsPDF}=window.jspdf;
-    const pdf=new jsPDF('p','mm','a4');
-    const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight();
-    // ★ 서명 행 보호 + 한 페이지면 A4 전체로 stretch
+  try {
+    // 2. [락 설정] 작업을 시작하면서 버튼을 비활성화하고 상태를 '처리 중'으로 바꿉니다.
+    isProcessingSubmission = true;
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '⏳ 처리 중...';
+    }
+
+    toast('PDF 생성 및 기록 저장 중…', 'info');
+
+    // PDF용 HTML 생성
+    const dept = document.getElementById('e1-dept').value;
+    const chem = e1.chems.join(', ');
+    const ds   = document.getElementById('e1-ds').value;
+    const de   = document.getElementById('e1-de').value;
+    const area = document.getElementById('pdf-area');
+    area.innerHTML = e1BuildPdfHTML();
+
+    await new Promise(r => setTimeout(r, 200)); // 화면 렌더링 대기
+
+    // html2canvas로 화면 캡처
+    const cv = await html2canvas(area.firstElementChild, { scale: 2, useCORS: true, allowTaint: true, logging: false, windowWidth: 780 });
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pw = pdf.internal.pageSize.getWidth();
+    const ph = pdf.internal.pageSize.getHeight();
+    
+    // 페이지 분할 및 PDF 생성
     await pdfRenderPagesProtected(area, cv, pdf, pw, ph, 2, true);
-    // ★ PDF 로컬 저장
-    const e1Names=e1.parts.map(p=>p.name);
-      const e1NmStr=e1Names.length===1?e1Names[0]:e1Names[0]+'외'+( e1Names.length-1)+'명';
-      pdf.save(`특별안전보건교육일지-${dept}-${e1NmStr}-${ds}.pdf`);
-    toast('PDF 저장 완료 ✓  Drive 업로드 중…','ok');
-    // ★ 교육이력 로컬 저장 → 관리자 즉시 업데이트
-    const _e1FileName = `특별안전보건교육일지-${dept}-${e1NmStr}-${ds}.pdf`;
-    // ★ 서명 이미지 압축 (인당 5KB 이하로) — 1일차 대표 서명
+
+    const e1Names = e1.parts.map(p => p.name);
+    const e1NmStr = e1Names.length === 1 ? e1Names[0] : e1Names[0] + '외' + (e1Names.length - 1) + '명';
+    const fileName = `특별안전보건교육일지-${dept}-${e1NmStr}-${ds}.pdf`;
+
+    // PDF 로컬 다운로드
+    pdf.save(fileName);
+    toast('PDF 저장 완료 ✓ Drive 업로드 시작…', 'ok');
+
+    // 서명 이미지 압축 처리 (대표 서명)
     const sigImgs = await Promise.all(e1.parts.map(async (p, i) => {
       const sig = (e1.sigData[0] && e1.sigData[0][i]) || '';
-      if(!sig) return '';
-      try { return await compressImg(sig); } catch(e) { return ''; }
+      if (!sig) return '';
+      try { return await compressImg(sig); } catch (e) { return ''; }
     }));
-    // ★ v15.43: 다일 교육 — 모든 일자 × 모든 인원 서명 (sigsByDay[di][i])
+
+    // 다일 교육 일자별 서명 압축
     const sigsByDay = {};
-    for(let di=0; di<e1.dates.length; di++){
+    for (let di = 0; di < e1.dates.length; di++) {
       sigsByDay[di] = {};
       const daySigs = e1.sigData[di] || {};
-      for(let i=0; i<e1.parts.length; i++){
-        if(daySigs[i]){
-          try { sigsByDay[di][i] = await compressImg(daySigs[i]); } catch(e) { sigsByDay[di][i] = ''; }
+      for (let i = 0; i < e1.parts.length; i++) {
+        if (daySigs[i]) {
+          try { sigsByDay[di][i] = await compressImg(daySigs[i]); } catch (e) { sigsByDay[di][i] = ''; }
         }
       }
     }
-    // ★ 사진 압축 (최대 4장, 큰 이미지는 작게)
-    const photoImgs = await Promise.all((e1.photos.filter(Boolean)).slice(0,4).map(async (p) => {
-      try { return await compressPhoto(p); } catch(e) { return ''; }
+
+    // 사진 압축
+    const photoImgs = await Promise.all((e1.photos.filter(Boolean)).slice(0, 4).map(async (p) => {
+      try { return await compressPhoto(p); } catch (e) { return ''; }
     }));
-    saveEduRecord({
-      type:'특별안전보건교육',
-      dept, chem,
-      dateStart: ds, dateEnd: de||ds,
-      days: e1.dates.length+'',
-      time: document.getElementById('e1-time').value||'',
-      place: document.getElementById('e1-place').value||'',
-      method: document.getElementById('e1-mth').value||'',
-      instructor: document.getElementById('e1-instr').value||'',
-      indiv: document.getElementById('e1-indiv').value||'',
-      common: document.getElementById('e1-common').value||'',
-      sigCount: Object.values(e1.sigData).reduce((a,d)=>a+Object.keys(d).length,0)+'',
-      names: e1.parts.map(p=>p.name).join('|'),
-      empNos: e1.parts.map(p=>p.empNo||'').join('|'),
-      joinDates: e1.parts.map(p=>p.join||'').join('|'),
-      genders: e1.parts.map(p=>p.gender||'').join('|'),
-      sigImgs: sigImgs,  // ★ 서명 이미지 배열 (1일차 대표)
-      sigsByDay: sigsByDay,  // ★ v15.43: 모든 일자 서명 (members[0]에 저장)
-      eduDates: e1.dates,  // ★ v15.43: 일자 배열 (members[0]에 저장)
-      photos: photoImgs,  // ★ 사진 배열 (e1 전용)
-      fileName: _e1FileName
-    });
-    // ★ Drive 업로드 → 이메일 발송
-    let e1PdfB64 = pdf.output('datauristring');
-    const e1FileName = `특별안전보건교육일지-${dept}-${e1NmStr}-${ds}.pdf`;
-    const e1SigCount = Object.values(e1.sigData).reduce((acc,d)=>acc+Object.keys(d).length,0);
-    const e1Opts = {
-      pdfBase64: e1PdfB64,
-      fileName:  e1FileName,
+
+    // 3. [데이터 저장] 여기서 실제 저장이 딱 한 번만 일어납니다.
+    await saveEduRecord({
       type: '특별안전보건교육',
-      namesRaw: e1.parts.map(p=>p.name).join('|'),
+      dept, chem,
+      dateStart: ds, dateEnd: de || ds,
+      days: e1.dates.length + '',
+      time: document.getElementById('e1-time').value || '',
+      place: document.getElementById('e1-place').value || '',
+      method: document.getElementById('e1-mth').value || '',
+      instructor: document.getElementById('e1-instr').value || '',
+      indiv: document.getElementById('e1-indiv').value || '',
+      common: document.getElementById('e1-common').value || '',
+      sigCount: Object.values(e1.sigData).reduce((a, d) => a + Object.keys(d).length, 0) + '',
+      names: e1.parts.map(p => p.name).join('|'),
+      empNos: e1.parts.map(p => p.empNo || '').join('|'),
+      joinDates: e1.parts.map(p => p.join || '').join('|'),
+      genders: e1.parts.map(p => p.gender || '').join('|'),
+      sigImgs: sigImgs,
+      sigsByDay: sigsByDay,
+      eduDates: e1.dates,
+      photos: photoImgs,
+      fileName: fileName
+    });
+
+    // 메일 발송용 base64 추출 및 발송
+    let pdfB64 = pdf.output('datauristring');
+    const e1SigCount = Object.values(e1.sigData).reduce((acc, d) => acc + Object.keys(d).length, 0);
+    
+    await uploadPdfAndSendEmail({
+      pdfBase64: pdfB64,
+      fileName,
+      type: '특별안전보건교육',
       emailSubject: `[특별안전보건교육일지] ${dept} ${ds}`,
-      dept, chem, date: `${ds}${de&&de!==ds?' ~ '+de:''}`,
-      time: document.getElementById('e1-time').value||'-',
-      place: document.getElementById('e1-place').value||'-',
-      method: document.getElementById('e1-mth').value||'-',
-      instructor: document.getElementById('e1-instr').value||'-',
-      indiv: document.getElementById('e1-indiv').value||'',
-      common: document.getElementById('e1-common').value||'',
-      participants: e1.parts.length+'명',
-      sigCount: e1SigCount+'명 서명',
-      names: e1.parts.map(p=>p.name).join(', '),
-      partsDetail: await Promise.all(e1.parts.map(async (p,i)=>({
-        no:i+1, name:p.name, join:p.join||'', gender:p.gender||'',
-        signed: i<e1SigCount ? '✓' : '-',
-        sigImg: i<3 ? await compressImg((e1.sigData[0]&&e1.sigData[0][i])||'') : ''
-      }))),
-      photos: await Promise.all((e1.photos.filter(Boolean)).slice(0,2).map(p=>compressPhoto(p))),
-      eduDates: e1.dates
-    };
-    // ★ 메모리 해제: 로컬 변수만 사용, 아래 정리
-    e1PdfB64 = null;
-    await uploadPdfAndSendEmail(e1Opts);
-    // ★ 메일 발송 후 큰 객체 해제
-    e1Opts.pdfBase64 = null;
-    e1Opts.partsDetail = null;
-    e1Opts.photos = null;
-  }catch(err){toast('PDF 오류: '+err.message,'err');}
-  // ★ 캡처 영역 정리 + GC 기회 부여
-  area.innerHTML='';
-  await new Promise(r => setTimeout(r, 100));
+      dept, chem, date: ds,
+      participants: e1.parts.length + '명',
+      sigCount: e1SigCount + '명 서명',
+      names: e1.parts.map(p => p.name).join(', ')
+    });
+
+    area.innerHTML = ''; // 임시 영역 청소
+
+  } catch (err) {
+    console.error('PDF 생성 오류:', err);
+    toast('❌ 처리 중 오류 발생: ' + err.message, 'err');
+    // 오류가 났을 때만 버튼을 다시 활성화해서 재시도할 수 있게 합니다.
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  } finally {
+    // 4. [락 해제] 성공하든 실패하든 마지막에 락을 풀어 다음 입력을 받습니다.
+    isProcessingSubmission = false;
+  }
 }
 
 /* ════════════════════════════════════════════════════════
@@ -4373,89 +4392,108 @@ function e2BuildPdfHTML(){
   </div>`;
 }
 
-async function e2GenPDF(){
-  toast('PDF 생성 중…','info');
-  // ★ v15.42: PDF용 HTML은 e2BuildPdfHTML()로 분리
-  const dept = document.getElementById('e2-dept').value;
-  const chem = e2.chems.join(', ');
-  const ds   = document.getElementById('e2-ds').value;
-  const area = document.getElementById('pdf-area');
-  area.innerHTML = e2BuildPdfHTML();
+/* ── [v15.45 수정본] MSDS 교육일지 저장 및 중복 방지 로직 ── */
+async function e2GenPDF() {
+  // [보안] 1. 중복 클릭 방지: 이미 처리 중이면 함수 실행을 즉시 중단합니다.
+  if (isProcessingSubmission) {
+    toast('⏳ 이미 처리가 진행 중입니다. 잠시만 기다려주세요.', 'info');
+    return;
+  }
 
-  await new Promise(r=>setTimeout(r,450));
-  try{
-    const cv=await html2canvas(area.firstElementChild,{scale:2,useCORS:true,allowTaint:true,logging:false,windowWidth:780});
-    const {jsPDF}=window.jspdf;
-    const pdf=new jsPDF('p','mm','a4');
-    const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight();
-    // ★ 서명 행 보호 (A4 채움은 적용 안함 - 기존 비율 유지)
+  const btn = event.currentTarget; 
+  const originalText = btn ? btn.innerHTML : '';
+
+  try {
+    // [보안] 2. 락 설정: 버튼을 비활성화하고 처리 중임을 표시합니다.
+    isProcessingSubmission = true;
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '⏳ 처리 중...';
+    }
+
+    toast('MSDS 교육일지 생성 및 기록 저장 중…', 'info');
+
+    // PDF 렌더링 영역 준비
+    const dept = document.getElementById('e2-dept').value;
+    const chem = e2.chems.join(', ');
+    const ds   = document.getElementById('e2-ds').value;
+    const area = document.getElementById('pdf-area');
+    area.innerHTML = e2BuildPdfHTML(); 
+
+    await new Promise(r => setTimeout(r, 300)); // 렌더링 안정화 대기
+
+    // 화면 캡처 및 PDF 객체 생성
+    const cv = await html2canvas(area.firstElementChild, { scale: 2, useCORS: true, allowTaint: true, logging: false, windowWidth: 780 });
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pw = pdf.internal.pageSize.getWidth();
+    const ph = pdf.internal.pageSize.getHeight();
+    
+    // 페이지 자동 분할 로직 호출
     await pdfRenderPagesProtected(area, cv, pdf, pw, ph, 2, false);
-    // ★ PDF 로컬 저장
-    const e2Names=e2.parts.map(p=>p.name);
-      const e2NmStr=e2Names.length===1?e2Names[0]:e2Names[0]+'외'+(e2Names.length-1)+'명';
-      pdf.save(`MSDS교육일지-${dept}-${e2NmStr}-${ds}.pdf`);
-    toast('PDF 저장 완료 ✓  Drive 업로드 중…','ok');
-    // ★ 교육이력 로컬 저장 → 관리자 즉시 업데이트
-    const _e2FileName = `MSDS교육일지-${dept}-${e2NmStr}-${ds}.pdf`;
-    // ★ 서명 이미지 압축
+
+    const e2Names = e2.parts.map(p => p.name);
+    const e2NmStr = e2Names.length === 1 ? e2Names[0] : e2Names[0] + '외' + (e2Names.length - 1) + '명';
+    const fileName = `MSDS교육일지-${dept}-${e2NmStr}-${ds}.pdf`;
+
+    // 1. PDF 파일 로컬 저장
+    pdf.save(fileName);
+    toast('📄 PDF 저장 완료! 서버 업로드 시작…', 'ok');
+
+    // 서명 이미지 압축 (용량 최적화)
     const e2SigImgs = await Promise.all(e2.parts.map(async (p, i) => {
       const sig = e2.sigData[i] || '';
-      if(!sig) return '';
-      try { return await compressImg(sig); } catch(e) { return ''; }
+      return sig ? await compressImg(sig) : '';
     }));
-    saveEduRecord({
-      type:'MSDS교육',
+
+    // [중요] 2. 데이터 저장: 이 코드가 락 덕분에 딱 한 번만 실행됩니다.
+    await saveEduRecord({
+      type: 'MSDS교육',
       dept, chem,
       dateStart: ds, dateEnd: ds,
       days: '1',
-      time: document.getElementById('e2-time').value||'',
-      place: document.getElementById('e2-place').value||'',
-      method: document.getElementById('e2-mth').value||'',
-      instructor: document.getElementById('e2-instr').value||'',
-      indiv: document.getElementById('e2-indiv').value||'',
-      common: document.getElementById('e2-common').value||'',
-      sigCount: Object.keys(e2.sigData).length+'',
-      names: e2.parts.map(p=>p.name).join('|'),
-      empNos: e2.parts.map(p=>p.empNo||'').join('|'),
-      joinDates: e2.parts.map(p=>p.join||'').join('|'),
-      genders: e2.parts.map(p=>p.gender||'').join('|'),
-      sigImgs: e2SigImgs,  // ★ 서명 이미지 배열
-      fileName: _e2FileName
+      time: document.getElementById('e2-time').value || '',
+      place: document.getElementById('e2-place').value || '',
+      method: document.getElementById('e2-mth').value || '',
+      instructor: document.getElementById('e2-instr').value || '',
+      indiv: document.getElementById('e2-indiv').value || '',
+      common: document.getElementById('e2-common').value || '',
+      sigCount: Object.keys(e2.sigData).length + '',
+      names: e2.parts.map(p => p.name).join('|'),
+      empNos: e2.parts.map(p => p.empNo || '').join('|'),
+      joinDates: e2.parts.map(p => p.join || '').join('|'),
+      genders: e2.parts.map(p => p.gender || '').join('|'),
+      sigImgs: e2SigImgs,
+      fileName: fileName
     });
-    // ★ Drive 업로드 → 이메일 발송
-    let e2PdfB64 = pdf.output('datauristring');
-    const e2FileName = `MSDS교육일지-${dept}-${e2NmStr}-${ds}.pdf`;
-    const e2SigCount = Object.keys(e2.sigData).length;
-    const e2Opts = {
-      pdfBase64: e2PdfB64,
-      fileName:  e2FileName,
+
+    // 3. 메일 발송 (GitHub 업로드 포함)
+    let pdfB64 = pdf.output('datauristring');
+    await uploadPdfAndSendEmail({
+      pdfBase64: pdfB64,
+      fileName: fileName,
       type: 'MSDS교육',
-      namesRaw: e2.parts.map(p=>p.name).join('|'),
       emailSubject: `[MSDS교육일지] ${dept} ${ds}`,
       dept, chem, date: ds,
-      time: document.getElementById('e2-time').value||'-',
-      place: document.getElementById('e2-place').value||'-',
-      method: document.getElementById('e2-mth').value||'-',
-      instructor: document.getElementById('e2-instr').value||'-',
-      indiv: document.getElementById('e2-indiv').value||'',
-      common: document.getElementById('e2-common').value||'',
-      participants: e2.parts.length+'명',
-      sigCount: e2SigCount+'명 서명',
-      names: e2.parts.map(p=>p.name).join(', '),
-      partsDetail: await Promise.all(e2.parts.map(async (p,i)=>({
-        no:i+1, name:p.name, join:p.join||'', gender:p.gender||'',
-        signed: i<e2SigCount ? '✓' : '-',
-        sigImg: i<3 ? await compressImg(e2.sigData[i]||'') : ''
-      })))
-    };
-    e2PdfB64 = null;
-    await uploadPdfAndSendEmail(e2Opts);
-    // ★ 메모리 해제
-    e2Opts.pdfBase64 = null;
-    e2Opts.partsDetail = null;
-  }catch(err){toast('PDF 오류: '+err.message,'err');}
-  area.innerHTML='';
-  await new Promise(r => setTimeout(r, 100));
+      participants: e2.parts.length + '명',
+      sigCount: Object.keys(e2.sigData).length + '명 서명',
+      names: e2.parts.map(p => p.name).join(', ')
+    });
+
+    area.innerHTML = ''; // 작업 영역 청소
+
+  } catch (err) {
+    console.error('MSDS 처리 중 오류:', err);
+    toast('❌ 오류 발생: ' + err.message, 'err');
+    // 에러 시에만 버튼을 다시 살려줍니다.
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  } finally {
+    // 4. 모든 작업(성공/실패)이 끝나면 락을 해제합니다.
+    isProcessingSubmission = false;
+  }
 }
 
 /* ══ 이메일 ══ */
@@ -6891,13 +6929,24 @@ function clrPpeSigN(i){
 }
 
 // 전체 PDF 생성
-async function ppeGenAllPDF(){
-  if(!ppePersons.length){toast('수령자를 추가하세요','err');return;}
-  for(let i=0;i<ppePersons.length;i++){
-    await ppeGenOnePDF(i);
-    await new Promise(r=>setTimeout(r,600));
+async function ppeGenAllPDF() {
+  if (!ppePersons.length) { toast('수령자를 추가하세요', 'err'); return; }
+  
+  // 1. 중복 클릭 방지 락
+  if (isProcessingSubmission) return;
+  
+  try {
+    isProcessingSubmission = true;
+    toast('일괄 PDF 생성 및 발송 시작...', 'info');
+    
+    for (let i = 0; i < ppePersons.length; i++) {
+      await ppeGenOnePDF(i);
+      await new Promise(r => setTimeout(r, 600));
+    }
+    toast(`✅ 총 ${ppePersons.length}명 PDF 발송 완료`, 'ok');
+  } finally {
+    isProcessingSubmission = false; // 작업 완료 후 락 해제
   }
-  toast(`✅ 총 ${ppePersons.length}명 PDF 발송 완료`,'ok');
 }
 
 async function ppeGenOnePDF(idx){
@@ -8453,70 +8502,43 @@ function updateEduRec(idx,field,val){
   }catch(e){ console.warn('updateEduRec:',e); }
 }
 
-/* ── 명시적 저장 버튼 ── */
-function saveEduRecRow(idx){
+/* ── [수정본] 관리자 수정 시 이전 기록 삭제 후 덮어쓰기 ── */
+async function saveEduRecRow(idx) {
   const target = adminRecords[idx];
-  if(!target){ toast('대상 없음','err'); return; }
+  if (!target) return;
 
-  // ★ 결재 정보 보존: localStorage records에서 같은 record를 찾아 결재 정보 유지
-  try{
-    const localRecords = JSON.parse(localStorage.getItem('bm_edu_records')||'[]');
-    const matched = localRecords.find(r =>
-      (target.recordId && r.recordId===target.recordId) ||
-      (r.submitted===target.submitted && r.name===target.name && r.dateStart===target.dateStart)
-    );
-    if(matched && matched.approved){
-      // 결재 완료된 records는 결재 정보 보존
-      target.approved = matched.approved;
-      target.approvedAt = matched.approvedAt;
-      target.approverName = matched.approverName;
-      console.log('[saveEduRecRow] 결재 정보 보존:', target.name, target.approvedAt);
-    }
-    // localStorage records도 같은 데이터로 갱신 (결재 탭 즉시 반영)
-    let updatedLocal = false;
-    for(let j=0;j<localRecords.length;j++){
-      if((target.recordId && localRecords[j].recordId===target.recordId) ||
-         (localRecords[j].submitted===target.submitted && localRecords[j].name===target.name && localRecords[j].dateStart===target.dateStart)){
-        Object.assign(localRecords[j], target);
-        updatedLocal = true;
-        break;
-      }
-    }
-    if(updatedLocal){
-      localStorage.setItem('bm_edu_records', JSON.stringify(localRecords));
-    }
-  }catch(e){ console.warn('[saveEduRecRow] localStorage 동기화 실패:', e); }
+  if (isProcessingSubmission) return;
+  isProcessingSubmission = true;
 
-  // GitHub 즉시 동기화 (있으면)
-  if(CFG.ghToken && CFG.ghRepo){
-    (async ()=>{
-      try{
-        const {data, sha} = await readGitHubJSON('records/edu_records.json');
-        const remote = (data && Array.isArray(data.records)) ? data.records : [];
-        // 같은 ID 찾아서 업데이트 (결재 정보도 함께 머지됨, target이 이미 결재 정보 포함)
-        let updated = false;
-        for(let i=0;i<remote.length;i++){
-          if((target.recordId && remote[i].recordId===target.recordId) ||
-             (remote[i].submitted===target.submitted && remote[i].name===target.name && remote[i].dateStart===target.dateStart)){
-            Object.assign(remote[i], target);
-            updated = true;
-            break;
-          }
-        }
-        if(!updated) remote.push(target);
-        await writeGitHubJSON('records/edu_records.json', {records:remote}, sha, `edu 수정: ${target.name||''} ${target.dateStart||''}`);
-        toast('💾 저장 완료 (결재 정보 보존, 다른 PC 자동 반영)','ok');
-        if(typeof BM!=='undefined'){
-          BM.audit('UPDATE','edu',{name:target.name, dateStart:target.dateStart, reason:'관리자 수정'});
-        }
-        // ★ 결재 탭 열려있으면 즉시 갱신
-        if(typeof apvRefreshIfOpen === 'function') apvRefreshIfOpen();
-      }catch(e){ toast('GitHub 저장 실패: '+e.message,'err'); }
-    })();
-  } else {
-    toast('💾 로컬 저장 완료 (GitHub 미설정)','ok');
-    // GitHub 없어도 localStorage 갱신은 위에서 했으므로 결재 탭 갱신
-    if(typeof apvRefreshIfOpen === 'function') apvRefreshIfOpen();
+  try {
+    toast('☁️ 서버 데이터를 업데이트 중입니다...', 'info');
+
+    // 1. 서버 원본 로드
+    const filePath = 'records/edu_records.json';
+    const { data, sha } = await readGitHubJSON(filePath);
+    let arr = Array.isArray(data) ? data : (data.records || []);
+    
+    // 2. [중요] 기존 ID를 가진 데이터 제거 (수정 전 데이터 삭제)
+    const cleanArr = arr.filter(r => r.recordId !== target.recordId);
+    
+    // 3. 수정된 정보로 고유 ID 재생성 및 추가
+    target.recordId = BM.makeRecordId(target); 
+    target.updatedAt = new Date().toISOString();
+    cleanArr.push(target);
+
+    // 4. 서버에 최종 덮어쓰기
+    const uploadData = Array.isArray(data) ? cleanArr : { ...data, records: cleanArr, updated: new Date().toISOString() };
+    await writeGitHubJSON(filePath, uploadData, sha, `📝 데이터 수정 반영: ${target.name}`);
+
+    // 5. 로컬 및 화면 갱신
+    localStorage.setItem('bm_edu_records', JSON.stringify(cleanArr));
+    toast('💾 수정 사항이 서버에 영구 반영되었습니다.', 'ok');
+    _adminDirectRender();
+
+  } catch (e) {
+    toast('❌ 저장 실패: ' + e.message, 'err');
+  } finally {
+    isProcessingSubmission = false;
   }
 }
 
@@ -9340,93 +9362,39 @@ BM.filterTombstoned = function(records, category){
   return records.filter(r => !tombs.has(r.recordId));
 };
 
-/* ── 7. 묘비 마킹 + GitHub/GAS 동기화 ── */
-BM.markDeleted = async function(category, recordIds, reason){
-  if(!Array.isArray(recordIds) || !recordIds.length) return 0;
-  const tombs = BM.getTombstones(category);
-  recordIds.forEach(id => tombs.add(id));
-  BM.saveTombstones(category, tombs);
+/* ── [수정본] GitHub 원본 파일에서 데이터를 물리적으로 삭제 (부활 방지) ── */
+BM.markDeleted = async function(category, recordIds, reason) {
+  if (!Array.isArray(recordIds) || !recordIds.length) return 0;
 
-  // 감사 로그 기록
-  BM.audit('DELETE', category, {
-    count: recordIds.length,
-    ids: recordIds,
-    reason: reason || '(사유 없음)'
-  });
+  const fileMap = { edu: 'records/edu_records.json', ppe: 'records/ppe_records.json', chem: 'records/chem_records.json' };
+  const filePath = fileMap[category];
 
-  // localStorage records에서도 즉시 제거 (현재 PC 즉각 반영)
-  const recKey = `bm_${category}_records`;
-  try{
-    let stored = JSON.parse(localStorage.getItem(recKey)||'[]');
-    BM.ensureIds(stored);
-    stored = stored.filter(r => !tombs.has(r.recordId));
-    stored.forEach((r,i)=>r.no=i+1);
-    localStorage.setItem(recKey, JSON.stringify(stored));
-  }catch(e){ console.warn('[markDeleted] local 정리 실패:', e); }
+  try {
+    // 1. GitHub 원본 데이터 가져오기
+    const { data, sha } = await readGitHubJSON(filePath);
+    if (!data) throw new Error("원본 데이터를 불러올 수 없습니다.");
 
-  // GitHub admin_cfg에 묘비 리스트 동기화 (다른 PC가 새로고침 시 받음)
-  try{
-    if(CFG.ghToken && CFG.ghRepo){
-      const cfgKey = `${category}_deleted_ids`;
-      const {data, sha} = await readGitHubJSON('records/admin_cfg.json');
-      const cfg = data || {};
-      const existing = new Set(Array.isArray(cfg[cfgKey]) ? cfg[cfgKey] : []);
-      tombs.forEach(t => existing.add(t));
-      cfg[cfgKey] = [...existing];
-      cfg[`${cfgKey}_updated_at`] = new Date().toISOString();
-      await writeGitHubJSON('records/admin_cfg.json', cfg, sha, `묘비 동기화: ${category} +${recordIds.length}`);
+    let recordsArr = Array.isArray(data) ? data : (data.records || []);
+    
+    // 2. 삭제 대상 ID를 제외하고 필터링 (물리적 제거)
+    const cleanRecords = recordsArr.filter(r => !recordIds.includes(r.recordId));
+    const removedCount = recordsArr.length - cleanRecords.length;
+
+    if (removedCount > 0) {
+      // 3. GitHub에 덮어쓰기
+      const uploadData = Array.isArray(data) ? cleanRecords : { ...data, records: cleanRecords, updated: new Date().toISOString() };
+      await writeGitHubJSON(filePath, uploadData, sha, `🗑 영구삭제: ${category} ${removedCount}건`);
+      
+      // 4. 로컬 스토리지도 즉시 반영
+      localStorage.setItem(`bm_${category}_records`, JSON.stringify(cleanRecords));
+      
+      BM.audit('PURGE_PERMANENT', category, { count: removedCount, reason: reason });
+      return removedCount;
     }
-  }catch(e){ console.warn('[markDeleted] GitHub admin_cfg 동기화 실패:', e); }
-
-  // ★ v15.43: GitHub records.json에서도 실제 데이터 제거 (영구 삭제)
-  // 사용자 요청: "저장공간에서도 삭제 — 다른 기기에서 불러와도 부활 안 됨"
-  try{
-    if(CFG.ghToken && CFG.ghRepo){
-      // 카테고리별 파일 경로
-      const fileMap = {
-        edu: 'records/edu_records.json',
-        ppe: 'records/ppe_records.json',
-        chem: 'records/chem_records.json'
-      };
-      const filePath = fileMap[category];
-      if(filePath){
-        const {data, sha} = await readGitHubJSON(filePath);
-        if(data){
-          // records 배열 추출 (구조: {records:[...], updated:...} 또는 직접 배열)
-          let arr = Array.isArray(data) ? data : (Array.isArray(data.records) ? data.records : null);
-          if(arr){
-            BM.ensureIds(arr);
-            const beforeLen = arr.length;
-            arr = arr.filter(r => !tombs.has(r.recordId));
-            const removed = beforeLen - arr.length;
-            if(removed > 0){
-              const newData = Array.isArray(data) ? arr : {...data, records: arr, updated: new Date().toISOString()};
-              await writeGitHubJSON(filePath, newData, sha, `🗑 영구삭제: ${category} ${removed}건 (id: ${recordIds.slice(0,3).join(',')}…)`);
-              console.log(`[영구삭제] GitHub ${filePath}: ${removed}건 실제 제거`);
-            }
-          }
-        }
-      }
-    }
-  }catch(e){ console.warn('[markDeleted] GitHub records 실제 삭제 실패:', e); }
-
-  // GAS adminCfg에도 동기화 (현재 메커니즘 그대로 재사용)
-  try{
-    if(CFG.url){
-      const cb='_tomb_'+Date.now();
-      window[cb] = ()=>{ delete window[cb]; };
-      const sc=document.createElement('script');
-      sc.src=CFG.url+'?action=adminCfg&method=set'
-           +'&key='+encodeURIComponent(`${category}_deleted_ids`)
-           +'&value='+encodeURIComponent(JSON.stringify([...tombs]))
-           +'&callback='+cb;
-      sc.onerror=()=>{ delete window[cb]; };
-      document.head.appendChild(sc);
-      setTimeout(()=>{ if(window[cb]){ delete window[cb]; sc.remove(); } }, 5000);
-    }
-  }catch(e){ console.warn('[markDeleted] GAS 동기화 실패:', e); }
-
-  return recordIds.length;
+    return 0;
+  } catch (e) {
+    throw new Error(`GitHub 삭제 실패: ${e.message}`);
+  }
 };
 
 /* ── 8. GitHub admin_cfg에서 묘비 리스트 받아와 localStorage 갱신 ── */
@@ -11153,7 +11121,7 @@ function printEduList(){
   const dept=document.getElementById('ap-edu-dept')?document.getElementById('ap-edu-dept').value||'전체 부서':'전체 부서';
   const from=document.getElementById('ap-edu-from')?document.getElementById('ap-edu-from').value:'';
   const to=document.getElementById('ap-edu-to')?document.getElementById('ap-edu-to').value:'';
-  const period=from&&to?from+' ~ '+to:from?from+' 이후':to?to+' 이전':'전체 기간';
+  const period=from&&to?from+'ㅇ ~ '+to:from?from+' 이후':to?to+' 이전':'전체 기간';
   const N='#1c3557',LB='#e8ecf2',BD='#c0cde0';
   const win=window.open('','_blank','width=1050,height=750');
   const html=[
