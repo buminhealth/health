@@ -1,5 +1,4 @@
 
-
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -2120,12 +2119,29 @@ async function loadAllFromGitHub(){
     const eduFiltered = BM.filterTombstoned(eduOnly, 'edu');
     let local=[]; try{local=JSON.parse(localStorage.getItem('bm_edu_records')||'[]');}catch(e){}
     const localFiltered = BM.filterTombstoned(local, 'edu');
-    const dupKey=r=>(r.name||'')+'|'+(r.dept||'')+'|'+(r.type||'')+'|'+(r.dateStart||'');
-    const localKeys=new Set(localFiltered.map(dupKey));
-    const ghNew=eduFiltered.filter(r=>!localKeys.has(dupKey(r)));
-    const seen=new Set();
-    const localDeduped=localFiltered.filter(r=>{const k=dupKey(r);if(seen.has(k))return false;seen.add(k);return true;});
-    const merged=[...localDeduped,...ghNew];
+    // 1. 최신 삭제 목록(묘비)을 GitHub에서 먼저 가져옵니다.
+    await BM.syncTombstonesFromGitHub('edu');
+    const tombs = BM.getTombstones('edu');
+
+    // 2. 서버 데이터에 고유 ID가 없는 옛날 데이터가 섞여있을 수 있으므로 ID를 부여합니다.
+    BM.ensureIds(eduFiltered);
+
+    // 3. ★ 핵심: 서버에서 온 데이터 중, 이미 삭제된 ID(묘비)는 즉시 거릅니다.
+    const deletedRemovedGhRecs = eduFiltered.filter(r => !tombs.has(r.recordId));
+
+    // 4. 로컬 데이터 로드 및 ID 보장
+    let local = []; 
+    try { local = JSON.parse(localStorage.getItem('bm_edu_records') || '[]'); } catch(e) {}
+    BM.ensureIds(local);
+
+    // 5. 로컬에 이미 존재하는 ID 목록 생성 (중복 병합 방지용)
+    const localIds = new Set(local.map(r => r.recordId));
+
+    // 6. 삭제되지 않았고 + 로컬에도 없는 정말 "새로운" 데이터만 추출
+    const ghNew = deletedRemovedGhRecs.filter(r => !localIds.has(r.recordId));
+
+    // 7. 최종 병합
+    const merged = [...local, ...ghNew];
     merged.sort((a,b)=>(b.dateStart||'').localeCompare(a.dateStart||''));
     merged.forEach((r,i)=>r.no=i+1);
     BM.ensureIds(merged); // ★ 글로벌 ID 부여
@@ -4140,7 +4156,20 @@ function e1BuildPdfHTML(){
 
 async function e1GenPDF(){
   toast('PDF 생성 중…','info');
-  // ★ v15.42: PDF용 HTML은 e1BuildPdfHTML()로 분리 (미리보기와 재사용)
+  // 스크립트 상단(전역)에 선언
+let isProcessingPDF = false; 
+
+async function e1GenPDF() {
+  if (isProcessingPDF) {
+    toast('현재 PDF를 생성 중입니다. 잠시만 기다려주세요.', 'warn');
+    return;
+  }
+
+  try {
+    isProcessingPDF = true; // 문 걸어잠그기
+    toast('PDF 생성 중…', 'info');
+        
+   // ★ v15.42: PDF용 HTML은 e1BuildPdfHTML()로 분리 (미리보기와 재사용)
   const dept = document.getElementById('e1-dept').value;
   const chem = e1.chems.join(', ');
   const ds   = document.getElementById('e1-ds').value;
@@ -4246,6 +4275,11 @@ async function e1GenPDF(){
   // ★ 캡처 영역 정리 + GC 기회 부여
   area.innerHTML='';
   await new Promise(r => setTimeout(r, 100));
+} catch (err) {
+    toast('오류 발생', 'err');
+  } finally {
+    isProcessingPDF = false; // 완료 후 문 열기
+  }
 }
 
 /* ════════════════════════════════════════════════════════
@@ -8455,69 +8489,37 @@ function updateEduRec(idx,field,val){
 }
 
 /* ── 명시적 저장 버튼 ── */
-function saveEduRecRow(idx){
+async function saveEduRecRow(idx) {
   const target = adminRecords[idx];
-  if(!target){ toast('대상 없음','err'); return; }
+  if (!target || !target.recordId) { toast('대상 ID가 없습니다', 'err'); return; }
 
-  // ★ 결재 정보 보존: localStorage records에서 같은 record를 찾아 결재 정보 유지
-  try{
-    const localRecords = JSON.parse(localStorage.getItem('bm_edu_records')||'[]');
-    const matched = localRecords.find(r =>
-      (target.recordId && r.recordId===target.recordId) ||
-      (r.submitted===target.submitted && r.name===target.name && r.dateStart===target.dateStart)
-    );
-    if(matched && matched.approved){
-      // 결재 완료된 records는 결재 정보 보존
-      target.approved = matched.approved;
-      target.approvedAt = matched.approvedAt;
-      target.approverName = matched.approverName;
-      console.log('[saveEduRecRow] 결재 정보 보존:', target.name, target.approvedAt);
+  // 1. 로컬 데이터 교체
+  try {
+    let local = JSON.parse(localStorage.getItem('bm_edu_records') || '[]');
+    const lIdx = local.findIndex(r => r.recordId === target.recordId);
+    if (lIdx >= 0) {
+      local[lIdx] = { ...target }; // 덮어쓰기
+      localStorage.setItem('bm_edu_records', JSON.stringify(local));
     }
-    // localStorage records도 같은 데이터로 갱신 (결재 탭 즉시 반영)
-    let updatedLocal = false;
-    for(let j=0;j<localRecords.length;j++){
-      if((target.recordId && localRecords[j].recordId===target.recordId) ||
-         (localRecords[j].submitted===target.submitted && localRecords[j].name===target.name && localRecords[j].dateStart===target.dateStart)){
-        Object.assign(localRecords[j], target);
-        updatedLocal = true;
-        break;
+  } catch (e) { console.error('Local save error', e); }
+
+  // 2. 서버(GitHub) 데이터 교체
+  if (CFG.ghToken && CFG.ghRepo) {
+    try {
+      const { data, sha } = await readGitHubJSON('records/edu_records.json');
+      let remote = Array.isArray(data) ? data : (data.records || []);
+      const rIdx = remote.findIndex(r => r.recordId === target.recordId);
+      
+      if (rIdx >= 0) {
+        remote[rIdx] = { ...target }; // 서버 데이터 덮어쓰기
+      } else {
+        remote.push(target); // 혹시 없으면 추가
       }
-    }
-    if(updatedLocal){
-      localStorage.setItem('bm_edu_records', JSON.stringify(localRecords));
-    }
-  }catch(e){ console.warn('[saveEduRecRow] localStorage 동기화 실패:', e); }
 
-  // GitHub 즉시 동기화 (있으면)
-  if(CFG.ghToken && CFG.ghRepo){
-    (async ()=>{
-      try{
-        const {data, sha} = await readGitHubJSON('records/edu_records.json');
-        const remote = (data && Array.isArray(data.records)) ? data.records : [];
-        // 같은 ID 찾아서 업데이트 (결재 정보도 함께 머지됨, target이 이미 결재 정보 포함)
-        let updated = false;
-        for(let i=0;i<remote.length;i++){
-          if((target.recordId && remote[i].recordId===target.recordId) ||
-             (remote[i].submitted===target.submitted && remote[i].name===target.name && remote[i].dateStart===target.dateStart)){
-            Object.assign(remote[i], target);
-            updated = true;
-            break;
-          }
-        }
-        if(!updated) remote.push(target);
-        await writeGitHubJSON('records/edu_records.json', {records:remote}, sha, `edu 수정: ${target.name||''} ${target.dateStart||''}`);
-        toast('💾 저장 완료 (결재 정보 보존, 다른 PC 자동 반영)','ok');
-        if(typeof BM!=='undefined'){
-          BM.audit('UPDATE','edu',{name:target.name, dateStart:target.dateStart, reason:'관리자 수정'});
-        }
-        // ★ 결재 탭 열려있으면 즉시 갱신
-        if(typeof apvRefreshIfOpen === 'function') apvRefreshIfOpen();
-      }catch(e){ toast('GitHub 저장 실패: '+e.message,'err'); }
-    })();
-  } else {
-    toast('💾 로컬 저장 완료 (GitHub 미설정)','ok');
-    // GitHub 없어도 localStorage 갱신은 위에서 했으므로 결재 탭 갱신
-    if(typeof apvRefreshIfOpen === 'function') apvRefreshIfOpen();
+      const newData = Array.isArray(data) ? remote : { ...data, records: remote, updated: new Date().toISOString() };
+      await writeGitHubJSON('records/edu_records.json', newData, sha, `Update: ${target.name}`);
+      toast('💾 덮어쓰기 저장 완료', 'ok');
+    } catch (e) { toast('GitHub 동기화 실패', 'err'); }
   }
 }
 
@@ -9341,92 +9343,45 @@ BM.filterTombstoned = function(records, category){
   return records.filter(r => !tombs.has(r.recordId));
 };
 
-/* ── 7. 묘비 마킹 + GitHub/GAS 동기화 ── */
-BM.markDeleted = async function(category, recordIds, reason){
-  if(!Array.isArray(recordIds) || !recordIds.length) return 0;
+BM.markDeleted = async function(category, recordIds, reason) {
+  if (!Array.isArray(recordIds) || !recordIds.length) return 0;
+  
+  // 1. 로컬 묘비(Tombstone) 등록
   const tombs = BM.getTombstones(category);
   recordIds.forEach(id => tombs.add(id));
   BM.saveTombstones(category, tombs);
 
-  // 감사 로그 기록
-  BM.audit('DELETE', category, {
-    count: recordIds.length,
-    ids: recordIds,
-    reason: reason || '(사유 없음)'
-  });
+  // 2. 감사 로그 기록
+  BM.audit('DELETE', category, { count: recordIds.length, reason: reason });
 
-  // localStorage records에서도 즉시 제거 (현재 PC 즉각 반영)
+  // 3. 로컬 저장소에서 즉시 제거
   const recKey = `bm_${category}_records`;
-  try{
-    let stored = JSON.parse(localStorage.getItem(recKey)||'[]');
-    BM.ensureIds(stored);
-    stored = stored.filter(r => !tombs.has(r.recordId));
-    stored.forEach((r,i)=>r.no=i+1);
-    localStorage.setItem(recKey, JSON.stringify(stored));
-  }catch(e){ console.warn('[markDeleted] local 정리 실패:', e); }
+  try {
+    let local = JSON.parse(localStorage.getItem(recKey) || '[]');
+    const filteredLocal = local.filter(r => !recordIds.includes(r.recordId));
+    localStorage.setItem(recKey, JSON.stringify(filteredLocal));
+  } catch (e) { console.error('Local cleanup fail', e); }
 
-  // GitHub admin_cfg에 묘비 리스트 동기화 (다른 PC가 새로고침 시 받음)
-  try{
-    if(CFG.ghToken && CFG.ghRepo){
-      const cfgKey = `${category}_deleted_ids`;
-      const {data, sha} = await readGitHubJSON('records/admin_cfg.json');
-      const cfg = data || {};
-      const existing = new Set(Array.isArray(cfg[cfgKey]) ? cfg[cfgKey] : []);
-      tombs.forEach(t => existing.add(t));
-      cfg[cfgKey] = [...existing];
-      cfg[`${cfgKey}_updated_at`] = new Date().toISOString();
-      await writeGitHubJSON('records/admin_cfg.json', cfg, sha, `묘비 동기화: ${category} +${recordIds.length}`);
-    }
-  }catch(e){ console.warn('[markDeleted] GitHub admin_cfg 동기화 실패:', e); }
-
-  // ★ v15.43: GitHub records.json에서도 실제 데이터 제거 (영구 삭제)
-  // 사용자 요청: "저장공간에서도 삭제 — 다른 기기에서 불러와도 부활 안 됨"
-  try{
-    if(CFG.ghToken && CFG.ghRepo){
-      // 카테고리별 파일 경로
-      const fileMap = {
-        edu: 'records/edu_records.json',
-        ppe: 'records/ppe_records.json',
-        chem: 'records/chem_records.json'
-      };
-      const filePath = fileMap[category];
-      if(filePath){
-        const {data, sha} = await readGitHubJSON(filePath);
-        if(data){
-          // records 배열 추출 (구조: {records:[...], updated:...} 또는 직접 배열)
-          let arr = Array.isArray(data) ? data : (Array.isArray(data.records) ? data.records : null);
-          if(arr){
-            BM.ensureIds(arr);
-            const beforeLen = arr.length;
-            arr = arr.filter(r => !tombs.has(r.recordId));
-            const removed = beforeLen - arr.length;
-            if(removed > 0){
-              const newData = Array.isArray(data) ? arr : {...data, records: arr, updated: new Date().toISOString()};
-              await writeGitHubJSON(filePath, newData, sha, `🗑 영구삭제: ${category} ${removed}건 (id: ${recordIds.slice(0,3).join(',')}…)`);
-              console.log(`[영구삭제] GitHub ${filePath}: ${removed}건 실제 제거`);
-            }
-          }
+  // 4. ★ GitHub 물리적 삭제 실행 (이게 핵심입니다)
+  if (CFG.ghToken && CFG.ghRepo) {
+    const fileMap = { edu: 'records/edu_records.json', ppe: 'records/ppe_records.json', chem: 'records/chem_records.json' };
+    const filePath = fileMap[category];
+    try {
+      const { data, sha } = await readGitHubJSON(filePath);
+      if (data) {
+        let arr = Array.isArray(data) ? data : (data.records || []);
+        const beforeLen = arr.length;
+        // 실제 데이터 배열에서 해당 ID들만 제외
+        const cleanedArr = arr.filter(r => !recordIds.includes(r.recordId));
+        
+        if (beforeLen !== cleanedArr.length) {
+          const newData = Array.isArray(data) ? cleanedArr : { ...data, records: cleanedArr, updated: new Date().toISOString() };
+          await writeGitHubJSON(filePath, newData, sha, `Physical Delete: ${category} ${beforeLen - cleanedArr.length}건`);
+          console.log(`[GitHub] ${category} 물리적 삭제 완료`);
         }
       }
-    }
-  }catch(e){ console.warn('[markDeleted] GitHub records 실제 삭제 실패:', e); }
-
-  // GAS adminCfg에도 동기화 (현재 메커니즘 그대로 재사용)
-  try{
-    if(CFG.url){
-      const cb='_tomb_'+Date.now();
-      window[cb] = ()=>{ delete window[cb]; };
-      const sc=document.createElement('script');
-      sc.src=CFG.url+'?action=adminCfg&method=set'
-           +'&key='+encodeURIComponent(`${category}_deleted_ids`)
-           +'&value='+encodeURIComponent(JSON.stringify([...tombs]))
-           +'&callback='+cb;
-      sc.onerror=()=>{ delete window[cb]; };
-      document.head.appendChild(sc);
-      setTimeout(()=>{ if(window[cb]){ delete window[cb]; sc.remove(); } }, 5000);
-    }
-  }catch(e){ console.warn('[markDeleted] GAS 동기화 실패:', e); }
-
+    } catch (e) { console.warn('GitHub 물리적 삭제 실패:', e); }
+  }
   return recordIds.length;
 };
 
