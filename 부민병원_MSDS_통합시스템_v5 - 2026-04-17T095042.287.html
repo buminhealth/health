@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -8493,13 +8492,15 @@ async function saveEduRecRow(idx) {
   const target = adminRecords[idx];
   if (!target || !target.recordId) { toast('대상 ID가 없습니다', 'err'); return; }
 
-  // 1. 로컬 데이터 교체
+  // 1. 로컬 데이터 교체 (중복 선언 방지를 위해 스코프 정리)
   try {
-    let local = JSON.parse(localStorage.getItem('bm_edu_records') || '[]');
-    const lIdx = local.findIndex(r => r.recordId === target.recordId);
+    const rawLocal = localStorage.getItem('bm_edu_records') || '[]';
+    let localDataList = JSON.parse(rawLocal);
+    const lIdx = localDataList.findIndex(r => r.recordId === target.recordId);
+    
     if (lIdx >= 0) {
-      local[lIdx] = { ...target }; // 덮어쓰기
-      localStorage.setItem('bm_edu_records', JSON.stringify(local));
+      localDataList[lIdx] = { ...target }; 
+      localStorage.setItem('bm_edu_records', JSON.stringify(localDataList));
     }
   } catch (e) { console.error('Local save error', e); }
 
@@ -8511,14 +8512,14 @@ async function saveEduRecRow(idx) {
       const rIdx = remote.findIndex(r => r.recordId === target.recordId);
       
       if (rIdx >= 0) {
-        remote[rIdx] = { ...target }; // 서버 데이터 덮어쓰기
+        remote[rIdx] = { ...target };
       } else {
-        remote.push(target); // 혹시 없으면 추가
+        remote.push(target);
       }
 
       const newData = Array.isArray(data) ? remote : { ...data, records: remote, updated: new Date().toISOString() };
       await writeGitHubJSON('records/edu_records.json', newData, sha, `Update: ${target.name}`);
-      toast('💾 덮어쓰기 저장 완료', 'ok');
+      toast('💾 서버 저장 완료', 'ok');
     } catch (e) { toast('GitHub 동기화 실패', 'err'); }
   }
 }
@@ -9346,23 +9347,22 @@ BM.filterTombstoned = function(records, category){
 BM.markDeleted = async function(category, recordIds, reason) {
   if (!Array.isArray(recordIds) || !recordIds.length) return 0;
   
-  // 1. 로컬 묘비(Tombstone) 등록
   const tombs = BM.getTombstones(category);
   recordIds.forEach(id => tombs.add(id));
   BM.saveTombstones(category, tombs);
 
-  // 2. 감사 로그 기록
   BM.audit('DELETE', category, { count: recordIds.length, reason: reason });
 
-  // 3. 로컬 저장소에서 즉시 제거
+  // 로컬 정리 (변수명을 안전하게 변경)
   const recKey = `bm_${category}_records`;
   try {
-    let local = JSON.parse(localStorage.getItem(recKey) || '[]');
-    const filteredLocal = local.filter(r => !recordIds.includes(r.recordId));
-    localStorage.setItem(recKey, JSON.stringify(filteredLocal));
+    const localRaw = localStorage.getItem(recKey) || '[]';
+    let currentLocalData = JSON.parse(localRaw);
+    const filteredData = currentLocalData.filter(r => !recordIds.includes(r.recordId));
+    localStorage.setItem(recKey, JSON.stringify(filteredData));
   } catch (e) { console.error('Local cleanup fail', e); }
 
-  // 4. ★ GitHub 물리적 삭제 실행 (이게 핵심입니다)
+  // GitHub 물리적 삭제
   if (CFG.ghToken && CFG.ghRepo) {
     const fileMap = { edu: 'records/edu_records.json', ppe: 'records/ppe_records.json', chem: 'records/chem_records.json' };
     const filePath = fileMap[category];
@@ -9370,21 +9370,18 @@ BM.markDeleted = async function(category, recordIds, reason) {
       const { data, sha } = await readGitHubJSON(filePath);
       if (data) {
         let arr = Array.isArray(data) ? data : (data.records || []);
-        const beforeLen = arr.length;
-        // 실제 데이터 배열에서 해당 ID들만 제외
         const cleanedArr = arr.filter(r => !recordIds.includes(r.recordId));
         
-        if (beforeLen !== cleanedArr.length) {
+        if (arr.length !== cleanedArr.length) {
           const newData = Array.isArray(data) ? cleanedArr : { ...data, records: cleanedArr, updated: new Date().toISOString() };
-          await writeGitHubJSON(filePath, newData, sha, `Physical Delete: ${category} ${beforeLen - cleanedArr.length}건`);
-          console.log(`[GitHub] ${category} 물리적 삭제 완료`);
+          await writeGitHubJSON(filePath, newData, sha, `Physical Delete: ${category}`);
         }
       }
-    } catch (e) { console.warn('GitHub 물리적 삭제 실패:', e); }
+    } catch (e) { console.warn('GitHub Physical Delete Fail'); }
   }
   return recordIds.length;
 };
-
+  
 /* ── 8. GitHub admin_cfg에서 묘비 리스트 받아와 localStorage 갱신 ── */
 BM.syncTombstonesFromGitHub = async function(category){
   if(!CFG.ghToken || !CFG.ghRepo) return;
