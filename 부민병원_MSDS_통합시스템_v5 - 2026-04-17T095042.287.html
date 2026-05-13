@@ -12110,16 +12110,17 @@ self.addEventListener('fetch',e=>{
 })();
 </script>
 /* ══════════════════════════════════════════════════════════════════════════
-   【 BM v16.1 통합 패치: 디자인 통일 + 하드 동기화 + 보안 + 캐시해제 】
+    【 BM v16.2 최종 패치: 문법 교정 및 메시지 박멸 완료 】
    ══════════════════════════════════════════════════════════════════════════
 */
 
 (function() {
-    console.log('%c[v16.1] 통합 패치 엔진 가동 시작...', 'color:#7c3aed; font-weight:bold;');
+    console.log('%c[v16.2] 엔진 가동 시작...', 'color:#7c3aed; font-weight:bold;');
 
-    // 1. 강제 캐시 해제 및 버전 관리 (새로고침 문제 해결)
-    const APP_VERSION = '16.1_20260513';
+    // 1. 강제 캐시 해제 및 버전 관리 (문법 교정 완료)
+    const APP_VERSION = '16.3_FINAL_STABLE'; // 변수 이름은 그대로 두고 값만 바꿉니다.
     const lastVer = localStorage.getItem('bm_app_version');
+
     if (lastVer !== APP_VERSION) {
         localStorage.setItem('bm_app_version', APP_VERSION);
         if ('serviceWorker' in navigator) {
@@ -12127,9 +12128,13 @@ self.addEventListener('fetch',e=>{
                 for (let name of names) caches.delete(name);
             });
         }
-       console.log('%c[v16.1] 신규 버전 감지: 캐시 초기화 및 새로고침 시행', 'color:#dc2626');
-        //
-        setTimeout(() => location.reload(true), 500);
+        console.log('%c[v16.2] 신규 버전 감지: 브라우저 캐시 삭제 및 새로고침', 'color:#dc2626');
+        
+        // 화면 하단 메시지(_safeToast)는 완전히 삭제했습니다.
+        
+        setTimeout(() => {
+            location.reload(true);
+        }, 300);
         return;
     }
 
