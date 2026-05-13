@@ -12110,13 +12110,13 @@ self.addEventListener('fetch',e=>{
 })();
 </script>
 /* ══════════════════════════════════════════════════════════════════════════
-   【 BM v16.4 최종 통합 패치: 4대 버그(Object현상/결재일/동기화) 완전해결 】
+   【 BM v16.4 최종 통합 패치: 이전 기능 합체 + 4대 버그 완결판 】
    ══════════════════════════════════════════════════════════════════════════
 */
 
 (function() {
-    // 1. 버전 관리 (16.4로 올려서 브라우저 강제 갱신)
-    const APP_VERSION = '16.4_STABLE_FINAL';
+    // 1. 버전 관리 및 캐시 삭제 (최신 버전 16.4)
+    const APP_VERSION = '16.4_TOTAL_STABLE';
     const lastVer = localStorage.getItem('bm_app_version');
     if (lastVer !== APP_VERSION) {
         localStorage.setItem('bm_app_version', APP_VERSION);
@@ -12127,15 +12127,46 @@ self.addEventListener('fetch',e=>{
         return;
     }
 
-    // 2. 보호구 지급물품 [object Object] 해결 & 결재일 삭제 로직
+    // 2. [복구] 관리자 설정 진입 보안 강화 (비밀번호)
+    const _oldShowSettings = window.showSettings;
+    window.showSettings = function() {
+        const isAdmin = localStorage.getItem('bm_admin_ok');
+        if (!isAdmin) {
+            const pw = prompt("관리자 비밀번호를 입력하세요 (설정 진입)");
+            if (pw !== (CFG.adminPw || '1234')) {
+                alert("비밀번호가 일치하지 않습니다.");
+                return;
+            }
+        }
+        if (typeof _oldShowSettings === 'function') _oldShowSettings();
+    };
+
+    // 3. [보완] 하드 동기화 엔진 (메일 발송 후 목록 갱신용 본체)
+    window._syncAllCloud = async function(type = 'edu') {
+        if (!CFG.ghToken || !CFG.ghRepo) return;
+        try {
+            const fileName = `records_${type}.json`;
+            const url = `https://api.github.com/repos/${CFG.ghRepo}/contents/${fileName}`;
+            const res = await fetch(url, { headers: { 'Authorization': `token ${CFG.ghToken}` } });
+            if (res.ok) {
+                const json = await res.json();
+                const cloudData = JSON.parse(decodeURIComponent(atob(json.content)));
+                localStorage.setItem(`bm_${type}_records`, JSON.stringify(cloudData));
+                if (typeof window.renderAdminTable === 'function') window.renderAdminTable(type);
+            }
+        } catch (e) { console.error('동기화 실패:', e); }
+    };
+
+    // 4. [신규] 데이터 렌더링 수정 (Object현상 해결 & 결재일 삭제)
     const _originalRender = window.renderAdminTable;
     window.renderAdminTable = function(type) {
         if (typeof _originalRender === 'function') _originalRender(type);
-
-        if (type === 'ppe') { // 보호구 탭 수정
+        
+        // 보호구 Object 현상 해결
+        if (type === 'ppe') {
             document.querySelectorAll('#adm-table-ppe tbody tr').forEach(row => {
                 const cell = row.cells[3];
-                if (cell && cell.innerText.includes('[object]')) {
+                if (cell && cell.innerText.includes('[object')) {
                     const records = JSON.parse(localStorage.getItem('bm_ppe_records') || '[]');
                     const idx = parseInt(row.cells[0].innerText) - 1;
                     if (records[idx] && Array.isArray(records[idx].items)) {
@@ -12144,38 +12175,39 @@ self.addEventListener('fetch',e=>{
                 }
             });
         }
-        if (type === 'apv') { // 결재일 컬럼 삭제
+        // 결재 관리 '결재일' 컬럼 삭제
+        if (type === 'apv') {
             const table = document.getElementById('adm-table-apv');
             if (table) {
                 const headerRow = table.querySelector('thead tr');
-                for (let i = 0; i < headerRow.cells.length; i++) {
-                    if (headerRow.cells[i].innerText.includes('결재일')) {
-                        headerRow.deleteCell(i);
-                        table.querySelectorAll('tbody tr').forEach(r => r.deleteCell(i));
-                        break;
+                if (headerRow) {
+                    for (let i = 0; i < headerRow.cells.length; i++) {
+                        if (headerRow.cells[i].innerText.includes('결재일')) {
+                            headerRow.deleteCell(i);
+                            table.querySelectorAll('tbody tr').forEach(r => r.deleteCell(i));
+                            break;
+                        }
                     }
                 }
             }
         }
     };
 
-    // 3. 메일 발송 후 자동 목록 갱신 (특별안전교육 누락 방지)
+    // 5. [신규] 메일 발송 후 자동 갱신
     const _originalSendEmail = window.sendAdminEmail;
     window.sendAdminEmail = function(data) {
         if (typeof _originalSendEmail === 'function') _originalSendEmail(data);
-        setTimeout(() => {
-            if (data.type === 'edu' || (data.subject && data.subject.includes('교육'))) {
-                if (typeof window._syncAllCloud === 'function') window._syncAllCloud('edu');
-            }
-        }, 3000); // 서버 저장 시간을 고려해 3초 뒤 동기화
+        setTimeout(() => { 
+            if (typeof window._syncAllCloud === 'function') window._syncAllCloud('edu'); 
+        }, 3000);
     };
 
-    // 4. 디자인 및 도구바 유지
+    // 6. [디자인] 상단 툴바 주입 유지
     window.addEventListener('load', () => {
         setTimeout(() => { if (window.injectUnifiedToolbar) window.injectUnifiedToolbar(); }, 1000);
     });
 
-    console.log('%c[v16.4] 모든 버그 수정 완료 및 시스템 정상 가동', 'color:#16a34a; font-weight:bold;');
+    console.log('%c[v16.4] 보안+버그수정 통합 패치 완료', 'color:green; font-weight:bold;');
 })();
 </body>
 </html>
