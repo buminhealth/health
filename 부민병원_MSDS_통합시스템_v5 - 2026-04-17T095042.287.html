@@ -12127,8 +12127,8 @@ self.addEventListener('fetch',e=>{
                 for (let name of names) caches.delete(name);
             });
         }
-        console.log('%c[v16.1] 신규 버전 감지: 캐시 초기화 및 새로고침 시행', 'color:#dc2626');
-        // 최초 1회만 강제 새로고침
+       console.log('%c[v16.1] 신규 버전 감지: 캐시 초기화 및 새로고침 시행', 'color:#dc2626');
+        // _safeToast('v16.1_20260513 신규 버전 감지: 캐시 초기화 및 새로고침 시행', 'ok');
         setTimeout(() => location.reload(true), 500);
         return;
     }
