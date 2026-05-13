@@ -1,5 +1,6 @@
 
 
+
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -4423,6 +4424,12 @@ async function e1SendEmail(){
     });
     toast('이메일 발송 완료 ✓','ok');
     showSendComplete('edu1');
+    // ★ v16.4: 메일 발송 3초 후 클라우드 동기화 (특별안전교육 목록 누락 방지)
+    setTimeout(function(){
+      if(typeof _syncAllCloud === 'function'){
+        try{ _syncAllCloud('edu'); }catch(e){ console.warn('[메일후 동기화]', e); }
+      }
+    }, 3000);
   }catch(err){
     const errMsg = (err.text || err.message || String(err));
     let userMsg = `⚠ ${p.name||'보호구'} 메일 오류: ` + errMsg.slice(0,80);
@@ -4456,6 +4463,12 @@ async function e2SendEmailAuto(dept, chem, ds, imgData){
     });
     toast('✅ 관리자 이메일 발송 완료','ok');
     showSendComplete('edu2');
+    // ★ v16.4: 메일 발송 3초 후 클라우드 동기화 (MSDS 교육 목록 누락 방지)
+    setTimeout(function(){
+      if(typeof _syncAllCloud === 'function'){
+        try{ _syncAllCloud('edu'); }catch(e){ console.warn('[메일후 동기화]', e); }
+      }
+    }, 3000);
   }catch(err){
     toast('이메일 오류: '+(err.text||err.message)+' — PDF는 정상 저장됨','err');
   }
@@ -4870,7 +4883,7 @@ function apvRender(){
     const apvCell = g.approved
       ? `<div style="display:flex;align-items:center;gap:4px;justify-content:flex-end;min-width:200px">
           <span style="font-size:10.5px;color:#15803d;font-weight:600;white-space:nowrap" title="결재일시: ${(g.approvedAt||'').slice(0,16).replace('T',' ')}">
-            ✓ ${g.approverName||'장은선'} · ${(g.approvedAt||'').slice(5,10)}
+            ✓ ${g.approverName||'장은선'}
           </span>
           <button onclick="viewApvRecord('${g.groupKey}')" style="padding:3px 7px;background:#fff;color:#0891b2;border:1px solid #0891b2;border-radius:4px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap" title="PDF 새 창에서 보기">👁</button>
           <button onclick="apvDownloadPdf('${g.groupKey}')" style="padding:3px 7px;background:#1c3557;color:#fff;border:none;border-radius:4px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap" title="결재 도장 합성 PDF 다운로드">📥</button>
@@ -5541,7 +5554,7 @@ function apvRenderMobile(filtered){
     const apvFooter = g.approved
       ? `<div style="display:flex;justify-content:space-between;align-items:center;background:#f0fdf4;border-top:1px solid #bbf7d0;padding:6px 10px;margin:8px -10px -8px;border-radius:0 0 7px 7px">
           <div style="font-size:10.5px;color:#15803d;font-weight:600">
-            ✓ ${g.approverName||'장은선'} · ${(g.approvedAt||'').slice(5,10)}
+            ✓ ${g.approverName||'장은선'}
           </div>
           <div style="display:flex;gap:4px">
             <button onclick="viewApvRecord('${g.groupKey}')" style="padding:4px 8px;background:#fff;color:#0891b2;border:1px solid #0891b2;border-radius:5px;font-size:10.5px;font-weight:600;cursor:pointer" title="PDF 보기">👁 보기</button>
@@ -8584,7 +8597,22 @@ function renderPpeAdminTable(data){
       <td><input type="date" style="width:130px;font-weight:600" value="${(r.date||r.dateStart||'').slice(0,10)}" onchange="updatePpeRec(${i},'date',this.value)" title="지급일 수정 가능"></td>
       <td><input type="text" style="width:75px;font-weight:600" value="${r.name||''}" onchange="updatePpeRec(${i},'name',this.value)"></td>
       <td><input type="text" style="width:90px" value="${r.dept||''}" onchange="updatePpeRec(${i},'dept',this.value)"></td>
-      <td><input type="text" style="width:100%;min-width:160px" value="${r.items||r.chem||''}" onchange="updatePpeRec(${i},'items',this.value)"></td>
+      <td><input type="text" style="width:100%;min-width:160px" value="${(function(){
+        // ★ v16.4: [object Object] 박멸 — items가 객체/배열일 때 안전 변환
+        if(r.itemsStr) return r.itemsStr;
+        if(Array.isArray(r.items)){
+          return r.items.map(it => {
+            if(it === null || it === undefined) return '';
+            if(typeof it === 'object') return (it.name||'') + (it.qty ? '×'+it.qty : '');
+            return String(it);
+          }).filter(Boolean).join(', ');
+        }
+        if(r.items && typeof r.items === 'object'){
+          // 단일 객체 케이스
+          return (r.items.name||'') + (r.items.qty ? '×'+r.items.qty : '');
+        }
+        return r.items || r.chem || '';
+      })()}" onchange="updatePpeRec(${i},'items',this.value)"></td>
       <td style="text-align:center;color:#16a34a;font-weight:700">${fmtSigned(r.signed)}</td>
       <td style="text-align:center" class="row-act">
         <button onclick="viewPpeRecord(${i})" title="창으로 보기" style="color:#0891b2">👁</button>
@@ -12109,105 +12137,57 @@ self.addEventListener('fetch',e=>{
   }
 })();
 </script>
+
+<script>
 /* ══════════════════════════════════════════════════════════════════════════
-   【 BM v16.4 최종 통합 패치: 이전 기능 합체 + 4대 버그 완결판 】
-   ══════════════════════════════════════════════════════════════════════════
-*/
-
+   【 BM v16.4 — 버전 관리 (조용한 자동 새로고침) 】
+   - 사용자에게 일체의 메시지/토스트 없이 백그라운드에서 캐시 갱신
+   - Service Worker 캐시 + 다양한 캐시 스토리지 모두 정리
+   ══════════════════════════════════════════════════════════════════════════ */
 (function() {
-    // 1. 버전 관리 및 캐시 삭제 (최신 버전 16.4)
-    const APP_VERSION = '16.4_TOTAL_STABLE';
-    const lastVer = localStorage.getItem('bm_app_version');
-    if (lastVer !== APP_VERSION) {
-        localStorage.setItem('bm_app_version', APP_VERSION);
-        if ('serviceWorker' in navigator) {
-            caches.keys().then(names => { for (let name of names) caches.delete(name); });
-        }
-        setTimeout(() => location.reload(true), 300);
-        return;
-    }
+  'use strict';
 
-    // 2. [복구] 관리자 설정 진입 보안 강화 (비밀번호)
-    const _oldShowSettings = window.showSettings;
-    window.showSettings = function() {
-        const isAdmin = localStorage.getItem('bm_admin_ok');
-        if (!isAdmin) {
-            const pw = prompt("관리자 비밀번호를 입력하세요 (설정 진입)");
-            if (pw !== (CFG.adminPw || '1234')) {
-                alert("비밀번호가 일치하지 않습니다.");
-                return;
-            }
-        }
-        if (typeof _oldShowSettings === 'function') _oldShowSettings();
-    };
+  const APP_VERSION = '16.4_STABLE_FINAL';
+  const lastVer = localStorage.getItem('bm_app_version');
 
-    // 3. [보완] 하드 동기화 엔진 (메일 발송 후 목록 갱신용 본체)
-    window._syncAllCloud = async function(type = 'edu') {
-        if (!CFG.ghToken || !CFG.ghRepo) return;
-        try {
-            const fileName = `records_${type}.json`;
-            const url = `https://api.github.com/repos/${CFG.ghRepo}/contents/${fileName}`;
-            const res = await fetch(url, { headers: { 'Authorization': `token ${CFG.ghToken}` } });
-            if (res.ok) {
-                const json = await res.json();
-                const cloudData = JSON.parse(decodeURIComponent(atob(json.content)));
-                localStorage.setItem(`bm_${type}_records`, JSON.stringify(cloudData));
-                if (typeof window.renderAdminTable === 'function') window.renderAdminTable(type);
-            }
-        } catch (e) { console.error('동기화 실패:', e); }
-    };
+  // 버전이 같으면 아무것도 하지 않음 (앱 정상 진행)
+  if (lastVer === APP_VERSION) {
+    console.log('[v16.4] 버전 일치 — 캐시 갱신 불필요 (' + APP_VERSION + ')');
+    return;
+  }
 
-    // 4. [신규] 데이터 렌더링 수정 (Object현상 해결 & 결재일 삭제)
-    const _originalRender = window.renderAdminTable;
-    window.renderAdminTable = function(type) {
-        if (typeof _originalRender === 'function') _originalRender(type);
-        
-        // 보호구 Object 현상 해결
-        if (type === 'ppe') {
-            document.querySelectorAll('#adm-table-ppe tbody tr').forEach(row => {
-                const cell = row.cells[3];
-                if (cell && cell.innerText.includes('[object')) {
-                    const records = JSON.parse(localStorage.getItem('bm_ppe_records') || '[]');
-                    const idx = parseInt(row.cells[0].innerText) - 1;
-                    if (records[idx] && Array.isArray(records[idx].items)) {
-                        cell.innerText = records[idx].items.join(', ');
-                    }
-                }
-            });
-        }
-        // 결재 관리 '결재일' 컬럼 삭제
-        if (type === 'apv') {
-            const table = document.getElementById('adm-table-apv');
-            if (table) {
-                const headerRow = table.querySelector('thead tr');
-                if (headerRow) {
-                    for (let i = 0; i < headerRow.cells.length; i++) {
-                        if (headerRow.cells[i].innerText.includes('결재일')) {
-                            headerRow.deleteCell(i);
-                            table.querySelectorAll('tbody tr').forEach(r => r.deleteCell(i));
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    };
+  // ─── 버전이 다를 때만 1회 캐시 정리 + 새로고침 ───
+  // ★ 사용자에게는 어떤 메시지도 표시하지 않음 (조용한 새로고침)
 
-    // 5. [신규] 메일 발송 후 자동 갱신
-    const _originalSendEmail = window.sendAdminEmail;
-    window.sendAdminEmail = function(data) {
-        if (typeof _originalSendEmail === 'function') _originalSendEmail(data);
-        setTimeout(() => { 
-            if (typeof window._syncAllCloud === 'function') window._syncAllCloud('edu'); 
-        }, 3000);
-    };
+  // 1) localStorage 버전 즉시 갱신 (재진입 방지)
+  localStorage.setItem('bm_app_version', APP_VERSION);
 
-    // 6. [디자인] 상단 툴바 주입 유지
-    window.addEventListener('load', () => {
-        setTimeout(() => { if (window.injectUnifiedToolbar) window.injectUnifiedToolbar(); }, 1000);
-    });
+  // 2) Service Worker 캐시 정리 (있을 때만)
+  let cachePromise = Promise.resolve();
+  if ('caches' in window) {
+    cachePromise = caches.keys()
+      .then(function(names){
+        return Promise.all(names.map(function(name){
+          // bumin-msds 관련 캐시만 정리 (다른 사이트 캐시 보호)
+          if (name.indexOf('bumin') === 0 || name.indexOf('msds') >= 0) {
+            return caches.delete(name);
+          }
+          return null;
+        }));
+      })
+      .catch(function(){ /* 캐시 정리 실패는 무시 */ });
+  }
 
-    console.log('%c[v16.4] 보안+버그수정 통합 패치 완료', 'color:green; font-weight:bold;');
+  // 3) 캐시 정리 완료 후 0.3초 뒤 조용히 새로고침
+  cachePromise.then(function(){
+    setTimeout(function(){
+      // location.reload(true)는 deprecated — 표준 방식 사용
+      window.location.reload();
+    }, 300);
+  });
+
+  // ★ 절대 _safeToast, toast, alert 등의 메시지를 호출하지 않음
 })();
+</script>
 </body>
 </html>
