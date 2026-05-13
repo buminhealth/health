@@ -12109,6 +12109,130 @@ self.addEventListener('fetch',e=>{
   }
 })();
 </script>
+/* ══════════════════════════════════════════════════════════════════════════
+   【 BM v16.1 통합 패치: 디자인 통일 + 하드 동기화 + 보안 + 캐시해제 】
+   ══════════════════════════════════════════════════════════════════════════
+*/
 
+(function() {
+    console.log('%c[v16.1] 통합 패치 엔진 가동 시작...', 'color:#7c3aed; font-weight:bold;');
+
+    // 1. 강제 캐시 해제 및 버전 관리 (새로고침 문제 해결)
+    const APP_VERSION = '16.1_20260513';
+    const lastVer = localStorage.getItem('bm_app_version');
+    if (lastVer !== APP_VERSION) {
+        localStorage.setItem('bm_app_version', APP_VERSION);
+        if ('serviceWorker' in navigator) {
+            caches.keys().then(names => {
+                for (let name of names) caches.delete(name);
+            });
+        }
+        console.log('%c[v16.1] 신규 버전 감지: 캐시 초기화 및 새로고침 시행', 'color:#dc2626');
+        // 최초 1회만 강제 새로고침
+        setTimeout(() => location.reload(true), 500);
+        return;
+    }
+
+    // 2. 관리자 설정 진입 보안 강화
+    const _oldShowSettings = window.showSettings;
+    window.showSettings = function() {
+        const isAdmin = localStorage.getItem('bm_admin_ok');
+        if (!isAdmin) {
+            const pw = prompt("관리자 비밀번호를 입력하세요 (설정 진입)");
+            if (pw !== (CFG.adminPw || '1234')) {
+                alert("비밀번호가 일치하지 않습니다.");
+                return;
+            }
+        }
+        if (typeof _oldShowSettings === 'function') _oldShowSettings();
+    };
+
+    // 3. 하드 동기화 (Hard Sync) 엔진: 서버 데이터 우선 덮어쓰기
+    window._syncAllCloud = async function(type = 'edu') {
+        if (!CFG.ghToken || !CFG.ghRepo) return alert('GitHub 설정이 필요합니다.');
+        
+        _safeToast(`${type.toUpperCase()} 데이터 동기화 중...`, 'loading');
+        
+        try {
+            const fileName = `records_${type}.json`;
+            const url = `https://api.github.com/repos/${CFG.ghRepo}/contents/${fileName}`;
+            
+            const res = await fetch(url, {
+                headers: { 'Authorization': `token ${CFG.ghToken}` }
+            });
+
+            if (res.ok) {
+                const json = await res.json();
+                const cloudData = JSON.parse(decodeURIComponent(atob(json.content)));
+                
+                // [핵심] 로컬과 합치지 않고 서버 데이터로 완전히 교체
+                localStorage.setItem(`bm_${type}_records`, JSON.stringify(cloudData));
+                
+                if (typeof window.renderAdminTable === 'function') {
+                    window.renderAdminTable(type);
+                }
+                _safeToast('✅ 서버 데이터 동기화 완료', 'ok');
+            } else {
+                _safeToast('❌ 서버에 데이터가 없습니다.', 'err');
+            }
+        } catch (e) {
+            console.error(e);
+            _safeToast('❌ 동기화 실패', 'err');
+        }
+    };
+
+    // 4. 모든 탭 상단 도구바(Toolbar) 디자인 및 위치 통일
+    window.injectUnifiedToolbar = function() {
+        const categories = ['apv', 'edu', 'ppe', 'chem'];
+        const labels = { apv:'결재 관리', edu:'교육 현황', ppe:'보호구 지급', chem:'화학물질' };
+
+        categories.forEach(cat => {
+            const pane = document.getElementById(`adm-pane-${cat}`);
+            if (!pane) return;
+
+            // 이미 주입되었다면 삭제 후 재주입 (위치 고정)
+            const oldToolbar = pane.querySelector('.bm-unified-toolbar');
+            if (oldToolbar) oldToolbar.remove();
+
+            const toolbarHtml = `
+                <div class="bm-unified-toolbar bg-gray-50 p-4 border-b mb-4 rounded-t-lg">
+                    <div class="flex flex-wrap gap-3 items-center justify-between">
+                        <div class="flex gap-2">
+                            <span class="text-lg font-bold text-slate-700 mr-2">${labels[cat]} 관리 도구</span>
+                            <button onclick="_syncAllCloud('${cat}')" class="px-3 py-1.5 bg-sky-500 text-white rounded text-sm hover:bg-sky-600">🔄 새로고침</button>
+                            <button onclick="handleTabAction('${cat}', 'dedupe')" class="px-3 py-1.5 bg-orange-500 text-white rounded text-sm hover:bg-orange-600">✨ 중복정리</button>
+                            <button onclick="handleTabAction('${cat}', 'delSel')" class="px-3 py-1.5 bg-red-500 text-white rounded text-sm hover:bg-red-600">🗑 선택삭제</button>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="handleTabAction('${cat}', 'csv')" class="px-3 py-1.5 bg-emerald-600 text-white rounded text-sm hover:bg-emerald-700">📊 CSV</button>
+                            <button onclick="handleTabAction('${cat}', 'pdf')" class="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">📄 PDF</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            pane.insertAdjacentHTML('afterbegin', toolbarHtml);
+        });
+    };
+
+    // 5. 메일 발송 오류 디버깅 보완
+    const _oldSendEmail = window.sendAdminEmail;
+    window.sendAdminEmail = function(data) {
+        if (!CFG.gasMailApi || CFG.gasMailApi.length < 10) {
+            alert("⚠️ 메일 API URL이 설정되지 않았습니다.\n[설정] 메뉴에서 Google Apps Script URL을 입력해주세요.");
+            return;
+        }
+        _safeToast('📧 메일 발송 시도 중...', 'loading');
+        if (typeof _oldSendEmail === 'function') _oldSendEmail(data);
+    };
+
+    // 초기화 실행
+    window.addEventListener('load', () => {
+        setTimeout(() => {
+            window.injectUnifiedToolbar();
+            console.log('%c[v16.1] 인터페이스 통일 및 보안 패치 완료', 'color:#16a34a');
+        }, 1000);
+    });
+
+})();
 </body>
 </html>
