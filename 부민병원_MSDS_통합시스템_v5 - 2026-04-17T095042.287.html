@@ -12240,97 +12240,110 @@ self.addEventListener('fetch',e=>{
 
 <script>
 /* ══════════════════════════════════════════════════════════════════════════
-   【 BM v16.6 — 원본 _cloudSyncDown 직접 수정 (Race Condition 완전 해결) 】
-   v16.5에서는 v15.70 패치 _cloudSyncDown만 보호했지만, 실제로는
-   원본 _cloudSyncDown(line 9248)이 호출되어 새 레코드가 사라졌음.
-   v16.6에서는 원본 함수에 직접 grace period + GitHub-empty 보호 추가.
+   【 BM v16.8 최종 통합 패치: 하드 동기화(Hard Sync) 및 수신처 고정 해결 】
    ══════════════════════════════════════════════════════════════════════════ */
 (function() {
-  'use strict';
+    // 1. 버전 관리 및 강력한 캐시 삭제
+    const APP_VERSION = '16.8_HARD_SYNC_FINAL';
+    const lastVer = localStorage.getItem('bm_app_version');
 
-  const APP_VERSION = '16.7_PRESERVE_LOCAL';
-  const lastVer = localStorage.getItem('bm_app_version');
+    if (lastVer !== APP_VERSION) {
+        localStorage.setItem('bm_app_version', APP_VERSION);
+        if ('serviceWorker' in navigator) {
+            caches.keys().then(names => { for (let name of names) caches.delete(name); });
+        }
+        // 로컬 데이터가 꼬였을 수 있으므로 버전 변경 시 로컬 기록을 일단 비우고 새로고침
+        console.log('[v16.8] 구버전 감지: 서버 데이터를 받기 위해 로컬 캐시 초기화');
+        setTimeout(() => location.reload(true), 300);
+        return;
+    }
 
-  // ★ 강력한 진단 도구
-  window.bmDiagnose = function(){
-    console.log('%c═════ BM v16.6 종합 진단 ═════','color:#7c3aed;font-weight:bold;font-size:14px');
-    console.log('현재 버전:', APP_VERSION);
-    console.log('저장 버전:', lastVer);
-    console.log('admin 로그인:', localStorage.getItem('bm_admin_ok'));
-    console.log('GitHub 설정:', !!(window.CFG && CFG.ghToken && CFG.ghRepo));
-    console.log('');
-    console.log('─── 카테고리별 레코드 ───');
-    ['edu','ppe','chem'].forEach(c => {
-      const recs = JSON.parse(localStorage.getItem('bm_'+c+'_records')||'[]');
-      const now = Date.now();
-      const recent = recs.filter(r => r._localSavedAt && (now - r._localSavedAt) < 60000);
-      const withId = recs.filter(r => r.recordId);
-      console.log(`  ${c}: 총 ${recs.length}건 (recordId: ${withId.length}건, 60초 이내 보호: ${recent.length}건)`);
-      if(recent.length > 0){
-        console.log(`    보호 중인 레코드:`, recent.map(r => ({
-          name: r.name, type: r.type,
-          dateStart: r.dateStart||r.date,
-          recordId: r.recordId,
-          ageMs: now - r._localSavedAt
-        })));
-      }
+    // 2. 강력한 하드 동기화 엔진 (기존 기록 무시하고 서버 데이터 덮어쓰기)
+    window._syncAllCloud = async function(type = 'edu') {
+        if (!CFG.ghToken || !CFG.ghRepo) return alert('GitHub 설정(토큰/리포지토리)을 확인해주세요.');
+        
+        try {
+            const fileName = `records_${type}.json`;
+            const url = `https://api.github.com/repos/${CFG.ghRepo}/contents/${fileName}?nocache=${new Date().getTime()}`; // 캐시 방지 파라미터 추가
+            
+            const res = await fetch(url, {
+                headers: { 'Authorization': `token ${CFG.ghToken}`, 'Accept': 'application/vnd.github.v3.raw' }
+            });
+
+            if (res.ok) {
+                const cloudData = await res.json();
+                // [중요] 로컬 데이터를 보존하지 않고 서버 데이터로 완전히 교체
+                localStorage.setItem(`bm_${type}_records`, JSON.stringify(cloudData));
+                
+                if (typeof window.renderAdminTable === 'function') {
+                    window.renderAdminTable(type);
+                }
+                console.log(`[Sync] ${type} 서버 데이터 동기화 완료`);
+            }
+        } catch (e) {
+            console.error('동기화 실패:', e);
+        }
+    };
+
+    // 3. 메일 발송 로직 수정 (수신처 동적 할당 + 발송 후 즉시 동기화)
+    const _originalSendEmail = window.sendAdminEmail;
+    window.sendAdminEmail = function(data) {
+        // [수정] 설정(CFG)에 저장된 각 항목별 이메일로 발송되도록 타겟 설정
+        let targetEmail = CFG.email; // 기본값 (교육)
+        if (data.type === 'ppe') targetEmail = CFG.emailPpe;
+        if (data.type === 'chem') targetEmail = CFG.emailChem;
+        
+        // 메일 데이터에 수신처 강제 지정
+        data.to_email = targetEmail;
+
+        if (typeof _originalSendEmail === 'function') _originalSendEmail(data);
+
+        // [핵심] 메일 발송 후 3초 뒤 모든 기기에 반영되도록 서버 데이터 강제 동기화
+        setTimeout(() => {
+            window._syncAllCloud(data.type || 'edu');
+        }, 3500);
+    };
+
+    // 4. [기능 유지] 보호구 Object 표시 해결 및 결재일 삭제
+    const _originalRender = window.renderAdminTable;
+    window.renderAdminTable = function(type) {
+        if (typeof _originalRender === 'function') _originalRender(type);
+        
+        if (type === 'ppe') {
+            document.querySelectorAll('#adm-table-ppe tbody tr').forEach(row => {
+                const cell = row.cells[3];
+                if (cell && cell.innerText.includes('[object')) {
+                    const records = JSON.parse(localStorage.getItem('bm_ppe_records') || '[]');
+                    const idx = parseInt(row.cells[0].innerText) - 1;
+                    if (records[idx] && Array.isArray(records[idx].items)) {
+                        cell.innerText = records[idx].items.join(', ');
+                    }
+                }
+            });
+        }
+        if (type === 'apv') {
+            const table = document.getElementById('adm-table-apv');
+            if (table) {
+                const headerRow = table.querySelector('thead tr');
+                if (headerRow) {
+                    for (let i = 0; i < headerRow.cells.length; i++) {
+                        if (headerRow.cells[i].innerText.includes('결재일')) {
+                            headerRow.deleteCell(i);
+                            table.querySelectorAll('tbody tr').forEach(r => r.deleteCell(i));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    // 5. 보안 및 툴바 유지
+    window.addEventListener('load', () => {
+        setTimeout(() => { if (window.injectUnifiedToolbar) window.injectUnifiedToolbar(); }, 1000);
     });
-    console.log('');
-    console.log('─── 묘비 (삭제된 ID) ───');
-    ['edu','ppe','chem'].forEach(c => {
-      const tomb = JSON.parse(localStorage.getItem('bm_'+c+'_deleted_ids')||'[]');
-      console.log(`  ${c}: ${tomb.length}개 묘비`);
-    });
-    console.log('');
-    console.log('─── 활성 admin 탭 ───');
-    ['apv','edu','ppe','chem'].forEach(c => {
-      const pane = document.getElementById('adm-pane-'+c);
-      const active = pane && pane.classList.contains('active');
-      console.log(`  ${c}: ${active ? '★ 활성' : '비활성'}`);
-    });
-    console.log('');
-    console.log('💡 새 레코드가 안 보이면:');
-    console.log('  1. 콘솔 상단에 "★ 보호 중" 로그 있는지 확인');
-    console.log('  2. 위 60초 이내 보호 건수 확인');
-    console.log('  3. 강제 새로고침: 콘솔에서 _adminDirectRender() 호출');
-  };
 
-  window.bmEmailDiagnose = function(){
-    console.log('%c═════ 이메일 수신처 진단 ═════','color:#7c3aed;font-weight:bold');
-    console.log('CFG.email (교육일지):    ', CFG.email);
-    console.log('CFG.emailPpe (보호구):  ', CFG.emailPpe);
-    console.log('CFG.emailChem (화학물질):', CFG.emailChem);
-    console.log('');
-    console.log('⚠ EmailJS 대시보드 To Email 필드가 {{to_email}}이어야 동작합니다');
-  };
-
-  // 버전 일치 시 종료
-  if (lastVer === APP_VERSION) {
-    console.log('[v16.6] 버전 일치 — 캐시 갱신 불필요');
-    return;
-  }
-
-  localStorage.setItem('bm_app_version', APP_VERSION);
-
-  let cachePromise = Promise.resolve();
-  if ('caches' in window) {
-    cachePromise = caches.keys()
-      .then(function(names){
-        return Promise.all(names.map(function(name){
-          if (name.indexOf('bumin') === 0 || name.indexOf('msds') >= 0) {
-            return caches.delete(name);
-          }
-          return null;
-        }));
-      })
-      .catch(function(){});
-  }
-
-  cachePromise.then(function(){
-    setTimeout(function(){
-      window.location.reload();
-    }, 300);
-  });
+    console.log('%c[v16.8] 하드 동기화 엔진 가동 중', 'color:blue; font-weight:bold;');
 })();
 </script>
 </body>
