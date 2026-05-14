@@ -1,7 +1,47 @@
 
 
 
+
 <!DOCTYPE html>
+<!--
+  ════════════════════════════════════════════════════════════════════
+  부민병원 MSDS 통합시스템 v17.6 (2026-05-14)
+  ════════════════════════════════════════════════════════════════════
+  v17.3 → v17.6 주요 수정 (오류 진단·수정):
+
+  [오류 1] 구글시트 MSDS 제품별 세부항목(구성성분/세부내용) 누락 + 부서 세부 표시 안 됨
+    FIX A: (사용자 요청으로 제거됨 — productList 하단 부서 필터 버튼 영역 미사용)
+    FIX B: 부서 필터 버튼 .db CSS 스타일 정의 (다른 곳 영향 없도록 무해하게 유지)
+    FIX C: row-level 그룹화 후 departments 빈 배열일 때 department 문자열에서
+           자동 변환되도록 수정 (이전엔 빈 배열도 truthy로 판단해 변환 스킵)
+    FIX D: 제품 단위(product-level) 데이터에도 한글 컬럼명(제품명/제조사/취급부서/
+           용도/응급처치/세부내용/구성성분 등) 매핑 추가 (이전엔 row-level에서만 처리)
+    ★★★ FIX I (v17.5 핵심): 내장 CHEMS 스냅샷을 백업하고 GAS 데이터로 덮어쓸 때
+           비어있는 필드(components/emergency/icons/departments 등)는 내장 데이터에서
+           자동 보충. GAS 시트가 부실해도 화면이 "정보 없음"으로 깨지지 않음.
+           또한 GAS 응답의 components 비율<30% 또는 departments 비율<50%면 시트
+           손상으로 판단하여 내장 데이터로 완전 폴백 (안전망)
+
+  [오류 2] 메일발송·수정·영구삭제 후 새로고침해도 동기화 안 되고 삭제 전 기록 부활
+    FIX E: _cloudSyncDown v15.70에 NK(자연키) 묘비 필터 적용 (이전엔 recordId 묘비만
+           검사 → 다른 기기에서 영구삭제한 레코드가 deviceId 차이로 부활)
+    FIX F: 페이지 새로고침 시 묘비뿐 아니라 records.json도 자동 동기화
+           (이전엔 묘비만 sync → 다른 기기 추가·수정 사항 절대 안 보이던 문제)
+    FIX G: loadAdminRecords에서 로컬 데이터가 있어도 GitHub 묘비/레코드 백그라운드
+           동기화 항상 실행 (이전엔 즉시 return → 사일런트 동기화 차단)
+    FIX H: saveEduRecord의 "save wins" 정책에 NK 묘비 제거도 추가
+           (이전엔 recordId 묘비만 제거 → 영구삭제 후 같은 이름·교육·일자로
+           재발송하면 NK 묘비에 걸려 화면에 안 나타나던 문제)
+
+  [오류 3] GitHub 영구삭제 시 "is at SHA1 but expected SHA2" 409 Conflict 오류
+    ★★★ FIX J (v17.6 핵심): writeGitHubJSON에 409 Conflict 자동 재시도 +
+           rebuild 콜백 패턴 도입. SHA 충돌 시 최신 데이터를 다시 읽어 같은 작업(영구삭제·
+           묘비 추가)을 멱등(idempotent)하게 재적용 후 최신 SHA로 재시도.
+           최대 4회 지수 백오프(200ms→1600ms). markDeleted의 records.json·admin_cfg.json
+           두 PUT 호출 모두 적용. 동시 작업(메일발송 후 appendEduRecords, 페이지 동기화 등)
+           으로 SHA가 바뀌어도 안전하게 삭제 완료.
+  ════════════════════════════════════════════════════════════════════
+-->
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
@@ -42,6 +82,10 @@ header{position:sticky;top:0;z-index:50}
 .list-title{font-weight:700;font-size:15px;color:#111827;word-break:break-all;text-align:left}
 .list-sub{font-weight:500;font-size:15px;color:#64748b;text-align:left}
 .list-dept{font-size:14px;color:#10b981;font-weight:600;text-align:left;margin-top:1px}
+/* ★ v17.4 FIX: 부서 필터 버튼 (productList 하단) */
+.db{padding:4px 9px;background:#fff;color:#475569;border:1px solid #cbd5e1;border-radius:14px;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;line-height:1.4}
+.db:hover{background:#f0fdf4;border-color:#10b981;color:#059669}
+.db.on{background:#10b981;color:#fff;border-color:#10b981;box-shadow:0 1px 3px rgba(16,185,129,0.3)}
 .active-card{border:2px solid #10b981 !important;background:#f0fdf4 !important}
 .sec-ttl{font-size:15px;font-weight:800;color:#64748b;border-left:4px solid #10b981;padding-left:9px;margin-bottom:7px;margin-top:18px}
 .table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:12px}
@@ -1533,6 +1577,14 @@ window.addEventListener('DOMContentLoaded',()=>{
   }
 
   CHEMS.forEach(p=>productMap[p.name]=p);
+  // ★★★ v17.5 FIX: 내장 CHEMS 스냅샷 백업 — loadChems가 GAS로 덮어쓰기 전에 보존
+  //              GAS 시트에 components/응급처치/픽토그램이 비어있으면 이 백업에서 보충됨
+  try{
+    window.__INITIAL_CHEMS_SNAPSHOT = JSON.parse(JSON.stringify(CHEMS));
+    console.log(`[v17.5] 내장 CHEMS 스냅샷 백업: ${window.__INITIAL_CHEMS_SNAPSHOT.length}종`);
+  }catch(e){
+    window.__INITIAL_CHEMS_SNAPSHOT = CHEMS.slice();
+  }
   // fallback 교육 데이터 먼저 적용
   Object.keys(FALLBACK_EDU).forEach(k=>{
     DEPT_EDU[k]=FALLBACK_EDU[k];
@@ -1805,13 +1857,53 @@ function showDetail(name){
   document.getElementById('placeholder').style.display='none';
   const con=document.getElementById('detailContent');con.style.display='block';
   let iconHtml=(p.icons&&p.icons.length)?p.icons.map(ic=>`<div class="flex flex-col items-center gap-1"><div class="w-16 h-16 md:w-20 md:h-20 bg-white border border-slate-100 rounded-lg flex items-center justify-center p-1 shadow-sm"><img src="${getDirectImgUrl(ic.url)}" class="max-w-full max-h-full object-contain" onerror="this.style.display='none'"></div><span class="text-[10px] font-bold text-red-600">${ic.label}</span></div>`).join(''):'없음';
+  // ★★★ v17.1: Google Sheets ISO 날짜 자동 변환 복원 (표시 직전 안전망) ★★★
+  // amount: "2026-09-10 00:00:00" → "9-10" (월-일 형식)
+  // casNumber: ISO 형식이면 ⚠ 표시
+  const _fixAmount = (v) => {
+    if (v === null || v === undefined) return '';
+    const s = v.toString().trim();
+    if (!s) return s;
+    const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[\sT].*)?$/);
+    if (m) return `${parseInt(m[2])}-${parseInt(m[3])}`;
+    return s;
+  };
+  const _fixCas = (v) => {
+    if (v === null || v === undefined) return '';
+    const s = v.toString().trim();
+    if (!s) return s;
+    const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[\sT].*)?$/);
+    if (m) return `${m[1]}-${parseInt(m[2])}-${parseInt(m[3])} ⚠`;
+    return s;
+  };
   // ★ 구버전(c.name/c.cas) + 현재(c.compName/c.casNumber) 양쪽 호환
-  const compRows=(p.components||[]).map(c=>`<tr><td class="font-bold bg-slate-50 text-left">${c.compName||c.name||'-'}</td><td>${c.casNumber||c.cas||'-'}</td><td class="text-emerald-700 font-black">${c.amount||'-'}</td><td>${c.workEnv||c.compWorkEnv||p.workEnv||'-'}</td><td>${c.healthCheck||c.compHealthCheck||p.healthCheck||'-'}</td></tr>`).join('');
+  const _tv=v=>(v||'').trim();
+  const compRows=(p.components||[]).map(c=>`<tr><td class="font-bold bg-slate-50 text-left">${c.compName||c.name||'-'}</td><td>${_fixCas(c.casNumber||c.cas)||'-'}</td><td class="text-emerald-700 font-black">${_fixAmount(c.amount)||'-'}</td><td>${_tv(c.workEnv)||_tv(c.compWorkEnv)||_tv(p.workEnv)||'-'}</td><td>${_tv(c.healthCheck)||_tv(c.compHealthCheck)||_tv(p.healthCheck)||'-'}</td></tr>`).join('');
   const lines=(p.emergency||'').split('\n').filter(l=>l.trim());
   const emRows=lines.map(line=>{let title='안내',desc=line;if(line.includes(']')){const pts=line.split(']');title=pts[0].replace('[','');desc=pts.slice(1).join(']');}return`<tr><th>[${title}]</th><td>${desc.trim().replace(/\n/g,'<br>')}</td></tr>`;}).join('');
-  // ★ boolean(true/false) + string("해당"/"TRUE") 양쪽 처리
-  const _isTarget = p.targetManage===true||p.targetManage==='해당'||p.targetManage==='TRUE'||p.targetManage==='Y'||p.targetManage==='1';
-  const _isSpecial = p.specialManage===true||p.specialManage==='해당'||p.specialManage==='TRUE'||p.specialManage==='Y'||p.specialManage==='1';
+  // ★ boolean(true/false) + string("해당"/"TRUE"/"o"/"O"/"●") 등 모든 표기 처리
+  const _truthy = v => {
+    if (v === true) return true;
+    if (typeof v !== 'string') return false;
+    const s = v.trim().toLowerCase();
+    return s === '해당' || s === 'true' || s === 'y' || s === 'yes' || s === '1' ||
+           s === 'o' || s === '●' || s === '○' || s === '○' || s === 'ㅇ';
+  };
+  const _isTarget = _truthy(p.targetManage);
+  const _isSpecial = _truthy(p.specialManage);
+
+  // ★ v16.9: 제품 레벨 workEnv/healthCheck가 비어있으면 성분 중 첫 번째 값 자동 추출
+  const _firstCompVal = (key) => {
+    const comps = p.components || [];
+    for (const c of comps) {
+      const v = (c[key] || '').toString().trim();
+      if (v) return v;
+    }
+    return '';
+  };
+  const _prodWorkEnv = (p.workEnv || '').trim() || _firstCompVal('workEnv') || '-';
+  const _prodHealthCheck = (p.healthCheck || '').trim() || _firstCompVal('healthCheck') || '-';
+
   const tC=_isTarget?'text-emerald-600':'text-slate-300';
   const sC=_isSpecial?'text-emerald-600':'text-slate-300';
   con.innerHTML=`<div>
@@ -1829,8 +1921,8 @@ function showDetail(name){
       <div class="flex flex-wrap gap-2 w-full md:w-auto md:ml-auto">
         <div class="mbadge flex-1"><span class="mbadge-t">관리대상물질</span><span class="mbadge-v ${tC}">${_isTarget?'해당':'미해당'}</span></div>
         <div class="mbadge flex-1"><span class="mbadge-t">특별관리대상</span><span class="mbadge-v ${sC}">${_isSpecial?'해당':'미해당'}</span></div>
-        <div class="mbadge flex-1"><span class="mbadge-t">작업환경측정</span><span class="mbadge-v text-sm">${p.workEnv||'-'}</span></div>
-        <div class="mbadge flex-1"><span class="mbadge-t">건강진단</span><span class="mbadge-v text-sm">${p.healthCheck||'-'}</span></div>
+        <div class="mbadge flex-1"><span class="mbadge-t">작업환경측정</span><span class="mbadge-v text-sm">${_prodWorkEnv}</span></div>
+        <div class="mbadge flex-1"><span class="mbadge-t">건강진단</span><span class="mbadge-v text-sm">${_prodHealthCheck}</span></div>
       </div>
     </div>
     <h4 class="sec-ttl">🧪 구성성분 및 관리정보</h4>
@@ -2008,7 +2100,7 @@ function applyDeptEdu(prefix, dept){
 // GitHub 파일 읽기
 async function readGitHubJSON(filePath){
   if(!CFG.ghToken||!CFG.ghRepo) throw new Error('GitHub 설정 없음');
-  const url=`https://api.github.com/repos/${CFG.ghRepo}/contents/${filePath}`;
+  const url=`https://api.github.com/repos/${CFG.ghRepo}/contents/${filePath}?_t=${Date.now()}`;
   const res=await fetch(url,{headers:{'Authorization':'token '+CFG.ghToken,'Accept':'application/vnd.github.v3+json'}});
   if(res.status===404) return {data:null,sha:null};
   if(!res.ok) throw new Error('읽기 실패 '+res.status);
@@ -2026,25 +2118,124 @@ async function readGitHubJSON(filePath){
 }
 
 // GitHub 파일 쓰기
-async function writeGitHubJSON(filePath,data,sha,msg){
+// ★★★ v17.6 FIX J: 409 Conflict 자동 재시도 + rebuild 콜백 지원
+// - 사용법(기존 호출 호환): writeGitHubJSON(path, data, sha, msg)
+// - 사용법(권장, 충돌 안전): writeGitHubJSON(path, data, sha, msg, rebuildFn)
+//   · rebuildFn(latestData) → 충돌 시 GitHub의 최신 데이터를 받아 newData를 재구성
+//   · 영구삭제처럼 멱등(idempotent) 작업에 안전 — 다른 기기 변경 후에도 동일한 결과
+// 동작:
+//   1) PUT 시도 → 200 OK → 종료
+//   2) 409 Conflict (또는 "but expected"/"is at" 메시지) → 최대 4회 재시도
+//      · rebuildFn이 있으면 최신 데이터 읽고 재구성
+//      · rebuildFn이 없으면 최신 SHA만 갱신 (덮어쓰기 위험 있음 — 주의)
+//      · 지수 백오프: 200ms → 400ms → 800ms → 1600ms
+async function writeGitHubJSON(filePath, data, sha, msg, rebuildFn){
   if(!CFG.ghToken||!CFG.ghRepo) throw new Error('GitHub 설정 없음');
   const url=`https://api.github.com/repos/${CFG.ghRepo}/contents/${filePath}`;
-  const content=btoa(unescape(encodeURIComponent(JSON.stringify(data))));
-  const body={message:msg||'update',content,...(sha?{sha}:{})};
-  const res=await fetch(url,{method:'PUT',headers:{'Authorization':'token '+CFG.ghToken,'Content-Type':'application/json','Accept':'application/vnd.github.v3+json'},body:JSON.stringify(body)});
-  if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error((e.message||res.status));}
-  return await res.json();
+  const MAX_RETRY = 4;
+  let currentSha = sha;
+  let currentData = data;
+  let lastErr = null;
+
+  for(let attempt = 0; attempt <= MAX_RETRY; attempt++){
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(currentData))));
+    const body = { message: msg||'update', content, ...(currentSha ? {sha:currentSha} : {}) };
+    const res = await fetch(url, {
+      method:'PUT',
+      headers:{'Authorization':'token '+CFG.ghToken, 'Content-Type':'application/json', 'Accept':'application/vnd.github.v3+json'},
+      body: JSON.stringify(body)
+    });
+    if(res.ok) return await res.json();
+
+    // 에러 응답 파싱
+    let errInfo = {};
+    try{ errInfo = await res.json(); }catch(_){}
+    const errMsg = errInfo.message || ('HTTP '+res.status);
+
+    // 409 Conflict 또는 "but expected"/"is at" 문구 감지
+    const isConflict = res.status === 409 ||
+                       res.status === 422 ||
+                       /but expected|is at|does not match/i.test(errMsg);
+
+    if(!isConflict || attempt === MAX_RETRY){
+      lastErr = new Error(errMsg);
+      throw lastErr;
+    }
+
+    // 재시도 준비: 최신 SHA 가져오기 (+ rebuild 콜백 있으면 데이터도 재구성)
+    console.warn(`[writeGitHubJSON] 409 충돌 — 재시도 ${attempt+1}/${MAX_RETRY} (${filePath}): ${errMsg}`);
+    try{ if(typeof toast==='function' && attempt===0) toast(`🔄 GitHub 충돌 감지 — 자동 재시도 중…`,'info'); }catch(_){}
+    try{
+      const fresh = await readGitHubJSON(filePath);
+      currentSha = fresh.sha;
+      if(typeof rebuildFn === 'function'){
+        try{
+          currentData = await rebuildFn(fresh.data);
+        }catch(rebuildErr){
+          console.error('[writeGitHubJSON] rebuild 콜백 오류:', rebuildErr);
+          throw rebuildErr;
+        }
+      }
+    }catch(refetchErr){
+      console.error('[writeGitHubJSON] 재시도용 readGitHubJSON 실패:', refetchErr);
+      throw refetchErr;
+    }
+    // 지수 백오프
+    await new Promise(r => setTimeout(r, 200 * Math.pow(2, attempt)));
+  }
+  throw lastErr || new Error('writeGitHubJSON: 알 수 없는 오류');
 }
 
 // 교육 기록 GitHub 추가
 async function appendEduRecordsToGitHub(newRecs){
   if(!newRecs||!newRecs.length) return;
   try{
-    // tombstone 동기화 후 삭제된 기록 재추가 차단
-    if(CFG.ghToken&&CFG.ghRepo) await BM.syncTombstonesFromGitHub('edu');
     BM.ensureIds(newRecs);
-    newRecs = BM.filterTombstoned(newRecs,'edu');
-    if(!newRecs.length){ console.log('[appendEdu] 모두 tombstone — 건너뜀'); return; }
+
+    // ★★★ v16.8: 묘비에서 새 레코드 ID 제거 (save wins) ★★★
+    // 영구삭제된 ID와 우연히 일치한 새 레코드가 GitHub 업로드 직전에 차단되는 것 방지.
+    // 묘비 동기화 전에 미리 정리.
+    const _newIds = new Set(newRecs.map(r => r.recordId).filter(Boolean));
+    if (_newIds.size > 0) {
+      const _localTombs = BM.getTombstones('edu');
+      let _cleaned = 0;
+      _newIds.forEach(id => { if (_localTombs.delete(id)) _cleaned++; });
+      if (_cleaned > 0) {
+        BM.saveTombstones('edu', _localTombs);
+        console.log(`[appendEdu] 로컬 묘비에서 새 ID ${_cleaned}개 제거 (save wins)`);
+      }
+    }
+
+    // tombstone GitHub 동기화 (단, 새 ID는 이미 로컬에서 제거됨)
+    if(CFG.ghToken&&CFG.ghRepo) await BM.syncTombstonesFromGitHub('edu');
+
+    // ★ v16.8: GitHub에서 묘비를 받았어도 새 레코드 ID는 다시 제거 (양쪽 정리)
+    if (_newIds.size > 0) {
+      const _localTombs2 = BM.getTombstones('edu');
+      let _cleaned2 = 0;
+      _newIds.forEach(id => { if (_localTombs2.delete(id)) _cleaned2++; });
+      if (_cleaned2 > 0) {
+        BM.saveTombstones('edu', _localTombs2);
+        // GitHub 묘비 파일도 청소
+        try {
+          const { data: tombData, sha: tombSha } = await readGitHubJSON('records/edu_tombstones.json');
+          if (tombData) {
+            let ghTombs = Array.isArray(tombData) ? tombData : (tombData.ids || []);
+            const before = ghTombs.length;
+            ghTombs = ghTombs.filter(id => !_newIds.has(id));
+            if (ghTombs.length < before) {
+              await writeGitHubJSON('records/edu_tombstones.json',
+                { ids: ghTombs, updated: new Date().toISOString() }, tombSha,
+                `🧹 묘비 정리: 재저장된 ID ${before - ghTombs.length}개`);
+              console.log(`[appendEdu] GitHub 묘비에서 ${before - ghTombs.length}개 제거`);
+            }
+          }
+        } catch(_) {}
+      }
+    }
+
+    // ★ v16.8: 새 레코드는 묘비 필터 적용 안 함 (이미 위에서 묘비 정리됨)
+    if(!newRecs.length){ console.log('[appendEdu] 새 레코드 없음 — 건너뜀'); return; }
 
     const {data, sha} = await readGitHubJSON('records/edu_records.json');
     let existing = (data&&Array.isArray(data.records)) ? data.records : [];
@@ -2062,8 +2253,8 @@ async function appendEduRecordsToGitHub(newRecs){
     merged.sort((a,b) => (b.dateStart||'').localeCompare(a.dateStart||''));
 
     await writeGitHubJSON('records/edu_records.json',
-      {records:merged, updated:new Date().toISOString()}, sha, '교육기록 Upsert');
-    toast('☁ GitHub 교육기록 저장 완료','ok');
+      {records:merged, updated:new Date().toISOString()}, sha, `교육기록 Upsert (+${newRecs.length}건)`);
+    toast(`☁ GitHub 교육기록 저장 완료 (+${newRecs.length}건)`,'ok');
   }catch(e){
     toast('⚠ GitHub 저장 실패: '+e.message,'err');
     console.error('[appendEduRecordsToGitHub]',e);
@@ -3221,6 +3412,16 @@ function chemSaveRecord(d, fname){
     // BM 모듈 ID 부여
     if(typeof BM!=='undefined') BM.ensureIds([rec]);
 
+    // ★★★ v16.8: 묘비 충돌 차단 (CRITICAL FIX) ★★★
+    // 영구삭제된 ID와 우연히 일치한 새 레코드가 즉시 사라지는 현상 방지
+    if (typeof BM !== 'undefined' && rec.recordId) {
+      const _tombs = BM.getTombstones('chem');
+      if (_tombs.delete(rec.recordId)) {
+        BM.saveTombstones('chem', _tombs);
+        console.log(`[chemSaveRecord] 묘비 1개 제거 (save wins): ${rec.recordId}`);
+      }
+    }
+
     stored.push(rec);
     localStorage.setItem('bm_chem_records', JSON.stringify(stored));
 
@@ -3594,17 +3795,271 @@ function loadChems(){
     if(res&&res.error){
       toast('MSDS 로드 오류: '+res.error,'err');
     } else if(res&&res.success&&Array.isArray(res.data)&&res.data.length>0){
-      // ★ 구글시트 데이터로 CHEMS 완전 교체
+      // ★★★ v17.3: 진단 로깅 + components 추출 완전 보강 ★★★
+      // 사용자가 F12 콘솔에서 데이터 구조를 직접 확인 가능
+      console.log('[loadChems] GAS 응답 받음:', {
+        총건수: res.data.length,
+        첫번째항목_키: Object.keys(res.data[0] || {}),
+        첫번째항목_샘플: res.data[0],
+        components_타입: res.data[0] ? typeof res.data[0].components : 'undefined',
+        components_isArray: res.data[0] ? Array.isArray(res.data[0].components) : false
+      });
+
+      // ★★★ v16.9_FINAL: 시트 데이터 정규화 (방어적 try/catch) ★★★
+      let normalizedData;
+      let isRowLevel = false;
+      try {
+        let rawData = res.data;
+
+        // ★★★ v17.3: components가 JSON 문자열로 인코딩된 경우 파싱 ★★★
+        // GAS가 components 배열을 JSON.stringify해서 보내는 경우 대응
+        rawData.forEach(item => {
+          if (item && typeof item.components === 'string') {
+            try {
+              const parsed = JSON.parse(item.components);
+              if (Array.isArray(parsed)) {
+                item.components = parsed;
+                console.log(`[loadChems] components JSON 문자열 파싱 성공: ${item.name}`);
+              }
+            } catch(e) {
+              console.warn(`[loadChems] components 파싱 실패: ${item.name}`, e.message);
+            }
+          }
+        });
+
+        // 컬럼명 정규화 헬퍼
+        const _normField = (obj, ...candidates) => {
+          if (!obj) return '';
+          for (const k of candidates) {
+            if (obj[k] !== undefined && obj[k] !== null && obj[k] !== '') return obj[k];
+          }
+          return '';
+        };
+        // boolean 정규화 — 'o', 'O', '해당', 'TRUE', 'Y', '1', '●', '○' 모두 true
+        const _normBool = (v) => {
+          if (v === true) return true;
+          if (v === false || v === null || v === undefined) return false;
+          if (typeof v === 'number') return v !== 0;
+          if (typeof v !== 'string') return false;
+          const s = v.trim().toLowerCase();
+          return s === '해당' || s === 'true' || s === 'y' || s === 'yes' || s === '1' ||
+                 s === 'o' || s === '●' || s === '○' || s === 'ㅇ';
+        };
+
+        // ★★★ v17.3: components 추출용 헬퍼 - 가능한 모든 컬럼명 변형 처리 ★★★
+        const _extractCompFromRow = (row, _fixCas, _fixAmount) => {
+          // 성분명: 모든 가능한 컬럼명
+          const compName = _normField(row,
+            'compName', 'compname', 'componentName', 'component_name', 'component', 'comp_name',
+            '성분명', '성분', '물질명', '화학물질명', '구성성분', 'substance', 'substanceName', 'chemName');
+          // CAS 번호: 모든 가능한 컬럼명
+          const casNumberRaw = _normField(row,
+            'casNumber', 'casnumber', 'CAS NO.', 'CAS NO', 'CAS', 'cas', 'CAS#', 'cas_number',
+            'casNo', 'CAS Number', 'casnum', 'CAS_NO', 'CASNO', 'CAS-NO');
+          // 함량: 모든 가능한 컬럼명
+          const amountRaw = _normField(row,
+            'amount', 'amt', '함량', 'concentration', 'conc', '농도', '%', 'percent', 'percentage', 'content');
+          const casNumber = _fixCas ? _fixCas(casNumberRaw) : casNumberRaw;
+          const amount = _fixAmount ? _fixAmount(amountRaw) : amountRaw;
+          if (compName || casNumber || amount) {
+            return {
+              compName,
+              casNumber,
+              amount,
+              workEnv: _normField(row, 'workEnv', 'workenv', 'work_env', '작업환경측정', 'compWorkEnv', 'wEnv'),
+              healthCheck: _normField(row, 'healthCheck', 'healthcheck', 'health_check', '건강진단', 'compHealthCheck', 'hCheck')
+            };
+          }
+          return null;
+        };
+
+        // 행 단위 데이터 감지 (강화)
+        const _nameField = (r) => (r && (r.name || r.제품명 || r['제품명'] || r.productName || r.product_name) || '').toString().trim();
+        const nameCounts = {};
+        rawData.forEach(r => {
+          if (!r) return;
+          const n = _nameField(r);
+          if (n) nameCounts[n] = (nameCounts[n] || 0) + 1;
+        });
+        // ★ v17.3: isRowLevel 감지 강화 — components가 빈 배열이어도 row 안에 성분 정보가 있으면 row-level로 간주
+        const isRowLevelDetected = Object.values(nameCounts).some(c => c > 1) ||
+                           rawData.some(r => {
+                             if (!r) return false;
+                             const hasNoComp = !Array.isArray(r.components) || r.components.length === 0;
+                             const hasCompField = r.compName || r.casNumber || r.casNum || r.compname ||
+                                                  r['성분명'] || r['CAS NO.'] || r.componentName || r.substance;
+                             return hasNoComp && hasCompField;
+                           });
+        isRowLevel = isRowLevelDetected;
+
+        // ★★★ v17.1: Google Sheets 자동 날짜 변환 복원 헬퍼 ★★★
+        const _fixDateString = (v) => {
+          if (v === null || v === undefined) return '';
+          const s = v.toString().trim();
+          if (!s) return s;
+          const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[\sT].*)?$/);
+          if (m) {
+            const month = parseInt(m[2]);
+            const day = parseInt(m[3]);
+            return `${month}-${day}`;
+          }
+          return s;
+        };
+
+        const _fixCasNumber = (v) => {
+          if (v === null || v === undefined) return '';
+          const s = v.toString().trim();
+          if (!s) return s;
+          const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[\sT].*)?$/);
+          if (m) {
+            return `${m[1]}-${parseInt(m[2])}-${parseInt(m[3])} ⚠`;
+          }
+          return s;
+        };
+
+        if (isRowLevel) {
+          // 행 단위 → 제품별 그룹핑
+          console.log('[loadChems] 행 단위 데이터 감지 → 제품별 그룹핑');
+          const groupMap = new Map();
+          let _lastName = '';
+          rawData.forEach(row => {
+            if (!row) return;
+            let name = _nameField(row);
+            if (!name) {
+              name = _lastName;
+              if (!name) return;
+            } else {
+              _lastName = name;
+            }
+            if (!groupMap.has(name)) {
+              groupMap.set(name, {
+                name,
+                manufacturer: _normField(row, 'manufacturer', 'manufacture', '제조사'),
+                department: _normField(row, 'department', '취급부서', '부서'),
+                usage: _normField(row, 'usage', '용도'),
+                targetManage: _normBool(_normField(row, 'targetManage', 'targetmanage', '관리대상물질', '관리대상')),
+                specialManage: _normBool(_normField(row, 'specialManage', 'specialmanage', '특별관리대상', '특별관리')),
+                workEnv: _normField(row, 'workEnv', 'workenv', '작업환경측정'),
+                healthCheck: _normField(row, 'healthCheck', 'healthcheck', '건강진단'),
+                emergency: _normField(row, 'emergency', '응급처치'),
+                pdfUrl: _normField(row, 'pdfUrl', 'pdfurl', 'PDF URL', 'PDF'),
+                iconUrl: _normField(row, 'iconUrl', 'iconurl', '아이콘'),
+                components: [],
+                departments: [],
+                icons: []
+              });
+            }
+            // ★ v17.3: 광범위 컬럼명 처리 헬퍼 사용
+            const comp = _extractCompFromRow(row, _fixCasNumber, _fixDateString);
+            if (comp) {
+              groupMap.get(name).components.push(comp);
+            }
+          });
+          normalizedData = Array.from(groupMap.values());
+          console.log(`[loadChems] 그룹핑 완료: ${normalizedData.length}개 제품, 평균 성분 ${(normalizedData.reduce((a,p)=>a+p.components.length,0)/Math.max(1,normalizedData.length)).toFixed(1)}개`);
+        } else {
+          // 이미 제품별 그룹핑된 데이터 — 필드 정규화 + amount/CAS 날짜 복원
+          normalizedData = rawData.map(item => {
+            // ★★★ v17.4 FIX: 제품 단위 데이터도 한글 컬럼명을 영문 키로 매핑
+            //               (이전 버전은 row-level에서만 한글 키 매핑함 → 제품 단위 데이터에서
+            //                구성성분/세부내용 등 누락 현상 발생)
+            const fixed = {
+              ...item,
+              name:          item.name          || _normField(item,'제품명','productName','product_name','product'),
+              manufacturer:  item.manufacturer  || _normField(item,'manufacture','제조사','maker'),
+              department:    item.department    || _normField(item,'취급부서','부서','dept'),
+              usage:         item.usage         || _normField(item,'용도','use','purpose','세부내용','description'),
+              emergency:     item.emergency     || _normField(item,'응급처치','응급조치','emergencyCare','firstAid'),
+              pdfUrl:        item.pdfUrl        || _normField(item,'pdfurl','PDF URL','PDF','pdfLink'),
+              iconUrl:       item.iconUrl       || _normField(item,'iconurl','아이콘','pictogram'),
+              targetManage:  _normBool(item.targetManage  ?? _normField(item,'targetmanage','관리대상물질','관리대상')),
+              specialManage: _normBool(item.specialManage ?? _normField(item,'specialmanage','특별관리대상','특별관리')),
+              workEnv:       (item.workEnv      || _normField(item,'workenv','작업환경측정')||'').toString(),
+              healthCheck:   (item.healthCheck  || _normField(item,'healthcheck','건강진단')||'').toString()
+            };
+            // ★ v17.1: components 안의 amount/casNumber도 날짜 변환 복원
+            if (Array.isArray(fixed.components)) {
+              fixed.components = fixed.components.map(c => ({
+                ...c,
+                // ★ v17.4: 성분 객체의 한글 키도 처리
+                compName:    c.compName    || c.name || c['성분명'] || c['성분'] || c['물질명'] || c['화학물질명'] || c['구성성분'] || '',
+                casNumber:   _fixCasNumber(c.casNumber || c.cas || c['CAS NO.'] || c['CAS'] || c['CAS번호'] || ''),
+                amount:      _fixDateString(c.amount  || c['함량'] || c['농도'] || ''),
+                workEnv:     c.workEnv     || c['작업환경측정'] || c.compWorkEnv     || '',
+                healthCheck: c.healthCheck || c['건강진단']     || c.compHealthCheck || ''
+              }));
+            }
+            // ★★★ v17.3: components가 없거나 빈 배열이면 row 자체에서 추출 시도 ★★★
+            if (!Array.isArray(fixed.components) || fixed.components.length === 0) {
+              const comp = _extractCompFromRow(item, _fixCasNumber, _fixDateString);
+              if (comp) {
+                fixed.components = [comp];
+                console.log(`[loadChems] ${item.name}: row에서 component 자동 추출 (single)`);
+              } else {
+                fixed.components = [];
+              }
+            }
+            return fixed;
+          });
+        }
+      } catch (normErr) {
+        // ★ 정규화 실패 시 원본 데이터 그대로 사용 (안전 fallback)
+        console.warn('[loadChems] 정규화 실패, 원본 사용:', normErr.message, normErr.stack);
+        normalizedData = res.data;
+      }
+
       CHEMS.length=0;
-      res.data.forEach(item=>{
-        // departments 정규화
+      // ★★★ v17.5 FIX (핵심): 내장 CHEMS 데이터를 백업하여 GAS 데이터에서 누락된 필드를 보충
+      //                      구글시트에 components/응급처치/픽토그램이 비어있거나 일부 컬럼만 있으면
+      //                      이전 버전은 빈 값으로 덮어써서 "정보 없음" 표시 → 내장 데이터로 폴백하여 보존
+      const _builtInMap = window.__BUILT_IN_CHEMS_MAP || (function(){
+        // 최초 1회만 내장 데이터(원본) 백업 — DOMContentLoaded 시점의 초기 CHEMS
+        const m = {};
+        if(window.__INITIAL_CHEMS_SNAPSHOT && Array.isArray(window.__INITIAL_CHEMS_SNAPSHOT)){
+          window.__INITIAL_CHEMS_SNAPSHOT.forEach(p => { if(p && p.name) m[p.name] = p; });
+        }
+        window.__BUILT_IN_CHEMS_MAP = m;
+        return m;
+      })();
+      // ★ 보충 함수: GAS 값이 비어있으면 내장 값 사용
+      const _isEmpty = v => v === null || v === undefined || v === '' ||
+                            (Array.isArray(v) && v.length === 0) ||
+                            (typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0);
+      const _mergeFromBuiltIn = (item) => {
+        const b = _builtInMap[item.name];
+        if(!b) return item;
+        // 텍스트·기본 필드: GAS가 비었으면 내장 사용
+        ['manufacturer','department','usage','emergency','pdfUrl','iconUrl','workEnv','healthCheck']
+          .forEach(k => { if(_isEmpty(item[k]) && !_isEmpty(b[k])) item[k] = b[k]; });
+        // 불리언: GAS가 명시 안 했으면 내장 사용
+        ['targetManage','specialManage'].forEach(k => {
+          if(item[k]===undefined || item[k]===null || item[k]==='') item[k] = b[k];
+        });
+        // 배열 필드: GAS가 비었으면 내장 사용
+        ['components','departments','icons'].forEach(k => {
+          if(_isEmpty(item[k]) && !_isEmpty(b[k])) item[k] = b[k];
+        });
+        // emergencyParsed
+        if(_isEmpty(item.emergencyParsed) && !_isEmpty(b.emergencyParsed)){
+          item.emergencyParsed = b.emergencyParsed;
+        }
+        return item;
+      };
+      normalizedData.forEach(item=>{
+        // ★ v17.4 FIX: row-level 그룹화 결과는 departments가 빈 배열로 초기화됨
+        //              → 빈 배열일 때도 department 문자열에서 변환되도록 보강
+        // departments 정규화 (빈 배열도 처리)
+        const _hasDepts = Array.isArray(item.departments) && item.departments.length>0;
+        if(typeof item.department==='string' && item.department.trim() && !_hasDepts){
+          item.departments = item.department.split(/[,\/·]/).map(d=>d.trim()).filter(Boolean);
+        }
         if(typeof item.departments==='string'){
-          item.departments=item.departments.split(/[,\/]/).map(d=>d.trim()).filter(Boolean);
+          item.departments=item.departments.split(/[,\/·]/).map(d=>d.trim()).filter(Boolean);
         }
         if(!Array.isArray(item.departments)) item.departments=[];
         // icons 정규화
         if(!Array.isArray(item.icons)) item.icons=[];
-        // iconUrl → icons 변환 (GAS에서 미변환 시 폴백)
+        // iconUrl → icons 변환
         if(item.icons.length===0 && item.iconUrl){
           item.icons=item.iconUrl.split(',').map(part=>{
             const pts=part.trim().split('|');
@@ -3613,7 +4068,7 @@ function loadChems(){
         }
         // components 정규화
         if(!Array.isArray(item.components)) item.components=[];
-        // emergencyParsed 생성 (없으면 자동 파싱)
+        // emergencyParsed 생성
         if(!item.emergencyParsed && item.emergency){
           const lines=(item.emergency||'').split('\n');
           const ep={skin_eye:'',inhalation:'',ingestion:''};
@@ -3624,16 +4079,41 @@ function loadChems(){
           });
           item.emergencyParsed=ep;
         }
+        // ★★★ v17.5 FIX: 내장 데이터에서 비어있는 필드 보충 (push 직전)
+        _mergeFromBuiltIn(item);
         CHEMS.push(item);
       });
-      // ★ productMap 완전 초기화 후 재빌드 (수정된 필드 즉시 반영)
+      // ★★★ v17.5 FIX: GAS 응답 손상 검증 안전망
+      //              GAS 데이터의 components 평균이 0이거나, departments 모두 비어있으면
+      //              시트가 망가진 것으로 간주 → 내장 데이터로 완전 폴백
+      const _withComps = CHEMS.filter(c => Array.isArray(c.components) && c.components.length>0).length;
+      const _withDepts = CHEMS.filter(c => Array.isArray(c.departments) && c.departments.length>0).length;
+      const _builtInCount = Object.keys(_builtInMap).length;
+      if(_builtInCount > 0 && CHEMS.length > 0){
+        const _compRatio = _withComps / CHEMS.length;
+        const _deptRatio = _withDepts / CHEMS.length;
+        // components 비율 30% 미만 또는 departments 비율 50% 미만이면 시트 손상으로 판단
+        if(_compRatio < 0.3 || _deptRatio < 0.5){
+          console.warn(`[loadChems] ⚠ GAS 시트 손상 의심 (성분 ${(_compRatio*100).toFixed(0)}% / 부서 ${(_deptRatio*100).toFixed(0)}%) — 내장 데이터로 폴백`);
+          toast(`⚠ 구글시트 데이터 부실 — 내장 ${_builtInCount}종 사용 중`,'info');
+          CHEMS.length = 0;
+          Object.values(_builtInMap).forEach(p => CHEMS.push(p));
+        }
+      }
+      // productMap 재빌드
       Object.keys(productMap).forEach(k=>delete productMap[k]);
       CHEMS.forEach(p=>productMap[p.name]=p);
+      // localStorage 캐싱 — 다음 페이지 로드 시 즉시 사용
+      try {
+        localStorage.setItem('bm_chems_cache', JSON.stringify({
+          data: CHEMS, cachedAt: Date.now()
+        }));
+      } catch(_) {}
       // UI 갱신
       buildDeptSelects();
       buildDeptButtons();
       renderList(deptF||'all');
-      toast(`✅ MSDS 목록 ${CHEMS.length}종 구글시트에서 업데이트 완료`,'ok');
+      toast(`✅ MSDS 목록 ${CHEMS.length}종 시트에서 업데이트 (${isRowLevel?'행 단위':'제품 단위'} 처리)`,'ok');
     } else if(res&&res.success&&(!res.data||res.data.length===0)){
       toast('chemicals 시트가 비어있습니다 — 내장 데이터 유지','info');
     }
@@ -7014,6 +7494,15 @@ function ppeSaveRecord(p, pdfFileName, sigImg){
     // ★ 글로벌 ID 부여 + 묘비 필터
     if(typeof BM !== 'undefined' && BM.ensureIds){
       BM.ensureIds(stored);
+      // ★★★ v16.8: 묘비 충돌 차단 ★★★
+      // 방금 저장한 rec의 ID가 묘비에 있으면 명시적으로 제거 (save wins)
+      if (rec.recordId) {
+        const _tombs = BM.getTombstones('ppe');
+        if (_tombs.delete(rec.recordId)) {
+          BM.saveTombstones('ppe', _tombs);
+          console.log(`[ppeSaveRecord] 묘비 1개 제거 (save wins): ${rec.recordId}`);
+        }
+      }
       const _t = BM.getTombstones('ppe');
       if(_t.size){
         const filtered = stored.filter(r => !_t.has(r.recordId));
@@ -7151,6 +7640,35 @@ function saveEduRecord(params){
     });
     // ★ 글로벌 ID 자동 부여 + 묘비 필터 적용
     BM.ensureIds(stored);
+
+    // ★★★ v16.8: 묘비 충돌 차단 (CRITICAL FIX) ★★★
+    // 영구삭제된 ID와 우연히 일치한 새 레코드가 즉시 사라지는 현상 방지.
+    // 새로 저장하는 레코드(stored.slice(-names.length))의 ID는
+    // 묘비에서 명시적으로 제거 — "save wins" 정책
+    // ★★★ v17.4 FIX: NK 묘비도 함께 제거 (이전엔 recordId 묘비만 제거 → 영구삭제 후
+    //              같은 이름·교육·일자로 재저장하면 NK 묘비에 걸려 안 보이던 문제)
+    const _newSaved = stored.slice(-names.length);
+    const _newIds = new Set(_newSaved.map(r => r.recordId).filter(Boolean));
+    const _newNks = new Set(_newSaved.map(r => BM.naturalKey(r)).filter(Boolean));
+    if (_newIds.size > 0) {
+      const _tombs = BM.getTombstones('edu');
+      let _cleaned = 0;
+      _newIds.forEach(id => { if (_tombs.delete(id)) _cleaned++; });
+      if (_cleaned > 0) {
+        BM.saveTombstones('edu', _tombs);
+        console.log(`[saveEduRecord] recordId 묘비 ${_cleaned}개 제거 (save wins)`);
+      }
+    }
+    if (_newNks.size > 0) {
+      const _nkTombs = BM.getNKTombstones('edu');
+      let _cleanedNk = 0;
+      _newNks.forEach(nk => { if (_nkTombs.delete(nk)) _cleanedNk++; });
+      if (_cleanedNk > 0) {
+        BM.saveNKTombstones('edu', _nkTombs);
+        console.log(`[saveEduRecord] NK 묘비 ${_cleanedNk}개 제거 (save wins)`);
+      }
+    }
+
     const _t = BM.getTombstones('edu');
     if(_t.size) stored = stored.filter(r => !_t.has(r.recordId));
     localStorage.setItem('bm_edu_records', JSON.stringify(stored));
@@ -9219,9 +9737,27 @@ function initAdmin(){
   // ★ 로컬 데이터 즉시 렌더링 (빠른 초기 화면)
   _adminDirectRender();
 
-  // ★ [수정4] GitHub Sync-down: 관리자 진입 시마다 클라우드 → 로컬 덮어쓰기
+  // ★★★ v17.0: 관리자 진입 시 자동 클라우드 동기화 (Cloud Golden Source) ★★★
+  // 사용자에게 진행 상황 표시 + sync 완료 후 자동 화면 갱신
   if(CFG.ghToken && CFG.ghRepo){
-    _syncAllCloud().catch(e => console.warn('[initAdmin] 동기화 실패:', e));
+    toast('☁ 클라우드 → 로컬 자동 동기화 중...','info');
+    _syncAllCloud()
+      .then(() => {
+        // _syncAllCloud 내부에서 _adminDirectRender 이미 호출됨
+        // 통계 정보로 사용자에게 결과 알림
+        try {
+          const eduN = JSON.parse(localStorage.getItem('bm_edu_records')||'[]').length;
+          const ppeN = JSON.parse(localStorage.getItem('bm_ppe_records')||'[]').length;
+          const chemN = JSON.parse(localStorage.getItem('bm_chem_records')||'[]').length;
+          toast(`✅ 동기화 완료 (교육 ${eduN} · 보호구 ${ppeN} · 화학 ${chemN})`,'ok');
+        } catch(e) {
+          toast('✅ 클라우드 동기화 완료','ok');
+        }
+      })
+      .catch(e => {
+        console.warn('[initAdmin] 동기화 실패:', e);
+        toast('⚠ 클라우드 동기화 실패 — 로컬 데이터로 표시 중','err');
+      });
   }
 }
 
@@ -9245,7 +9781,15 @@ async function _syncAllCloud(){
   }catch(e){ console.warn('[_syncAllCloud] 실패:', e); }
 }
 
-/* ★ [수정1] GitHub → localStorage Sync-down (Golden Source = GitHub) */
+/* ★★★ v17.0: GitHub → localStorage Sync-down (TRUE Cloud Golden Source) ★★★
+   
+   변경 사항 (v16.7 대비):
+   1. GitHub 데이터를 베이스로 시작 (이전: 로컬 베이스 + GitHub 덮어쓰기)
+   2. 로컬은 60초 이내 신규 레코드만 보호 (좀비 자동 폐기)
+   3. recordId + naturalKey 양쪽 묘비 모두 적용 (부활 통로 차단)
+   4. recordId 없는 레코드도 묘비 검사 (자연키 기반)
+   5. Upsert: 같은 recordId/naturalKey 중복 시 최신 submitted만 유지
+*/
 async function _cloudSyncDown(category){
   const fileMap = {
     edu:  'records/edu_records.json',
@@ -9258,85 +9802,102 @@ async function _cloudSyncDown(category){
     chem: (a,b) => (b.submitted||'').localeCompare(a.submitted||'')
   };
 
-  // ★★★ v16.7: race condition + 기존 데이터 완전 보호 ★★★
-  // 핵심 원칙:
-  //   1. GitHub 비어있어도 로컬 wholesale 초기화 금지 (tombstone이 삭제 처리)
-  //   2. 기존 로컬 레코드는 _localSavedAt 없어도 100% 보존
-  //   3. GitHub Upsert 시 신규(60초 이내) 레코드는 덮어쓰지 않음
-
-  const _GRACE_MS = 60000; // 60초
+  const _GRACE_MS = 60000; // 60초 보호창
   const _now = Date.now();
 
+  // 1) 로컬 백업 — 신규 보호 레코드 식별용
   let _localBefore = [];
   try { _localBefore = JSON.parse(localStorage.getItem(`bm_${category}_records`)||'[]'); } catch(_e){}
+  BM.ensureIds(_localBefore);
 
+  // ★ 신규 보호: 60초 이내 저장된 로컬 레코드 (방금 작성, GitHub 업로드 진행 중일 수 있음)
   const _recentLocal = _localBefore.filter(r =>
     r && r._localSavedAt && (_now - r._localSavedAt) < _GRACE_MS
   );
   if(_recentLocal.length > 0){
-    console.log(`[_cloudSyncDown ${category}] ★ 보호 중: 60초 이내 저장된 신규 ${_recentLocal.length}건`);
+    console.log(`[_cloudSyncDown ${category}] ★ 신규 보호: 60초 이내 ${_recentLocal.length}건`);
   }
 
   try{
+    // 2) GitHub에서 최신 데이터 가져오기
     const {data} = await readGitHubJSON(fileMap[category]);
     if(!data){
-      // GitHub 응답 없음 — 로컬 그대로 유지
-      console.log(`[_cloudSyncDown ${category}] GitHub 응답 없음 → 로컬 ${_localBefore.length}건 유지`);
+      // GitHub 응답 자체가 없으면 (네트워크 오류) 로컬 유지
+      console.warn(`[_cloudSyncDown ${category}] GitHub 응답 없음 → 로컬 유지`);
       return;
     }
     let ghRecs = Array.isArray(data) ? data : (data.records||[]);
 
-    if(!ghRecs.length){
-      // ★ v16.7: GitHub 비어있어도 로컬 wholesale 초기화 절대 금지
-      //   이유: 첫 사용자/네트워크 실패/묘비 mismatch 등으로 GitHub가
-      //   일시적으로 비어 보일 수 있고, 그럴 때 로컬을 지우면 데이터 손실
-      //   정상 삭제는 tombstone(묘비) 시스템이 처리하므로 wipe 불필요
-      console.log(`[_cloudSyncDown ${category}] GitHub 비어있음 → 로컬 ${_localBefore.length}건 유지 (tombstone으로 정상 삭제 반영)`);
-      return;
-    }
+    // 3) 묘비 동기화 (GitHub → 로컬) — 이미 sync된 상태라고 가정
+    const tombs = BM.getTombstones(category);
+    const nkTombs = BM.getNKTombstones(category);
 
-    // ★ ensureIds 먼저 (tombstone 필터 전에 ID 부여)
+    // 4) GitHub 데이터에 ID 부여 + 묘비 적용
     BM.ensureIds(ghRecs);
-    ghRecs = BM.filterTombstoned(ghRecs, category);
-
-    // ★ 로컬 다시 읽기 (saveEduRecord 직후라면 최신 상태 반영)
-    let local = [];
-    try{ local = JSON.parse(localStorage.getItem(`bm_${category}_records`)||'[]'); }catch(e){}
-    BM.ensureIds(local);
-
-    // ★ v16.7: 신규 보호 ID 추출 (묘비 필터 전에 — 묘비 충돌 방지)
-    const _recentLocalIds = new Set(_recentLocal.map(r => r.recordId).filter(Boolean));
-
-    // 로컬에서 묘비 적용 (단, 보호 레코드는 묘비 면제)
-    local = local.filter(r => {
-      if(!r || !r.recordId) return true; // recordId 없으면 일단 보존
-      if(_recentLocalIds.has(r.recordId)) return true; // 신규 보호
-      // 일반 묘비 필터
-      const tombs = BM.getTombstones(category);
-      return !tombs.has(r.recordId);
+    ghRecs = ghRecs.filter(r => {
+      if (tombs.has(r.recordId)) return false;
+      if (nkTombs.has(BM.naturalKey(r))) return false;
+      return true;
     });
 
-    // ★ Upsert 병합: 로컬을 기반으로 시작 → GitHub로 덮어쓰기 (신규 보호 제외)
-    const merged = new Map(local.map(r => [r.recordId, r]));
+    // 5) ★★★ TRUE Cloud Golden Source: GitHub를 베이스로 시작 ★★★
+    //    같은 recordId가 GitHub에 여러 개 있으면 가장 최근 submitted만 유지
+    const merged = new Map();
     ghRecs.forEach(r => {
-      if(_recentLocalIds.has(r.recordId)) {
-        return; // 신규 보호 레코드는 GitHub 덮어쓰기 건너뜀
+      const existing = merged.get(r.recordId);
+      if (!existing) {
+        merged.set(r.recordId, r);
+      } else {
+        // recordId 충돌 시 최신 submitted 우선
+        const curT = (r.submitted||'') > (existing.submitted||'');
+        if (curT) merged.set(r.recordId, r);
       }
-      merged.set(r.recordId, r);
     });
 
-    // ★ 신규 보호 레코드 강제 포함 (혹시 빠졌으면)
+    // 6) 신규 보호 레코드만 추가 (로컬 좀비는 자동 폐기)
     _recentLocal.forEach(r => {
-      if(!merged.has(r.recordId)) merged.set(r.recordId, r);
+      // 신규 보호 레코드도 묘비 적용 (영구삭제 후 60초 이내라면)
+      if (tombs.has(r.recordId)) return;
+      if (nkTombs.has(BM.naturalKey(r))) return;
+      // GitHub에 이미 있으면 (업로드 완료) → 둘 중 최신 submitted 유지
+      const existing = merged.get(r.recordId);
+      if (!existing) {
+        merged.set(r.recordId, r);
+      } else {
+        const localT = r.submitted || r._localSavedAt || 0;
+        const cloudT = existing.submitted || 0;
+        if (localT > cloudT) merged.set(r.recordId, r);
+      }
     });
 
-    const result = [...merged.values()];
+    // 7) ★ naturalKey 기준 추가 dedupe (같은 사람·같은 교육·같은 날 중복 제거)
+    const byNk = new Map();
+    [...merged.values()].forEach(r => {
+      const nk = BM.naturalKey(r);
+      const existing = byNk.get(nk);
+      if (!existing) {
+        byNk.set(nk, r);
+      } else {
+        // 같은 자연키 — 더 최신 submitted 유지
+        const curT = r.submitted || r._localSavedAt || 0;
+        const exiT = existing.submitted || existing._localSavedAt || 0;
+        if (curT > exiT) byNk.set(nk, r);
+      }
+    });
+
+    // 8) 정렬 + no 재부여
+    const result = [...byNk.values()];
     result.sort(sortKey[category]);
     result.forEach((r,i) => r.no = i+1);
 
+    // 9) 로컬에 저장
     localStorage.setItem(`bm_${category}_records`, JSON.stringify(result));
-    console.log(`[_cloudSyncDown ${category}] 완료: 최종 ${result.length}건 (GitHub ${ghRecs.length}건, 로컬 ${local.length}건, 신규 보호 ${_recentLocal.length}건)`);
-  }catch(e){ console.warn(`[_cloudSyncDown ${category}] 실패:`, e, '— 로컬 유지'); }
+    const zombieCount = _localBefore.length - _recentLocal.length - 
+                         _localBefore.filter(r => merged.has(r.recordId)).length;
+    console.log(`[_cloudSyncDown ${category}] ☁ Golden Source 동기화: 최종 ${result.length}건 (GitHub ${ghRecs.length} + 신규 보호 ${_recentLocal.length}, 좀비 폐기 ${Math.max(0,zombieCount)}건)`);
+  }catch(e){
+    console.warn(`[_cloudSyncDown ${category}] 실패:`, e, '— 로컬 유지');
+  }
 }
 
 /* ============================================================
@@ -9468,23 +10029,33 @@ BM.markDeleted = async function(category, recordIds, reason){
   };
 
   /* ⑤ GitHub records.json 물리삭제 — 다른 기기 부활 원천 차단 */
+  /* ★★★ v17.6 FIX J: 409 Conflict 시 자동 재시도 (rebuild 콜백 사용)
+     - 동시 작업(메일발송 후 appendEduRecords, 페이지 동기화 등)으로 SHA가 바뀌어도
+       최신 데이터를 다시 읽어 같은 ID들을 다시 필터링하여 안전하게 재시도 */
   try{
     const filePath = fileMap[category];
     const {data, sha} = await readGitHubJSON(filePath);
     if(data){
-      let arr = Array.isArray(data) ? data : (data.records||[]);
-      BM.ensureIds(arr);
-      const before = arr.length;
-      arr = arr.filter(r =>
-        !tombs.has(r.recordId) && !nkTombs.has(BM.naturalKey(r))
-      );
-      const removed = before - arr.length;
-      arr.forEach((r,i) => r.no = i+1);
-      const newData = Array.isArray(data) ? arr
-        : {...data, records:arr, updated:new Date().toISOString()};
+      // rebuild 콜백: 최신 데이터에서 묘비 ID/NK 매칭되는 레코드 제거 — 멱등
+      const _applyDeletion = (sourceData) => {
+        if(!sourceData) sourceData = Array.isArray(data) ? [] : {};
+        let arr = Array.isArray(sourceData) ? sourceData : (sourceData.records||[]);
+        BM.ensureIds(arr);
+        arr = arr.filter(r =>
+          !tombs.has(r.recordId) && !nkTombs.has(BM.naturalKey(r))
+        );
+        arr.forEach((r,i) => r.no = i+1);
+        return Array.isArray(sourceData) ? arr
+          : {...sourceData, records:arr, updated:new Date().toISOString()};
+      };
+      const before = (Array.isArray(data) ? data : (data.records||[])).length;
+      const newData = _applyDeletion(data);
+      const after = (Array.isArray(newData) ? newData : (newData.records||[])).length;
+      const removed = before - after;
       await writeGitHubJSON(filePath, newData, sha,
-        `🗑 영구삭제: ${category} ${removed}건`);
-      console.log(`[영구삭제] GitHub ${filePath}: ${before}→${arr.length}건 (${removed}건 제거)`);
+        `🗑 영구삭제: ${category} ${removed}건`,
+        _applyDeletion);  // ★ rebuild 콜백 — 409 시 최신 데이터로 재적용
+      console.log(`[영구삭제] GitHub ${filePath}: ${before}→${after}건 (${removed}건 제거)`);
       if(removed > 0) toast(`🗑 GitHub ${removed}건 완전 삭제됨`,'ok');
     }
   }catch(e){
@@ -9493,24 +10064,64 @@ BM.markDeleted = async function(category, recordIds, reason){
   }
 
   /* ⑥ GitHub admin_cfg — recordId + NK tombstone 동시 동기화 */
+  /* ★★★ v17.6 FIX J: 묘비 동기화도 409 자동 재시도 (멱등 — Set에 추가) */
   try{
     const {data:cfg, sha:cfgSha} = await readGitHubJSON('records/admin_cfg.json');
-    const c = cfg||{};
-    // recordId tombstone
-    const idKey = `${category}_deleted_ids`;
-    const existIds = new Set(Array.isArray(c[idKey]) ? c[idKey] : []);
-    tombs.forEach(id => existIds.add(id));
-    c[idKey] = [...existIds];
-    // NK tombstone
-    const nkKey = `${category}_deleted_nk`;
-    const existNks = new Set(Array.isArray(c[nkKey]) ? c[nkKey] : []);
-    nkTombs.forEach(nk => existNks.add(nk));
-    c[nkKey] = [...existNks];
-    c[`${idKey}_updated_at`] = new Date().toISOString();
-    await writeGitHubJSON('records/admin_cfg.json', c, cfgSha,
-      `묘비동기화: ${category} +${recordIds.length}`);
+    // rebuild 콜백: 최신 admin_cfg에 같은 묘비를 다시 병합 — 멱등
+    const _applyTombstones = (sourceCfg) => {
+      const c = sourceCfg || {};
+      const idKey = `${category}_deleted_ids`;
+      const existIds = new Set(Array.isArray(c[idKey]) ? c[idKey] : []);
+      tombs.forEach(id => existIds.add(id));
+      c[idKey] = [...existIds];
+      const nkKey = `${category}_deleted_nk`;
+      const existNks = new Set(Array.isArray(c[nkKey]) ? c[nkKey] : []);
+      nkTombs.forEach(nk => existNks.add(nk));
+      c[nkKey] = [...existNks];
+      c[`${idKey}_updated_at`] = new Date().toISOString();
+      return c;
+    };
+    const newCfg = _applyTombstones(cfg);
+    await writeGitHubJSON('records/admin_cfg.json', newCfg, cfgSha,
+      `묘비동기화: ${category} +${recordIds.length}`,
+      _applyTombstones);  // ★ rebuild 콜백 — 409 시 최신 cfg에 재병합
     console.log(`[markDeleted] admin_cfg 동기화 완료`);
   }catch(e){ console.warn('[markDeleted] admin_cfg 동기화 실패:', e); }
+
+  /* ★★★ ⑦ v17.2: GAS Sheet 동시 삭제 (진정한 Cloud Golden Source 완성) ★★★
+     GAS Sheet에 남아있는 좀비 데이터가 loadAdminRecords 폴백으로 부활하던 문제 차단.
+     GAS endpoint가 deleteRecords 액션을 지원하지 않아도 silent fail. */
+  if (CFG.url) {
+    try {
+      const nkArr = [];
+      try {
+        const stored = JSON.parse(localStorage.getItem(`bm_${category}_records_pre_delete`)||'[]');
+        stored.forEach(r => nkArr.push(BM.naturalKey(r)));
+      } catch(_) {}
+      // 자연키 + recordId 양쪽 전달 (GAS 측에서 어떤 키를 쓰든 매칭)
+      const cb = '_gasdel_' + Date.now();
+      window[cb] = (res) => {
+        delete window[cb];
+        if (res && res.success) {
+          console.log(`[markDeleted] GAS Sheet 삭제 성공: ${category} ${res.deleted||recordIds.length}건`);
+        } else if (res && res.error) {
+          console.warn(`[markDeleted] GAS Sheet 응답: ${res.error}`);
+        }
+      };
+      const sc = document.createElement('script');
+      const idsParam = encodeURIComponent(JSON.stringify(recordIds));
+      const nksParam = encodeURIComponent(JSON.stringify([...nkTombs].slice(-recordIds.length)));
+      sc.src = `${CFG.url}?action=deleteRecords&category=${category}&ids=${idsParam}&nks=${nksParam}&callback=${cb}`;
+      sc.onerror = () => { delete window[cb]; };
+      document.head.appendChild(sc);
+      // 5초 후 자동 정리 (GAS가 deleteRecords 액션 미구현 시 silent)
+      setTimeout(() => {
+        if (window[cb]) { delete window[cb]; sc.remove(); }
+      }, 5000);
+    } catch(e) {
+      console.warn('[markDeleted] GAS Sheet 삭제 요청 실패 (무시):', e.message);
+    }
+  }
 
   return recordIds.length;
 };;
@@ -9746,11 +10357,32 @@ BM.highlightDuplicates = function(category){
   });
 };
 
-/* ── 19. 페이지 로드 시 묘비 동기화 (백그라운드) ── */
+/* ── 19. 페이지 로드 시 묘비 + 레코드 자동 동기화 (백그라운드) ── */
+/* ★★★ v17.4 FIX: 페이지 새로고침 시 다른 기기의 변경사항(추가/수정/영구삭제)
+   를 자동 반영하기 위해 records.json도 함께 동기화. 이전 버전은 묘비만 동기화 →
+   다른 기기에서 영구삭제해도 이 기기에서는 부활하던 문제 해결. */
 window.addEventListener('load', ()=>{
   setTimeout(async ()=>{
-    await BM.syncTombstonesFromGitHub('edu');
-    await BM.syncTombstonesFromGitHub('ppe');
+    try{
+      if(!CFG.ghToken || !CFG.ghRepo) return;
+      // 1) 묘비 먼저 동기화 (삭제 정보 우선)
+      await BM.syncTombstonesFromGitHub('edu');
+      await BM.syncTombstonesFromGitHub('ppe');
+      await BM.syncTombstonesFromGitHub('chem');
+      // 2) 레코드 데이터 동기화 (GitHub Golden Source → 로컬 갱신)
+      if(typeof window._cloudSyncDown === 'function'){
+        await window._cloudSyncDown('edu');
+        await window._cloudSyncDown('ppe');
+        await window._cloudSyncDown('chem');
+      }
+      // 3) 관리자 화면이 열려 있으면 즉시 재렌더
+      if(typeof _adminDirectRender === 'function'){
+        try{ _adminDirectRender(); }catch(_){}
+      }
+      console.log('[페이지로드 자동동기화] 완료 — 다른 기기 변경사항 반영');
+    }catch(e){
+      console.warn('[페이지로드 자동동기화] 실패:', e);
+    }
   }, 2000);
 });
 
@@ -10312,15 +10944,53 @@ function _adminDirectRender(){
     el.textContent = `총 ${count}건${dup}`;
   };
 
+  // ★★★ v16.8: 카테고리별 "유효 레코드" 판정 함수 (빈 행 제외) ★★★
+  const _isValid = (r, cat) => {
+    if (!r) return false;
+    if (cat === 'edu' || cat === 'ppe') {
+      return !!(r.name && r.name.trim());
+    }
+    if (cat === 'chem') {
+      return !!((r.name && r.name.trim()) || (r.product && r.product.trim()));
+    }
+    return true;
+  };
+
+  // ★★★ v17.0: dedupe 안전망 — naturalKey + recordId 중복 시 최신 1건만 유지 ★★★
+  const _dedupe = (records) => {
+    if (!Array.isArray(records)) return [];
+    // 1차: recordId 기준 (최신 submitted 유지)
+    const byId = new Map();
+    records.forEach(r => {
+      if (!r) return;
+      const id = r.recordId;
+      if (!id) { byId.set(Symbol(), r); return; } // ID 없으면 별도 유지
+      const ex = byId.get(id);
+      if (!ex || (r.submitted||'') > (ex.submitted||'')) byId.set(id, r);
+    });
+    // 2차: naturalKey 기준
+    const byNk = new Map();
+    [...byId.values()].forEach(r => {
+      const nk = BM.naturalKey(r);
+      const ex = byNk.get(nk);
+      if (!ex || (r.submitted||'') > (ex.submitted||'')) byNk.set(nk, r);
+    });
+    return [...byNk.values()];
+  };
+
   // 교육현황
   try{
     const raw=JSON.parse(localStorage.getItem('bm_edu_records')||'[]');
     let edu=raw.filter(r=>!(r.type||'').includes('보호구'));
     BM.ensureIds(edu);
     edu = BM.filterTombstoned(edu, 'edu'); // ★ 묘비 적용
+    edu = edu.filter(r => _isValid(r, 'edu')); // ★ v16.8: 빈 행 제외
+    edu = _dedupe(edu); // ★ v17.0: 중복 최종 정리
     adminRecords=edu;
     const tbody=document.getElementById('admin-tbody');
     if(tbody){
+      // ★ v16.8: 항상 DOM을 먼저 비우기 (0건이든 N건이든 옛 행 잔존 차단)
+      tbody.innerHTML='';
       if(!edu.length){
         tbody.innerHTML='<tr><td colspan="11" style="text-align:center;padding:30px;color:#94a3b8">기록이 없습니다<br><small>PDF 저장·메일발송 후 자동 기록됩니다</small></td></tr>';
       } else {
@@ -10337,7 +11007,12 @@ function _adminDirectRender(){
     let ppe=JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');
     BM.ensureIds(ppe);
     ppe = BM.filterTombstoned(ppe, 'ppe'); // ★ 묘비 적용
+    ppe = ppe.filter(r => _isValid(r, 'ppe')); // ★ v16.8: 빈 행 제외
+    ppe = _dedupe(ppe); // ★ v17.0: 중복 최종 정리
     window._ppeCurrentFiltered = ppe;
+    // ★ v16.8: PPE도 DOM 먼저 비우기
+    const ppeTbody = document.getElementById('ppe-admin-tbody');
+    if (ppeTbody) ppeTbody.innerHTML = '';
     renderPpeAdminTable(ppe);
     BM.highlightDuplicates('ppe');
     _setBadge('adm-ppe-stat', ppe.length, BM.findDuplicateGroups(ppe).length);
@@ -10348,6 +11023,7 @@ function _adminDirectRender(){
     let chem = JSON.parse(localStorage.getItem('bm_chem_records')||'[]');
     BM.ensureIds(chem);
     chem = BM.filterTombstoned(chem, 'chem');
+    chem = _dedupe(chem); // ★ v17.0: 중복 최종 정리
     window._chemCurrentFiltered = chem;
     renderChemAdminTable(chem);
     BM.highlightDuplicates('chem');
@@ -10655,12 +11331,17 @@ function loadAllPpeFromGAS(){
 function _doLoadAllPpeRecords(clearedAt){ loadAllPpeFromGAS(); }
 
 function loadAdminRecords(filter){
+  // ★★★ v16.9_FINAL: 빈 행 판정 함수 (loadAdminRecords 경로용) ★★★
+  const _isValidEdu = (r) => !!(r && r.name && r.name.trim());
+
   // ★ 락 없이 단순 실행 (락으로 인한 블락 제거)
   // ── 로컬 데이터 로드 (교육만, 보호구 제외)
   let localData=[];
   try{
     const raw=JSON.parse(localStorage.getItem('bm_edu_records')||'[]');
     localData=raw.filter(r=>!(r.type||'').includes('보호구'));
+    // ★ v16.9_FINAL: 즉시 빈 행 필터링
+    localData = localData.filter(_isValidEdu);
   }catch(e){}
 
   // ── 필터 적용
@@ -10758,7 +11439,27 @@ function loadAdminRecords(filter){
 
   // ── 초기화됐으면 GAS 조회 안 함
   if(localStorage.getItem('bm_edu_cleared')==='1') return;
-  // ── 로컬에 데이터 있으면 GAS 조회 안 함
+
+  // ★★★ v17.4 FIX: 로컬에 데이터가 있어도 GitHub 묘비/레코드 백그라운드 동기화는 항상 실행
+  //              (이전 버전은 로컬 있으면 곧바로 return → 다른 기기의 영구삭제/수정이 절대
+  //               반영되지 않던 사일런트 동기화 차단 버그)
+  // 백그라운드(비차단)로 GitHub 동기화 실행 → 완료되면 자동 재렌더
+  if(CFG.ghToken && CFG.ghRepo){
+    (async ()=>{
+      try{
+        await BM.syncTombstonesFromGitHub('edu');
+        if(typeof window._cloudSyncDown === 'function'){
+          await window._cloudSyncDown('edu');
+        }
+        // 새 묘비/데이터 반영 후 화면 재렌더
+        if(typeof _adminDirectRender === 'function'){
+          try{ _adminDirectRender(); }catch(_){}
+        }
+      }catch(e){ console.warn('[loadAdminRecords 백그라운드 sync]', e); }
+    })();
+  }
+
+  // ── 로컬에 데이터 있으면 GAS 조회 안 함 (GAS는 보조 폴백)
   if(localData.length>0) return;
   if(!CFG.url) return;
 
@@ -10767,7 +11468,32 @@ function loadAdminRecords(filter){
   window[cb]=res=>{
     delete window[cb];
     if(res&&res.success&&Array.isArray(res.data)&&res.data.length>0){
-      const eduOnly=res.data.filter(r=>!(r.type||'').includes('보호구'));
+      // ★★★ v17.2: GAS 폴백 좀비 부활 완전 차단 ★★★
+      // GAS Sheet는 markDeleted로 삭제 안 되므로, 묘비/자연키묘비를 반드시 적용
+      let eduOnly = res.data.filter(r=>!(r.type||'').includes('보호구')).filter(_isValidEdu);
+      // 1) recordId 부여
+      BM.ensureIds(eduOnly);
+      // 2) recordId 묘비 + 자연키 묘비 모두 적용 (좀비 부활 차단)
+      const tombs = BM.getTombstones('edu');
+      const nkTombs = BM.getNKTombstones('edu');
+      const beforeFilter = eduOnly.length;
+      eduOnly = eduOnly.filter(r => {
+        if (tombs.has(r.recordId)) return false;
+        if (nkTombs.has(BM.naturalKey(r))) return false;
+        return true;
+      });
+      const zombieCount = beforeFilter - eduOnly.length;
+      if (zombieCount > 0) {
+        console.log(`[loadAdminRecords GAS] 좀비 ${zombieCount}건 차단 (묘비 적용)`);
+      }
+      // 3) dedupe (같은 recordId/naturalKey 최신만)
+      const byNk = new Map();
+      eduOnly.forEach(r => {
+        const nk = BM.naturalKey(r);
+        const ex = byNk.get(nk);
+        if (!ex || (r.submitted||'') > (ex.submitted||'')) byNk.set(nk, r);
+      });
+      eduOnly = [...byNk.values()];
       localStorage.setItem('bm_edu_records',JSON.stringify(eduOnly));
       adminRecords=doFilter(eduOnly);
       renderAdminTable(adminRecords);
@@ -10959,9 +11685,15 @@ function deletePpeRecord(idx){
 }
 
 function loadPpeAdmin(){
+  // ★★★ v16.9_FINAL: 빈 행 판정 (loadPpeAdmin 경로용) ★★★
+  const _isValidPpe = (r) => !!(r && r.name && r.name.trim());
+
   // ── 로컬 데이터 로드
   let local=[];
-  try{local=JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');}catch(e){}
+  try{
+    local=JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');
+    local = local.filter(_isValidPpe); // ★ v16.9_FINAL: 빈 행 즉시 제거
+  }catch(e){}
 
   renderPpeAdminTable(local);
 
@@ -10978,8 +11710,25 @@ function loadPpeAdmin(){
     if(res&&res.error){
       toast('MSDS 로드 오류: '+res.error,'err');
     } else if(res&&res.success&&Array.isArray(res.data)&&res.data.length>0){
-      const gasRecs=res.data.filter(r=>(r.type||'').includes('보호구'));
+      // ★★★ v17.2: GAS 폴백 좀비 부활 완전 차단 (PPE) ★★★
+      let gasRecs=res.data.filter(r=>(r.type||'').includes('보호구'));
       if(!gasRecs.length) return;
+      BM.ensureIds(gasRecs);
+      // 묘비 + 자연키묘비 적용
+      const tombs = BM.getTombstones('ppe');
+      const nkTombs = BM.getNKTombstones('ppe');
+      const before = gasRecs.length;
+      gasRecs = gasRecs.filter(r => !tombs.has(r.recordId) && !nkTombs.has(BM.naturalKey(r)));
+      const zombies = before - gasRecs.length;
+      if (zombies > 0) console.log(`[loadPpeAdmin GAS] 좀비 ${zombies}건 차단`);
+      // dedupe (자연키 기준 최신 1건만)
+      const byNk = new Map();
+      gasRecs.forEach(r => {
+        const nk = BM.naturalKey(r);
+        const ex = byNk.get(nk);
+        if (!ex || (r.submitted||'') > (ex.submitted||'')) byNk.set(nk, r);
+      });
+      gasRecs = [...byNk.values()];
       localStorage.setItem('bm_ppe_records',JSON.stringify(gasRecs));
       renderPpeAdminTable(gasRecs);
     }
@@ -11437,7 +12186,7 @@ function openCfg(){
   if(!localStorage.getItem('bm_cfg_ok')){
     const pw=prompt('설정 비밀번호를 입력하세요:');
     if(!pw) return;
-    if(!_checkPassword('cfg', pw)) return;
+    if(!_safeCheckPw('cfg', pw)) return;
     localStorage.setItem('bm_cfg_ok','1');
     setTimeout(()=>localStorage.removeItem('bm_cfg_ok'), 30*60*1000); // 30분 후 자동 해제
   }
@@ -11747,11 +12496,26 @@ self.addEventListener('fetch',e=>{
 
   function _boot(){
     if(typeof BM === 'undefined' || typeof CFG === 'undefined'){
-      setTimeout(_boot, 1000); return;
+      window._bm_boot_retry = (window._bm_boot_retry||0) + 1;
+      if(window._bm_boot_retry > 15){
+        console.warn('[v15.70] _boot 재시도 15회 초과 — BM/CFG 미정의 상태로 중단');
+        return;
+      }
+      setTimeout(_boot, 800); return;
     }
+    window._bm_boot_retry = 0;
     if(window._bm_v15_70_applied) return;
     window._bm_v15_70_applied = true;
     console.log('%c[v15.70] 통합 패치 시작','color:#7c3aed;font-weight:bold;font-size:14px');
+
+    /* ── _safeCheckPw: _checkPassword 미정의 타이밍 오류 방어 (v15.70 부팅 보장) ── */
+    function _safeCheckPw(scope, pw){
+      if(typeof _checkPassword === 'function') return _checkPassword(scope, pw);
+      const fn = window._checkPassword || window.checkPassword;
+      if(typeof fn === 'function') return fn(scope, pw);
+      console.warn('[v15.70] _checkPassword 미정의 — 인증 불가');
+      return false;
+    }
 
     /* ════════════════════════════════════════════════════════════════════
        §1. handleTabAction — 사용자 지정 범용 함수
@@ -11768,7 +12532,7 @@ self.addEventListener('fetch',e=>{
       if(localStorage.getItem('bm_admin_ok') !== '1'){
         const pw = prompt('🔐 관리자 비밀번호를 입력하세요\n(관리 기능은 관리자만 사용 가능합니다)');
         if(pw === null || pw === '') return;
-        if(typeof _checkPassword !== 'function' || !_checkPassword('admin', pw)){
+        if(!_safeCheckPw('admin', pw)){
           toast('관리자 인증 실패','err'); return;
         }
         localStorage.setItem('bm_admin_ok','1');
@@ -11838,11 +12602,17 @@ self.addEventListener('fetch',e=>{
         let local = localRaw.slice();
         BM.ensureIds(local);
         // 로컬 묘비 적용 (단, 신규 보호 레코드는 면제)
-        const tombs = BM.getTombstones(category);
+        // ★★★ v17.4 FIX: recordId 묘비 + NK 묘비 양쪽 모두 적용
+        //              (이전 버전은 recordId 묘비만 검사 → 다른 기기에서
+        //               영구삭제한 레코드가 NK 묘비를 무시하고 부활하는 현상 발생)
+        const tombs   = BM.getTombstones(category);
+        const nkTombs = BM.getNKTombstones(category);
         local = local.filter(r => {
-          if(!r || !r.recordId) return true;
-          if(recentIds.has(r.recordId)) return true;
-          return !tombs.has(r.recordId);
+          if(!r) return false;
+          if(recentIds.has(r.recordId)) return true; // 60초 이내 신규 보호
+          if(r.recordId && tombs.has(r.recordId)) return false;
+          if(nkTombs.has(BM.naturalKey(r))) return false;
+          return true;
         });
 
         const merged = new Map(local.map(r => [r.recordId, r]));
@@ -11895,10 +12665,11 @@ self.addEventListener('fetch',e=>{
         await BM.syncTombstonesFromGitHub('edu');
         await window._cloudSyncDown('edu');
         _adminLoading = false; adminLoaded = false; adminRecords = [];
-        if(typeof loadAdminRecords === 'function') loadAdminRecords();
+        // ★★★ v17.2: loadAdminRecords() 호출 제거 — GAS 폴백으로 좀비 부활하던 문제 차단 ★★★
+        // _cloudSyncDown이 이미 Cloud Golden Source 정책으로 로컬을 갱신했으므로 추가 GAS 호출 불필요
         _renderAllTabs();
         const r = JSON.parse(localStorage.getItem('bm_edu_records')||'[]');
-        toast(`✅ 교육 ${r.length}건 (Hard Sync)`,'ok');
+        toast(`✅ 교육 ${r.length}건 (Hard Sync · Cloud Golden)`,'ok');
       }catch(e){ toast('동기화 실패','err'); }
     };
 
@@ -12240,111 +13011,219 @@ self.addEventListener('fetch',e=>{
 
 <script>
 /* ══════════════════════════════════════════════════════════════════════════
-   【 BM v16.8 최종 통합 패치: 하드 동기화(Hard Sync) 및 수신처 고정 해결 】
+   【 BM v16.8_FULL_FIX — 종합 마무리 패치 】
+   ▪ 빈 행 자동 정리 (페이지 로드 시 1회) — 8~17번 같은 placeholder 잔여물 제거
+   ▪ 로컬 단독 레코드 자동 업로드 — Device A의 미업로드 데이터 자동 → GitHub
+   ▪ 버전 변경 시 캐시 강제 정리 + 새로고침
    ══════════════════════════════════════════════════════════════════════════ */
 (function() {
-    // 1. 버전 관리 및 강력한 캐시 삭제
-    const APP_VERSION = '16.8_HARD_SYNC_FINAL';
-    const lastVer = localStorage.getItem('bm_app_version');
+  'use strict';
 
-    if (lastVer !== APP_VERSION) {
-        localStorage.setItem('bm_app_version', APP_VERSION);
-        if ('serviceWorker' in navigator) {
-            caches.keys().then(names => { for (let name of names) caches.delete(name); });
-        }
-        // 로컬 데이터가 꼬였을 수 있으므로 버전 변경 시 로컬 기록을 일단 비우고 새로고침
-        console.log('[v16.8] 구버전 감지: 서버 데이터를 받기 위해 로컬 캐시 초기화');
-        setTimeout(() => location.reload(true), 300);
-        return;
-    }
+  const APP_VERSION = '17.3_COMP_EXTRACT';
+  const lastVer = localStorage.getItem('bm_app_version');
 
-    // 2. 강력한 하드 동기화 엔진 (기존 기록 무시하고 서버 데이터 덮어쓰기)
-    window._syncAllCloud = async function(type = 'edu') {
-        if (!CFG.ghToken || !CFG.ghRepo) return alert('GitHub 설정(토큰/리포지토리)을 확인해주세요.');
-        
-        try {
-            const fileName = `records_${type}.json`;
-            const url = `https://api.github.com/repos/${CFG.ghRepo}/contents/${fileName}?nocache=${new Date().getTime()}`; // 캐시 방지 파라미터 추가
-            
-            const res = await fetch(url, {
-                headers: { 'Authorization': `token ${CFG.ghToken}`, 'Accept': 'application/vnd.github.v3.raw' }
+  // 진단 도구 (콘솔 접근 가능하도록 IIFE 종료 전에 등록)
+  window.bmDiagnose = function() {
+    console.log('%c═══ BM v16.8 종합 진단 ═══','color:#7c3aed;font-weight:bold;font-size:14px');
+    console.log('현재 버전:', APP_VERSION);
+    ['edu','ppe','chem'].forEach(cat => {
+      const recs = JSON.parse(localStorage.getItem(`bm_${cat}_records`) || '[]');
+      const tombs = JSON.parse(localStorage.getItem(`bm_${cat}_deleted_ids`) || '[]');
+      const empty = recs.filter(r => {
+        if (cat === 'chem') return !(r.name||r.product||'').trim();
+        return !(r.name||'').trim();
+      });
+      const valid = recs.length - empty.length;
+      console.log(`[${cat}] 로컬: 총 ${recs.length}건 (정상 ${valid}, 빈행 ${empty.length}) · 묘비: ${tombs.length}`);
+    });
+  };
+
+  // ─── [Part 1] 버전 변경 시 1회 캐시 정리 + 새로고침 ───
+  if (lastVer !== APP_VERSION) {
+    console.log(`[v16.8] 버전 변경: ${lastVer || '없음'} → ${APP_VERSION}`);
+    localStorage.setItem('bm_app_version', APP_VERSION);
+
+    const clearCache = ('caches' in window)
+      ? caches.keys().then(names => Promise.all(names.map(n => caches.delete(n))))
+      : Promise.resolve();
+
+    clearCache.finally(() => {
+      setTimeout(() => {
+        try { location.reload(true); } catch(_) { location.reload(); }
+      }, 300);
+    });
+    return; // 새로고침 예약 후 종료
+  }
+
+  // ─── [Part 2] 빈 행 자동 정리 (페이지 로드 시 1회) ───
+  function cleanEmptyRows() {
+    let totalCleaned = 0;
+    ['edu','ppe'].forEach(cat => {
+      try {
+        const before = JSON.parse(localStorage.getItem(`bm_${cat}_records`) || '[]');
+        const after = before.filter(r => r && r.name && r.name.trim());
+        const removed = before.length - after.length;
+        if (removed > 0) {
+          // 빈 행의 ID는 묘비에 추가 (다른 기기에서도 부활 방지)
+          if (window.BM) {
+            const tombs = BM.getTombstones(cat);
+            before.filter(r => !r.name || !r.name.trim()).forEach(r => {
+              if (r.recordId) tombs.add(r.recordId);
             });
-
-            if (res.ok) {
-                const cloudData = await res.json();
-                // [중요] 로컬 데이터를 보존하지 않고 서버 데이터로 완전히 교체
-                localStorage.setItem(`bm_${type}_records`, JSON.stringify(cloudData));
-                
-                if (typeof window.renderAdminTable === 'function') {
-                    window.renderAdminTable(type);
-                }
-                console.log(`[Sync] ${type} 서버 데이터 동기화 완료`);
-            }
-        } catch (e) {
-            console.error('동기화 실패:', e);
+            BM.saveTombstones(cat, tombs);
+          }
+          after.forEach((r,i) => r.no = i+1);
+          localStorage.setItem(`bm_${cat}_records`, JSON.stringify(after));
+          totalCleaned += removed;
+          console.log(`[v16.8 cleanup] ${cat}: 빈 행 ${removed}건 제거`);
         }
-    };
-
-    // 3. 메일 발송 로직 수정 (수신처 동적 할당 + 발송 후 즉시 동기화)
-    const _originalSendEmail = window.sendAdminEmail;
-    window.sendAdminEmail = function(data) {
-        // [수정] 설정(CFG)에 저장된 각 항목별 이메일로 발송되도록 타겟 설정
-        let targetEmail = CFG.email; // 기본값 (교육)
-        if (data.type === 'ppe') targetEmail = CFG.emailPpe;
-        if (data.type === 'chem') targetEmail = CFG.emailChem;
-        
-        // 메일 데이터에 수신처 강제 지정
-        data.to_email = targetEmail;
-
-        if (typeof _originalSendEmail === 'function') _originalSendEmail(data);
-
-        // [핵심] 메일 발송 후 3초 뒤 모든 기기에 반영되도록 서버 데이터 강제 동기화
-        setTimeout(() => {
-            window._syncAllCloud(data.type || 'edu');
-        }, 3500);
-    };
-
-    // 4. [기능 유지] 보호구 Object 표시 해결 및 결재일 삭제
-    const _originalRender = window.renderAdminTable;
-    window.renderAdminTable = function(type) {
-        if (typeof _originalRender === 'function') _originalRender(type);
-        
-        if (type === 'ppe') {
-            document.querySelectorAll('#adm-table-ppe tbody tr').forEach(row => {
-                const cell = row.cells[3];
-                if (cell && cell.innerText.includes('[object')) {
-                    const records = JSON.parse(localStorage.getItem('bm_ppe_records') || '[]');
-                    const idx = parseInt(row.cells[0].innerText) - 1;
-                    if (records[idx] && Array.isArray(records[idx].items)) {
-                        cell.innerText = records[idx].items.join(', ');
-                    }
-                }
-            });
-        }
-        if (type === 'apv') {
-            const table = document.getElementById('adm-table-apv');
-            if (table) {
-                const headerRow = table.querySelector('thead tr');
-                if (headerRow) {
-                    for (let i = 0; i < headerRow.cells.length; i++) {
-                        if (headerRow.cells[i].innerText.includes('결재일')) {
-                            headerRow.deleteCell(i);
-                            table.querySelectorAll('tbody tr').forEach(r => r.deleteCell(i));
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    };
-
-    // 5. 보안 및 툴바 유지
-    window.addEventListener('load', () => {
-        setTimeout(() => { if (window.injectUnifiedToolbar) window.injectUnifiedToolbar(); }, 1000);
+      } catch(e) {}
     });
 
-    console.log('%c[v16.8] 하드 동기화 엔진 가동 중', 'color:blue; font-weight:bold;');
+    // chem: name 또는 product 둘 다 없으면 제거
+    try {
+      const before = JSON.parse(localStorage.getItem('bm_chem_records') || '[]');
+      const after = before.filter(r => r && ((r.name && r.name.trim()) || (r.product && r.product.trim())));
+      const removed = before.length - after.length;
+      if (removed > 0) {
+        if (window.BM) {
+          const tombs = BM.getTombstones('chem');
+          before.filter(r => !(r.name||r.product||'').trim()).forEach(r => {
+            if (r.recordId) tombs.add(r.recordId);
+          });
+          BM.saveTombstones('chem', tombs);
+        }
+        after.forEach((r,i) => r.no = i+1);
+        localStorage.setItem('bm_chem_records', JSON.stringify(after));
+        totalCleaned += removed;
+        console.log(`[v16.8 cleanup] chem: 빈 행 ${removed}건 제거`);
+      }
+    } catch(e) {}
+
+    if (totalCleaned > 0) {
+      console.log(`[v16.8 cleanup] ✅ 총 ${totalCleaned}건의 빈 행 제거 완료`);
+      // 화면 갱신
+      if (typeof _adminDirectRender === 'function') _adminDirectRender();
+    }
+  }
+
+  // ─── [Part 3] 로컬 단독 레코드 자동 업로드 ───
+  // Device A에 있는데 GitHub에 없는 레코드를 자동으로 업로드 → 다른 기기 동기화 보장
+  async function uploadLocalOnlyRecords() {
+    if (!window.CFG || !CFG.ghToken || !CFG.ghRepo) return;
+    if (!window.BM || !window.readGitHubJSON || !window.writeGitHubJSON) return;
+
+    for (const cat of ['edu','ppe','chem']) {
+      try {
+        const local = JSON.parse(localStorage.getItem(`bm_${cat}_records`) || '[]')
+          .filter(r => r && (cat === 'chem' ? (r.name||r.product) : r.name));
+        if (!local.length) continue;
+        BM.ensureIds(local);
+
+        const fileName = `records/${cat}_records.json`;
+        const { data, sha } = await readGitHubJSON(fileName);
+        const ghRecs = data ? (Array.isArray(data) ? data : (data.records || [])) : [];
+        const ghIds = new Set(ghRecs.map(r => r.recordId).filter(Boolean));
+
+        // 로컬에만 있는 레코드 추출
+        const localOnly = local.filter(r => r.recordId && !ghIds.has(r.recordId));
+        if (!localOnly.length) continue;
+
+        // 묘비에서 이 ID들 제거 (재업로드 가능)
+        const tombs = BM.getTombstones(cat);
+        let tombsRemoved = 0;
+        localOnly.forEach(r => { if (tombs.delete(r.recordId)) tombsRemoved++; });
+        if (tombsRemoved > 0) {
+          BM.saveTombstones(cat, tombs);
+          console.log(`[자동 업로드 ${cat}] 묘비 ${tombsRemoved}개 제거`);
+        }
+
+        // 병합 후 업로드
+        BM.ensureIds(ghRecs);
+        const merged = new Map(ghRecs.map(r => [r.recordId, r]));
+        localOnly.forEach(r => merged.set(r.recordId, r));
+        const result = [...merged.values()];
+        const sortKey = cat === 'edu'
+          ? (a,b) => (b.dateStart||'').localeCompare(a.dateStart||'')
+          : cat === 'ppe'
+          ? (a,b) => (b.date||b.dateStart||'').localeCompare(a.date||a.dateStart||'')
+          : (a,b) => (b.submitted||'').localeCompare(a.submitted||'');
+        result.sort(sortKey);
+
+        await writeGitHubJSON(fileName,
+          { records: result, updated: new Date().toISOString() }, sha,
+          `📤 자동 업로드: ${cat} 로컬단독 ${localOnly.length}건`);
+        console.log(`[자동 업로드 ${cat}] ${localOnly.length}건 → GitHub`);
+      } catch(e) {
+        console.warn(`[자동 업로드 ${cat}] 실패:`, e.message);
+      }
+    }
+  }
+
+  // ─── [Part 4] 페이지 로드 후 실행 ───
+  function runAll() {
+    // 1) 빈 행 정리 (즉시)
+    if (window.BM && window.BM.getTombstones) {
+      cleanEmptyRows();
+    } else {
+      setTimeout(cleanEmptyRows, 1500);
+    }
+
+    // 2) 관리자 모드일 때만 로컬 단독 자동 업로드 (5초 후)
+    if (localStorage.getItem('bm_admin_ok') === '1') {
+      setTimeout(() => {
+        uploadLocalOnlyRecords().catch(e => console.warn('[자동 업로드]', e));
+      }, 5000);
+    }
+  }
+
+  // DOM 준비 시점에 실행
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', runAll, { once: true });
+  } else {
+    setTimeout(runAll, 100);
+  }
+
+  // initAdmin 후크 — 관리자 진입 시마다 자동 업로드 시도
+  if (typeof window.initAdmin === 'function') {
+    const _orig = window.initAdmin;
+    window.initAdmin = function(...args) {
+      const ret = _orig.apply(this, args);
+      // 3초 후 자동 업로드 시도 (admin 로그인 즉시 실행)
+      setTimeout(() => {
+        if (localStorage.getItem('bm_admin_ok') === '1') {
+          uploadLocalOnlyRecords().catch(e => console.warn('[자동 업로드]', e));
+        }
+      }, 3000);
+      return ret;
+    };
+  }
+
+  // ★★★ v16.9_FINAL: _adminDirectRender 호출 전 빈 행 자동 정리 후크 ★★★
+  // 어떤 경로로 admin 화면이 갱신되든 항상 빈 행이 제거된 상태로 표시
+  if (typeof window._adminDirectRender === 'function') {
+    const _origDirect = window._adminDirectRender;
+    window._adminDirectRender = function(...args) {
+      try { cleanEmptyRows(); } catch(e) { console.warn('[cleanEmptyRows pre-hook]', e); }
+      return _origDirect.apply(this, args);
+    };
+  }
+
+  // ★★★ v16.9_FINAL: loadAdminRecords 호출 전 빈 행 자동 정리 후크 ★★★
+  if (typeof window.loadAdminRecords === 'function') {
+    const _origLoad = window.loadAdminRecords;
+    window.loadAdminRecords = function(...args) {
+      try { cleanEmptyRows(); } catch(e) { console.warn('[cleanEmptyRows pre-loadAdmin]', e); }
+      return _origLoad.apply(this, args);
+    };
+  }
+
+  console.log('%c[v16.9_FINAL] 매핑 수정 + 빈 행 차단 완료 ✓','color:#16a34a;font-weight:bold;font-size:13px');
+  console.log('   ① MSDS 시트 매핑 (o/O 인식, 행단위 그룹핑)  ② 묘비 충돌 (save wins)');
+  console.log('   ③ 빈 행 표시 차단 (3중 후크)  ④ DOM 캐시 강제 갱신  ⑤ 로컬 단독 자동 업로드');
+  console.log('   진단: bmDiagnose()');
 })();
 </script>
+
 </body>
 </html>
