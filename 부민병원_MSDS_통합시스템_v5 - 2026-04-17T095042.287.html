@@ -5,9 +5,9 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v17.9 (2026-05-14)
+  부민병원 MSDS 통합시스템 v17.10 (2026-05-14)
   ════════════════════════════════════════════════════════════════════
-  v17.3 → v17.9 주요 수정 (오류 진단·수정):
+  v17.3 → v17.10 주요 수정 (오류 진단·수정):
 
   [오류 1] 구글시트 MSDS 제품별 세부항목(구성성분/세부내용) 누락 + 부서 세부 표시 안 됨
     FIX A: (사용자 요청으로 제거됨 — productList 하단 부서 필터 버튼 영역 미사용)
@@ -5958,39 +5958,63 @@ async function apvToggleArchive(){
 }
 
 /* ── GitHub records.json fetch ── */
+// ★★★ v17.10 FIX O-1: apvLoadFromGitHub → localStorage 머지
+// 문제: 아카이브 모드 로드 후 교육 현황 탭에 반영 안 됨
+// 해결: GitHub records를 archiveRecords + localStorage에 동시 머지
 async function apvLoadFromGitHub(){
   const repo = CFG.ghRepo || 'buminhealth/health';
   const [owner, repoName] = repo.split('/');
-  // raw URL (캐시 회피용 timestamp)
   const url = `https://raw.githubusercontent.com/${owner}/${repoName}/main/records/edu_records.json?_t=${Date.now()}`;
   const res = await fetch(url);
   if(!res.ok){
-    if(res.status === 404){
-      throw new Error('records 백업 파일이 GitHub에 없음 (records/edu_records.json)');
-    }
+    if(res.status === 404) throw new Error('records 백업 파일이 GitHub에 없음 (records/edu_records.json)');
     throw new Error(`HTTP ${res.status}: ${res.statusText}`);
   }
   let raw = await res.json();
-  // ★ admin_cfg.json 형식 호환: {records: [...]} 또는 [...] 모두 지원
   const records = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.records) ? raw.records : null);
-  if(!records){
-    throw new Error('records 형식 오류 (배열 아님)');
-  }
-  // ★ 묘비 처리: 영구 삭제된 records 필터링
+  if(!records) throw new Error('records 형식 오류 (배열 아님)');
+
+  // ★ 묘비 처리 (recordId + NK 양쪽)
+  let filtered = records;
   if(typeof BM !== 'undefined'){
     BM.ensureIds(records);
-    const tombs = BM.getTombstones('edu');
-    if(tombs.size){
+    const tombs   = BM.getTombstones('edu');
+    const nkTombs = BM.getNKTombstones('edu');
+    if(tombs.size || nkTombs.size){
       const before = records.length;
-      const filtered = records.filter(r => !tombs.has(r.recordId));
+      filtered = records.filter(r => {
+        if(r.recordId && tombs.has(r.recordId)) return false;
+        if(nkTombs.has(BM.naturalKey(r))) return false;
+        return true;
+      });
       console.log(`[아카이브] 묘비 필터: ${before} → ${filtered.length}`);
-      apvState.archiveRecords = filtered;
-      console.log(`📦 아카이브 ${filtered.length}건 로드 완료`);
-      return;
     }
   }
-  apvState.archiveRecords = records;
-  console.log(`📦 아카이브 ${records.length}건 로드 완료`);
+  apvState.archiveRecords = filtered;
+  console.log(`📦 아카이브 ${filtered.length}건 로드 완료`);
+
+  // ★★★ v17.10 FIX O-1: localStorage 머지 → 교육 현황 탭 즉시 반영
+  try{
+    let local = [];
+    try{ local = JSON.parse(localStorage.getItem('bm_edu_records')||'[]'); }catch(_){}
+    if(typeof BM !== 'undefined') BM.ensureIds(local);
+    const localMap = new Map(local.map(r => [r.recordId, r]));
+    let mergedCount = 0;
+    filtered.forEach(r => {
+      if(r.recordId && !localMap.has(r.recordId)){
+        localMap.set(r.recordId, r);
+        mergedCount++;
+      }
+    });
+    if(mergedCount > 0){
+      const merged = [...localMap.values()];
+      merged.sort((a,b) => (b.dateStart||'').localeCompare(a.dateStart||''));
+      merged.forEach((r,i) => r.no = i+1);
+      localStorage.setItem('bm_edu_records', JSON.stringify(merged));
+      console.log(`[FIX O-1] GitHub→localStorage 머지: ${mergedCount}건 추가 (총 ${merged.length}건)`);
+      if(typeof _adminDirectRender === 'function') setTimeout(_adminDirectRender, 50);
+    }
+  }catch(e){ console.warn('[FIX O-1] localStorage 머지 실패:', e); }
 }
 
 /* ── 다중 기기 결재 정보 동기화 (백그라운드, 본체는 유지하고 결재 정보만 머지) ── */
@@ -12862,15 +12886,48 @@ self.addEventListener('fetch',e=>{
       chem: 'records/chem_records.json'
     };
 
+    // ★★★ v17.10 FIX O-2: raw URL 폴백 — 토큰 없어도 읽기 동기화 가능
+    // ★★★ v17.10 FIX O-3: 토큰 미설정 시 명확한 안내
     window._cloudSyncDown = async function(category){
-      if(!FILE_MAP[category] || !CFG.ghToken || !CFG.ghRepo) return;
+      if(!FILE_MAP[category] || !CFG.ghRepo) return;
+      const hasToken = !!(CFG.ghToken);
       const sortKey = {
         edu:  (a,b) => (b.dateStart||'').localeCompare(a.dateStart||''),
         ppe:  (a,b) => (b.date||b.dateStart||'').localeCompare(a.date||a.dateStart||''),
         chem: (a,b) => (b.submitted||'').localeCompare(a.submitted||'')
       };
       try{
-        const {data} = await readGitHubJSON(FILE_MAP[category]);
+        // ★★★ v17.10 FIX O-2: 1차 API(토큰), 실패 시 raw URL 폴백
+        let data = null;
+        if(hasToken){
+          try{
+            const result = await readGitHubJSON(FILE_MAP[category]);
+            data = result.data;
+          }catch(apiErr){
+            console.warn(`[FIX O-2 cloudSync ${category}] API 실패 → raw URL 폴백:`, apiErr.message);
+          }
+        } else {
+          // ★★★ v17.10 FIX O-3: 토큰 없음 안내 (edu 카테고리에서만 1회)
+          if(category === 'edu'){
+            console.warn('[FIX O-3] GitHub 토큰 미설정 — raw URL 읽기 전용 동기화');
+            try{ toast('⚠ GitHub 토큰 미설정 — 읽기 전용 동기화 중 (⚙ 설정에서 토큰 입력 권장)','info'); }catch(_){}
+          }
+        }
+        // 2차: raw URL 폴백 (토큰 없거나 API 실패 시)
+        if(!data){
+          try{
+            const [owner, repoName] = CFG.ghRepo.split('/');
+            const rawUrl = `https://raw.githubusercontent.com/${owner}/${repoName}/main/${FILE_MAP[category]}?_t=${Date.now()}`;
+            const rawRes = await fetch(rawUrl);
+            if(rawRes.ok){
+              data = await rawRes.json();
+              const cnt = Array.isArray(data)?data.length:((data&&data.records)?data.records.length:0);
+              console.log(`[FIX O-2] raw URL 폴백 성공 (${category}): ${cnt}건`);
+            }
+          }catch(rawErr){
+            console.warn(`[FIX O-2] raw URL도 실패 (${category}):`, rawErr.message);
+          }
+        }
 
         // ★ v16.7: 60초 이내 저장된 로컬 신규 보호
         let localRaw = [];
@@ -12900,10 +12957,7 @@ self.addEventListener('fetch',e=>{
         // ★ v16.7: 로컬 데이터를 시작점으로 (옛 레코드 100% 보존) → GitHub로 Upsert
         let local = localRaw.slice();
         BM.ensureIds(local);
-        // 로컬 묘비 적용 (단, 신규 보호 레코드는 면제)
         // ★★★ v17.4 FIX: recordId 묘비 + NK 묘비 양쪽 모두 적용
-        //              (이전 버전은 recordId 묘비만 검사 → 다른 기기에서
-        //               영구삭제한 레코드가 NK 묘비를 무시하고 부활하는 현상 발생)
         const tombs   = BM.getTombstones(category);
         const nkTombs = BM.getNKTombstones(category);
         local = local.filter(r => {
@@ -12916,10 +12970,9 @@ self.addEventListener('fetch',e=>{
 
         const merged = new Map(local.map(r => [r.recordId, r]));
         ghRecs.forEach(r => {
-          if(recentIds.has(r.recordId)) return; // 신규 보호는 GitHub 덮어쓰기 면제
+          if(recentIds.has(r.recordId)) return;
           merged.set(r.recordId, r);
         });
-        // 신규 보호 강제 포함
         recentLocal.forEach(r => {
           if(!merged.has(r.recordId)) merged.set(r.recordId, r);
         });
@@ -13318,7 +13371,7 @@ self.addEventListener('fetch',e=>{
 (function() {
   'use strict';
 
-  const APP_VERSION = '17.3_COMP_EXTRACT';
+  const APP_VERSION = '17.10';
   const lastVer = localStorage.getItem('bm_app_version');
 
   // 진단 도구 (콘솔 접근 가능하도록 IIFE 종료 전에 등록)
