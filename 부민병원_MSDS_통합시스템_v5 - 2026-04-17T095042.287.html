@@ -3177,6 +3177,7 @@ function chemSaveRecord(d, fname){
     const rec = {
       no: stored.length+1,
       submitted: submitted,
+      _localSavedAt: Date.now(),  // ★ v16.5: race condition 방지 보호 마커
       docNo: d.docNo,
       docDate: d.docDate,
       filename: fname,
@@ -4424,12 +4425,9 @@ async function e1SendEmail(){
     });
     toast('이메일 발송 완료 ✓','ok');
     showSendComplete('edu1');
-    // ★ v16.4: 메일 발송 3초 후 클라우드 동기화 (특별안전교육 목록 누락 방지)
-    setTimeout(function(){
-      if(typeof _syncAllCloud === 'function'){
-        try{ _syncAllCloud('edu'); }catch(e){ console.warn('[메일후 동기화]', e); }
-      }
-    }, 3000);
+    // ★ v16.5: 이전 v16.4의 setTimeout(_syncAllCloud, 3000) 제거
+    //  이유: 이 함수는 실제 사용자 경로(e1GenPDF → uploadPdfAndSendEmail)에서 호출되지 않음
+    //  대신 _cloudSyncDown에 60초 grace period를 도입해 race condition을 근본 해결
   }catch(err){
     const errMsg = (err.text || err.message || String(err));
     let userMsg = `⚠ ${p.name||'보호구'} 메일 오류: ` + errMsg.slice(0,80);
@@ -4463,12 +4461,7 @@ async function e2SendEmailAuto(dept, chem, ds, imgData){
     });
     toast('✅ 관리자 이메일 발송 완료','ok');
     showSendComplete('edu2');
-    // ★ v16.4: 메일 발송 3초 후 클라우드 동기화 (MSDS 교육 목록 누락 방지)
-    setTimeout(function(){
-      if(typeof _syncAllCloud === 'function'){
-        try{ _syncAllCloud('edu'); }catch(e){ console.warn('[메일후 동기화]', e); }
-      }
-    }, 3000);
+    // ★ v16.5: 이전 v16.4의 setTimeout 제거 — _cloudSyncDown 60초 grace period로 근본 해결
   }catch(err){
     toast('이메일 오류: '+(err.text||err.message)+' — PDF는 정상 저장됨','err');
   }
@@ -6389,8 +6382,21 @@ async function uploadPdfAndSendEmail(opts){
       </div>
     </div>`;
 
+    // ★ v16.5: type별로 정확한 수신처 분기 (EmailJS 템플릿 To Email은 {{to_email}} 변수로 설정되어 있어야 작동)
+    const _emailType = (type||'').toString();
+    let _recipient;
+    if(_emailType.includes('보호구')){
+      _recipient = (CFG.emailPpe && CFG.emailPpe.trim()) || DEFAULT_CFG.emailPpe;
+    } else if(_emailType.includes('화학물질') || _emailType.includes('유해화학')){
+      _recipient = (CFG.emailChem && CFG.emailChem.trim()) || DEFAULT_CFG.emailChem;
+    } else {
+      // 교육일지 (특별안전보건교육, MSDS교육)
+      _recipient = (CFG.email && CFG.email.trim()) || DEFAULT_CFG.email;
+    }
+    console.log('[uploadPdfAndSendEmail] type=' + _emailType + ' → to_email=' + _recipient);
+
     await emailjs.send(CFG.ejsSvc, CFG.ejsTpl, {
-      to_email:    (CFG.email&&CFG.email.trim())||DEFAULT_CFG.email,
+      to_email:    _recipient,
       subject:     '[PDF] '+emailSubject,
       department:  dept||'',
       chemical:    (chem||'').length>100?(chem||'').slice(0,97)+'…':(chem||''),
@@ -6991,6 +6997,7 @@ function ppeSaveRecord(p, pdfFileName, sigImg){
     const rec={
       no:stored.length+1,
       submitted:todayStr()+'_'+Date.now(),
+      _localSavedAt: Date.now(),  // ★ v16.5: race condition 방지 보호 마커
       type:'보호구지급',
       name:p.name, dept:p.dept,
       empNo: p.empNo || '',
@@ -7114,6 +7121,7 @@ function saveEduRecord(params){
       stored.push({
         no: stored.length+1,
         submitted: now,
+        _localSavedAt: Date.now(),  // ★ v16.5: race condition 방지 보호 마커 (60초 grace period)
         type: params.type||'특별안전보건교육',
         dept: params.dept||'',
         chem: params.chem||'',
@@ -9249,16 +9257,48 @@ async function _cloudSyncDown(category){
     ppe:  (a,b) => (b.date||b.dateStart||'').localeCompare(a.date||a.dateStart||''),
     chem: (a,b) => (b.submitted||'').localeCompare(a.submitted||'')
   };
+
+  // ★★★ v16.6: race condition 근본 해결 — 60초 이내 저장된 레코드는 절대 손실되지 않도록 보호 ★★★
+  // 시나리오 1: 새 레코드 저장 직후 admin 진입 시 GitHub 업로드가 미완료 상태
+  // 시나리오 2: 첫 사용자라 GitHub의 records/edu_records.json이 비어있음
+  // 시나리오 3: 묘비 필터가 ghRecs를 0개로 잡음
+  // → 위 모든 경우에 로컬 단독 신규 레코드가 사라지는 것을 방지
+  const _GRACE_MS = 60000; // 60초
+  const _now = Date.now();
+  let _localBefore = [];
+  try { _localBefore = JSON.parse(localStorage.getItem(`bm_${category}_records`)||'[]'); } catch(_e){}
+  const _recentLocal = _localBefore.filter(r =>
+    r && r._localSavedAt && (_now - r._localSavedAt) < _GRACE_MS
+  );
+  if(_recentLocal.length > 0){
+    console.log(`[_cloudSyncDown ${category}] ★ 보호 중: 60초 이내 저장된 신규 ${_recentLocal.length}건`);
+  }
+
   try{
     const {data} = await readGitHubJSON(fileMap[category]);
-    if(!data) return;
+    if(!data){
+      // GitHub 응답 없음 — 로컬은 그대로 유지 (변화 없음)
+      console.log(`[_cloudSyncDown ${category}] GitHub 응답 없음 → 로컬 유지`);
+      return;
+    }
     let ghRecs = Array.isArray(data) ? data : (data.records||[]);
+
     if(!ghRecs.length){
-      // GitHub가 비어있으면 로컬도 비워야 함 (완전 삭제 반영)
+      // ★ v16.6: GitHub가 비어있어도 신규 보호 레코드가 있으면 로컬 초기화 금지
+      if(_recentLocal.length > 0){
+        console.log(`[_cloudSyncDown ${category}] GitHub 비어있지만 신규 ${_recentLocal.length}건 보호 — 로컬 초기화 건너뜀`);
+        // 신규 레코드만 남기고 정리
+        const protectedOnly = _recentLocal.slice();
+        protectedOnly.sort(sortKey[category]);
+        protectedOnly.forEach((r,i) => r.no = i+1);
+        localStorage.setItem(`bm_${category}_records`, JSON.stringify(protectedOnly));
+        return;
+      }
+      // 신규 보호 레코드도 없을 때만 초기화 (정상 삭제 반영)
       const tombCheck = JSON.parse(localStorage.getItem(`bm_${category}_records`)||'[]');
       if(tombCheck.length > 0){
         localStorage.setItem(`bm_${category}_records`, '[]');
-        console.log(`[_cloudSyncDown] ${category}: GitHub 비어있음 → 로컬 초기화`);
+        console.log(`[_cloudSyncDown ${category}] GitHub 비어있음 → 로컬 초기화`);
       }
       return;
     }
@@ -9273,19 +9313,34 @@ async function _cloudSyncDown(category){
     let local = [];
     try{ local = JSON.parse(localStorage.getItem(`bm_${category}_records`)||'[]'); }catch(e){}
     BM.ensureIds(local);
+
+    // ★ v16.6: 묘비 필터 전에 신규 보호 레코드 추출 (묘비에서 우연히 매칭되더라도 보호)
+    const _recentLocalIds = new Set(_recentLocal.map(r => r.recordId).filter(Boolean));
     local = BM.filterTombstoned(local, category);
 
     // recordId 기준 Map: GitHub 버전이 우선 (덮어씀)
     const merged = new Map(local.map(r => [r.recordId, r]));
-    ghRecs.forEach(r => merged.set(r.recordId, r)); // GitHub 버전으로 덮어쓰기
+    ghRecs.forEach(r => {
+      // ★ v16.6: 60초 이내 저장된 신규 레코드는 GitHub로 덮어쓰지 않음 (업로드 미완료 가능성)
+      if(_recentLocalIds.has(r.recordId)) {
+        console.log(`[_cloudSyncDown ${category}] 신규 보호 레코드는 GitHub 덮어쓰기 건너뜀: ${r.recordId}`);
+        return;
+      }
+      merged.set(r.recordId, r);
+    });
+
+    // ★ v16.6: 신규 보호 레코드 강제 포함 (혹시 빠졌으면 추가)
+    _recentLocal.forEach(r => {
+      if(!merged.has(r.recordId)) merged.set(r.recordId, r);
+    });
 
     const result = [...merged.values()];
     result.sort(sortKey[category]);
     result.forEach((r,i) => r.no = i+1);
 
     localStorage.setItem(`bm_${category}_records`, JSON.stringify(result));
-    console.log(`[_cloudSyncDown] ${category}: ${result.length}건 (GitHub ${ghRecs.length}건 우선 반영)`);
-  }catch(e){ console.warn(`[_cloudSyncDown] ${category} 실패:`, e); }
+    console.log(`[_cloudSyncDown ${category}] ${result.length}건 (GitHub ${ghRecs.length}건, 신규 보호 ${_recentLocal.length}건)`);
+  }catch(e){ console.warn(`[_cloudSyncDown ${category}] 실패:`, e); }
 }
 
 /* ============================================================
@@ -10376,6 +10431,11 @@ function admSwitchPane(name){
   // 결재 pane 활성화 시 데이터 로드
   if(name==='apv' && typeof apvInit==='function'){
     try { apvInit(); } catch(e) { console.warn('apvInit 실패:', e.message); }
+  }
+  // ★ v16.6: 교육/보호구/화학 탭 활성화 시 localStorage 기준 강제 재렌더 (탭 전환 즉시 최신 표시)
+  if(name==='edu' || name==='ppe' || name==='chem'){
+    try { if(typeof _adminDirectRender==='function') _adminDirectRender(); }
+    catch(e){ console.warn('_adminDirectRender 실패:', e.message); }
   }
   // 컨텐츠 영역 스크롤 최상단
   const content = document.querySelector('.adm-content');
@@ -11755,11 +11815,33 @@ self.addEventListener('fetch',e=>{
         let ghRecs = data ? (Array.isArray(data) ? data : (data.records||[])) : [];
         BM.ensureIds(ghRecs);
         ghRecs = BM.filterTombstoned(ghRecs, category);
-        ghRecs.sort(sortKey[category]);
-        ghRecs.forEach((r,i) => r.no = i+1);
-        // ★ 로컬 강제 덮어쓰기 — 좀비 차단
-        localStorage.setItem(`bm_${category}_records`, JSON.stringify(ghRecs));
-        console.log(`[Hard Sync] ${category}: 클라우드 ${ghRecs.length}건 → 로컬 덮어쓰기`);
+
+        // ★ v16.5: race condition 방지 — 최근 60초 이내 저장된 로컬 단독 레코드 보호
+        //  GitHub 업로드가 비동기로 진행 중인 새 레코드가 사라지는 것 방지
+        let recentLocalOnly = [];
+        try {
+          const localRaw = JSON.parse(localStorage.getItem(`bm_${category}_records`)||'[]');
+          const ghIdSet = new Set(ghRecs.map(r => r.recordId).filter(Boolean));
+          const now = Date.now();
+          const GRACE_MS = 60000; // 60초
+          recentLocalOnly = localRaw.filter(r => {
+            if(!r || !r.recordId) return false;
+            if(ghIdSet.has(r.recordId)) return false; // GitHub에 이미 있음 → 제외
+            if(!r._localSavedAt) return false;        // 보호 마커 없음 → 옛 레코드 (좀비 차단)
+            return (now - r._localSavedAt) < GRACE_MS; // 60초 이내 → 보호
+          });
+          if(recentLocalOnly.length > 0) {
+            console.log(`[Hard Sync ${category}] 최근 ${recentLocalOnly.length}건 로컬 보호 (업로드 대기 중)`);
+          }
+        } catch(_e) { recentLocalOnly = []; }
+
+        // GitHub 데이터 + 보호된 로컬 단독 레코드 = 최종 저장
+        const finalRecs = [...ghRecs, ...recentLocalOnly];
+        finalRecs.sort(sortKey[category]);
+        finalRecs.forEach((r,i) => r.no = i+1);
+        // ★ 로컬 갱신 (좀비 차단 + 진행중 업로드 보호)
+        localStorage.setItem(`bm_${category}_records`, JSON.stringify(finalRecs));
+        console.log(`[Hard Sync] ${category}: 클라우드 ${ghRecs.length}건 + 보호 ${recentLocalOnly.length}건 → 로컬`);
       }catch(e){ console.warn(`[Hard Sync ${category}]`, e); }
     };
 
@@ -12140,53 +12222,97 @@ self.addEventListener('fetch',e=>{
 
 <script>
 /* ══════════════════════════════════════════════════════════════════════════
-   【 BM v16.4 — 버전 관리 (조용한 자동 새로고침) 】
-   - 사용자에게 일체의 메시지/토스트 없이 백그라운드에서 캐시 갱신
-   - Service Worker 캐시 + 다양한 캐시 스토리지 모두 정리
+   【 BM v16.6 — 원본 _cloudSyncDown 직접 수정 (Race Condition 완전 해결) 】
+   v16.5에서는 v15.70 패치 _cloudSyncDown만 보호했지만, 실제로는
+   원본 _cloudSyncDown(line 9248)이 호출되어 새 레코드가 사라졌음.
+   v16.6에서는 원본 함수에 직접 grace period + GitHub-empty 보호 추가.
    ══════════════════════════════════════════════════════════════════════════ */
 (function() {
   'use strict';
 
-  const APP_VERSION = '16.4_STABLE_FINAL';
+  const APP_VERSION = '16.6_DEEP_FIX';
   const lastVer = localStorage.getItem('bm_app_version');
 
-  // 버전이 같으면 아무것도 하지 않음 (앱 정상 진행)
+  // ★ 강력한 진단 도구
+  window.bmDiagnose = function(){
+    console.log('%c═════ BM v16.6 종합 진단 ═════','color:#7c3aed;font-weight:bold;font-size:14px');
+    console.log('현재 버전:', APP_VERSION);
+    console.log('저장 버전:', lastVer);
+    console.log('admin 로그인:', localStorage.getItem('bm_admin_ok'));
+    console.log('GitHub 설정:', !!(window.CFG && CFG.ghToken && CFG.ghRepo));
+    console.log('');
+    console.log('─── 카테고리별 레코드 ───');
+    ['edu','ppe','chem'].forEach(c => {
+      const recs = JSON.parse(localStorage.getItem('bm_'+c+'_records')||'[]');
+      const now = Date.now();
+      const recent = recs.filter(r => r._localSavedAt && (now - r._localSavedAt) < 60000);
+      const withId = recs.filter(r => r.recordId);
+      console.log(`  ${c}: 총 ${recs.length}건 (recordId: ${withId.length}건, 60초 이내 보호: ${recent.length}건)`);
+      if(recent.length > 0){
+        console.log(`    보호 중인 레코드:`, recent.map(r => ({
+          name: r.name, type: r.type,
+          dateStart: r.dateStart||r.date,
+          recordId: r.recordId,
+          ageMs: now - r._localSavedAt
+        })));
+      }
+    });
+    console.log('');
+    console.log('─── 묘비 (삭제된 ID) ───');
+    ['edu','ppe','chem'].forEach(c => {
+      const tomb = JSON.parse(localStorage.getItem('bm_'+c+'_deleted_ids')||'[]');
+      console.log(`  ${c}: ${tomb.length}개 묘비`);
+    });
+    console.log('');
+    console.log('─── 활성 admin 탭 ───');
+    ['apv','edu','ppe','chem'].forEach(c => {
+      const pane = document.getElementById('adm-pane-'+c);
+      const active = pane && pane.classList.contains('active');
+      console.log(`  ${c}: ${active ? '★ 활성' : '비활성'}`);
+    });
+    console.log('');
+    console.log('💡 새 레코드가 안 보이면:');
+    console.log('  1. 콘솔 상단에 "★ 보호 중" 로그 있는지 확인');
+    console.log('  2. 위 60초 이내 보호 건수 확인');
+    console.log('  3. 강제 새로고침: 콘솔에서 _adminDirectRender() 호출');
+  };
+
+  window.bmEmailDiagnose = function(){
+    console.log('%c═════ 이메일 수신처 진단 ═════','color:#7c3aed;font-weight:bold');
+    console.log('CFG.email (교육일지):    ', CFG.email);
+    console.log('CFG.emailPpe (보호구):  ', CFG.emailPpe);
+    console.log('CFG.emailChem (화학물질):', CFG.emailChem);
+    console.log('');
+    console.log('⚠ EmailJS 대시보드 To Email 필드가 {{to_email}}이어야 동작합니다');
+  };
+
+  // 버전 일치 시 종료
   if (lastVer === APP_VERSION) {
-    console.log('[v16.4] 버전 일치 — 캐시 갱신 불필요 (' + APP_VERSION + ')');
+    console.log('[v16.6] 버전 일치 — 캐시 갱신 불필요');
     return;
   }
 
-  // ─── 버전이 다를 때만 1회 캐시 정리 + 새로고침 ───
-  // ★ 사용자에게는 어떤 메시지도 표시하지 않음 (조용한 새로고침)
-
-  // 1) localStorage 버전 즉시 갱신 (재진입 방지)
   localStorage.setItem('bm_app_version', APP_VERSION);
 
-  // 2) Service Worker 캐시 정리 (있을 때만)
   let cachePromise = Promise.resolve();
   if ('caches' in window) {
     cachePromise = caches.keys()
       .then(function(names){
         return Promise.all(names.map(function(name){
-          // bumin-msds 관련 캐시만 정리 (다른 사이트 캐시 보호)
           if (name.indexOf('bumin') === 0 || name.indexOf('msds') >= 0) {
             return caches.delete(name);
           }
           return null;
         }));
       })
-      .catch(function(){ /* 캐시 정리 실패는 무시 */ });
+      .catch(function(){});
   }
 
-  // 3) 캐시 정리 완료 후 0.3초 뒤 조용히 새로고침
   cachePromise.then(function(){
     setTimeout(function(){
-      // location.reload(true)는 deprecated — 표준 방식 사용
       window.location.reload();
     }, 300);
   });
-
-  // ★ 절대 _safeToast, toast, alert 등의 메시지를 호출하지 않음
 })();
 </script>
 </body>
