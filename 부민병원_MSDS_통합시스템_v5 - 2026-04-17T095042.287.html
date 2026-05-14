@@ -5,9 +5,9 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v17.8 (2026-05-14)
+  부민병원 MSDS 통합시스템 v17.9 (2026-05-14)
   ════════════════════════════════════════════════════════════════════
-  v17.3 → v17.8 주요 수정 (오류 진단·수정):
+  v17.3 → v17.9 주요 수정 (오류 진단·수정):
 
   [오류 1] 구글시트 MSDS 제품별 세부항목(구성성분/세부내용) 누락 + 부서 세부 표시 안 됨
     FIX A: (사용자 요청으로 제거됨 — productList 하단 부서 필터 버튼 영역 미사용)
@@ -70,6 +70,20 @@
           동일한 안정성 적용
        5) 호출 측(uploadPdfAndSendEmail, 보호구 발송, chemSendEmail) 모두 try-catch
           처리하여 에러 메시지를 사용자에게 토스트로 명확히 표시
+
+  [오류 6] 새 HTML을 GitHub에 업로드 후 URL로 접속하니 교육 0건 (로컬엔 2건 있음)
+    ★★★ FIX N (v17.9 핵심): localStorage는 origin별로 분리됨 → file:// 또는 다른
+           origin에서 작성한 레코드가 GitHub Pages URL(https://...github.io)에서는
+           보이지 않음. 또한 appendXxxToGitHub가 실패해도 조용히 끝나서 GitHub
+           records.json이 비어있을 수 있음.
+       1) 자동 복구 (BM.autoRecoverToGitHub): 페이지 로드 시 "로컬 N>0건 /
+          GitHub 0건" 조합 감지 시 자동 푸시 (묘비 필터 적용 후 안전하게)
+          → 처음 URL 접속 시 다른 origin/기기에서 작성한 데이터가 자동 복구됨
+       2) 수동 강제 푸시 버튼 (BM.forcePushToGitHub): 관리자 모드의 교육·보호구·
+          화학물질 3개 탭 모두에 "📤 GitHub 푸시" 버튼 추가
+          → 사용자가 명시적으로 로컬 데이터를 GitHub records.json에 덮어쓰기
+       3) 자동 복구는 GitHub에 이미 데이터가 있으면 작동 안 함 (덮어쓰기 방지) —
+          안전한 한방향 동기화로 제한
   ════════════════════════════════════════════════════════════════════
 -->
 <html lang="ko">
@@ -1297,6 +1311,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
               <!-- ★ 표준 버튼 행 (4개 탭 동일) ★ -->
               <div class="bm-std-action-row" data-tab="edu" style="background:#fff;border-radius:10px;padding:10px 14px;margin-bottom:10px;border:1px solid #e2e8f0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                 <button type="button" onclick="handleTabAction('edu','refresh')" style="padding:7px 14px;background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="클라우드 → 로컬 Hard Sync">☁ 새로고침</button>
+                <button type="button" onclick="BM.forcePushToGitHub('edu')" style="padding:7px 14px;background:#7c3aed;color:#fff;border:1px solid #7c3aed;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="로컬 데이터를 GitHub records.json에 강제 업로드 (다른 origin/기기에서도 보이게 함)">📤 GitHub 푸시</button>
                 <button type="button" onclick="handleTabAction('edu','dedupe')"  style="padding:7px 14px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="recordId 기준 중복 자동 정리">🧹 중복정리</button>
                 <button type="button" onclick="handleTabAction('edu','delete')"  style="padding:7px 14px;background:#fee2e2;color:#dc2626;border:1px solid #ef4444;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="선택된 항목 영구 삭제">🗑 선택삭제</button>
                 <button type="button" onclick="handleTabAction('edu','csv')"     style="padding:7px 14px;background:#10b981;color:#fff;border:1px solid #10b981;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">📥 CSV 출력</button>
@@ -1365,6 +1380,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
               <!-- ★ 표준 버튼 행 (4개 탭 동일) ★ -->
               <div class="bm-std-action-row" data-tab="ppe" style="background:#fff;border-radius:10px;padding:10px 14px;margin-bottom:10px;border:1px solid #e2e8f0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                 <button type="button" onclick="handleTabAction('ppe','refresh')" style="padding:7px 14px;background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="클라우드 → 로컬 Hard Sync">☁ 새로고침</button>
+                <button type="button" onclick="BM.forcePushToGitHub('ppe')" style="padding:7px 14px;background:#7c3aed;color:#fff;border:1px solid #7c3aed;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="로컬 데이터를 GitHub records.json에 강제 업로드">📤 GitHub 푸시</button>
                 <button type="button" onclick="handleTabAction('ppe','dedupe')"  style="padding:7px 14px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="recordId 기준 중복 자동 정리">🧹 중복정리</button>
                 <button type="button" onclick="handleTabAction('ppe','delete')"  style="padding:7px 14px;background:#fee2e2;color:#dc2626;border:1px solid #ef4444;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="선택된 항목 영구 삭제">🗑 선택삭제</button>
                 <button type="button" onclick="handleTabAction('ppe','csv')"     style="padding:7px 14px;background:#10b981;color:#fff;border:1px solid #10b981;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">📥 CSV 출력</button>
@@ -1435,6 +1451,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
               <!-- ★ 표준 버튼 행 (4개 탭 동일) ★ -->
               <div class="bm-std-action-row" data-tab="chem" style="background:#fff;border-radius:10px;padding:10px 14px;margin-bottom:10px;border:1px solid #e2e8f0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                 <button type="button" onclick="handleTabAction('chem','refresh')" style="padding:7px 14px;background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="클라우드 → 로컬 Hard Sync">☁ 새로고침</button>
+                <button type="button" onclick="BM.forcePushToGitHub('chem')" style="padding:7px 14px;background:#7c3aed;color:#fff;border:1px solid #7c3aed;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="로컬 데이터를 GitHub records.json에 강제 업로드">📤 GitHub 푸시</button>
                 <button type="button" onclick="handleTabAction('chem','dedupe')"  style="padding:7px 14px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="recordId 기준 중복 자동 정리">🧹 중복정리</button>
                 <button type="button" onclick="handleTabAction('chem','delete')"  style="padding:7px 14px;background:#fee2e2;color:#dc2626;border:1px solid #ef4444;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="선택된 항목 영구 삭제">🗑 선택삭제</button>
                 <button type="button" onclick="handleTabAction('chem','csv')"     style="padding:7px 14px;background:#10b981;color:#fff;border:1px solid #10b981;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">📥 CSV 출력</button>
@@ -10311,6 +10328,112 @@ BM.getAuditLog = function(limit){
 };
 
 /* ──────────────────────────────────────────────────────────────────
+   v17.9 FIX N: 로컬 → GitHub 자동 복구 + 수동 강제 푸시
+   ──────────────────────────────────────────────────────────────────
+   문제 1: localStorage는 origin별로 분리됨 → file://에서 저장한 데이터가
+          https://...github.io 같은 다른 URL로 접속하면 사라진 것처럼 보임
+   문제 2: appendEduRecordsToGitHub가 실패해도 조용히 끝남 → 사용자는
+          업로드된 줄 알지만 GitHub records.json이 비어있을 수 있음
+   해결:
+     1) 자동 복구: 페이지 로드 시 "로컬 N>0건 / GitHub 0건" 조합 감지하여
+        GitHub에 자동 푸시 (묘비 필터 적용 후) — 한쪽 origin에서 작성한
+        레코드를 GitHub에 올려 다른 origin에서도 보이도록 함
+     2) 수동 강제 푸시: 관리자가 명시적으로 호출 가능 (BM.forcePushToGitHub)
+   ────────────────────────────────────────────────────────────────── */
+BM._fileMap = {
+  edu:  'records/edu_records.json',
+  ppe:  'records/ppe_records.json',
+  chem: 'records/chem_records.json'
+};
+
+// 로컬에 레코드가 있는데 GitHub은 비어있을 때만 자동 업로드 (안전)
+BM.autoRecoverToGitHub = async function(category){
+  if(!CFG.ghToken || !CFG.ghRepo) return {pushed:0, reason:'GitHub 미설정'};
+  const filePath = BM._fileMap[category];
+  if(!filePath) return {pushed:0, reason:'알 수 없는 카테고리'};
+
+  // 1) 로컬 레코드 확인
+  let localRecs = [];
+  try{ localRecs = JSON.parse(localStorage.getItem(`bm_${category}_records`)||'[]'); }catch(_){}
+  if(!Array.isArray(localRecs) || !localRecs.length){
+    return {pushed:0, reason:'로컬 비어있음'};
+  }
+
+  // 2) 묘비 필터 적용 (영구삭제된 항목은 제외)
+  BM.ensureIds(localRecs);
+  const filtered = BM.filterTombstoned(localRecs, category);
+  if(!filtered.length){
+    return {pushed:0, reason:'로컬 모두 묘비 처리됨'};
+  }
+
+  // 3) GitHub 상태 확인
+  try{
+    const {data, sha} = await readGitHubJSON(filePath);
+    const ghRecs = data ? (Array.isArray(data) ? data : (data.records||[])) : [];
+
+    if(ghRecs.length > 0){
+      // GitHub에 이미 데이터가 있으면 자동 푸시하지 않음 (덮어쓰기 방지)
+      return {pushed:0, reason:`GitHub에 이미 ${ghRecs.length}건 있음`};
+    }
+
+    // 4) GitHub이 비어있고 로컬에 있음 → 자동 푸시
+    console.log(`[autoRecover ${category}] 로컬 ${filtered.length}건 / GitHub 0건 → 자동 푸시`);
+    filtered.forEach((r,i) => r.no = i+1);
+    const newData = {records: filtered, updated: new Date().toISOString()};
+    await writeGitHubJSON(filePath, newData, sha,
+      `자동 복구: ${category} ${filtered.length}건 (로컬→GitHub)`);
+    return {pushed: filtered.length, reason:'자동 복구 성공'};
+  }catch(e){
+    console.warn(`[autoRecover ${category}] 실패:`, e.message);
+    return {pushed:0, reason:'GitHub 오류: '+e.message};
+  }
+};
+
+// 강제로 로컬을 GitHub에 푸시 (덮어쓰기) — 사용자가 명시적으로 호출
+BM.forcePushToGitHub = async function(category){
+  if(!CFG.ghToken || !CFG.ghRepo){ toast('⚙ GitHub 미설정','err'); return 0; }
+  const filePath = BM._fileMap[category];
+  if(!filePath){ toast('알 수 없는 카테고리: '+category,'err'); return 0; }
+
+  let localRecs = [];
+  try{ localRecs = JSON.parse(localStorage.getItem(`bm_${category}_records`)||'[]'); }catch(_){}
+  if(!Array.isArray(localRecs) || !localRecs.length){
+    toast(`로컬 ${category} 비어있음 — 푸시할 데이터 없음`,'info');
+    return 0;
+  }
+
+  BM.ensureIds(localRecs);
+  const filtered = BM.filterTombstoned(localRecs, category);
+  filtered.forEach((r,i) => r.no = i+1);
+
+  try{
+    const {sha} = await readGitHubJSON(filePath);
+    const newData = {records: filtered, updated: new Date().toISOString()};
+    // rebuild 콜백: 409 충돌 시 로컬을 그대로 사용 (사용자가 명시적으로 푸시했으므로)
+    await writeGitHubJSON(filePath, newData, sha,
+      `강제 푸시: ${category} ${filtered.length}건 (로컬→GitHub 덮어쓰기)`,
+      () => newData);
+    toast(`✅ ${category} ${filtered.length}건 GitHub 업로드 완료`,'ok');
+    return filtered.length;
+  }catch(e){
+    console.error(`[forcePush ${category}] 실패:`, e);
+    toast(`⚠ 푸시 실패: ${e.message.slice(0,100)}`,'err');
+    return 0;
+  }
+};
+
+// 모든 카테고리 강제 푸시 (관리자 모드 버튼용)
+BM.forcePushAllToGitHub = async function(){
+  if(!CFG.ghToken || !CFG.ghRepo){ toast('⚙ GitHub 미설정','err'); return; }
+  if(!confirm('로컬의 모든 교육·보호구·화학물질 기록을 GitHub에 덮어쓰기합니다.\n\n• GitHub records.json이 로컬 데이터로 완전히 교체됩니다\n• 다른 기기에서 추가한 데이터가 있다면 사라질 수 있습니다\n• 영구삭제된 항목은 자동으로 제외됩니다\n\n계속하시겠습니까?')) return;
+  toast('📤 로컬 → GitHub 강제 푸시 중…','info');
+  const r1 = await BM.forcePushToGitHub('edu');
+  const r2 = await BM.forcePushToGitHub('ppe');
+  const r3 = await BM.forcePushToGitHub('chem');
+  toast(`✅ 푸시 완료 — 교육 ${r1} · 보호구 ${r2} · 화학 ${r3}`,'ok');
+};
+
+/* ──────────────────────────────────────────────────────────────────
    v17.7 FIX K: Save-Wins 묘비 정리 헬퍼
    ──────────────────────────────────────────────────────────────────
    문제: v17.4 FIX F/G(자동 동기화)가 GitHub admin_cfg.json에서 NK 묘비를
@@ -10518,7 +10641,9 @@ BM.highlightDuplicates = function(category){
 /* ── 19. 페이지 로드 시 묘비 + 레코드 자동 동기화 (백그라운드) ── */
 /* ★★★ v17.4 FIX: 페이지 새로고침 시 다른 기기의 변경사항(추가/수정/영구삭제)
    를 자동 반영하기 위해 records.json도 함께 동기화. 이전 버전은 묘비만 동기화 →
-   다른 기기에서 영구삭제해도 이 기기에서는 부활하던 문제 해결. */
+   다른 기기에서 영구삭제해도 이 기기에서는 부활하던 문제 해결.
+   ★★★ v17.9 FIX N: 추가로, 로컬에 레코드가 있는데 GitHub은 비어있는 경우
+   자동 복구 수행 (다른 origin에서 작성한 레코드를 GitHub에 자동 업로드) */
 window.addEventListener('load', ()=>{
   setTimeout(async ()=>{
     try{
@@ -10527,13 +10652,29 @@ window.addEventListener('load', ()=>{
       await BM.syncTombstonesFromGitHub('edu');
       await BM.syncTombstonesFromGitHub('ppe');
       await BM.syncTombstonesFromGitHub('chem');
-      // 2) 레코드 데이터 동기화 (GitHub Golden Source → 로컬 갱신)
+
+      // 2) ★ v17.9 FIX N: 자동 복구 — 로컬에는 있지만 GitHub은 비어있는 경우
+      //    각 카테고리별로 안전하게 자동 푸시 (GitHub에 데이터가 있으면 건너뜀)
+      const recover = async (cat) => {
+        const r = await BM.autoRecoverToGitHub(cat);
+        if(r.pushed > 0){
+          toast(`📤 [${cat}] 로컬 ${r.pushed}건을 GitHub에 자동 복구`,'ok');
+          console.log(`[autoRecover ${cat}]`, r);
+        } else if(r.reason && r.reason !== '로컬 비어있음' && !r.reason.includes('이미')){
+          console.log(`[autoRecover ${cat}] 건너뜀:`, r.reason);
+        }
+      };
+      await recover('edu');
+      await recover('ppe');
+      await recover('chem');
+
+      // 3) 레코드 데이터 동기화 (GitHub Golden Source → 로컬 갱신)
       if(typeof window._cloudSyncDown === 'function'){
         await window._cloudSyncDown('edu');
         await window._cloudSyncDown('ppe');
         await window._cloudSyncDown('chem');
       }
-      // 3) 관리자 화면이 열려 있으면 즉시 재렌더
+      // 4) 관리자 화면이 열려 있으면 즉시 재렌더
       if(typeof _adminDirectRender === 'function'){
         try{ _adminDirectRender(); }catch(_){}
       }
