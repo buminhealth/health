@@ -5,9 +5,9 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v17.6 (2026-05-14)
+  부민병원 MSDS 통합시스템 v17.8 (2026-05-14)
   ════════════════════════════════════════════════════════════════════
-  v17.3 → v17.6 주요 수정 (오류 진단·수정):
+  v17.3 → v17.8 주요 수정 (오류 진단·수정):
 
   [오류 1] 구글시트 MSDS 제품별 세부항목(구성성분/세부내용) 누락 + 부서 세부 표시 안 됨
     FIX A: (사용자 요청으로 제거됨 — productList 하단 부서 필터 버튼 영역 미사용)
@@ -40,6 +40,36 @@
            최대 4회 지수 백오프(200ms→1600ms). markDeleted의 records.json·admin_cfg.json
            두 PUT 호출 모두 적용. 동시 작업(메일발송 후 appendEduRecords, 페이지 동기화 등)
            으로 SHA가 바뀌어도 안전하게 삭제 완료.
+
+  [오류 4] e1/e2/보호구/화학물질 메일발송 후 메일 미수신 + 관리현황 목록에 안 나타남
+    ★★★ FIX K (v17.7 핵심): v17.4 FIX F/G(자동 동기화)와 FIX H(NK 묘비 정리) 충돌로
+           저장 직후 GitHub admin_cfg.json의 NK 묘비가 다시 동기화되어 새 레코드가
+           묘비에 걸려 화면에서 사라지던 회귀 버그 해결.
+           - 공통 헬퍼 BM.clearSaveWinsTombstones(category, newRecords) 추가
+           - 로컬 + GitHub admin_cfg.json 양쪽의 recordId·NK 묘비를 모두 정리
+           - GitHub PUT은 writeGitHubJSON의 rebuild 콜백(FIX J) 활용 → 409 안전
+           - saveEduRecord, ppe 저장, chem 저장 세 곳 모두 적용
+    FIX L: uploadPdfAndSendEmail에 단계별 콘솔 로그 추가 — F12 콘솔에서 어디서
+           실패했는지 (EmailJS 설정/GitHub 토큰/PDF업로드/EmailJS 발송) 정확히 추적 가능.
+           수신자 이메일도 토스트에 표시(`📧 이메일 발송 완료 ✓ (수신자: …)`)하여
+           실제 발송 대상이 명확히 보이도록 개선.
+
+  [오류 5] 메일발송 후 "GitHub 업로드 실패" 토스트 — 메일 링크 깨짐 + 사용자가 원인 모름
+    ★★★ FIX M (v17.8 핵심): uploadPdfToGitHub 전면 강화
+       1) path 인코딩 개선 — segment별 encodeURIComponent (이전엔 path 전체 인코딩
+          → "/"가 "%2F"로 변환되어 GitHub이 폴더 경로를 잘못 해석할 가능성 차단)
+       2) 자동 재시도 — 422 SHA 충돌, 409 Conflict, 5xx 서버오류, 네트워크 단절 시
+          최대 4회 지수 백오프 (200ms→1600ms)
+       3) 실제 GitHub API 에러를 사용자에게 표시 (이전엔 빈 문자열만 반환)
+          - 401: "인증 실패 — GitHub 토큰 만료/잘못됨"
+          - 403: "권한 거부 — 토큰에 repo 권한 없거나 rate limit 초과"
+          - 404: "저장소 없음 — {repo}"
+          - 413: "PDF 용량 초과 — GitHub 단일 파일 최대 100MB"
+          - 그 외: API 원본 메시지를 그대로 표시
+       4) chemUploadPdfToGitHub를 uploadPdfToGitHub로 위임 — 화학물질 보고서에도
+          동일한 안정성 적용
+       5) 호출 측(uploadPdfAndSendEmail, 보호구 발송, chemSendEmail) 모두 try-catch
+          처리하여 에러 메시지를 사용자에게 토스트로 명확히 표시
   ════════════════════════════════════════════════════════════════════
 -->
 <html lang="ko">
@@ -3219,7 +3249,15 @@ async function chemSendEmail(d, fname, pdfB64){
 
     let pdfUrl = '';
     if(CFG.ghToken){
-      pdfUrl = await chemUploadPdfToGitHub(pdfB64, fname);
+      // ★ v17.8 FIX M: uploadPdfToGitHub가 throw 가능 → try-catch로 정확한 에러 표시
+      try{
+        pdfUrl = await uploadPdfToGitHub(pdfB64, fname);
+      }catch(uploadErr){
+        const m = uploadErr.message || String(uploadErr);
+        console.error('[chemSendEmail PDF 업로드 실패]', m);
+        toast('⚠ GitHub PDF 업로드 실패: '+m.slice(0,120),'err');
+        pdfUrl = ''; // 빈 값으로 진행 — 메일 본문에 "업로드 실패" 메시지 표시됨
+      }
     }
     // ★ PDF base64 즉시 해제 (수 MB 메모리 절약)
     pdfB64 = null;
@@ -3333,29 +3371,16 @@ async function uploadFileToGitHub(dataURL, path){
 /* ── chem 전용: PDF를 화학물질/YYYY-MM 폴더에 업로드 후 raw URL 반환 ── */
 async function chemUploadPdfToGitHub(pdfBase64, fileName){
   if(!CFG.ghToken) return '';
-  const repo = CFG.ghRepo || 'buminhealth/health';
-  const base64 = pdfBase64.includes(',') ? pdfBase64.split(',')[1] : pdfBase64;
-  const ym = new Date().toISOString().slice(0,7);
-  const path = `화학물질/${ym}/${fileName}`;
-  const url = `https://api.github.com/repos/${repo}/contents/${encodeURIComponent(path)}`;
+  // ★ v17.8 FIX M: 공통 uploadPdfToGitHub로 위임 — 자동 재시도, segment별 인코딩,
+  //               정확한 에러 메시지를 모두 동일하게 활용. 파일명에 "유해화학물질"이
+  //               포함되어 있으면 uploadPdfToGitHub가 자동으로 화학물질 폴더 사용.
+  //               화학물질 보고서 파일명은 chemMakeFilename에서 항상 "유해화학물질"로 시작.
   try{
-    let sha = '';
-    try{
-      const check = await fetch(url, {headers:{'Authorization':'token '+CFG.ghToken}});
-      if(check.ok){ const j=await check.json(); sha=j.sha||''; }
-    }catch(e){}
-    const body = {message:`화학물질 보고서 업로드: ${fileName}`, content: base64};
-    if(sha) body.sha = sha;
-    const res = await fetch(url, {
-      method:'PUT',
-      headers:{'Authorization':'token '+CFG.ghToken,'Content-Type':'application/json'},
-      body: JSON.stringify(body)
-    });
-    if(!res.ok) return '';
-    const [owner, repoName] = repo.split('/');
-    return `https://raw.githubusercontent.com/${owner}/${repoName}/main/${path}`;
+    return await uploadPdfToGitHub(pdfBase64, fileName);
   }catch(err){
-    console.error('chemUploadPdfToGitHub error:', err);
+    console.error('[chemUploadPdfToGitHub] 실패:', err.message);
+    // 호출 측은 빈 문자열을 실패 표시로 사용 (historically)
+    // 더 정확한 메시지가 필요하면 호출 측에서 try-catch 사용 권장
     return '';
   }
 }
@@ -3412,14 +3437,11 @@ function chemSaveRecord(d, fname){
     // BM 모듈 ID 부여
     if(typeof BM!=='undefined') BM.ensureIds([rec]);
 
-    // ★★★ v16.8: 묘비 충돌 차단 (CRITICAL FIX) ★★★
-    // 영구삭제된 ID와 우연히 일치한 새 레코드가 즉시 사라지는 현상 방지
-    if (typeof BM !== 'undefined' && rec.recordId) {
-      const _tombs = BM.getTombstones('chem');
-      if (_tombs.delete(rec.recordId)) {
-        BM.saveTombstones('chem', _tombs);
-        console.log(`[chemSaveRecord] 묘비 1개 제거 (save wins): ${rec.recordId}`);
-      }
+    // ★★★ v17.7 FIX K: save-wins 묘비 정리 (로컬 + GitHub admin_cfg)
+    //              recordId + NK 양쪽, 로컬 + GitHub 양쪽 모두 정리
+    //              자동 동기화 후에도 묘비 부활 차단 (v17.4 FIX F/G 회귀 버그 해결)
+    if (typeof BM !== 'undefined' && BM.clearSaveWinsTombstones) {
+      BM.clearSaveWinsTombstones('chem', [rec]);  // 비동기 fire-and-forget
     }
 
     stored.push(rec);
@@ -6779,9 +6801,13 @@ async function uploadPdfAndSendEmail(opts){
          participants, sigCount, names, time, place, method,
          instructor, indiv, common, partsDetail, type, photos, eduDates} = opts;
 
+  // ★★★ v17.7 FIX L: 단계별 진단 로깅 — F12 콘솔로 어느 단계에서 실패했는지 추적 가능
+  console.log('[uploadPdfAndSendEmail] ▶ 시작', {fileName, type, subject: emailSubject});
+
   // ── EmailJS 설정 확인
   if(!CFG.ejsKey || !CFG.ejsSvc || !CFG.ejsTpl){
-    toast('⚙ EmailJS 미설정 — 설정에서 입력하세요','info');
+    console.error('[uploadPdfAndSendEmail] ❌ EmailJS 설정 누락', {ejsKey:!!CFG.ejsKey, ejsSvc:!!CFG.ejsSvc, ejsTpl:!!CFG.ejsTpl});
+    toast('⚙ EmailJS 미설정 — ⚙ 버튼 → 설정에서 입력 필요','err');
     return;
   }
 
@@ -6793,6 +6819,7 @@ async function uploadPdfAndSendEmail(opts){
   try{
     // ── EmailJS 로드
     if(!window.emailjs){
+      console.log('[uploadPdfAndSendEmail] EmailJS 라이브러리 로드 중…');
       const s=document.createElement('script');
       s.src='https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js';
       document.head.appendChild(s);
@@ -6802,17 +6829,31 @@ async function uploadPdfAndSendEmail(opts){
 
     // ── GitHub에 PDF 업로드
     if(!CFG.ghToken){
+      console.error('[uploadPdfAndSendEmail] ❌ GitHub 토큰 없음');
       toast('⚙ GitHub 토큰 미설정 — ⚙ 설정에서 Personal Access Token 입력 필요','err');
       pdfBase64 = null;
       return;
     }
     if(!pdfBase64){
+      console.error('[uploadPdfAndSendEmail] ❌ PDF base64 데이터 없음');
       toast('⚠ PDF 데이터 없음 — 일지를 다시 작성하거나 다른 PDF로 시도하세요','err');
       return;
     }
 
     toast('📤 GitHub에 PDF 업로드 중…','info');
-    const ghLink = await uploadPdfToGitHub(pdfBase64, fileName);
+    console.log('[uploadPdfAndSendEmail] GitHub PDF 업로드 시작:', fileName);
+    let ghLink = '';
+    try{
+      ghLink = await uploadPdfToGitHub(pdfBase64, fileName);
+    }catch(uploadErr){
+      // ★ v17.8 FIX M: uploadPdfToGitHub가 던진 정확한 에러 메시지를 사용자에게 노출
+      const m = uploadErr.message || String(uploadErr);
+      console.error('[uploadPdfAndSendEmail] ❌ PDF 업로드 예외:', m);
+      toast('⚠ GitHub PDF 업로드 실패: ' + m.slice(0,120), 'err');
+      pdfBase64 = null;
+      return;
+    }
+    console.log('[uploadPdfAndSendEmail] GitHub PDF 업로드 결과:', ghLink || '(빈 값)');
 
     // ★ 핵심: PDF base64 즉시 메모리 해제 (수 MB 절약)
     pdfBase64 = null;
@@ -6821,7 +6862,8 @@ async function uploadPdfAndSendEmail(opts){
     await new Promise(r => setTimeout(r, 50));
 
     if(!ghLink){
-      toast('⚠ GitHub 업로드 실패 — 토큰 확인','err');
+      console.error('[uploadPdfAndSendEmail] ❌ GitHub 업로드 실패 — 링크 빈 값');
+      toast('⚠ GitHub PDF 업로드 실패 — 토큰/저장소 권한 확인 필요','err');
       return;
     }
 
@@ -6875,6 +6917,7 @@ async function uploadPdfAndSendEmail(opts){
     }
     console.log('[uploadPdfAndSendEmail] type=' + _emailType + ' → to_email=' + _recipient);
 
+    console.log('[uploadPdfAndSendEmail] EmailJS 발송 시작:', {to:_recipient, svc:CFG.ejsSvc, tpl:CFG.ejsTpl});
     await emailjs.send(CFG.ejsSvc, CFG.ejsTpl, {
       to_email:    _recipient,
       subject:     '[PDF] '+emailSubject,
@@ -6886,8 +6929,9 @@ async function uploadPdfAndSendEmail(opts){
       names:       (names||'').length>100?(names||'').slice(0,97)+'…':(names||''),
       message:     eduMsgHtml
     });
+    console.log('[uploadPdfAndSendEmail] ✅ EmailJS 발송 완료 (수신함 확인 필요)');
 
-    toast('📧 이메일 발송 완료 ✓','ok');
+    toast(`📧 이메일 발송 완료 ✓ (수신자: ${_recipient})`,'ok');
 
     // ── 전송완료 화면
     if((type||'').includes('MSDS')) showSendComplete('edu2');
@@ -7066,10 +7110,23 @@ async function downloadPdfFromGitHub(fileName, ymOverride){
   }
 }
 
+/* ★★★ v17.8 FIX M: PDF GitHub 업로드 안정화
+   문제: 메일은 발송되지만 PDF GitHub 업로드가 실패해서 메일 본문 링크가 깨지고,
+         사용자에게는 "GitHub PDF 업로드 실패"만 보일 뿐 실제 원인을 알 수 없음.
+   해결:
+     1) path 인코딩 — segment별로만 encodeURIComponent (이전엔 path 전체를 인코딩해서
+        "/"가 "%2F"로 변환되어 폴더 경로 해석 문제 가능)
+     2) 실패 시 실제 GitHub API 에러 메시지를 호출자에게 전달 (이전엔 빈 문자열만 반환)
+     3) 자동 재시도 (422 SHA 충돌, 5xx 서버 오류, 네트워크 오류) 최대 4회
+     4) 호출 측에서 사용자에게 정확한 원인 메시지 토스트 표시
+*/
 async function uploadPdfToGitHub(pdfBase64, fileName){
   const token = CFG.ghToken;
   const repo  = CFG.ghRepo || 'buminhealth/health';
-  if(!token){ return ''; }
+  if(!token){
+    console.error('[uploadPdfToGitHub] ❌ GitHub 토큰 없음');
+    throw new Error('GitHub 토큰 미설정');
+  }
 
   // data URI → raw base64
   const base64 = pdfBase64.includes(',') ? pdfBase64.split(',')[1] : pdfBase64;
@@ -7081,37 +7138,83 @@ async function uploadPdfToGitHub(pdfBase64, fileName){
 
   const ym   = new Date().toISOString().slice(0,7);
   const path = `${folder}/${ym}/${fileName}`;
-  const url  = `https://api.github.com/repos/${repo}/contents/${encodeURIComponent(path)}`;
+  // ★ v17.8 FIX M: segment별 인코딩 — "/"는 그대로 두고 각 부분만 인코딩
+  //               (이전: encodeURIComponent(path)는 "/"까지 "%2F"로 변환 → 폴더 해석 오류)
+  const pathEncoded = path.split('/').map(encodeURIComponent).join('/');
+  const url  = `https://api.github.com/repos/${repo}/contents/${pathEncoded}`;
 
-  try{
-    // 기존 파일 SHA 확인 (업데이트 시 필요)
-    let sha = '';
+  const MAX_RETRY = 4;
+  let lastErrMsg = '';
+
+  for(let attempt = 0; attempt <= MAX_RETRY; attempt++){
     try{
-      const check = await fetch(url, {headers:{'Authorization':'token '+token}});
-      if(check.ok){ const j=await check.json(); sha=j.sha||''; }
-    }catch(e){}
+      // 기존 파일 SHA 확인 (있으면 업데이트, 없으면 생성)
+      let sha = '';
+      try{
+        const check = await fetch(url, {headers:{'Authorization':'token '+token, 'Accept':'application/vnd.github.v3+json'}});
+        if(check.ok){ const j=await check.json(); sha=j.sha||''; }
+        else if(check.status !== 404){
+          // 404가 아닌 다른 에러는 토큰/권한 문제일 가능성
+          const errBody = await check.json().catch(()=>({}));
+          console.warn('[uploadPdfToGitHub] 기존 파일 확인 실패:', check.status, errBody.message);
+        }
+      }catch(e){
+        console.warn('[uploadPdfToGitHub] SHA 확인 네트워크 오류:', e.message);
+      }
 
-    const body = {message:`${folder} 자동 업로드: ${fileName}`, content: base64};
-    if(sha) body.sha = sha;
+      const body = {message:`${folder} 자동 업로드: ${fileName}`, content: base64};
+      if(sha) body.sha = sha;
 
-    const res = await fetch(url, {
-      method:'PUT',
-      headers:{'Authorization':'token '+token,'Content-Type':'application/json'},
-      body: JSON.stringify(body)
-    });
+      const res = await fetch(url, {
+        method:'PUT',
+        headers:{'Authorization':'token '+token, 'Content-Type':'application/json', 'Accept':'application/vnd.github.v3+json'},
+        body: JSON.stringify(body)
+      });
 
-    if(!res.ok){ const e=await res.json(); throw new Error(e.message); }
-    const j = await res.json();
+      if(res.ok){
+        if(attempt > 0) console.log(`[uploadPdfToGitHub] 재시도 ${attempt}회 후 성공`);
+        const j = await res.json();
+        const [owner, repoName] = repo.split('/');
+        // ★ raw URL (PDF 직접 다운로드 가능) — segment별 인코딩
+        const rawUrl = `https://raw.githubusercontent.com/${owner}/${repoName}/main/${pathEncoded}`;
+        return rawUrl;
+      }
 
-    // GitHub Pages URL
-    const [owner, repoName] = repo.split('/');
-    // ★ raw URL (PDF 직접 다운로드 가능)
-    const rawUrl = `https://raw.githubusercontent.com/${owner}/${repoName}/main/${path}`;
-    return rawUrl;
-  }catch(err){
-    console.error('GitHub upload error:', err);
-    return '';
+      // 실패 — 에러 메시지 파싱
+      const errBody = await res.json().catch(()=>({}));
+      lastErrMsg = errBody.message || ('HTTP '+res.status);
+      console.error(`[uploadPdfToGitHub] 시도 ${attempt+1}/${MAX_RETRY+1} 실패 (${res.status}):`, lastErrMsg);
+
+      // 재시도 가능한 에러인지 판단
+      const isRetryable = res.status === 422 ||           // SHA 충돌
+                          res.status === 409 ||           // Conflict
+                          res.status === 502 ||           // Bad Gateway
+                          res.status === 503 ||           // Service Unavailable
+                          res.status === 504 ||           // Gateway Timeout
+                          /but expected|is at|does not match/i.test(lastErrMsg);
+
+      if(!isRetryable || attempt === MAX_RETRY){
+        // 재시도 불가 또는 한도 초과 → 호출자에게 에러 전달
+        let userMsg = lastErrMsg;
+        if(res.status === 401) userMsg = '인증 실패 — GitHub 토큰 만료/잘못됨 (⚙ 설정 확인)';
+        else if(res.status === 403) userMsg = '권한 거부 — 토큰에 repo 권한이 없거나 rate limit 초과';
+        else if(res.status === 404) userMsg = '저장소 없음 — ' + repo + ' (⚙ 설정의 ghRepo 확인)';
+        else if(res.status === 413) userMsg = 'PDF 용량 초과 — GitHub 단일 파일 최대 100MB';
+        else if(/path/i.test(lastErrMsg)) userMsg = '파일 경로 오류 — ' + lastErrMsg + ' (한글 폴더명 문제 가능)';
+        throw new Error(`HTTP ${res.status}: ${userMsg}`);
+      }
+
+      // 지수 백오프 후 재시도 (200ms → 400ms → 800ms → 1600ms)
+      await new Promise(r => setTimeout(r, 200 * Math.pow(2, attempt)));
+    }catch(err){
+      // fetch 자체 실패 (네트워크 단절 등) — 재시도
+      if(attempt === MAX_RETRY) throw err;
+      lastErrMsg = err.message;
+      console.error(`[uploadPdfToGitHub] 시도 ${attempt+1} 네트워크 오류:`, err.message);
+      await new Promise(r => setTimeout(r, 200 * Math.pow(2, attempt)));
+    }
   }
+  throw new Error('PDF 업로드 실패 — '+lastErrMsg);
 }
 
 
@@ -7404,7 +7507,16 @@ async function ppeSendEmailOne(p, fname, pdfB64, sigImg){
     toast(`☁️ ${p.name} GitHub 업로드 중…`,'info');
     let pdfUrl = '';
     if(CFG.ghToken){
-      pdfUrl = await uploadPdfToGitHub(pdfB64, fname);
+      // ★ v17.8 FIX M: uploadPdfToGitHub가 throw 가능 → try-catch로 감싸기
+      try{
+        pdfUrl = await uploadPdfToGitHub(pdfB64, fname);
+      }catch(uploadErr){
+        const m = uploadErr.message || String(uploadErr);
+        console.error('[보호구 PDF 업로드 실패]', m);
+        toast('⚠ GitHub PDF 업로드 실패: '+m.slice(0,100),'err');
+        pdfB64 = null;
+        return; // 이메일 발송 중단 (링크가 없으므로)
+      }
     }
     // ★ PDF base64 즉시 메모리 해제 (수 MB 절약)
     pdfB64 = null;
@@ -7494,15 +7606,9 @@ function ppeSaveRecord(p, pdfFileName, sigImg){
     // ★ 글로벌 ID 부여 + 묘비 필터
     if(typeof BM !== 'undefined' && BM.ensureIds){
       BM.ensureIds(stored);
-      // ★★★ v16.8: 묘비 충돌 차단 ★★★
-      // 방금 저장한 rec의 ID가 묘비에 있으면 명시적으로 제거 (save wins)
-      if (rec.recordId) {
-        const _tombs = BM.getTombstones('ppe');
-        if (_tombs.delete(rec.recordId)) {
-          BM.saveTombstones('ppe', _tombs);
-          console.log(`[ppeSaveRecord] 묘비 1개 제거 (save wins): ${rec.recordId}`);
-        }
-      }
+      // ★★★ v17.7 FIX K: save-wins 묘비 정리 (로컬 + GitHub admin_cfg)
+      //              NK 묘비도 정리하여 자동 동기화 후에도 새 레코드 부활 보장
+      BM.clearSaveWinsTombstones('ppe', [rec]);  // 비동기 fire-and-forget
       const _t = BM.getTombstones('ppe');
       if(_t.size){
         const filtered = stored.filter(r => !_t.has(r.recordId));
@@ -7641,33 +7747,12 @@ function saveEduRecord(params){
     // ★ 글로벌 ID 자동 부여 + 묘비 필터 적용
     BM.ensureIds(stored);
 
-    // ★★★ v16.8: 묘비 충돌 차단 (CRITICAL FIX) ★★★
-    // 영구삭제된 ID와 우연히 일치한 새 레코드가 즉시 사라지는 현상 방지.
-    // 새로 저장하는 레코드(stored.slice(-names.length))의 ID는
-    // 묘비에서 명시적으로 제거 — "save wins" 정책
-    // ★★★ v17.4 FIX: NK 묘비도 함께 제거 (이전엔 recordId 묘비만 제거 → 영구삭제 후
-    //              같은 이름·교육·일자로 재저장하면 NK 묘비에 걸려 안 보이던 문제)
+    // ★★★ v17.7 FIX K: save-wins 묘비 정리 (로컬 + GitHub admin_cfg 양쪽)
+    //              v17.4 FIX F/G의 자동 동기화가 GitHub 묘비를 다시 가져와 새 레코드가
+    //              사라지던 회귀 버그 해결. clearSaveWinsTombstones가 GitHub admin_cfg.json
+    //              까지 정리해서 다음 sync에서 묘비 부활 차단.
     const _newSaved = stored.slice(-names.length);
-    const _newIds = new Set(_newSaved.map(r => r.recordId).filter(Boolean));
-    const _newNks = new Set(_newSaved.map(r => BM.naturalKey(r)).filter(Boolean));
-    if (_newIds.size > 0) {
-      const _tombs = BM.getTombstones('edu');
-      let _cleaned = 0;
-      _newIds.forEach(id => { if (_tombs.delete(id)) _cleaned++; });
-      if (_cleaned > 0) {
-        BM.saveTombstones('edu', _tombs);
-        console.log(`[saveEduRecord] recordId 묘비 ${_cleaned}개 제거 (save wins)`);
-      }
-    }
-    if (_newNks.size > 0) {
-      const _nkTombs = BM.getNKTombstones('edu');
-      let _cleanedNk = 0;
-      _newNks.forEach(nk => { if (_nkTombs.delete(nk)) _cleanedNk++; });
-      if (_cleanedNk > 0) {
-        BM.saveNKTombstones('edu', _nkTombs);
-        console.log(`[saveEduRecord] NK 묘비 ${_cleanedNk}개 제거 (save wins)`);
-      }
-    }
+    BM.clearSaveWinsTombstones('edu', _newSaved);  // 비동기 fire-and-forget
 
     const _t = BM.getTombstones('edu');
     if(_t.size) stored = stored.filter(r => !_t.has(r.recordId));
@@ -10223,6 +10308,79 @@ BM.getAuditLog = function(limit){
     const log = JSON.parse(localStorage.getItem('bm_audit_log')||'[]');
     return log.slice(-1*(limit||30)).reverse(); // 최근 N건, 최신 위
   }catch(e){ return []; }
+};
+
+/* ──────────────────────────────────────────────────────────────────
+   v17.7 FIX K: Save-Wins 묘비 정리 헬퍼
+   ──────────────────────────────────────────────────────────────────
+   문제: v17.4 FIX F/G(자동 동기화)가 GitHub admin_cfg.json에서 NK 묘비를
+        다시 가져와서, 저장 후 잠시 보였던 새 레코드가 사라지는 현상.
+   해결: 저장 시점에 로컬뿐 아니라 GitHub admin_cfg.json의 묘비에서도
+        새 레코드의 recordId/NK를 제거 → 다음 자동 동기화에서 묘비가
+        부활하지 않음.
+   사용: 모든 saveXxxRecord 함수 끝에서 호출
+   ────────────────────────────────────────────────────────────────── */
+BM.clearSaveWinsTombstones = async function(category, newRecords){
+  if(!Array.isArray(newRecords) || !newRecords.length) return;
+
+  // 새 레코드의 recordId + NK 집합
+  const ids = new Set(newRecords.map(r => r && r.recordId).filter(Boolean));
+  const nks = new Set(newRecords.map(r => r && BM.naturalKey(r)).filter(Boolean));
+
+  // 1) 로컬 묘비 정리 (즉시 효과)
+  let localChanged = false;
+  if(ids.size > 0){
+    const tombs = BM.getTombstones(category);
+    let cleaned = 0;
+    ids.forEach(id => { if(tombs.delete(id)) cleaned++; });
+    if(cleaned > 0){
+      BM.saveTombstones(category, tombs);
+      console.log(`[clearSaveWins ${category}] 로컬 recordId 묘비 ${cleaned}개 제거`);
+      localChanged = true;
+    }
+  }
+  if(nks.size > 0){
+    const nkTombs = BM.getNKTombstones(category);
+    let cleanedNk = 0;
+    nks.forEach(nk => { if(nkTombs.delete(nk)) cleanedNk++; });
+    if(cleanedNk > 0){
+      BM.saveNKTombstones(category, nkTombs);
+      console.log(`[clearSaveWins ${category}] 로컬 NK 묘비 ${cleanedNk}개 제거`);
+      localChanged = true;
+    }
+  }
+
+  // 2) GitHub admin_cfg.json 묘비 정리 (다음 동기화에서 부활 방지)
+  //    로컬에 묘비가 있었다면 GitHub에도 있을 가능성이 있으니 항상 확인.
+  if(!CFG.ghToken || !CFG.ghRepo) return;
+  try{
+    const _rebuild = (cfgData) => {
+      const c = cfgData || {};
+      const idKey = `${category}_deleted_ids`;
+      const nkKey = `${category}_deleted_nk`;
+      if(Array.isArray(c[idKey]) && ids.size > 0){
+        c[idKey] = c[idKey].filter(id => !ids.has(id));
+      }
+      if(Array.isArray(c[nkKey]) && nks.size > 0){
+        c[nkKey] = c[nkKey].filter(nk => !nks.has(nk));
+      }
+      c[`${idKey}_updated_at`] = new Date().toISOString();
+      return c;
+    };
+    const {data: cfg, sha: cfgSha} = await readGitHubJSON('records/admin_cfg.json');
+    // GitHub 묘비에 새 레코드의 ID/NK가 실제로 있는지 확인 (없으면 PUT 안 함)
+    const idKey = `${category}_deleted_ids`;
+    const nkKey = `${category}_deleted_nk`;
+    const hasIdInGh = Array.isArray(cfg && cfg[idKey]) && cfg[idKey].some(id => ids.has(id));
+    const hasNkInGh = Array.isArray(cfg && cfg[nkKey]) && cfg[nkKey].some(nk => nks.has(nk));
+    if(!hasIdInGh && !hasNkInGh) return; // GitHub 묘비에 없으면 PUT 생략 (네트워크 절약)
+    const newCfg = _rebuild(cfg);
+    await writeGitHubJSON('records/admin_cfg.json', newCfg, cfgSha,
+      `save-wins: ${category} 신규 ${newRecords.length}건 묘비제거`, _rebuild);
+    console.log(`[clearSaveWins ${category}] GitHub admin_cfg 묘비 정리 완료`);
+  }catch(e){
+    console.warn(`[clearSaveWins ${category}] GitHub admin_cfg 정리 실패:`, e.message);
+  }
 };
 
 /* ── 12. 체크박스 선택 — 선택된 행의 recordId 배열 반환 ── */
