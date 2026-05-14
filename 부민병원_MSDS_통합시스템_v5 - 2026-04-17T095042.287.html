@@ -13549,12 +13549,14 @@ self.addEventListener('fetch',e=>{
       setTimeout(cleanEmptyRows, 1500);
     }
 
-    // 2) 관리자 모드일 때만 로컬 단독 자동 업로드 (5초 후)
+    // 2) 관리자 모드일 때만 로컬 단독 자동 업로드 (5초 후) — v17.10 비활성화
+    /*
     if (localStorage.getItem('bm_admin_ok') === '1') {
       setTimeout(() => {
         uploadLocalOnlyRecords().catch(e => console.warn('[자동 업로드]', e));
       }, 5000);
     }
+    */
   }
 
   // DOM 준비 시점에 실행
