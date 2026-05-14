@@ -13542,20 +13542,6 @@ self.addEventListener('fetch',e=>{
 
   // ─── [Part 4] 페이지 로드 후 실행 ───
   function runAll() {
-    // ★ v17.10: 모든 사용자 강제 1회 초기화 로직
-    const WIPE_KEY = 'bm_force_wipe_20260514';
-    if (!localStorage.getItem(WIPE_KEY)) {
-      console.log('--- FORCE WIPE ACTIVATED (v17.10) ---');
-      Object.keys(localStorage).forEach(k => {
-        if (k.startsWith('bm_')) localStorage.removeItem(k);
-      });
-      localStorage.setItem(WIPE_KEY, 'true');
-      console.log('--- LOCAL DATA CLEARED ---');
-      // 강제 초기화 후 데이터 꼬임 방지를 위해 즉시 리로드
-      location.reload();
-      return;
-    }
-
     // 1) 빈 행 정리 (즉시)
     if (window.BM && window.BM.getTombstones) {
       cleanEmptyRows();
