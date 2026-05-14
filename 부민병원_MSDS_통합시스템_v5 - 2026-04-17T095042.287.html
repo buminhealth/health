@@ -9258,15 +9258,18 @@ async function _cloudSyncDown(category){
     chem: (a,b) => (b.submitted||'').localeCompare(a.submitted||'')
   };
 
-  // ★★★ v16.6: race condition 근본 해결 — 60초 이내 저장된 레코드는 절대 손실되지 않도록 보호 ★★★
-  // 시나리오 1: 새 레코드 저장 직후 admin 진입 시 GitHub 업로드가 미완료 상태
-  // 시나리오 2: 첫 사용자라 GitHub의 records/edu_records.json이 비어있음
-  // 시나리오 3: 묘비 필터가 ghRecs를 0개로 잡음
-  // → 위 모든 경우에 로컬 단독 신규 레코드가 사라지는 것을 방지
+  // ★★★ v16.7: race condition + 기존 데이터 완전 보호 ★★★
+  // 핵심 원칙:
+  //   1. GitHub 비어있어도 로컬 wholesale 초기화 금지 (tombstone이 삭제 처리)
+  //   2. 기존 로컬 레코드는 _localSavedAt 없어도 100% 보존
+  //   3. GitHub Upsert 시 신규(60초 이내) 레코드는 덮어쓰지 않음
+
   const _GRACE_MS = 60000; // 60초
   const _now = Date.now();
+
   let _localBefore = [];
   try { _localBefore = JSON.parse(localStorage.getItem(`bm_${category}_records`)||'[]'); } catch(_e){}
+
   const _recentLocal = _localBefore.filter(r =>
     r && r._localSavedAt && (_now - r._localSavedAt) < _GRACE_MS
   );
@@ -9277,59 +9280,52 @@ async function _cloudSyncDown(category){
   try{
     const {data} = await readGitHubJSON(fileMap[category]);
     if(!data){
-      // GitHub 응답 없음 — 로컬은 그대로 유지 (변화 없음)
-      console.log(`[_cloudSyncDown ${category}] GitHub 응답 없음 → 로컬 유지`);
+      // GitHub 응답 없음 — 로컬 그대로 유지
+      console.log(`[_cloudSyncDown ${category}] GitHub 응답 없음 → 로컬 ${_localBefore.length}건 유지`);
       return;
     }
     let ghRecs = Array.isArray(data) ? data : (data.records||[]);
 
     if(!ghRecs.length){
-      // ★ v16.6: GitHub가 비어있어도 신규 보호 레코드가 있으면 로컬 초기화 금지
-      if(_recentLocal.length > 0){
-        console.log(`[_cloudSyncDown ${category}] GitHub 비어있지만 신규 ${_recentLocal.length}건 보호 — 로컬 초기화 건너뜀`);
-        // 신규 레코드만 남기고 정리
-        const protectedOnly = _recentLocal.slice();
-        protectedOnly.sort(sortKey[category]);
-        protectedOnly.forEach((r,i) => r.no = i+1);
-        localStorage.setItem(`bm_${category}_records`, JSON.stringify(protectedOnly));
-        return;
-      }
-      // 신규 보호 레코드도 없을 때만 초기화 (정상 삭제 반영)
-      const tombCheck = JSON.parse(localStorage.getItem(`bm_${category}_records`)||'[]');
-      if(tombCheck.length > 0){
-        localStorage.setItem(`bm_${category}_records`, '[]');
-        console.log(`[_cloudSyncDown ${category}] GitHub 비어있음 → 로컬 초기화`);
-      }
+      // ★ v16.7: GitHub 비어있어도 로컬 wholesale 초기화 절대 금지
+      //   이유: 첫 사용자/네트워크 실패/묘비 mismatch 등으로 GitHub가
+      //   일시적으로 비어 보일 수 있고, 그럴 때 로컬을 지우면 데이터 손실
+      //   정상 삭제는 tombstone(묘비) 시스템이 처리하므로 wipe 불필요
+      console.log(`[_cloudSyncDown ${category}] GitHub 비어있음 → 로컬 ${_localBefore.length}건 유지 (tombstone으로 정상 삭제 반영)`);
       return;
     }
 
     // ★ ensureIds 먼저 (tombstone 필터 전에 ID 부여)
     BM.ensureIds(ghRecs);
-
-    // ★ tombstone 필터 (recordId + NK 둘 다)
     ghRecs = BM.filterTombstoned(ghRecs, category);
 
-    // ★ Upsert 병합: GitHub 버전이 최신 (Golden Source)
+    // ★ 로컬 다시 읽기 (saveEduRecord 직후라면 최신 상태 반영)
     let local = [];
     try{ local = JSON.parse(localStorage.getItem(`bm_${category}_records`)||'[]'); }catch(e){}
     BM.ensureIds(local);
 
-    // ★ v16.6: 묘비 필터 전에 신규 보호 레코드 추출 (묘비에서 우연히 매칭되더라도 보호)
+    // ★ v16.7: 신규 보호 ID 추출 (묘비 필터 전에 — 묘비 충돌 방지)
     const _recentLocalIds = new Set(_recentLocal.map(r => r.recordId).filter(Boolean));
-    local = BM.filterTombstoned(local, category);
 
-    // recordId 기준 Map: GitHub 버전이 우선 (덮어씀)
+    // 로컬에서 묘비 적용 (단, 보호 레코드는 묘비 면제)
+    local = local.filter(r => {
+      if(!r || !r.recordId) return true; // recordId 없으면 일단 보존
+      if(_recentLocalIds.has(r.recordId)) return true; // 신규 보호
+      // 일반 묘비 필터
+      const tombs = BM.getTombstones(category);
+      return !tombs.has(r.recordId);
+    });
+
+    // ★ Upsert 병합: 로컬을 기반으로 시작 → GitHub로 덮어쓰기 (신규 보호 제외)
     const merged = new Map(local.map(r => [r.recordId, r]));
     ghRecs.forEach(r => {
-      // ★ v16.6: 60초 이내 저장된 신규 레코드는 GitHub로 덮어쓰지 않음 (업로드 미완료 가능성)
       if(_recentLocalIds.has(r.recordId)) {
-        console.log(`[_cloudSyncDown ${category}] 신규 보호 레코드는 GitHub 덮어쓰기 건너뜀: ${r.recordId}`);
-        return;
+        return; // 신규 보호 레코드는 GitHub 덮어쓰기 건너뜀
       }
       merged.set(r.recordId, r);
     });
 
-    // ★ v16.6: 신규 보호 레코드 강제 포함 (혹시 빠졌으면 추가)
+    // ★ 신규 보호 레코드 강제 포함 (혹시 빠졌으면)
     _recentLocal.forEach(r => {
       if(!merged.has(r.recordId)) merged.set(r.recordId, r);
     });
@@ -9339,8 +9335,8 @@ async function _cloudSyncDown(category){
     result.forEach((r,i) => r.no = i+1);
 
     localStorage.setItem(`bm_${category}_records`, JSON.stringify(result));
-    console.log(`[_cloudSyncDown ${category}] ${result.length}건 (GitHub ${ghRecs.length}건, 신규 보호 ${_recentLocal.length}건)`);
-  }catch(e){ console.warn(`[_cloudSyncDown ${category}] 실패:`, e); }
+    console.log(`[_cloudSyncDown ${category}] 완료: 최종 ${result.length}건 (GitHub ${ghRecs.length}건, 로컬 ${local.length}건, 신규 보호 ${_recentLocal.length}건)`);
+  }catch(e){ console.warn(`[_cloudSyncDown ${category}] 실패:`, e, '— 로컬 유지'); }
 }
 
 /* ============================================================
@@ -11812,37 +11808,59 @@ self.addEventListener('fetch',e=>{
       };
       try{
         const {data} = await readGitHubJSON(FILE_MAP[category]);
-        let ghRecs = data ? (Array.isArray(data) ? data : (data.records||[])) : [];
+
+        // ★ v16.7: 60초 이내 저장된 로컬 신규 보호
+        let localRaw = [];
+        try{ localRaw = JSON.parse(localStorage.getItem(`bm_${category}_records`)||'[]'); }catch(_e){}
+        const now = Date.now();
+        const GRACE_MS = 60000;
+        const recentLocal = localRaw.filter(r =>
+          r && r._localSavedAt && (now - r._localSavedAt) < GRACE_MS
+        );
+        const recentIds = new Set(recentLocal.map(r => r.recordId).filter(Boolean));
+        if(recentLocal.length > 0) console.log(`[v15.70 cloudSync ${category}] 보호 ${recentLocal.length}건`);
+
+        // GitHub 응답 없음 또는 비어있음 → 로컬 유지 (절대 wipe 금지)
+        if(!data){
+          console.log(`[v15.70 cloudSync ${category}] GitHub 응답 없음 → 로컬 ${localRaw.length}건 유지`);
+          return;
+        }
+        let ghRecs = Array.isArray(data) ? data : (data.records||[]);
+        if(!ghRecs.length){
+          console.log(`[v15.70 cloudSync ${category}] GitHub 비어있음 → 로컬 ${localRaw.length}건 유지 (tombstone으로 삭제 반영)`);
+          return;
+        }
+
         BM.ensureIds(ghRecs);
         ghRecs = BM.filterTombstoned(ghRecs, category);
 
-        // ★ v16.5: race condition 방지 — 최근 60초 이내 저장된 로컬 단독 레코드 보호
-        //  GitHub 업로드가 비동기로 진행 중인 새 레코드가 사라지는 것 방지
-        let recentLocalOnly = [];
-        try {
-          const localRaw = JSON.parse(localStorage.getItem(`bm_${category}_records`)||'[]');
-          const ghIdSet = new Set(ghRecs.map(r => r.recordId).filter(Boolean));
-          const now = Date.now();
-          const GRACE_MS = 60000; // 60초
-          recentLocalOnly = localRaw.filter(r => {
-            if(!r || !r.recordId) return false;
-            if(ghIdSet.has(r.recordId)) return false; // GitHub에 이미 있음 → 제외
-            if(!r._localSavedAt) return false;        // 보호 마커 없음 → 옛 레코드 (좀비 차단)
-            return (now - r._localSavedAt) < GRACE_MS; // 60초 이내 → 보호
-          });
-          if(recentLocalOnly.length > 0) {
-            console.log(`[Hard Sync ${category}] 최근 ${recentLocalOnly.length}건 로컬 보호 (업로드 대기 중)`);
-          }
-        } catch(_e) { recentLocalOnly = []; }
+        // ★ v16.7: 로컬 데이터를 시작점으로 (옛 레코드 100% 보존) → GitHub로 Upsert
+        let local = localRaw.slice();
+        BM.ensureIds(local);
+        // 로컬 묘비 적용 (단, 신규 보호 레코드는 면제)
+        const tombs = BM.getTombstones(category);
+        local = local.filter(r => {
+          if(!r || !r.recordId) return true;
+          if(recentIds.has(r.recordId)) return true;
+          return !tombs.has(r.recordId);
+        });
 
-        // GitHub 데이터 + 보호된 로컬 단독 레코드 = 최종 저장
-        const finalRecs = [...ghRecs, ...recentLocalOnly];
+        const merged = new Map(local.map(r => [r.recordId, r]));
+        ghRecs.forEach(r => {
+          if(recentIds.has(r.recordId)) return; // 신규 보호는 GitHub 덮어쓰기 면제
+          merged.set(r.recordId, r);
+        });
+        // 신규 보호 강제 포함
+        recentLocal.forEach(r => {
+          if(!merged.has(r.recordId)) merged.set(r.recordId, r);
+        });
+
+        const finalRecs = [...merged.values()];
         finalRecs.sort(sortKey[category]);
         finalRecs.forEach((r,i) => r.no = i+1);
-        // ★ 로컬 갱신 (좀비 차단 + 진행중 업로드 보호)
         localStorage.setItem(`bm_${category}_records`, JSON.stringify(finalRecs));
-        console.log(`[Hard Sync] ${category}: 클라우드 ${ghRecs.length}건 + 보호 ${recentLocalOnly.length}건 → 로컬`);
-      }catch(e){ console.warn(`[Hard Sync ${category}]`, e); }
+        console.log(`[v15.70 cloudSync ${category}] 완료: ${finalRecs.length}건 (GitHub ${ghRecs.length}, 로컬 ${local.length}, 신규 ${recentLocal.length})`);
+      }catch(e){ console.warn(`[v15.70 cloudSync ${category}]`, e, '— 로컬 유지'); }
     };
 
     window._syncAllCloud = async function(){
@@ -12230,7 +12248,7 @@ self.addEventListener('fetch',e=>{
 (function() {
   'use strict';
 
-  const APP_VERSION = '16.6_DEEP_FIX';
+  const APP_VERSION = '16.7_PRESERVE_LOCAL';
   const lastVer = localStorage.getItem('bm_app_version');
 
   // ★ 강력한 진단 도구
