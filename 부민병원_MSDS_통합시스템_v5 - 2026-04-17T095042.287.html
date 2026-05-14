@@ -1170,10 +1170,38 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
           <span class="adm-nav-icon">📋</span>
           <span class="adm-nav-label">감사 로그</span>
         </div>
+        <div class="adm-nav-item" data-pane="settings" onclick="admSwitchPane('settings')">
+          <span class="adm-nav-icon">⚙️</span>
+          <span class="adm-nav-label">시스템 설정</span>
+        </div>
       </aside>
 
       <!-- 우측 컨텐츠 영역 -->
       <main class="adm-content">
+        <!-- ── ⚙️ 시스템 설정 pane (v17.10 추가) ── -->
+        <section class="adm-pane" id="adm-pane-settings">
+          <div style="background:#fff;border-radius:10px;padding:24px;border:1px solid #e2e8f0;max-width:600px">
+            <h3 style="font-size:18px;font-weight:800;color:#1c3557;margin-bottom:12px;display:flex;align-items:center;gap:8px">
+              <span style="font-size:24px">⚙️</span> 시스템 설정 및 초기화
+            </h3>
+            <p style="font-size:13px;color:#64748b;margin-bottom:24px">테스트를 위해 기기 또는 서버의 데이터를 관리할 수 있는 도구입니다.</p>
+            
+            <div style="background:#fef2f2;border:2px solid #fecaca;border-radius:12px;padding:20px">
+              <h4 style="color:#b91c1c;font-weight:800;font-size:15px;margin-bottom:8px">⚠ 모든 로컬 데이터 초기화 (공장 초기화)</h4>
+              <p style="font-size:12px;color:#7f1d1d;line-height:1.6;margin-bottom:16px">
+                이 컴퓨터에 저장된 <b>모든 데이터(MSDS, 교육일지, 보호구 지급, 사용자 설정 등)</b>를 완전히 삭제합니다.<br>
+                데이터가 꼬였거나 동기화가 불합치할 때 '클린 테스트'를 위해 사용하세요.
+              </p>
+              <button onclick="if(confirm('정말로 이 컴퓨터의 모든 데이터를 초기화하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) { 
+                Object.keys(localStorage).forEach(k => { if(k.startsWith('bm_')) localStorage.removeItem(k); });
+                alert('로컬 데이터가 초기화되었습니다. 페이지를 새로고침합니다.');
+                location.reload();
+              }" style="width:100%;padding:14px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-weight:800;cursor:pointer;font-size:14px">
+                이 컴퓨터 데이터 완전 삭제 및 초기화
+              </button>
+            </div>
+          </div>
+        </section>
 
         <!-- ── 📌 결재 관리 pane (기본 활성) ── -->
         <section class="adm-pane active" id="adm-pane-apv">
