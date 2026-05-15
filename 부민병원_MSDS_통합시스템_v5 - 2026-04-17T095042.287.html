@@ -11399,6 +11399,30 @@ function _adminDirectRender(){
     edu = BM.filterTombstoned(edu, 'edu'); // ★ 묘비 적용
     edu = edu.filter(r => _isValid(r, 'edu')); // ★ v16.8: 빈 행 제외
     edu = _dedupe(edu); // ★ v17.0: 중복 최종 정리
+
+    // ★★★ FIX: 드롭다운 갱신용 백업 (필터 적용 전 데이터)
+    const eduAll = edu.slice();
+
+    // ★★★ FIX: 현재 화면 필터 적용 — 필터 무력화 버그 해결
+    const _ef = {
+      dept:   (document.getElementById('adm-dept-sel')||{}).value||'',
+      type:   (document.getElementById('adm-type-sel')||{}).value||'',
+      from:   (document.getElementById('adm-from')||{}).value||'',
+      to:     (document.getElementById('adm-to')  ||{}).value||'',
+      search: ((document.getElementById('adm-search')||{}).value||'').toLowerCase().trim()
+    };
+    edu = edu.filter(r => {
+      if(_ef.dept && r.dept!==_ef.dept) return false;
+      if(_ef.type && !(r.type||'').includes(_ef.type)) return false;
+      if(_ef.from && (r.dateStart||'')<_ef.from) return false;
+      if(_ef.to   && (r.dateStart||'')>_ef.to)   return false;
+      if(_ef.search){
+        const _hay = ((r.name||'')+' '+(r.empNo||'')+' '+(r.dept||'')).toLowerCase();
+        if(!_hay.includes(_ef.search)) return false;
+      }
+      return true;
+    });
+
     adminRecords=edu;
     const tbody=document.getElementById('admin-tbody');
     if(tbody){
@@ -11412,7 +11436,7 @@ function _adminDirectRender(){
       }
     }
     _setBadge('adm-stat', edu.length, BM.findDuplicateGroups(edu).length);
-    _updateAdminDropdowns(edu);
+    _updateAdminDropdowns(eduAll);  // ★ FIX: 필터 적용 전 데이터로 드롭다운 갱신  
   }catch(e){ console.error('교육현황 렌더 오류:',e); }
 
   // 보호구현황
@@ -11422,6 +11446,26 @@ function _adminDirectRender(){
     ppe = BM.filterTombstoned(ppe, 'ppe'); // ★ 묘비 적용
     ppe = ppe.filter(r => _isValid(r, 'ppe')); // ★ v16.8: 빈 행 제외
     ppe = _dedupe(ppe); // ★ v17.0: 중복 최종 정리
+
+    // ★★★ FIX: 현재 화면 필터 적용 — 필터 무력화 버그 해결
+    const _pf = {
+      dept:   (document.getElementById('adm-ppe-dept-sel')||{}).value||'',
+      from:   (document.getElementById('adm-ppe-from')||{}).value||'',
+      to:     (document.getElementById('adm-ppe-to')  ||{}).value||'',
+      search: ((document.getElementById('adm-ppe-search')||{}).value||'').toLowerCase().trim()
+    };
+    ppe = ppe.filter(r => {
+      if(_pf.dept && r.dept!==_pf.dept) return false;
+      const _pd = r.date || r.dateStart || '';
+      if(_pf.from && _pd<_pf.from) return false;
+      if(_pf.to   && _pd>_pf.to)   return false;
+      if(_pf.search){
+        const _phay = ((r.name||'')+' '+(r.dept||'')+' '+(r.items||r.chem||'')).toLowerCase();
+        if(!_phay.includes(_pf.search)) return false;
+      }
+      return true;
+    });
+
     window._ppeCurrentFiltered = ppe;
     // ★ v16.8: PPE도 DOM 먼저 비우기
     const ppeTbody = document.getElementById('ppe-admin-tbody');
@@ -11437,12 +11481,42 @@ function _adminDirectRender(){
     BM.ensureIds(chem);
     chem = BM.filterTombstoned(chem, 'chem');
     chem = _dedupe(chem); // ★ v17.0: 중복 최종 정리
+
+    // ★★★ FIX: 드롭다운 갱신용 백업 (필터 적용 전 데이터)
+    const chemAll = chem.slice();
+
+    // ★★★ FIX: 현재 화면 필터 적용 — 필터 무력화 버그 해결
+    const _cf = {
+      tag:    (document.getElementById('adm-chem-tag-sel')||{}).value||'',
+      dept:   (document.getElementById('adm-chem-dept-sel')||{}).value||'',
+      from:   (document.getElementById('adm-chem-from')||{}).value||'',
+      to:     (document.getElementById('adm-chem-to')  ||{}).value||'',
+      search: ((document.getElementById('adm-chem-search')||{}).value||'').toLowerCase().trim()
+    };
+    chem = chem.filter(r => {
+      if(_cf.tag && !(r.tag||'').includes(_cf.tag)) return false;
+      if(_cf.dept && r.dept!==_cf.dept) return false;
+      const _cd = r.date || r.docDate || '';
+      if(_cf.from && _cd<_cf.from) return false;
+      if(_cf.to   && _cd>_cf.to)   return false;
+      if(_cf.search){
+        const _chay = (
+          (r.name||'')+' '+(r.product||'')+' '+(r.dept||'')+' '+
+          (r.docNo||'')+' '+(r.newMats||'')+' '+(r.stopMats||'')+' '+
+          (r.newProduct||'')+' '+(r.stopProduct||'')+' '+
+          (r.newWriter||'')+' '+(r.stopWriter||'')
+        ).toLowerCase();
+        if(!_chay.includes(_cf.search)) return false;
+      }
+      return true;
+    });
+
     window._chemCurrentFiltered = chem;
     renderChemAdminTable(chem);
     BM.highlightDuplicates('chem');
     _setBadge('adm-chem-stat', chem.length, BM.findDuplicateGroups(chem).length);
-    // 부서 셀렉트 갱신
-    const depts = [...new Set(chem.map(r=>r.dept).filter(Boolean))].sort();
+    // 부서 셀렉트 갱신 — ★ FIX: 필터 적용 전 데이터로 드롭다운 만들기
+    const depts = [...new Set(chemAll.map(r=>r.dept).filter(Boolean))].sort();
     const dSel = document.getElementById('adm-chem-dept-sel');
     if(dSel){
       const cur = dSel.value;
