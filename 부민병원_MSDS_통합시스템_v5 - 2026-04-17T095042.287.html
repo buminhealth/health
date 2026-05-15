@@ -10148,9 +10148,12 @@ BM.filterTombstoned = function(records, category){
   const nkTombs = BM.getNKTombstones(category);
   if(!tombs.size && !nkTombs.size) return records;
   BM.ensureIds(records);
-  return records.filter(r =>
-    !tombs.has(r.recordId) && !nkTombs.has(BM.naturalKey(r))
-  );
+  const _now = Date.now();
+  const _GRACE_MS = 60000 * 60; // 1시간 (신규 작성된 데이터는 묘비 검사 무시, Save Wins)
+  return records.filter(r => {
+    if(r._localSavedAt && (_now - r._localSavedAt) < _GRACE_MS) return true;
+    return !tombs.has(r.recordId) && !nkTombs.has(BM.naturalKey(r));
+  });
 };;
 
 /* ── 7. 묘비 마킹 + GitHub/GAS 동기화 ── */
@@ -10446,11 +10449,19 @@ BM.autoRecoverToGitHub = async function(category){
     }
 
     // 4) GitHub이 비어있고 로컬에 있음 → 자동 푸시
-    console.log(`[autoRecover ${category}] 로컬 ${filtered.length}건 / GitHub 0건 → 자동 푸시`);
-    filtered.forEach((r,i) => r.no = i+1);
-    const newData = {records: filtered, updated: new Date().toISOString()};
+    // ★ 조건 강화: 깃허브가 0건이라고 모든 로컬 좀비를 무조건 올리지 않음
+    // 방금 새로 작성된(60초 이내) 레코드가 있을 때만 푸시를 허용함
+    const _now = Date.now();
+    const recentOnly = filtered.filter(r => r._localSavedAt && (_now - r._localSavedAt) < 60000);
+    if(recentOnly.length === 0){
+      return {pushed:0, reason:'신규 레코드 없음 (좀비 강제 복구 방지)'};
+    }
+
+    console.log(`[autoRecover ${category}] 신규 작성 ${recentOnly.length}건 / GitHub 0건 → 자동 푸시`);
+    recentOnly.forEach((r,i) => r.no = i+1);
+    const newData = {records: recentOnly, updated: new Date().toISOString()};
     await writeGitHubJSON(filePath, newData, sha,
-      `자동 복구: ${category} ${filtered.length}건 (로컬→GitHub)`);
+      `자동 복구: ${category} ${recentOnly.length}건 (신규 로컬→GitHub)`);
     return {pushed: filtered.length, reason:'자동 복구 성공'};
   }catch(e){
     console.warn(`[autoRecover ${category}] 실패:`, e.message);
