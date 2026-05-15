@@ -3,6 +3,7 @@
 
 
 
+
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
@@ -1259,8 +1260,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
                   <label style="cursor:pointer"><input type="checkbox" id="apv-check-all" onchange="apvToggleAll(this.checked)" style="margin-right:5px"> 전체 선택</label>
                   <span style="margin-left:14px">선택: <b id="apv-sel-count" style="color:#1c3557">0</b>건 / 결재대기: <b id="apv-pending-count" style="color:#f59e0b">0</b>건 / 완료: <b id="apv-done-count" style="color:#16a34a">0</b>건</span>
                 </div>
-               <button onclick="apvBatchApprove()" id="apv-btn-approve" style="padding:7px 16px;background:#1c3557;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">✅ 일괄 결재</button>
-                <button onclick="apvBatchDownload()" id="apv-btn-download" style="padding:7px 16px;background:#0ea5e9;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;margin-left:6px">📥 결재완료 PDF 일괄 다운로드</button>
+                <button onclick="apvBatchApprove()" id="apv-btn-approve" style="padding:7px 16px;background:#1c3557;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">✅ 일괄 결재 + PDF 다운로드</button>
               </div>
 
     <!-- 일지 목록 -->
@@ -6428,7 +6428,7 @@ async function apvBatchApprove(){
 
     let stampedCount = 0;
     let failedCount = 0;
- /* ★ 자동 다운로드 비활성화 — 다운로드는 📥 결재완료 PDF 일괄 다운로드 버튼에서만
+
     if(withPdf.length > 0){
       toast(`📄 ${withPdf.length}건 원본 PDF에 도장 합성 중…`,'info');
       for(let i=0; i<withPdf.length; i++){
@@ -6447,7 +6447,6 @@ async function apvBatchApprove(){
       toast(`📋 ${withoutPdf.length}건 (옛 일지) 결재 확인서 발급…`,'info');
       await apvGenApprovalPdf(withoutPdf, stampPng);
     }
-   */
 
     // 5) GitHub records 동기화
     // ★ 아카이브 모드 결재면 archiveRecords(전체) 업로드, 아니면 localStorage records 업로드
@@ -6480,7 +6479,7 @@ async function apvBatchApprove(){
     alert('결재 처리 중 오류:\n\n'+(err.stack||err.message||err));
   }finally{
     btn.disabled = false;
-    btn.innerHTML = '✅ 일괄 결재
+    btn.innerHTML = '✅ 일괄 결재 + PDF 다운로드';
   }
 }
 
@@ -6494,35 +6493,25 @@ async function apvStampOriginalPdf(group, stampPngDataUrl){
       return false;
     }
 
-// GitHub PDF URL 빌드 (uploadPdfToGitHub와 동일 경로 규칙)
-    // ★ ym 후보 다중 시도: submitted, dateStart, 파일명추출, 결재일 순
+    // GitHub PDF URL 빌드 (uploadPdfToGitHub와 동일 경로 규칙)
+    // submitted = "YYYY-MM-DD_타임스탬프", PDF 업로드 시점의 ym = YYYY-MM
+    const ym = (group.submitted||'').slice(0,7); // "2026-05-06_..." → "2026-05"
     const repo = CFG.ghRepo || 'buminhealth/health';
     const [owner, repoName] = repo.split('/');
+    // ★ 폴더 분기: 보호구는 '보호구/', 그 외는 '교육일지/'
     const isPpe = (group.type||'').includes('보호구');
     const folder = isPpe ? '보호구' : '교육일지';
+    const pdfUrl = `https://raw.githubusercontent.com/${owner}/${repoName}/main/${encodeURIComponent(folder)}/${ym}/${encodeURIComponent(group.pdfFileName)}`;
 
-    // ★ ym 후보 빌드 (중복 제거)
-    const ymCandidates = [];
-    const _push = v => { if(v && !ymCandidates.includes(v)) ymCandidates.push(v); };
-    _push((group.submitted||'').slice(0,7));
-    _push((group.dateStart||'').slice(0,7));
-    // 파일명에서 yyyy-mm 추출 (예: ...-2026-04-01.pdf → 2026-04)
-    const _m = (group.pdfFileName||'').match(/(\d{4})-(\d{2})-\d{2}/);
-    if(_m) _push(`${_m[1]}-${_m[2]}`);
-    _push((group.approvedAt||'').slice(0,7));
+    // PDF 다운로드 (1차 시도)
+    let resp = await fetch(pdfUrl);
 
-    // ★ ym 후보 순차 시도 + 보호구 폴백
-    let resp = null, pdfUrl = '';
-    for(const ym of ymCandidates){
-      pdfUrl = `https://raw.githubusercontent.com/${owner}/${repoName}/main/${encodeURIComponent(folder)}/${ym}/${encodeURIComponent(group.pdfFileName)}`;
-      resp = await fetch(pdfUrl);
-      if(resp.ok){ console.log(`[PDF found] ${ym}:`, group.pdfFileName); break; }
-      // 보호구는 옛 잘못 업로드(교육일지/) 폴백도 동일 ym에서 시도
-      if(isPpe){
-        const fbUrl = `https://raw.githubusercontent.com/${owner}/${repoName}/main/${encodeURIComponent('교육일지')}/${ym}/${encodeURIComponent(group.pdfFileName)}`;
-        resp = await fetch(fbUrl);
-        if(resp.ok){ pdfUrl = fbUrl; toast(`⚠ 옛 위치 발견 - 도장 합성 진행`,'info'); break; }
-      }
+    // ★ 2차 폴백: 보호구 PDF가 옛 잘못 업로드 케이스 (교육일지/)
+    if(!resp.ok && resp.status === 404 && isPpe){
+      const fallbackUrl = `https://raw.githubusercontent.com/${owner}/${repoName}/main/${encodeURIComponent('교육일지')}/${ym}/${encodeURIComponent(group.pdfFileName)}`;
+      console.log('보호구 → 교육일지 폴더 폴백:', fallbackUrl);
+      resp = await fetch(fallbackUrl);
+      if(resp.ok) toast(`⚠ 옛 위치 발견 - 도장 합성 진행`,'info');
     }
 
     if(!resp.ok){
@@ -8682,7 +8671,7 @@ function buildEduPreviewHTML(group, currentRecordId, opts){
   ${approved ? `
   <div style="background:#f0fdf4;border:1px solid #16a34a;border-radius:6px;padding:10px 14px;margin-top:14px;font-size:11.5px;line-height:1.6;font-family:${FF}">
     <b style="color:#15803d">결재 정보</b>&nbsp;·&nbsp;
-    <span>결재자 <b>${group.approverName||'-'}</b></span>
+    <span>결재자 <b>${group.approverName||'-'}</b> · 결재일 ${(group.approvedAt||'').slice(0,10)}</span>
   </div>` : ''}
 
   ${group.pdfFileName ? `<div style="font-size:10.5px;color:${P.txtGray};margin-top:10px;text-align:right;font-family:${FF}">📁 ${group.pdfFileName}</div>` : ''}
@@ -13726,102 +13715,6 @@ self.addEventListener('fetch',e=>{
   console.log('   진단: bmDiagnose()');
 })();
 </script>
-<script>
-/* ── 결재완료 PDF 일괄 다운로드 (v17.11) ── */
-window.apvBatchDownload = async function(){
-  if(apvState.selected.size === 0){ toast('⚠ 다운로드할 일지를 먼저 선택하세요','err'); return; }
-  const allSelected = apvState.groups.filter(g => apvState.selected.has(g.groupKey));
-  const approvedOnly = allSelected.filter(g => g.approved);
-  const skipped = allSelected.length - approvedOnly.length;
-  if(approvedOnly.length === 0){ toast('⚠ 선택된 항목 중 결재완료 일지가 없음','err'); return; }
-  if(skipped > 0) toast(`ℹ️ 결재대기 ${skipped}건은 자동 제외 (완료 ${approvedOnly.length}건만 다운로드)`,'info');
-  const btn = document.getElementById('apv-btn-download');
-  if(btn){ btn.disabled = true; btn.textContent = '⏳ 다운로드 중…'; }
-  try{
-    const withPdf = approvedOnly.filter(g => g.pdfFileName);
-    const withoutPdf = approvedOnly.filter(g => !g.pdfFileName);
-    let okCount = 0, failCount = 0;
-    if(withPdf.length > 0){
-      toast(`📥 ${withPdf.length}건 PDF 다운로드 시작…`,'info');
-      for(let i=0; i<withPdf.length; i++){
-        const g = withPdf[i];
-        toast(`📥 다운로드 (${i+1}/${withPdf.length}): ${g.dept}`,'info');
-        try{
-          const stampPng = await apvStampToImage(g.approvedAt);
-          if(!stampPng) throw new Error('도장 생성 실패');
-          const ok = await apvStampOriginalPdf(g, stampPng);
-          if(ok) okCount++; else failCount++;
-        }catch(e){ console.error('apvBatchDownload 개별 실패:', g.dept, e); failCount++; }
-        await new Promise(r => setTimeout(r, 800));
-      }
-    }
-    if(withoutPdf.length > 0){
-      toast(`📋 ${withoutPdf.length}건 (옛 일지) 결재 확인서 발급…`,'info');
-      try{ const stampPng = await apvStampToImage(); await apvGenApprovalPdf(withoutPdf, stampPng); okCount += withoutPdf.length; }
-      catch(e){ console.error('apvBatchDownload 옛일지 실패:', e); failCount += withoutPdf.length; }
-    }
-    let summary = `✅ 다운로드 완료 — 성공 ${okCount}건`;
-    if(failCount > 0) summary += ` · ⚠ 실패 ${failCount}건`;
-    toast(summary, 'ok');
-  }catch(err){ console.error('apvBatchDownload error:', err); toast('❌ 다운로드 오류: '+(err.message||err),'err'); }
-  finally{ if(btn){ btn.disabled = false; btn.textContent = '📥 결재완료 PDF 일괄 다운로드'; } }
-};
-console.log('[v17.11] apvBatchDownload 등록 완료');
-</script>
-  
-<script>                             
-/* ── 일괄 결재 = 도장만 (PDF 자동 다운로드 비활성화, v17.11) ── */
-window.apvBatchApprove = async function(){
-  if(apvState.selected.size === 0){ toast('⚠ 결재할 일지를 먼저 선택하세요','err'); return; }
-  const allSelected = apvState.groups.filter(g => apvState.selected.has(g.groupKey));
-  const pendingOnly = allSelected.filter(g => !g.approved);
-  const skippedCount = allSelected.length - pendingOnly.length;
-  if(pendingOnly.length === 0){ toast('⚠ 선택된 항목이 모두 결재완료 상태','err'); return; }
-  if(skippedCount > 0) toast(`ℹ️ 결재완료 ${skippedCount}건은 자동 제외 (대기 ${pendingOnly.length}건만 처리)`,'info');
-  const btn = document.getElementById('apv-btn-approve');
-  btn.disabled = true; btn.textContent = '⏳ 처리 중…';
-  try{
-    toast(`📋 ${pendingOnly.length}건 결재 처리 시작…`,'info');
-    const selectedGroups = pendingOnly;
-    const now = new Date().toISOString();
-    const apvName = (CFG.stampName && CFG.stampName.trim()) || CFG.apv1Name || '장은선';
-    let records = [];
-    try{ records = JSON.parse(localStorage.getItem('bm_edu_records')||'[]'); }catch(e){}
-    selectedGroups.forEach(g => {
-      records.forEach(r => {
-        const key = `${r.submitted}__${r.dept}__${r.dateStart}__${r.type}`;
-        if(key === g.groupKey){ r.approved = true; r.approvedAt = now; r.approverName = apvName; }
-      });
-      if(apvState.archiveRecords){
-        apvState.archiveRecords.forEach(r => {
-          const key = `${r.submitted}__${r.dept}__${r.dateStart}__${r.type}`;
-          if(key === g.groupKey){ r.approved = true; r.approvedAt = now; r.approverName = apvName; }
-        });
-      }
-    });
-    localStorage.setItem('bm_edu_records', JSON.stringify(records));
-    if(CFG.ghToken && CFG.ghRepo){
-      try{
-        const path = `records/edu_records.json`;
-        const dataToUpload = apvState.archiveMode && apvState.archiveRecords ? apvState.archiveRecords : records;
-        const dataURL = 'data:application/json;base64,'+btoa(unescape(encodeURIComponent(JSON.stringify(dataToUpload,null,2))));
-        await uploadFileToGitHub(dataURL, path);
-      }catch(e){ console.warn('GitHub records 동기화 실패:',e); }
-    }
-    apvState.selected.clear();
-    apvLoadAndRender();
-    const chkAll = document.getElementById('apv-check-all');
-    if(chkAll) chkAll.checked = false;
-    toast(`✅ 결재 완료 — ${selectedGroups.length}건 (도장 표시됨, PDF는 📥 버튼)`,'ok');
-  }catch(err){
-    console.error('apvBatchApprove error:',err);
-    toast('❌ 결재 오류: '+(err.message||err),'err');
-  }finally{
-    btn.disabled = false; btn.innerHTML = '✅ 일괄 결재';
-  }
-};
-console.log('[v17.11] apvBatchApprove 도장만 모드 등록 완료');
-</script> 
-  
+
 </body>
 </html>
