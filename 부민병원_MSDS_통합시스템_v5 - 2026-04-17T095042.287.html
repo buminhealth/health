@@ -2,6 +2,7 @@
 
 
 
+
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
@@ -1331,7 +1332,11 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
                     <label class="fl">교육 구분</label>
                     <select class="fc" id="adm-type-sel" onchange="handleTabAction('edu','apply')"><option value="">전체 구분</option></select>
                   </div>
-                  <div style="display:flex;gap:6px;align-items:flex-end">
+                  <div style="display:flex;gap:10px;align-items:flex-end">
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;background:#f8fafc;padding:7px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:11.5px;color:#475569;font-weight:700;white-space:nowrap;margin-bottom:0">
+                      <input type="checkbox" id="adm-show-all" onchange="handleTabAction('edu','apply')" style="width:15px;height:15px;cursor:pointer;accent-color:#1c3557">
+                      <span>전체 이력 표시</span>
+                    </label>
                     <button type="button" onclick="handleTabAction('edu','apply')" style="padding:7px 14px;background:#10b981;color:#fff;border:1px solid #10b981;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">🔍 조회</button>
                   </div>
                 </div>
@@ -2313,22 +2318,25 @@ async function appendEduRecordsToGitHub(newRecs){
     if(!newRecs.length){ console.log('[appendEdu] 새 레코드 없음 — 건너뜀'); return; }
 
     const {data, sha} = await readGitHubJSON('records/edu_records.json');
-    let existing = (data&&Array.isArray(data.records)) ? data.records : [];
-    BM.ensureIds(existing);
-    existing = BM.filterTombstoned(existing,'edu');
-
-    // ★ Upsert: recordId 기준, 신규가 더 최신이면 덮어씀
-    const map = new Map(existing.map(r => [r.recordId, r]));
-    newRecs.forEach(r => {
-      const prev = map.get(r.recordId);
-      if(!prev || (r.updatedAt||r.submitted||'') >= (prev.updatedAt||prev.submitted||''))
-        map.set(r.recordId, r);
-    });
-    const merged = [...map.values()];
-    merged.sort((a,b) => (b.dateStart||'').localeCompare(a.dateStart||''));
+    const getRebuilt = (freshData) => {
+      let existing = (freshData&&Array.isArray(freshData.records)) ? freshData.records : [];
+      if(typeof BM!=='undefined') BM.ensureIds(existing);
+      if(typeof BM!=='undefined' && BM.filterTombstoned) existing = BM.filterTombstoned(existing,'edu');
+      const map = new Map(existing.map(r => [r.recordId, r]));
+      newRecs.forEach(r => {
+        const prev = map.get(r.recordId);
+        if(!prev || (r.updatedAt||r.submitted||'') >= (prev.updatedAt||prev.submitted||''))
+          map.set(r.recordId, r);
+      });
+      const merged = [...map.values()];
+      merged.sort((a,b) => (b.dateStart||'').localeCompare(a.dateStart||''));
+      return {records:merged, updated:new Date().toISOString()};
+    };
 
     await writeGitHubJSON('records/edu_records.json',
-      {records:merged, updated:new Date().toISOString()}, sha, `교육기록 Upsert (+${newRecs.length}건)`);
+      getRebuilt(data), sha, `교육기록 Upsert (+${newRecs.length}건)`,
+      (fresh) => getRebuilt(fresh)
+    );
     toast(`☁ GitHub 교육기록 저장 완료 (+${newRecs.length}건)`,'ok');
   }catch(e){
     toast('⚠ GitHub 저장 실패: '+e.message,'err');
@@ -2345,22 +2353,25 @@ async function appendPpeRecordToGitHub(rec){
     if(!filtered.length) return;
 
     const {data, sha} = await readGitHubJSON('records/ppe_records.json');
-    let existing = (data&&Array.isArray(data.records)) ? data.records : [];
-    BM.ensureIds(existing);
-    existing = BM.filterTombstoned(existing,'ppe');
-
-    // ★ Upsert: recordId 기준
-    const map = new Map(existing.map(r => [r.recordId, r]));
-    filtered.forEach(r => {
-      const prev = map.get(r.recordId);
-      if(!prev || (r.updatedAt||r.submitted||'') >= (prev.updatedAt||prev.submitted||''))
-        map.set(r.recordId, r);
-    });
-    const merged = [...map.values()];
-    merged.sort((a,b) => (b.date||b.dateStart||'').localeCompare(a.date||a.dateStart||''));
+    const getRebuilt = (freshData) => {
+      let existing = (freshData&&Array.isArray(freshData.records)) ? freshData.records : [];
+      if(typeof BM!=='undefined') BM.ensureIds(existing);
+      if(typeof BM!=='undefined' && BM.filterTombstoned) existing = BM.filterTombstoned(existing,'ppe');
+      const map = new Map(existing.map(r => [r.recordId, r]));
+      filtered.forEach(r => {
+        const prev = map.get(r.recordId);
+        if(!prev || (r.updatedAt||r.submitted||'') >= (prev.updatedAt||prev.submitted||''))
+          map.set(r.recordId, r);
+      });
+      const merged = [...map.values()];
+      merged.sort((a,b) => (b.date||b.dateStart||'').localeCompare(a.date||a.dateStart||''));
+      return {records:merged, updated:new Date().toISOString()};
+    };
 
     await writeGitHubJSON('records/ppe_records.json',
-      {records:merged, updated:new Date().toISOString()}, sha, '보호구기록 Upsert');
+      getRebuilt(data), sha, '보호구기록 Upsert',
+      (fresh) => getRebuilt(fresh)
+    );
     toast('☁ GitHub 보호구기록 저장 완료','ok');
   }catch(e){
     toast('⚠ GitHub 보호구기록 저장 실패: '+e.message,'err');
@@ -3497,9 +3508,15 @@ function chemSaveRecord(d, fname){
       (async ()=>{
         try{
           const {data, sha} = await readGitHubJSON('records/chem_records.json');
-          const remote = (data && Array.isArray(data.records)) ? data.records : [];
-          remote.push(rec);
-          await writeGitHubJSON('records/chem_records.json', {records:remote}, sha, `chem: ${rec.tag} ${rec.dept} ${rec.product}`);
+          const getRebuilt = (freshData) => {
+            const remote = (freshData && Array.isArray(freshData.records)) ? freshData.records : [];
+            const map = new Map(remote.map(r => [r.recordId, r]));
+            const prev = map.get(rec.recordId);
+            if(!prev || (rec.updatedAt||rec.submitted||'') >= (prev.updatedAt||prev.submitted||''))
+              map.set(rec.recordId, rec);
+            return {records:[...map.values()], updated:new Date().toISOString()};
+          };
+          await writeGitHubJSON('records/chem_records.json', getRebuilt(data), sha, `chem: ${rec.tag} ${rec.dept} ${rec.product}`, (fresh) => getRebuilt(fresh));
           console.log('[chem] GitHub 백업 완료');
         }catch(e){ console.warn('[chem] GitHub 백업 실패:', e); }
       })();
@@ -7756,7 +7773,7 @@ function clrPpeSig(){
 // 기존 단일 함수 호환
 async function ppeGenPDF(){ await ppeGenAllPDF(); }
 
-function logToGAS(sheet,names,dept,chem,date){if(!CFG.url)return;const cb='_bml_'+Date.now();window[cb]=res=>{delete window[cb];if(res&&res.success)toast('교육기록 시트 저장 완료','ok');};const sc=document.createElement('script');sc.src=CFG.url+'?action=log&callback='+cb+'&sheet='+encodeURIComponent(sheet)+'&name='+encodeURIComponent(names)+'&dept='+encodeURIComponent(dept)+'&chem='+encodeURIComponent(chem)+'&date='+encodeURIComponent(date);sc.onerror=()=>{delete window[cb];};document.head.appendChild(sc);setTimeout(()=>{if(window[cb]){delete window[cb];sc.remove();}},5000);}
+function logToGAS(sheet,names,dept,chem,date){if(!CFG.url)return;const cb='_bml_'+Date.now()+'_'+Math.floor(Math.random()*1000);window[cb]=res=>{delete window[cb];if(res&&res.success)toast('교육기록 시트 저장 완료','ok');};const sc=document.createElement('script');sc.src=CFG.url+'?action=log&callback='+cb+'&sheet='+encodeURIComponent(sheet)+'&name='+encodeURIComponent(names)+'&dept='+encodeURIComponent(dept)+'&chem='+encodeURIComponent(chem)+'&date='+encodeURIComponent(date);sc.onerror=()=>{delete window[cb];};document.head.appendChild(sc);setTimeout(()=>{if(window[cb]){delete window[cb];sc.remove();}},5000);}
 function setSyncDot(s){const m={ok:'#4ade80',warn:'#fbbf24',err:'#ef4444',load:'#93c5fd'};document.getElementById('sdot').style.background=m[s]||'#4ade80';}
 
 /* ══ 교육이력 저장 (localStorage + GAS 이중 저장) ══ */
