@@ -4667,7 +4667,6 @@ async function e1GenPDF(){
     // ★ PDF 로컬 저장
     const e1Names=e1.parts.map(p=>p.name);
       const e1NmStr=e1Names.length===1?e1Names[0]:e1Names[0]+'외'+( e1Names.length-1)+'명';
-      pdf.save(`특별안전보건교육일지-${dept}-${e1NmStr}-${ds}.pdf`);
     toast('PDF 저장 완료 ✓  Drive 업로드 중…','ok');
     // ★ 교육이력 로컬 저장 → 관리자 즉시 업데이트
     const _e1FileName = `특별안전보건교육일지-${dept}-${e1NmStr}-${ds}.pdf`;
@@ -4749,6 +4748,7 @@ async function e1GenPDF(){
     e1Opts.pdfBase64 = null;
     e1Opts.partsDetail = null;
     e1Opts.photos = null;
+    pdf.save(`특별안전보건교육일지-${dept}-${e1NmStr}-${ds}.pdf`);
   }catch(err){toast('PDF 오류: '+err.message,'err');}
   // ★ 캡처 영역 정리 + GC 기회 부여
   area.innerHTML='';
@@ -4901,7 +4901,6 @@ async function e2GenPDF(){
     // ★ PDF 로컬 저장
     const e2Names=e2.parts.map(p=>p.name);
       const e2NmStr=e2Names.length===1?e2Names[0]:e2Names[0]+'외'+(e2Names.length-1)+'명';
-      pdf.save(`MSDS교육일지-${dept}-${e2NmStr}-${ds}.pdf`);
     toast('PDF 저장 완료 ✓  Drive 업로드 중…','ok');
     // ★ 교육이력 로컬 저장 → 관리자 즉시 업데이트
     const _e2FileName = `MSDS교육일지-${dept}-${e2NmStr}-${ds}.pdf`;
@@ -4961,6 +4960,7 @@ async function e2GenPDF(){
     // ★ 메모리 해제
     e2Opts.pdfBase64 = null;
     e2Opts.partsDetail = null;
+    pdf.save(`MSDS교육일지-${dept}-${e2NmStr}-${ds}.pdf`);
   }catch(err){toast('PDF 오류: '+err.message,'err');}
   area.innerHTML='';
   await new Promise(r => setTimeout(r, 100));
