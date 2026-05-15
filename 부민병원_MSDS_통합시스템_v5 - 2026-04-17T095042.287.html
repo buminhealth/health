@@ -1345,6 +1345,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
               <div class="bm-std-action-row" data-tab="edu" style="background:#fff;border-radius:10px;padding:10px 14px;margin-bottom:10px;border:1px solid #e2e8f0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                 <button type="button" onclick="handleTabAction('edu','refresh')" style="padding:7px 14px;background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="클라우드 → 로컬 Hard Sync">☁ 새로고침</button>
                 <button type="button" onclick="BM.forcePushToGitHub('edu')" style="padding:7px 14px;background:#7c3aed;color:#fff;border:1px solid #7c3aed;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="로컬 데이터를 GitHub records.json에 강제 업로드 (다른 origin/기기에서도 보이게 함)">📤 GitHub 푸시</button>
+                <button type="button" onclick="BM.forcePullFromGitHub('edu')" style="padding:7px 14px;background:#dc2626;color:#fff;border:1px solid #dc2626;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;margin-left:4px" title="로컬 캐시 완전 초기화 + GitHub에서 강제로 다시 받아오기 (Grace Period 무시)">🔥 강제 재동기화</button>
                 <button type="button" onclick="handleTabAction('edu','dedupe')"  style="padding:7px 14px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="recordId 기준 중복 자동 정리">🧹 중복정리</button>
                 <button type="button" onclick="handleTabAction('edu','delete')"  style="padding:7px 14px;background:#fee2e2;color:#dc2626;border:1px solid #ef4444;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="선택된 항목 영구 삭제">🗑 선택삭제</button>
                 <button type="button" onclick="handleTabAction('edu','csv')"     style="padding:7px 14px;background:#10b981;color:#fff;border:1px solid #10b981;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">📥 CSV 출력</button>
@@ -1414,6 +1415,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
               <div class="bm-std-action-row" data-tab="ppe" style="background:#fff;border-radius:10px;padding:10px 14px;margin-bottom:10px;border:1px solid #e2e8f0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                 <button type="button" onclick="handleTabAction('ppe','refresh')" style="padding:7px 14px;background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="클라우드 → 로컬 Hard Sync">☁ 새로고침</button>
                 <button type="button" onclick="BM.forcePushToGitHub('ppe')" style="padding:7px 14px;background:#7c3aed;color:#fff;border:1px solid #7c3aed;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="로컬 데이터를 GitHub records.json에 강제 업로드">📤 GitHub 푸시</button>
+                <button type="button" onclick="BM.forcePullFromGitHub('edu')" style="padding:7px 14px;background:#dc2626;color:#fff;border:1px solid #dc2626;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;margin-left:4px" title="로컬 캐시 완전 초기화 + GitHub에서 강제로 다시 받아오기 (Grace Period 무시)">🔥 강제 재동기화</button>
                 <button type="button" onclick="handleTabAction('ppe','dedupe')"  style="padding:7px 14px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="recordId 기준 중복 자동 정리">🧹 중복정리</button>
                 <button type="button" onclick="handleTabAction('ppe','delete')"  style="padding:7px 14px;background:#fee2e2;color:#dc2626;border:1px solid #ef4444;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="선택된 항목 영구 삭제">🗑 선택삭제</button>
                 <button type="button" onclick="handleTabAction('ppe','csv')"     style="padding:7px 14px;background:#10b981;color:#fff;border:1px solid #10b981;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">📥 CSV 출력</button>
@@ -1485,6 +1487,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
               <div class="bm-std-action-row" data-tab="chem" style="background:#fff;border-radius:10px;padding:10px 14px;margin-bottom:10px;border:1px solid #e2e8f0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                 <button type="button" onclick="handleTabAction('chem','refresh')" style="padding:7px 14px;background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="클라우드 → 로컬 Hard Sync">☁ 새로고침</button>
                 <button type="button" onclick="BM.forcePushToGitHub('chem')" style="padding:7px 14px;background:#7c3aed;color:#fff;border:1px solid #7c3aed;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="로컬 데이터를 GitHub records.json에 강제 업로드">📤 GitHub 푸시</button>
+                <button type="button" onclick="BM.forcePullFromGitHub('edu')" style="padding:7px 14px;background:#dc2626;color:#fff;border:1px solid #dc2626;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;margin-left:4px" title="로컬 캐시 완전 초기화 + GitHub에서 강제로 다시 받아오기 (Grace Period 무시)">🔥 강제 재동기화</button>
                 <button type="button" onclick="handleTabAction('chem','dedupe')"  style="padding:7px 14px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="recordId 기준 중복 자동 정리">🧹 중복정리</button>
                 <button type="button" onclick="handleTabAction('chem','delete')"  style="padding:7px 14px;background:#fee2e2;color:#dc2626;border:1px solid #ef4444;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="선택된 항목 영구 삭제">🗑 선택삭제</button>
                 <button type="button" onclick="handleTabAction('chem','csv')"     style="padding:7px 14px;background:#10b981;color:#fff;border:1px solid #10b981;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">📥 CSV 출력</button>
@@ -10149,7 +10152,7 @@ BM.filterTombstoned = function(records, category){
   if(!tombs.size && !nkTombs.size) return records;
   BM.ensureIds(records);
   const _now = Date.now();
-  const _GRACE_MS = 60000 * 60; // 1시간 (신규 작성된 데이터는 묘비 검사 무시, Save Wins)
+  const _GRACE_MS = 60000 * 5; // 5분 (신규 작성된 데이터는 묘비 검사 무시, Save Wins)
   return records.filter(r => {
     if(r._localSavedAt && (_now - r._localSavedAt) < _GRACE_MS) return true;
     return !tombs.has(r.recordId) && !nkTombs.has(BM.naturalKey(r));
@@ -10459,6 +10462,48 @@ BM.autoRecoverToGitHub = async function(category){
 };
 
 // 강제로 로컬을 GitHub에 푸시 (덮어쓰기) — 사용자가 명시적으로 호출
+// ★ 강제 풀: Grace Period 무시 + 로컬 완전 초기화 + GitHub에서 다시 받기
+//   - "다른 기기에서 삭제했는데 이 기기는 그대로일 때" 단일 클릭 해결책
+BM.forcePullFromGitHub = async function(category){
+  if(!CFG.ghToken || !CFG.ghRepo){ toast('⚙ GitHub 미설정 — ⚙ 설정에서 토큰 입력 필요','err'); return; }
+  if(!confirm(`[${category}] 이 기기의 로컬 캐시를 모두 비우고\nGitHub에서 다시 받아오시겠습니까?\n\n(다른 기기에서 삭제한 항목이 이 기기에 남아있을 때 사용)`)) return;
+  
+  toast(`🔥 ${category} 강제 재동기화 시작…`,'info');
+  try{
+    // 1) 로컬 records 완전 삭제 (Grace Period 보호 무시)
+    localStorage.removeItem(`bm_${category}_records`);
+    console.log(`[forcePull ${category}] 로컬 캐시 초기화 완료`);
+    
+    // 2) GitHub admin_cfg에서 묘비 받아와 로컬 덮어쓰기
+    await BM.syncTombstonesFromGitHub(category);
+    console.log(`[forcePull ${category}] 묘비 동기화 완료 (ID ${BM.getTombstones(category).size}개, NK ${BM.getNKTombstones(category).size}개)`);
+    
+    // 3) GitHub records 받아와 묘비 필터 후 로컬 저장
+    const fileMap = {edu:'records/edu_records.json', ppe:'records/ppe_records.json', chem:'records/chem_records.json'};
+    const {data} = await readGitHubJSON(fileMap[category]);
+    let ghRecs = data ? (Array.isArray(data) ? data : (data.records||[])) : [];
+    BM.ensureIds(ghRecs);
+    
+    const tombs = BM.getTombstones(category);
+    const nkTombs = BM.getNKTombstones(category);
+    ghRecs = ghRecs.filter(r => !tombs.has(r.recordId) && !nkTombs.has(BM.naturalKey(r)));
+    ghRecs.forEach((r,i) => r.no = i+1);
+    
+    localStorage.setItem(`bm_${category}_records`, JSON.stringify(ghRecs));
+    console.log(`[forcePull ${category}] GitHub 기준 로컬 재구성 완료: ${ghRecs.length}건`);
+    
+    // 4) 화면 갱신
+    _adminLoading = false;
+    adminLoaded = false;
+    if(typeof _adminDirectRender === 'function') _adminDirectRender();
+    if(typeof loadAdminRecords === 'function') loadAdminRecords();
+    
+    toast(`✅ ${category} 재동기화 완료 — 최종 ${ghRecs.length}건`,'ok');
+  }catch(e){
+    console.error(`[forcePull ${category}] 실패:`, e);
+    toast(`⚠ 재동기화 실패: ${e.message}`,'err');
+  }
+};  
 BM.forcePushToGitHub = async function(category){
   if(!CFG.ghToken || !CFG.ghRepo){ toast('⚙ GitHub 미설정','err'); return 0; }
   const filePath = BM._fileMap[category];
