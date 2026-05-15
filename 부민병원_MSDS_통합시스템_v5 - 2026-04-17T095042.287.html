@@ -10307,26 +10307,15 @@ BM.syncTombstonesFromGitHub = async function(category){
     const {data} = await readGitHubJSON('records/admin_cfg.json');
     const cfg = data||{};
 
-    // recordId tombstone 동기화
-    const remoteIds = Array.isArray(cfg[`${category}_deleted_ids`])
-      ? cfg[`${category}_deleted_ids`] : [];
-    if(remoteIds.length){
-      const local = BM.getTombstones(category);
-      let added = 0;
-      remoteIds.forEach(id => { if(!local.has(id)){ local.add(id); added++; } });
-      if(added) BM.saveTombstones(category, local);
-    }
+    // recordId tombstone 동기화 (완전 덮어쓰기: Mirroring)
+    const remoteIds = Array.isArray(cfg[`${category}_deleted_ids`]) ? cfg[`${category}_deleted_ids`] : [];
+    BM.saveTombstones(category, new Set(remoteIds));
 
-    // ★ NK tombstone 동기화 (다른 기기 deviceId 기반 ID 불일치 해결 핵심)
-    const remoteNks = Array.isArray(cfg[`${category}_deleted_nk`])
-      ? cfg[`${category}_deleted_nk`] : [];
-    if(remoteNks.length){
-      const localNk = BM.getNKTombstones(category);
-      let addedNk = 0;
-      remoteNks.forEach(nk => { if(!localNk.has(nk)){ localNk.add(nk); addedNk++; } });
-      if(addedNk) BM.saveNKTombstones(category, localNk);
-      console.log(`[묘비동기화] ${category}: nk +${addedNk}건`);
-    }
+    // ★ NK tombstone 동기화 (완전 덮어쓰기: Mirroring)
+    const remoteNks = Array.isArray(cfg[`${category}_deleted_nk`]) ? cfg[`${category}_deleted_nk`] : [];
+    BM.saveNKTombstones(category, new Set(remoteNks));
+
+    console.log(`[묘비동기화] ${category}: 깃허브 원본과 동일하게 초기화 완료 (Ghost Tombstone 방지)`);
   }catch(e){ console.warn('[syncTombstonesFromGitHub] 실패:', e); }
 };;
 
