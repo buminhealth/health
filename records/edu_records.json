@@ -277,7 +277,10 @@
     "sigsByDay": null,
     "eduDates": null,
     "pdfFileName": "MSDS교육일지-6병동-김은희-2026-01-05.pdf",
-    "recordId": "2026-05-15_17788306|김은희|118040204|6병동|MSDS교육|2026-01-05"
+    "recordId": "2026-05-15_17788306|김은희|118040204|6병동|MSDS교육|2026-01-05",
+    "approved": true,
+    "approvedAt": "2026-05-16T01:06:58.147Z",
+    "approverName": "장은선"
   },
   {
     "no": 9,
@@ -306,7 +309,10 @@
     "sigsByDay": null,
     "eduDates": null,
     "pdfFileName": "MSDS교육일지-6병동-박선희-2026-01-05.pdf",
-    "recordId": "2026-05-15_17788307|박선희|123030215|6병동|MSDS교육|2026-01-05"
+    "recordId": "2026-05-15_17788307|박선희|123030215|6병동|MSDS교육|2026-01-05",
+    "approved": true,
+    "approvedAt": "2026-05-16T01:06:58.147Z",
+    "approverName": "장은선"
   },
   {
     "no": 10,
