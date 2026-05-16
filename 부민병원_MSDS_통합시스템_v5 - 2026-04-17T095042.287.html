@@ -1260,7 +1260,8 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
                   <label style="cursor:pointer"><input type="checkbox" id="apv-check-all" onchange="apvToggleAll(this.checked)" style="margin-right:5px"> 전체 선택</label>
                   <span style="margin-left:14px">선택: <b id="apv-sel-count" style="color:#1c3557">0</b>건 / 결재대기: <b id="apv-pending-count" style="color:#f59e0b">0</b>건 / 완료: <b id="apv-done-count" style="color:#16a34a">0</b>건</span>
                 </div>
-                <button onclick="apvBatchApprove()" id="apv-btn-approve" style="padding:7px 16px;background:#1c3557;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">✅ 일괄 결재 + PDF 다운로드</button>
+                <button onclick="apvBatchApprove()" id="apv-btn-approve" style="padding:7px 16px;background:#1c3557;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">✅ 선택 일지 결재</button>
+                <button onclick="apvBatchDownload()" id="apv-btn-download" style="padding:7px 16px;background:#0ea5e9;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;margin-left:6px">📥 선택 일지 PDF 다운로드</button>
               </div>
 
     <!-- 일지 목록 -->
