@@ -6453,6 +6453,64 @@ async function apvBatchApprove(){
   }
 }
 
+/* ════════════════════════════════════════════════════════
+   ★ v15.44: 일괄 PDF 다운로드 — 선택 일지 PDF 한꺼번에 다운로드
+   ════════════════════════════════════════════════════════ */
+async function apvBatchDownload(){
+  if(apvState.selected.size === 0){
+    toast('⚠ 다운로드할 일지를 먼저 선택하세요','err');
+    return;
+  }
+
+  const selectedGroups = apvState.groups.filter(g => apvState.selected.has(g.groupKey));
+  if(selectedGroups.length === 0){
+    toast('⚠ 선택된 일지를 찾을 수 없음','err');
+    return;
+  }
+
+  const btn = document.getElementById('apv-btn-download');
+  if(btn){
+    btn.disabled = true;
+    btn.textContent = '⏳ 다운로드 중…';
+  }
+
+  let okCount = 0;
+  let failCount = 0;
+
+  try{
+    toast(`📥 ${selectedGroups.length}건 PDF 다운로드 시작…`,'info');
+
+    for(let i=0; i<selectedGroups.length; i++){
+      const g = selectedGroups[i];
+      const label = `${g.dept||'?'} · ${g.dateStart||''}`;
+      toast(`📄 다운로드 (${i+1}/${selectedGroups.length}): ${label}`,'info');
+
+      try{
+        await apvDownloadPdf(g.groupKey);
+        okCount++;
+      }catch(err){
+        console.error(`다운로드 실패 [${label}]:`, err);
+        failCount++;
+      }
+
+      await new Promise(r => setTimeout(r, 800));
+    }
+
+    let summary = `✅ 다운로드 완료 — 성공 ${okCount}건`;
+    if(failCount > 0) summary += ` · ⚠ 실패 ${failCount}건`;
+    toast(summary, failCount > 0 ? 'info' : 'ok');
+
+  }catch(err){
+    console.error('apvBatchDownload error:',err);
+    toast('❌ 다운로드 오류: '+(err.message||err),'err');
+  }finally{
+    if(btn){
+      btn.disabled = false;
+      btn.textContent = '📥 선택 일지 PDF 다운로드';
+    }
+  }
+}
+  
 /* ── 원본 PDF 다운로드 → pdf-lib 도장 합성 → 새 PDF 다운로드 ── */
 async function apvStampOriginalPdf(group, stampPngDataUrl){
   try{
