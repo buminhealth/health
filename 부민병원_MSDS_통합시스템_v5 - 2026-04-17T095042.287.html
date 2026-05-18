@@ -6389,27 +6389,18 @@ async function apvBatchApprove(){
   try{
     toast(`📋 ${pendingOnly.length}건 결재 처리 시작…`,'info');
 
-    // 1) 결재 도장 이미지 생성
-    toast('🎨 결재 도장 생성 중…','info');
-    const stampPng = await apvStampToImage();
-    if(!stampPng){
-      throw new Error('결재 도장 생성 실패');
-    }
-
-    const selectedGroups = pendingOnly;  // ★ 결재 대기 일지만 처리
+  // ★ v15.44: 결재 = 상태 기록만. PDF 합성/다운로드는 "📥 선택 일지 PDF 다운로드" 버튼 전담
+    const selectedGroups = pendingOnly;
     if(selectedGroups.length === 0){
       throw new Error('선택된 일지를 찾을 수 없음');
     }
     const now = new Date().toISOString();
-    // ★ 도장 이름 우선순위: stampName(별도) → apv1Name → 기본
     const apvName = (CFG.stampName && CFG.stampName.trim()) || CFG.apv1Name || '장은선';
 
-    // 2) records 결재 정보 업데이트
-    // ★ 아카이브 모드면 archiveRecords(GitHub) + localStorage 둘 다 갱신
+    // 1) records 결재 정보 업데이트 (localStorage + 아카이브)
     let records = [];
     try{ records = JSON.parse(localStorage.getItem('bm_edu_records')||'[]'); }catch(e){}
     selectedGroups.forEach(g => {
-      // localStorage records 갱신 (있으면)
       records.forEach(r => {
         const key = `${r.submitted}__${r.dept}__${r.dateStart}__${r.type}`;
         if(key === g.groupKey){
@@ -6418,7 +6409,6 @@ async function apvBatchApprove(){
           r.approverName = apvName;
         }
       });
-      // 아카이브 records도 갱신 (있으면)
       if(apvState.archiveRecords){
         apvState.archiveRecords.forEach(r => {
           const key = `${r.submitted}__${r.dept}__${r.dateStart}__${r.type}`;
@@ -6431,32 +6421,6 @@ async function apvBatchApprove(){
       }
     });
     localStorage.setItem('bm_edu_records', JSON.stringify(records));
-
-    // 3) 그룹별 PDF 처리: pdfFileName 있으면 pdf-lib 도장 합성, 없으면 폴백
-    const withPdf = selectedGroups.filter(g => g.pdfFileName);
-    const withoutPdf = selectedGroups.filter(g => !g.pdfFileName);
-
-    let stampedCount = 0;
-    let failedCount = 0;
-
-    if(withPdf.length > 0){
-      toast(`📄 ${withPdf.length}건 원본 PDF에 도장 합성 중…`,'info');
-      for(let i=0; i<withPdf.length; i++){
-        const g = withPdf[i];
-        toast(`📄 PDF 합성 (${i+1}/${withPdf.length}): ${g.dept}`,'info');
-        const ok = await apvStampOriginalPdf(g, stampPng);
-        if(ok) stampedCount++;
-        else failedCount++;
-        // 다운로드 간격 (브라우저가 차단하지 않도록)
-        await new Promise(r => setTimeout(r, 800));
-      }
-    }
-
-    // 4) 옛 일지(pdfFileName 없음)는 결재 확인서 PDF로 폴백
-    if(withoutPdf.length > 0){
-      toast(`📋 ${withoutPdf.length}건 (옛 일지) 결재 확인서 발급…`,'info');
-      await apvGenApprovalPdf(withoutPdf, stampPng);
-    }
 
     // 5) GitHub records 동기화
     // ★ 아카이브 모드 결재면 archiveRecords(전체) 업로드, 아니면 localStorage records 업로드
@@ -6477,19 +6441,15 @@ async function apvBatchApprove(){
     const chkAll = document.getElementById('apv-check-all');
     if(chkAll) chkAll.checked = false;
 
-    // 결과 요약 토스트
-    let summary = `✅ 결재 완료 — `;
-    if(stampedCount > 0)  summary += `원본 도장 ${stampedCount}건 `;
-    if(withoutPdf.length > 0) summary += `· 결재확인서 ${withoutPdf.length}건 `;
-    if(failedCount > 0)   summary += `· ⚠ 실패 ${failedCount}건`;
-    toast(summary, 'ok');
+   // 결과 요약 토스트 (PDF 다운로드는 별도 버튼 안내)
+    toast(`✅ 결재 완료 — ${selectedGroups.length}건 처리됨. PDF는 "📥 선택 일지 PDF 다운로드" 버튼으로 받으세요.`, 'ok');
   }catch(err){
     console.error('apvBatchApprove error:',err);
     toast('❌ 결재 오류: '+(err.message||err),'err');
     alert('결재 처리 중 오류:\n\n'+(err.stack||err.message||err));
   }finally{
     btn.disabled = false;
-    btn.innerHTML = '✅ 일괄 결재 + PDF 다운로드';
+    btn.innerHTML = '✅ 선택 일지 결재';
   }
 }
 
