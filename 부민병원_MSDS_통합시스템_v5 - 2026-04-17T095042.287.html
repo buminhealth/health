@@ -4142,7 +4142,7 @@ function loadChems(){
           item.emergencyParsed=ep;
         }
         // ★★★ v17.5 FIX: 내장 데이터에서 비어있는 필드 보충 (push 직전)
-        _mergeFromBuiltIn(item);
+        // _mergeFromBuiltIn(item);
         CHEMS.push(item);
       });
       // ★★★ v17.5 FIX: GAS 응답 손상 검증 안전망
