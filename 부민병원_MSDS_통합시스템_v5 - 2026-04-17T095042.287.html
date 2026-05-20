@@ -4140,8 +4140,9 @@ function loadChems(){
           });
           item.emergencyParsed=ep;
         }
-        // ★★★ v17.5 FIX: 내장 데이터에서 비어있는 필드 보충 (push 직전)
-        _mergeFromBuiltIn(item);
+        // ★★★ v18.0: _mergeFromBuiltIn 제거 — 시트가 단일 진실 소스
+        //            (시트에서 비운 값을 내장값으로 덮어쓰던 버그 해결)
+        // _mergeFromBuiltIn(item);
         CHEMS.push(item);
       });
       // ★★★ v17.5 FIX: GAS 응답 손상 검증 안전망
@@ -4154,7 +4155,7 @@ function loadChems(){
         const _compRatio = _withComps / CHEMS.length;
         const _deptRatio = _withDepts / CHEMS.length;
         // components 비율 30% 미만 또는 departments 비율 50% 미만이면 시트 손상으로 판단
-        if(_compRatio < 0.3 || _deptRatio < 0.5){
+        if(false && (_compRatio < 0.3 || _deptRatio < 0.5)){
           console.warn(`[loadChems] ⚠ GAS 시트 손상 의심 (성분 ${(_compRatio*100).toFixed(0)}% / 부서 ${(_deptRatio*100).toFixed(0)}%) — 내장 데이터로 폴백`);
           toast(`⚠ 구글시트 데이터 부실 — 내장 ${_builtInCount}종 사용 중`,'info');
           CHEMS.length = 0;
@@ -4180,7 +4181,7 @@ function loadChems(){
     }
   };
   const sc=document.createElement('script');
-  sc.src=CFG.url+'?action=chems&callback='+cb;
+  sc.src=CFG.url+'?action=chems&_t='+Date.now()+'&callback='+cb;
   sc.onerror=()=>{
     delete window[cb];
     toast('MSDS 목록 GAS 로드 실패 — 내장 데이터 사용 중','info');
@@ -12968,11 +12969,12 @@ self.addEventListener('fetch',e=>{
   // Service Worker 캐시 1회 강제 해제
   (function(){
     if('serviceWorker' in navigator && 'caches' in window){
-      if(localStorage.getItem('bm_sw_cleared_v15_70') === '1') return;
+      if(localStorage.getItem('bm_sw_cleared_v18_0') === '1') return;
       try{
         caches.keys().then(keys => {
           keys.forEach(k => { if(k.startsWith('bumin-msds-')) caches.delete(k); });
-          localStorage.setItem('bm_sw_cleared_v15_70','1');
+          localStorage.setItem('bm_sw_cleared_v18_0','1');
+          try{ localStorage.removeItem('bm_chems_cache'); }catch(_){}
         });
       }catch(e){}
     }
