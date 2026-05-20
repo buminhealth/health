@@ -4155,7 +4155,7 @@ function loadChems(){
         const _compRatio = _withComps / CHEMS.length;
         const _deptRatio = _withDepts / CHEMS.length;
         // components 비율 30% 미만 또는 departments 비율 50% 미만이면 시트 손상으로 판단
-        if(_compRatio < 0.3 || _deptRatio < 0.5){
+        if(false && (_compRatio < 0.3 || _deptRatio < 0.5)){
           console.warn(`[loadChems] ⚠ GAS 시트 손상 의심 (성분 ${(_compRatio*100).toFixed(0)}% / 부서 ${(_deptRatio*100).toFixed(0)}%) — 내장 데이터로 폴백`);
           toast(`⚠ 구글시트 데이터 부실 — 내장 ${_builtInCount}종 사용 중`,'info');
           CHEMS.length = 0;
