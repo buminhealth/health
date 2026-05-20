@@ -4,6 +4,7 @@
 
 
 
+
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
@@ -4089,19 +4090,17 @@ function loadChems(){
       const _mergeFromBuiltIn = (item) => {
         const b = _builtInMap[item.name];
         if(!b) return item;
-       // ★ v18.0: 텍스트 필드는 시트 값이 진실 — 보충 비활성화
-        //          (사용자가 시트에서 수정한 값이 내장값으로 덮이는 버그 차단)
-        // ['manufacturer','department','usage','emergency','pdfUrl','iconUrl','workEnv','healthCheck']
-        //   .forEach(k => { if(_isEmpty(item[k]) && !_isEmpty(b[k])) item[k] = b[k]; });
+        // 텍스트·기본 필드: GAS가 비었으면 내장 사용
+        ['manufacturer','department','usage','emergency','pdfUrl','iconUrl','workEnv','healthCheck']
+          .forEach(k => { if(_isEmpty(item[k]) && !_isEmpty(b[k])) item[k] = b[k]; });
         // 불리언: GAS가 명시 안 했으면 내장 사용
         ['targetManage','specialManage'].forEach(k => {
           if(item[k]===undefined || item[k]===null || item[k]==='') item[k] = b[k];
         });
-        // ★ v18.1: 배열 필드도 시트 값이 진실 — 보충 비활성화
-        //          (시트에서 성분 행 모두 삭제해도 내장값으로 덮이던 버그 차단)
-        // ['components','departments','icons'].forEach(k => {
-        //   if(_isEmpty(item[k]) && !_isEmpty(b[k])) item[k] = b[k];
-        // });
+        // 배열 필드: GAS가 비었으면 내장 사용
+        ['components','departments','icons'].forEach(k => {
+          if(_isEmpty(item[k]) && !_isEmpty(b[k])) item[k] = b[k];
+        });
         // emergencyParsed
         if(_isEmpty(item.emergencyParsed) && !_isEmpty(b.emergencyParsed)){
           item.emergencyParsed = b.emergencyParsed;
@@ -4156,7 +4155,7 @@ function loadChems(){
         const _compRatio = _withComps / CHEMS.length;
         const _deptRatio = _withDepts / CHEMS.length;
         // components 비율 30% 미만 또는 departments 비율 50% 미만이면 시트 손상으로 판단
-        if(false && (_compRatio < 0.3 || _deptRatio < 0.5)){
+        if(_compRatio < 0.3 || _deptRatio < 0.5){
           console.warn(`[loadChems] ⚠ GAS 시트 손상 의심 (성분 ${(_compRatio*100).toFixed(0)}% / 부서 ${(_deptRatio*100).toFixed(0)}%) — 내장 데이터로 폴백`);
           toast(`⚠ 구글시트 데이터 부실 — 내장 ${_builtInCount}종 사용 중`,'info');
           CHEMS.length = 0;
@@ -4182,7 +4181,7 @@ function loadChems(){
     }
   };
   const sc=document.createElement('script');
-  sc.src=CFG.url+'?action=chems&_t='+Date.now()+'&callback='+cb;
+  sc.src=CFG.url+'?action=chems&callback='+cb;
   sc.onerror=()=>{
     delete window[cb];
     toast('MSDS 목록 GAS 로드 실패 — 내장 데이터 사용 중','info');
@@ -12970,12 +12969,11 @@ self.addEventListener('fetch',e=>{
   // Service Worker 캐시 1회 강제 해제
   (function(){
     if('serviceWorker' in navigator && 'caches' in window){
-      if(localStorage.getItem('bm_sw_cleared_v18_0') === '1') return;
+      if(localStorage.getItem('bm_sw_cleared_v15_70') === '1') return;
       try{
         caches.keys().then(keys => {
           keys.forEach(k => { if(k.startsWith('bumin-msds-')) caches.delete(k); });
-          localStorage.setItem('bm_sw_cleared_v18_0','1');
-          try{ localStorage.removeItem('bm_chems_cache'); }catch(_){}
+          localStorage.setItem('bm_sw_cleared_v15_70','1');
         });
       }catch(e){}
     }
