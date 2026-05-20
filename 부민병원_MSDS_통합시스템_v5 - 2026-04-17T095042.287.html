@@ -4097,10 +4097,11 @@ function loadChems(){
         ['targetManage','specialManage'].forEach(k => {
           if(item[k]===undefined || item[k]===null || item[k]==='') item[k] = b[k];
         });
-        // 배열 필드: GAS가 비었으면 내장 사용
-        ['components','departments','icons'].forEach(k => {
-          if(_isEmpty(item[k]) && !_isEmpty(b[k])) item[k] = b[k];
-        });
+        // ★ v18.1: 배열 필드도 시트 값이 진실 — 보충 비활성화
+        //          (시트에서 성분 행 모두 삭제해도 내장값으로 덮이던 버그 차단)
+        // ['components','departments','icons'].forEach(k => {
+        //   if(_isEmpty(item[k]) && !_isEmpty(b[k])) item[k] = b[k];
+        // });
         // emergencyParsed
         if(_isEmpty(item.emergencyParsed) && !_isEmpty(b.emergencyParsed)){
           item.emergencyParsed = b.emergencyParsed;
