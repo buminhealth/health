@@ -1936,7 +1936,7 @@ function showDetail(name){
   };
   // ★ 구버전(c.name/c.cas) + 현재(c.compName/c.casNumber) 양쪽 호환
   const _tv=v=>(v||'').trim();
-  const compRows=(p.components||[]).map(c=>`<tr><td class="font-bold bg-slate-50 text-left">${c.compName||c.name||'-'}</td><td>${_fixCas(c.casNumber||c.cas)||'-'}</td><td class="text-emerald-700 font-black">${_fixAmount(c.amount)||'-'}</td><td>${_tv(c.workEnv)||_tv(c.compWorkEnv)||_tv(p.workEnv)||'-'}</td><td>${_tv(c.healthCheck)||_tv(c.compHealthCheck)||_tv(p.healthCheck)||'-'}</td></tr>`).join('');
+  const compRows=(p.components||[]).map(c=>`<tr><td class="font-bold bg-slate-50 text-left">${c.compName||c.name||'-'}</td><td>${_fixCas(c.casNumber||c.cas)||'-'}</td><td class="text-emerald-700 font-black">${_fixAmount(c.amount)||'-'}</td><td>${_tv(c.workEnv)||'-'}</td><td>${_tv(c.healthCheck)||'-'}</td></tr>`).join('');
   const lines=(p.emergency||'').split('\n').filter(l=>l.trim());
   const emRows=lines.map(line=>{let title='안내',desc=line;if(line.includes(']')){const pts=line.split(']');title=pts[0].replace('[','');desc=pts.slice(1).join(']');}return`<tr><th>[${title}]</th><td>${desc.trim().replace(/\n/g,'<br>')}</td></tr>`;}).join('');
   // ★ boolean(true/false) + string("해당"/"TRUE"/"o"/"O"/"●") 등 모든 표기 처리
