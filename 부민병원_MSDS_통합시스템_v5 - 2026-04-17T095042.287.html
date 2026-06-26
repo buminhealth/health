@@ -1263,7 +1263,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
                 </div>
                 <button onclick="apvBatchApprove()" id="apv-btn-approve" style="padding:7px 16px;background:#1c3557;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">✅ 선택 일지 결재</button>
                 <button onclick="apvBatchDownload()" id="apv-btn-download" style="padding:7px 16px;background:#0ea5e9;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;margin-left:6px">📥 개별 PDF 다운로드</button>
-<button onclick="" id="apv-btn-merge" style="padding:7px 16px;background:#10b981;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;margin-left:6px">📚 전체 PDF 병합 다운로드</button>
+<button onclick="apvMergeDownload()" id="apv-btn-merge" style="padding:7px 16px;background:#10b981;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;margin-left:6px">📚 전체 PDF 병합 다운로드</button>
               </div>
 
     <!-- 일지 목록 -->
@@ -6514,134 +6514,131 @@ async function apvBatchDownload(){
 }
 
 /* ════════════════════════════════════════════════════════
-   ★ 수정됨: 일괄 PDF 병합 다운로드 — 도장 합성 후 병합 적용
+   ★ 수정본: 통합 PDF 병합 및 도장 합성 다운로드
    ════════════════════════════════════════════════════════ */
 async function apvMergeDownload() {
-  if(apvState.selected.size === 0){
-    toast('⚠ 병합할 일지를 먼저 선택하세요','err');
-    return;
-  }
-
-  const selectedGroups = apvState.groups.filter(g => apvState.selected.has(g.groupKey));
-  if(selectedGroups.length === 0){
-    toast('⚠ 선택된 일지를 찾을 수 없음','err');
-    return;
-  }
-
-  const btn = document.getElementById('apv-btn-merge');
-  if(btn){
-    btn.disabled = true;
-    btn.textContent = '⏳ 도장 합성 및 병합 중…';
-  }
-
-  let okCount = 0;
-  let failCount = 0;
-
-  try {
-    toast(`📚 ${selectedGroups.length}건 결재 도장 합성 및 PDF 병합 시작…`,'info');
-
-    if(typeof PDFLib === 'undefined' || !PDFLib.PDFDocument){
-      toast('❌ pdf-lib 미로드 — 새로고침 필요','err');
-      return;
+    if (apvState.selected.size === 0) {
+        toast('⚠ 병합할 일지를 먼저 선택하세요', 'err');
+        return;
     }
 
-    const { PDFDocument } = PDFLib;
-    const mergedPdf = await PDFDocument.create();
+    const selectedGroups = apvState.groups.filter(g => apvState.selected.has(g.groupKey));
+    if (selectedGroups.length === 0) {
+        toast('⚠ 선택된 일지를 찾을 수 없음', 'err');
+        return;
+    }
 
-    for(let i=0; i<selectedGroups.length; i++){
-      const group = selectedGroups[i];
-      const label = `${group.dept||'?'} · ${group.dateStart||''}`;
-      toast(`📄 도장 찍는 중 (${i+1}/${selectedGroups.length}): ${label}`,'info');
+    const btn = document.getElementById('apv-btn-merge');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ 도장 합성 및 병합 중…';
+    }
 
-      try {
-        // 1. 원본 PDF 가져오기 (기존과 동일)
-        const ym = (group.submitted||'').slice(0,7); 
-        const repo = (typeof CFG !== 'undefined' && CFG.ghRepo) ? CFG.ghRepo : 'buminhealth/health';
-        const [owner, repoName] = repo.split('/');
-        const isPpe = (group.type||'').includes('보호구');
-        const folder = isPpe ? '보호구' : '교육일지';
-        const pdfUrl = `https://raw.githubusercontent.com/${owner}/${repoName}/main/${encodeURIComponent(folder)}/${ym}/${encodeURIComponent(group.pdfFileName)}`;
+    let okCount = 0;
+    let failCount = 0;
 
-        let resp = await fetch(pdfUrl);
-        if(!resp.ok && resp.status === 404 && isPpe){
-          const fallbackUrl = `https://raw.githubusercontent.com/${owner}/${repoName}/main/${encodeURIComponent('교육일지')}/${ym}/${encodeURIComponent(group.pdfFileName)}`;
-          resp = await fetch(fallbackUrl);
-        }
-        if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    try {
+        toast(`📚 ${selectedGroups.length}건 결재 도장 합성 및 PDF 병합 시작…`, 'info');
 
-        const pdfBytes = await resp.arrayBuffer();
-        const pdfDoc = await PDFDocument.load(pdfBytes);
-        const page = pdfDoc.getPages()[0];
-        const { width, height } = page.getSize();
-
-        // ══════════════════════════════════════════════════════
-        // 🔴 [도장 이미지 생성 위치] 🔴
-        // 이곳에 기존 apvDownloadPdf 함수에서 사용하는 도장 생성 로직
-        // (stampPngDataUrl을 만드는 코드)이 들어가야 합니다.
-        // 현재는 임시로 변수만 선언해 두었습니다.
-        // ══════════════════════════════════════════════════════
-        let stampPngDataUrl = ""; // <- 여기에 실제 도장 데이터가 할당되어야 합니다.
-
-        // 2. 결재 도장 합성하기 (도장 데이터가 있을 경우에만 실행)
-        if (stampPngDataUrl) {
-            const stampBase64 = stampPngDataUrl.split(',')[1];
-            const stampBytes = Uint8Array.from(atob(stampBase64), c => c.charCodeAt(0));
-            const stampImage = await pdfDoc.embedPng(stampBytes);
-            
-            const stampSize = 28;
-            const stampX = width - 55;
-            const stampY = height - 58;
-            
-            page.drawImage(stampImage, {
-                x: stampX,
-                y: stampY,
-                width: stampSize,
-                height: stampSize
-            });
+        if (typeof PDFLib === 'undefined' || !PDFLib.PDFDocument) {
+            toast('❌ pdf-lib 미로드 — 새로고침 필요', 'err');
+            return;
         }
 
-        // 3. 도장이 찍힌 페이지를 병합 문서로 복사
-        const copiedPages = await mergedPdf.copyPages(pdfDoc, pdfDoc.getPageIndices());
-        copiedPages.forEach((p) => mergedPdf.addPage(p));
+        const { PDFDocument } = PDFLib;
+        const mergedPdf = await PDFDocument.create();
 
-        okCount++;
-      } catch(err) {
-        console.error(`병합 실패 [${label}]:`, err);
-        failCount++;
-      }
-      
-      await new Promise(r => setTimeout(r, 500)); // 부하 방지
-    }
+        for (let i = 0; i < selectedGroups.length; i++) {
+            const group = selectedGroups[i];
+            const label = `${group.dept || '?'} · ${group.dateStart || ''}`;
+            toast(`📄 처리 중 (${i + 1}/${selectedGroups.length}): ${label}`, 'info');
 
-    if(okCount > 0) {
-      toast(`💾 병합 완료! 파일 다운로드 중...`, 'info');
-      const mergedPdfBytes = await mergedPdf.save();
-      const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      const today = new Date().toISOString().slice(0,10);
-      link.download = `통합_결재완료_일지출력_${today}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(link.href);
-      
-      let summary = `✅ 병합 완료 — 성공 ${okCount}건`;
-      if(failCount > 0) summary += ` · ⚠ 누락 ${failCount}건`;
-      toast(summary, failCount > 0 ? 'info' : 'ok');
-    } else {
-      toast(`❌ 병합할 PDF를 하나도 가져오지 못했습니다.`, 'err');
-    }
+            try {
+                // 1. 원본 PDF 가져오기
+                const ym = (group.submitted || '').slice(0, 7);
+                const repo = (typeof CFG !== 'undefined' && CFG.ghRepo) ? CFG.ghRepo : 'buminhealth/health';
+                const [owner, repoName] = repo.split('/');
+                const isPpe = (group.type || '').includes('보호구');
+                const folder = isPpe ? '보호구' : '교육일지';
+                const pdfUrl = `https://raw.githubusercontent.com/${owner}/${repoName}/main/${encodeURIComponent(folder)}/${ym}/${encodeURIComponent(group.pdfFileName)}`;
 
-  } catch(err) {
-    console.error('apvMergeDownload error:',err);
-    toast('❌ 병합 다운로드 오류: '+(err.message||err),'err');
-  } finally {
-    if(btn){
-      btn.disabled = false;
-      btn.textContent = '📚 전체 PDF 병합 다운로드';
+                let resp = await fetch(pdfUrl);
+                if (!resp.ok && resp.status === 404 && isPpe) {
+                    const fallbackUrl = `https://raw.githubusercontent.com/${owner}/${repoName}/main/${encodeURIComponent('교육일지')}/${ym}/${encodeURIComponent(group.pdfFileName)}`;
+                    resp = await fetch(fallbackUrl);
+                }
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+                const pdfBytes = await resp.arrayBuffer();
+                const pdfDoc = await PDFDocument.load(pdfBytes);
+                const page = pdfDoc.getPages()[0];
+                const { width, height } = page.getSize();
+
+                // 2. 결재완료 시 도장 합성 (기존 시스템 함수 apvStampToImage 활용)
+                if (group.approved) {
+                    const stampPngDataUrl = await apvStampToImage(group.approvedAt);
+                    if (stampPngDataUrl) {
+                        const stampBase64 = stampPngDataUrl.split(',')[1];
+                        const stampBytes = Uint8Array.from(atob(stampBase64), c => c.charCodeAt(0));
+                        const stampImage = await pdfDoc.embedPng(stampBytes);
+
+                        // 결재 위치 좌표
+                        const stampSize = 22;
+                        const stampX = width - 49;
+                        const stampY = height - 55;
+
+                        page.drawImage(stampImage, {
+                            x: stampX,
+                            y: stampY,
+                            width: stampSize,
+                            height: stampSize
+                        });
+                    }
+                }
+
+                // 3. 병합 문서에 페이지 추가
+                const copiedPages = await mergedPdf.copyPages(pdfDoc, pdfDoc.getPageIndices());
+                copiedPages.forEach((p) => mergedPdf.addPage(p));
+
+                okCount++;
+            } catch (err) {
+                console.error(`병합 실패 [${label}]:`, err);
+                failCount++;
+            }
+
+            await new Promise(r => setTimeout(r, 500)); // 과부하 방지
+        }
+
+        // 4. 최종 다운로드
+        if (okCount > 0) {
+            toast(`💾 병합 완료! 파일 다운로드 중...`, 'info');
+            const mergedPdfBytes = await mergedPdf.save();
+            const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            const today = new Date().toISOString().slice(0, 10);
+            link.download = `통합_결재완료_일지출력_${today}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+
+            let summary = `✅ 병합 완료 — 성공 ${okCount}건`;
+            if (failCount > 0) summary += ` · ⚠ 누락 ${failCount}건`;
+            toast(summary, failCount > 0 ? 'info' : 'ok');
+        } else {
+            toast(`❌ 병합할 PDF를 하나도 가져오지 못했습니다.`, 'err');
+        }
+
+    } catch (err) {
+        console.error('apvMergeDownload error:', err);
+        toast('❌ 병합 다운로드 오류: ' + (err.message || err), 'err');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '📚 전체 PDF 병합 다운로드';
+        }
     }
-  }
 }
   
 /* ── 원본 PDF 다운로드 → pdf-lib 도장 합성 → 새 PDF 다운로드 ── */
