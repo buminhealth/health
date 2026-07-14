@@ -9,8 +9,27 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v17.16 (2026-07-14)
+  부민병원 MSDS 통합시스템 v17.17 (2026-07-14)
   ════════════════════════════════════════════════════════════════════
+  ★★★ v17.17 (2026-07-14) — 보호구 관리자 행 인덱스 버그 수정 (요청사항 6):
+    [보고] 부서(예: 총무팀)로 검색 후 행을 체크하고 👁 미리보기·📥 출력을 누르면
+           검색 전 목록의 1번 기록(다른 사람 일지)이 열리는 문제.
+    [원인 분석] 표는 필터·정렬된 배열로 그려지고 버튼은 그 화면 순번(idx)을 넘기는데,
+           보호구의 👁 미리보기·📥 출력·창열기·✕ 삭제 4개 함수가 idx를
+           "필터 전 전체 저장 배열" 또는 "자체 재계산 필터"에 대고 조회하고 있었음.
+           → 필터·검색·정렬을 걸면 화면 1번 ≠ 전체 1번이 되어 다른 기록이 열림.
+           (교육 현황은 adminRecords, 화학물질은 _chemCurrentFiltered로 이미 일치 — 보호구만 불일치)
+    [수정]
+    - renderPpeAdminTable 시작에 window._ppeCurrentFiltered = data 단일화
+      → 어떤 경로(조회·부서필터·동기화·중복정리·저장 직후)로 렌더돼도 화면=기준배열 100% 일치
+    - viewPpeRecord · downloadPpePdfFromAdmin · openPpePdfFromAdmin:
+      전체 배열[idx] → 화면 배열[idx]로 교체 (👁·📥·창열기 모두 화면의 그 행을 정확히 염)
+    - 자동 검색된 pdfFileName 저장도 인덱스 대입 → recordId 기준 반영으로 교체
+      (잘못된 기록에 파일명이 저장되던 2차 오염 차단)
+    - deletePpeRecord: 자체 재계산 필터(검색어·중복정리·정렬 미반영) 제거 →
+      화면 배열 기준으로 대상 확정 (다른 기록이 지워질 수 있던 위험 제거)
+    - 수정·저장(updatePpeRec/savePpeRecRow)은 이미 화면 배열 기준이라 무변경
+
   ★★★ v17.16 (2026-07-14) — 관리자 PDF 출력·다운로드 통일 (요청사항 5):
     [보고 1] 보호구 지급의 "PDF 출력"이 필터·체크와 무관하게 전체 기록을 출력
     [보고 2] 보호구 목록 PDF에서 지급물품이 [object Object]로 표시
@@ -8897,8 +8916,10 @@ async function viewEduRecord(idx){
 
 /* ── 보호구 PDF 형태 미리보기 ── */
 async function viewPpeRecord(idx){
-  const all = JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');
-  const r = all[idx];
+  // ★ v17.17: 화면에 렌더된 배열(필터·검색·정렬 결과) 기준으로 인덱싱
+  //   — 부서 검색 후 미리보기·출력 시 검색 전 다른 기록이 열리던 버그 수정
+  const _view = window._ppeCurrentFiltered || JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');
+  const r = _view[idx];
   if(!r){ toast('대상 없음','err'); return; }
 
   // ★ 옛 일지 (sigImg 없음) → 원본 PDF iframe
@@ -9277,6 +9298,9 @@ function renderPpeAdminTable(data){
   const tbody=document.getElementById('ppe-admin-tbody');
   if(!tbody) return;
 
+  // ★ v17.17: 화면=원천 단일화 — 어떤 경로로 렌더돼도 행 버튼(idx)의 기준 배열을 항상 일치시킴
+  window._ppeCurrentFiltered = data;
+
   // 부서 셀렉트 업데이트
   const allData=(() => { try{return JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');}catch(e){return [];} })();
   const depts=[...new Set(allData.map(r=>r.dept).filter(Boolean))].sort();
@@ -9419,8 +9443,10 @@ function _showPpePdfNotFoundModal(r){
 
 /* ── 관리자 → 보호구 → PDF 새 창 보기 (자동 검색 포함) ── */
 async function openPpePdfFromAdmin(idx){
-  const all = JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');
-  const r = all[idx];
+  // ★ v17.17: 화면에 렌더된 배열(필터·검색·정렬 결과) 기준으로 인덱싱
+  //   — 부서 검색 후 미리보기·출력 시 검색 전 다른 기록이 열리던 버그 수정
+  const _view = window._ppeCurrentFiltered || JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');
+  const r = _view[idx];
   if(!r){ toast('대상 없음','err'); return; }
 
   // ★ pdfFileName 없으면 GitHub에서 자동 검색
@@ -9432,8 +9458,18 @@ async function openPpePdfFromAdmin(idx){
     });
     if(found){
       r.pdfFileName = found;
-      all[idx] = r;
-      localStorage.setItem('bm_ppe_records', JSON.stringify(all));
+      // ★ v17.17: recordId(없으면 자연키) 기준으로 원본 저장소에 반영 — 인덱스로 다른 기록을 오염시키던 위험 제거
+      try{
+        const all = JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');
+        const j = all.findIndex(x =>
+          (r.recordId && x.recordId === r.recordId) ||
+          (x.submitted === r.submitted && x.name === r.name &&
+           (x.date||x.dateStart||'') === (r.date||r.dateStart||'')));
+        if(j >= 0){
+          all[j].pdfFileName = found;
+          localStorage.setItem('bm_ppe_records', JSON.stringify(all));
+        }
+      }catch(e){}
       toast(`✅ 자동 매칭: ${found.slice(0,40)}…`,'ok');
     }else{
       // ★ v15.43: 친절한 모달로 records 재생성 옵션 제공
@@ -9448,8 +9484,10 @@ async function openPpePdfFromAdmin(idx){
 
 /* ── 관리자 → 보호구 → PDF 다운로드 (자동 검색 포함) ── */
 async function downloadPpePdfFromAdmin(idx){
-  const all = JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');
-  const r = all[idx];
+  // ★ v17.17: 화면에 렌더된 배열(필터·검색·정렬 결과) 기준으로 인덱싱
+  //   — 부서 검색 후 미리보기·출력 시 검색 전 다른 기록이 열리던 버그 수정
+  const _view = window._ppeCurrentFiltered || JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');
+  const r = _view[idx];
   if(!r){ toast('대상 없음','err'); return; }
 
   // ★ pdfFileName 없으면 GitHub에서 자동 검색
@@ -9461,8 +9499,18 @@ async function downloadPpePdfFromAdmin(idx){
     });
     if(found){
       r.pdfFileName = found;
-      all[idx] = r;
-      localStorage.setItem('bm_ppe_records', JSON.stringify(all));
+      // ★ v17.17: recordId(없으면 자연키) 기준으로 원본 저장소에 반영 — 인덱스로 다른 기록을 오염시키던 위험 제거
+      try{
+        const all = JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');
+        const j = all.findIndex(x =>
+          (r.recordId && x.recordId === r.recordId) ||
+          (x.submitted === r.submitted && x.name === r.name &&
+           (x.date||x.dateStart||'') === (r.date||r.dateStart||'')));
+        if(j >= 0){
+          all[j].pdfFileName = found;
+          localStorage.setItem('bm_ppe_records', JSON.stringify(all));
+        }
+      }catch(e){}
       toast(`✅ 자동 매칭: ${found.slice(0,40)}…`,'ok');
     }else{
       // ★ v15.43: 친절한 모달로 records 재생성 옵션 제공
@@ -12439,19 +12487,9 @@ function clearPpeRecords(){
 
 function deletePpeRecord(idx){
   if(!confirm('이 보호구 기록을 영구 삭제하시겠습니까?\n\n※ 로컬+GitHub 동시 삭제\n※ 다른 기기에서도 즉시 사라짐')) return;
-  const deptSel=(document.getElementById('adm-ppe-dept-sel')||{}).value||'';
-  const fromVal=(document.getElementById('adm-ppe-from')||{}).value||'';
-  const toVal  =(document.getElementById('adm-ppe-to')  ||{}).value||'';
-  let stored=[];
-  try{ stored=JSON.parse(localStorage.getItem('bm_ppe_records')||'[]'); }catch(e){}
-  const filtered=stored.filter(r=>{
-    if(deptSel&&r.dept!==deptSel) return false;
-    const d=r.date||r.dateStart||'';
-    if(fromVal&&d<fromVal) return false;
-    if(toVal&&d>toVal) return false;
-    return true;
-  });
-  const target=filtered[idx];
+  // ★ v17.17: 화면에 렌더된 배열 기준으로 대상 확정
+  //   — 자체 재계산 필터(검색어·중복정리·정렬 미반영)로 다른 기록이 지워질 수 있던 위험 제거
+  const target=(window._ppeCurrentFiltered||[])[idx];
   if(!target){ toast('대상 없음','err'); return; }
   BM.ensureIds([target]);
   BM.markDeleted('ppe', [target.recordId], '관리자 단건 삭제')
