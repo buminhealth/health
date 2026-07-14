@@ -5,11 +5,29 @@
 
 
 
+
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v17.10 (2026-05-14)
+  부민병원 MSDS 통합시스템 v17.11 (2026-07-14)
   ════════════════════════════════════════════════════════════════════
+  ★★★ v17.11 (2026-07-14) — 보호구 지급수령증 "일지 1장·메일 1통" 전환:
+    [요청] 수령자 여러 명 추가 시 개인별 PDF N장 + 메일 N통이 아니라,
+           MSDS교육일지처럼 전원이 한 장의 일지에 누적 기록·서명되고
+           그 일지 1장이 메일 1통으로 발송되도록 서식 자체를 명부형으로 변경.
+    - ppeBuildLedgerHTML 신설: 명부형 일지 (번호/성명/부서/입사일/지급물품/수령일/서명)
+      · e2(MSDS교육일지)와 동일한 디자인 언어 + data-sig-row 페이지 분할 보호
+    - ppeGenAllPDF 전면 교체: N회 반복 생성·발송 제거 → 일지 1장 생성
+      · pdfRenderPagesProtected 적용 — 수령자가 많아 2장 이상이어도 서명 행이 잘리지 않음
+    - ppeSendEmailAll 신설(ppeSendEmailOne 대체): 수령자 명단 표가 포함된 메일 1통 발송
+    - ppeSaveRecordsBatch 신설(ppeSaveRecord 대체): 교육일지와 동일하게
+      · 동일 submitted 배치로 인원별 누적 저장 (관리자 현황·통계·중복검사 그대로 호환)
+      · 전원이 같은 pdfFileName(일지 1장) 공유 · GitHub 1회 커밋 · GAS 1회 호출(names '|' 구분)
+    - pdfYm 필드 신설: 업로드 폴더(보호구/YYYY-MM)를 레코드에 기록
+      · 수령일 월(月)과 발송 월이 달라도 관리자 재다운로드/미리보기 100% 매칭
+    - 서명 유지 개선: 수령자 추가/삭제로 서명판이 다시 그려져도 기존 서명 자동 복원
+    - 화면 내 일지 미리보기(STEP 4) 신설 — 발송 전 최종 일지 확인 가능
+
   v17.3 → v17.10 주요 수정 (오류 진단·수정):
 
   [오류 1] 구글시트 MSDS 제품별 세부항목(구성성분/세부내용) 누락 + 부서 세부 표시 안 됨
@@ -781,7 +799,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div>
         <h2 style="font-size:17px;font-weight:900;color:#1c3557;margin:0">🦺 보호구 지급수령증</h2>
-        <p style="font-size:11px;color:#64748b;margin:3px 0 0">산업안전보건법 제38조 | 이름 검색 → 부서 자동입력 → 지급물품 자동입력</p>
+        <p style="font-size:11px;color:#64748b;margin:3px 0 0">산업안전보건법 제38조 | 이름 검색 → 수령자 누적 추가 → 서명 → <b style="color:#1c3557">일지 1장 · 메일 1통</b> 발송</p>
       </div>
       <button class="btn btn-s" style="font-size:11px" onclick="ppeReset()">전체 초기화</button>
     </div>
@@ -830,16 +848,24 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     </div>
 
     <!-- STEP3: 서명 -->
-    <div class="card" style="margin-bottom:12px" id="ppe-sig-card" style="display:none">
+    <div class="card" style="margin-bottom:12px" id="ppe-sig-card">
       <div class="card-ttl" style="margin-bottom:5px">✍️ STEP 3. 수령자 서명</div>
+      <p style="font-size:11px;color:#64748b;margin:0 0 8px">보호구를 수령한 직원은 본인 서명란에 직접 서명해주세요. 수령자를 추가·삭제해도 기존 서명은 유지됩니다.</p>
       <div id="ppe-sig-blocks"></div>
     </div>
 
-    <!-- STEP4: PDF 발송 -->
-    <div style="display:flex;gap:10px;justify-content:center;margin-bottom:16px">
+    <!-- ★ v17.11 STEP4: 일지 미리보기 (교육일지 미리보기와 동일 패턴) -->
+    <div class="card" style="margin-bottom:12px;display:none" id="ppe-preview-card">
+      <div class="card-ttl" style="margin-bottom:8px">📋 STEP 4. 일지 미리보기 <span style="color:#64748b;font-weight:400;font-size:12px">— 수령자 전원이 아래 한 장의 일지에 기록됩니다</span></div>
+      <div id="ppe-preview" style="border:1px solid #e2e8f0;border-radius:8px;overflow:auto;max-height:520px;background:#f8fafc"></div>
+    </div>
+
+    <!-- STEP5: 일지 PDF 저장 · 메일 1통 발송 (v17.11) -->
+    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-bottom:16px">
       <button class="btn btn-p" style="font-size:14px;padding:10px 32px" onclick="ppeGenAllPDF()">
-        📄 전체 PDF 저장 · 메일 발송
+        📄 일지 PDF 저장 · 메일 발송 (1장 · 1통)
       </button>
+      <p style="font-size:11px;color:#64748b;margin:0">수령자 전원이 <b>한 장의 일지</b>에 누적 기록되어 <b>메일 1통</b>으로 발송됩니다 (MSDS 교육일지와 동일 방식)</p>
     </div>
   </div>
 </div>
@@ -2323,12 +2349,14 @@ async function appendEduRecordsToGitHub(newRecs){
   }
 }
 
-// 보호구 기록 GitHub 추가
+// 보호구 기록 GitHub 추가 — ★ v17.11: 단건/배열 모두 지원 (일지 배치 1회 커밋)
 async function appendPpeRecordToGitHub(rec){
   try{
+    const recs = Array.isArray(rec) ? rec : [rec];
+    if(!recs.length) return;
     if(CFG.ghToken&&CFG.ghRepo) await BM.syncTombstonesFromGitHub('ppe');
-    BM.ensureIds([rec]);
-    const filtered = BM.filterTombstoned([rec],'ppe');
+    BM.ensureIds(recs);
+    const filtered = BM.filterTombstoned(recs,'ppe');
     if(!filtered.length) return;
 
     const {data, sha} = await readGitHubJSON('records/ppe_records.json');
@@ -2348,10 +2376,10 @@ async function appendPpeRecordToGitHub(rec){
     };
 
     await writeGitHubJSON('records/ppe_records.json',
-      getRebuilt(data), sha, '보호구기록 Upsert',
+      getRebuilt(data), sha, `보호구기록 Upsert (${filtered.length}건)`,
       (fresh) => getRebuilt(fresh)
     );
-    toast('☁ GitHub 보호구기록 저장 완료','ok');
+    toast(`☁ GitHub 보호구기록 ${filtered.length}건 저장 완료`,'ok');
   }catch(e){
     toast('⚠ GitHub 보호구기록 저장 실패: '+e.message,'err');
     console.error('[appendPpeRecordToGitHub]',e);
@@ -4981,13 +5009,14 @@ async function e1SendEmail(){
     //  이유: 이 함수는 실제 사용자 경로(e1GenPDF → uploadPdfAndSendEmail)에서 호출되지 않음
     //  대신 _cloudSyncDown에 60초 grace period를 도입해 race condition을 근본 해결
   }catch(err){
+    // ★ v17.11 잠복 버그 수정: 존재하지 않는 변수 p 참조 → catch 자체가 ReferenceError로 죽던 문제 제거
     const errMsg = (err.text || err.message || String(err));
-    let userMsg = `⚠ ${p.name||'보호구'} 메일 오류: ` + errMsg.slice(0,80);
-    if(errMsg.includes('422')) userMsg = `⚠ EmailJS 422 (${p.name}) — 템플릿 변수명 불일치`;
-    else if(errMsg.includes('400')) userMsg = `⚠ EmailJS 400 (${p.name}) — API Key 확인`;
-    else if(errMsg.includes('403')) userMsg = `⚠ EmailJS 403 (${p.name}) — 사용량 초과`;
+    let userMsg = '⚠ 특별교육일지 메일 오류: ' + errMsg.slice(0,80);
+    if(errMsg.includes('422')) userMsg = '⚠ EmailJS 422 — 템플릿 변수명 불일치';
+    else if(errMsg.includes('400')) userMsg = '⚠ EmailJS 400 — API Key 확인';
+    else if(errMsg.includes('403')) userMsg = '⚠ EmailJS 403 — 사용량 초과';
     toast(userMsg,'err');
-    console.error('ppeSendEmailOne error:', err);
+    console.error('e1SendEmail error:', err);
   }
 }
 async function e2SendEmailAuto(dept, chem, ds, imgData){
@@ -7550,7 +7579,8 @@ function ppeAddPerson(){
   document.getElementById('ppe-date').value='';
   document.getElementById('ppe-items-wrap').innerHTML='';
   document.getElementById('ppe-cur-items').style.display='none';
-  toast(`✅ ${ppePersons[ppePersons.length-1].name} 추가됨`,'ok');
+  if(typeof ppeBuildPreview==='function') ppeBuildPreview();   // ★ v17.11
+  toast(`✅ ${ppePersons[ppePersons.length-1].name} 추가됨 — 현재 일지 누적 ${ppePersons.length}명`,'ok');
 }
 
 function renderPersonList(){
@@ -7589,6 +7619,7 @@ function ppeRemovePerson(i){
   ppePersons.splice(i,1);
   renderPersonList();
   renderPpeSigBlocks();
+  if(typeof ppeBuildPreview==='function') ppeBuildPreview();   // ★ v17.11
 }
 
 // 서명 블록 생성
@@ -7615,144 +7646,247 @@ function initPpeSigN(i){
   cv._init=true;
   cv.width=cv.offsetWidth||360; cv.height=120;
   const ctx=cv.getContext('2d');
+  // ★ v17.11: 저장된 서명 복원 — 수령자 추가/삭제로 서명판이 다시 그려져도 기존 서명 유지
+  if(ppePersons[i]&&ppePersons[i].sig){
+    const im=new Image();
+    im.onload=()=>{try{ctx.drawImage(im,0,0);}catch(e){}};
+    im.src=ppePersons[i].sig;
+  }
   let draw=false,lx=0,ly=0;
   const gp=e=>{const r=cv.getBoundingClientRect(),s=e.touches?e.touches[0]:e;return{x:s.clientX-r.left,y:s.clientY-r.top};};
   cv.addEventListener('mousedown',e=>{e.preventDefault();draw=true;const p=gp(e);lx=p.x;ly=p.y;},{passive:false});
   cv.addEventListener('touchstart',e=>{e.preventDefault();draw=true;const p=gp(e);lx=p.x;ly=p.y;},{passive:false});
-  const mv=e=>{e.preventDefault();if(!draw)return;const p=gp(e);ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(p.x,p.y);ctx.strokeStyle='#1a2340';ctx.lineWidth=1.8;ctx.lineCap='round';ctx.stroke();lx=p.x;ly=p.y;};
+  const mv=e=>{e.preventDefault();if(!draw)return;const p=gp(e);ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(p.x,p.y);ctx.strokeStyle='#1a2340';ctx.lineWidth=1.8;ctx.lineCap='round';ctx.stroke();lx=p.x;ly=p.y;
+    // ★ v17.11: 스트로크마다 서명 데이터 저장 (일지·기록·복원에 사용)
+    if(ppePersons[i]) ppePersons[i].sig=cv.toDataURL();};
   cv.addEventListener('mousemove',mv,{passive:false});
   cv.addEventListener('touchmove',mv,{passive:false});
-  ['mouseup','touchend','mouseleave'].forEach(ev=>cv.addEventListener(ev,()=>draw=false));
+  ['mouseup','touchend','mouseleave'].forEach(ev=>cv.addEventListener(ev,()=>{
+    if(draw && typeof ppeBuildPreview==='function') ppeBuildPreview();  // ★ 서명 종료 시 미리보기 갱신
+    draw=false;
+  }));
 }
 
 function clrPpeSigN(i){
   const cv=document.getElementById('ppe-sig-'+i);
   if(cv){const ctx=cv.getContext('2d');ctx.clearRect(0,0,cv.width,cv.height);}
+  if(ppePersons[i]) delete ppePersons[i].sig;   // ★ v17.11: 저장된 서명도 함께 삭제
+  if(typeof ppeBuildPreview==='function') ppeBuildPreview();
 }
 
-// 전체 PDF 생성
-async function ppeGenAllPDF(){
-  if(!ppePersons.length){toast('수령자를 추가하세요','err');return;}
-  for(let i=0;i<ppePersons.length;i++){
-    await ppeGenOnePDF(i);
-    await new Promise(r=>setTimeout(r,600));
-  }
-  toast(`✅ 총 ${ppePersons.length}명 PDF 발송 완료`,'ok');
+/* ══════════════════════════════════════════════════════════════════
+   ★★★ v17.11: 보호구 지급수령증 — MSDS교육일지와 동일한 "일지 1장" 방식
+   ────────────────────────────────────────────────────────────────
+   [변경 전] 수령자 N명 → 개인 수령증 PDF N장 → 메일 N통 개별 발송
+   [변경 후] 수령자 N명 → 명부형 일지 PDF 1장(전원 누적 기록·서명) → 메일 1통
+   - 레코드: 교육일지와 동일하게 인원별 저장 + 동일 submitted 배치 + 동일 pdfFileName 공유
+   - pdfYm 필드 신설: 업로드 폴더(보호구/YYYY-MM)를 레코드에 기록 → 재다운로드 100% 매칭
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── 일지 대표값(부서·이름·날짜 라벨) 계산 ── */
+function ppeGroupLabels(persons){
+  const names = persons.map(p=>p.name).filter(Boolean);
+  const nameLabel = names.length===1 ? names[0] : (names[0]||'') + '외' + (names.length-1) + '명';
+  const depts = [...new Set(persons.map(p=>p.dept).filter(Boolean))];
+  const deptLabel = depts.length===0 ? '부서미상' : (depts.length===1 ? depts[0] : depts[0] + '외' + (depts.length-1));
+  const dates = [...new Set(persons.map(p=>p.date).filter(Boolean))].sort();
+  const repDate  = dates.length===1 ? dates[0] : todayStr();                       // 파일명·메일용 대표일
+  const dateLabel = dates.length<=1 ? (dates[0]||todayStr()) : fmtDateRange(dates[0], dates[dates.length-1]); // 일지 표기용
+  const signedCount = persons.filter(p=>p.sig).length;
+  return {nameLabel, deptLabel, depts, repDate, dateLabel, signedCount};
 }
 
-async function ppeGenOnePDF(idx){
-  const p=ppePersons[idx];
-  const N='#1c3557',LB='#e8ecf2',BD='#b0bece';
-  const t=`border:1.2px solid ${BD}`;
-  const lbl=`background:${LB};${t};padding:9px 12px;font-weight:700;color:${N};font-size:11px;text-align:center;vertical-align:middle`;
-  const val=`background:#fff;${t};padding:9px 12px;font-size:12px;vertical-align:middle`;
-  const sigCv=document.getElementById('ppe-sig-'+idx);
-  const sigImg=sigCv?sigCv.toDataURL('image/png'):'';
-  const itemsStr=p.items.map(i=>`${i.name} ×${i.qty}개`).join('<br>');
+/* ── ★ v17.11: 명부형 일지 HTML 빌더 (e2BuildPdfHTML과 동일 디자인 언어) ── */
+function ppeBuildLedgerHTML(persons){
+  const L = ppeGroupLabels(persons);
+  const P = {
+    navy:'#1c3557', bgHead:'#e8ecf2', bgWhite:'#ffffff', bgStripe:'#f7f9fc',
+    border:'#b0bece', borderHd:'#8398b0',
+    txt:'#1a1a2e', txtSub:'#3d4f6a', txtGray:'#6b7b8d', sigBg:'#fafcff'
+  };
+  const FF  = `'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif`;
+  const LBL = `background:${P.bgHead};border:1.2px solid ${P.borderHd};padding:10px 11px;font-weight:700;font-size:12px;text-align:center;color:${P.navy};vertical-align:middle;line-height:1.5;font-family:${FF}`;
+  const VAL = `background:${P.bgWhite};border:1.2px solid ${P.border};padding:10px 12px;font-size:12px;font-weight:400;color:${P.txt};vertical-align:middle;line-height:1.5;font-family:${FF}`;
 
-  const area=document.getElementById('pdf-area');
-  area.innerHTML=`
-  <div style="padding:26px 28px;width:700px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;background:#fff">
-    <div style="text-align:center;border-bottom:3px solid ${N};padding-bottom:12px;margin-bottom:4px">
-      <div style="font-size:22px;font-weight:900;letter-spacing:6px;color:${N}">보호구 지급수령증</div>
-      <div style="font-size:10px;color:#888;margin-top:4px">산업안전보건법 제38조 | 인당의료재단 부민병원</div>
+  const rows = persons.map((p,i)=>{
+    const bg = i%2===0 ? P.bgWhite : P.bgStripe;
+    const itemsStr = (p.items||[]).map(it=>`${it.name} ×${it.qty}`).join(', ');
+    return `<tr style="height:52px" data-sig-row="1">
+      <td style="border:1.2px solid ${P.border};text-align:center;font-size:12px;font-weight:700;color:${P.navy};background:${P.bgHead};width:34px;vertical-align:middle;font-family:${FF}">${i+1}</td>
+      <td style="border:1.2px solid ${P.border};font-size:12px;font-weight:700;text-align:center;background:${bg};color:${P.txt};vertical-align:middle;font-family:${FF}">${p.name||''}</td>
+      <td style="border:1.2px solid ${P.border};font-size:11px;font-weight:400;text-align:center;background:${bg};color:${P.txtSub};vertical-align:middle;font-family:${FF};word-break:keep-all">${p.dept||''}</td>
+      <td style="border:1.2px solid ${P.border};font-size:11px;font-weight:400;text-align:center;background:${bg};color:${P.txtSub};vertical-align:middle;font-family:${FF};font-variant-numeric:tabular-nums;white-space:nowrap">${p.join||''}</td>
+      <td style="border:1.2px solid ${P.border};font-size:10.5px;font-weight:400;text-align:left;background:${bg};color:${P.txt};vertical-align:middle;padding:6px 9px;line-height:1.55;font-family:${FF};word-break:keep-all">${itemsStr}</td>
+      <td style="border:1.2px solid ${P.border};font-size:11px;font-weight:400;text-align:center;background:${bg};color:${P.txtSub};vertical-align:middle;font-family:${FF};font-variant-numeric:tabular-nums;white-space:nowrap">${p.date||''}</td>
+      <td style="border:1.2px solid ${P.border};text-align:center;background:${P.sigBg};vertical-align:middle">
+        ${p.sig?`<img src="${p.sig}" style="height:44px;max-width:100%;display:block;margin:0 auto">`:''}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+  <div style="padding:20px 26px 22px;width:750px;font-family:${FF};color:${P.txt};background:#fff;box-sizing:border-box">
+    <div style="margin-bottom:14px">
+      <div style="display:flex;align-items:baseline;padding-bottom:9px;border-bottom:2px solid ${P.navy};width:100%;gap:14px;flex-wrap:wrap">
+        <div style="font-size:24px;font-weight:700;letter-spacing:2px;color:${P.navy};line-height:1">보호구 지급수령증</div>
+        <div style="font-size:10.5px;color:${P.txtGray};letter-spacing:0.3px;font-weight:400">산업안전보건법 제38조 | 인당의료재단 부민병원</div>
+      </div>
     </div>
-    <table style="width:100%;border-collapse:collapse;margin-bottom:2px;table-layout:fixed">
-      <colgroup><col style="width:80px"><col><col style="width:80px"><col></colgroup>
-      <tr style="height:46px">
-        <td style="${lbl}">이&nbsp;&nbsp;&nbsp;름</td>
-        <td style="${val};font-weight:700;font-size:13px">${p.name}</td>
-        <td style="${lbl}">부&nbsp;&nbsp;&nbsp;서</td>
-        <td style="${val}">${p.dept}</td>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:1px;table-layout:fixed">
+      <colgroup><col style="width:14%"><col style="width:36%"><col style="width:14%"><col style="width:36%"></colgroup>
+      <tr>
+        <td style="${LBL}">지급부서</td>
+        <td style="${VAL};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${L.depts.join(', ')||'-'}</td>
+        <td style="${LBL}">지&nbsp;급&nbsp;일</td>
+        <td style="${VAL};font-variant-numeric:tabular-nums;white-space:nowrap">${L.dateLabel}</td>
       </tr>
-      <tr style="height:44px">
-        <td style="${lbl}">입&nbsp;사&nbsp;일</td>
-        <td style="${val}">${p.join}</td>
-        <td style="${lbl}">수&nbsp;령&nbsp;일</td>
-        <td style="${val};font-weight:700">${p.date}</td>
-      </tr>
-      <tr style="height:90px">
-        <td style="${lbl};vertical-align:middle">지급물품</td>
-        <td style="${val};font-size:11px;line-height:2;vertical-align:middle;word-break:keep-all" colspan="1">${itemsStr}</td>
-        <td style="${lbl};vertical-align:middle">서&nbsp;&nbsp;&nbsp;명<br><span style="font-size:9px;font-weight:400;color:#888">(수령자)</span></td>
-        <td style="background:#fafcff;${t};text-align:center;vertical-align:middle">
-          ${sigImg?`<img src="${sigImg}" style="height:75px;max-width:150px;object-fit:contain">`:'&nbsp;'}</td>
-      </tr>
-      <tr style="height:44px">
-        <td style="${lbl}">지&nbsp;급&nbsp;자</td>
-        <td style="${val};font-weight:900;color:${N};font-size:13px;letter-spacing:1px" colspan="3">안 전 관 리 자</td>
+      <tr>
+        <td style="${LBL}">지&nbsp;급&nbsp;자</td>
+        <td style="${VAL};font-weight:700;color:${P.navy};letter-spacing:1px">안 전 관 리 자</td>
+        <td style="${LBL}">수령인원</td>
+        <td style="${VAL}">${persons.length}명 <span style="color:${P.txtGray};font-size:11px">(서명 ${L.signedCount}명)</span></td>
       </tr>
     </table>
-    <div style="margin-top:14px;padding-top:8px;border-top:1px solid ${BD};display:flex;justify-content:space-between;font-size:9px;color:#888">
-      <span>본 수령증은 보호구 지급 확인서로 법정 보관 서류입니다.</span>
-      <span>인당의료재단 부민병원</span>
+    <div style="background:${P.navy};color:#fff;font-weight:700;font-size:12px;padding:9px 0;text-align:center;letter-spacing:3px;border-radius:3px;margin-top:14px;margin-bottom:0;font-family:${FF}">
+      보호구 수령자 명단 및 서명
+    </div>
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="background:${P.bgHead}">
+          <th style="border:1.2px solid ${P.borderHd};padding:6px 4px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:34px;font-family:${FF};vertical-align:middle;white-space:nowrap">번호</th>
+          <th style="border:1.2px solid ${P.borderHd};padding:6px 4px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:62px;font-family:${FF};vertical-align:middle;white-space:nowrap">성명</th>
+          <th style="border:1.2px solid ${P.borderHd};padding:6px 4px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:82px;font-family:${FF};vertical-align:middle;white-space:nowrap">부서</th>
+          <th style="border:1.2px solid ${P.borderHd};padding:6px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:82px;font-family:${FF};vertical-align:middle;white-space:nowrap">입사일</th>
+          <th style="border:1.2px solid ${P.borderHd};padding:6px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;font-family:${FF};vertical-align:middle;white-space:nowrap">지급물품</th>
+          <th style="border:1.2px solid ${P.borderHd};padding:6px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:82px;font-family:${FF};vertical-align:middle;white-space:nowrap">수령일</th>
+          <th style="border:1.2px solid ${P.borderHd};padding:6px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:120px;font-family:${FF};vertical-align:middle;white-space:nowrap">서명</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div style="margin-top:12px;padding-top:8px;border-top:1.5px solid ${P.border};display:flex;justify-content:space-between">
+      <div style="font-size:11px;font-weight:400;color:${P.txtGray};font-family:${FF}">본 수령증은 보호구 지급 확인서로 법정 보관 서류입니다.</div>
+      <div style="font-size:11px;font-weight:400;color:${P.txtGray};font-family:${FF}">인당의료재단 부민병원</div>
     </div>
   </div>`;
-
-  await new Promise(r=>setTimeout(r,400));
-  try{
-    const cv=await html2canvas(area.firstElementChild,{scale:2,useCORS:true,logging:false});
-    const {jsPDF}=window.jspdf;
-    const pdf=new jsPDF('p','mm','a4');
-    const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight();
-    const ih=(cv.height/cv.width)*pw;
-    pdf.addImage(cv.toDataURL('image/png'),'PNG',0,0,pw,Math.min(ih,ph));
-    const fname=`보호구지급수령증_${p.dept}_${p.name}_${p.date}.pdf`;
-    pdf.save(fname);
-    toast(`📄 ${p.name} PDF 저장 완료`,'ok');
-    await ppeSendEmailOne(p, fname, pdf.output('datauristring'), sigImg);
-    // ★ 서명 이미지 압축
-    let compressedSig = '';
-    try{ compressedSig = sigImg ? await compressImg(sigImg) : ''; }catch(e){}
-    ppeSaveRecord(p, fname, compressedSig); // ★ 파일명 + 서명 함께 전달
-  }catch(err){toast('PDF 오류: '+err.message,'err');}
-  area.innerHTML='';
 }
 
-async function ppeSendEmailOne(p, fname, pdfB64, sigImg){
+/* ── ★ v17.11: 화면 내 일지 미리보기 (e2RenderPreview 패턴) ── */
+function ppeBuildPreview(){
+  const wrap = document.getElementById('ppe-preview');
+  const card = document.getElementById('ppe-preview-card');
+  if(!wrap) return;
+  if(!ppePersons.length){
+    if(card) card.style.display='none';
+    wrap.innerHTML='';
+    return;
+  }
+  if(card) card.style.display='block';
+  try{
+    wrap.innerHTML = `<div style="transform-origin:top left;transform:scale(0.85);width:117.65%">${ppeBuildLedgerHTML(ppePersons)}</div>`;
+  }catch(e){
+    wrap.innerHTML = `<div style="color:#dc2626;font-size:12px;padding:20px;text-align:center">미리보기 생성 실패: ${e.message}</div>`;
+    console.error('ppeBuildPreview error:', e);
+  }
+}
+
+/* ── ★ v17.11: 일지 PDF 1장 생성 → 기록 저장(인원별) → 메일 1통 발송 ── */
+async function ppeGenAllPDF(){
+  if(!ppePersons.length){toast('수령자를 추가하세요','err');return;}
+  const L = ppeGroupLabels(ppePersons);
+  if(L.signedCount < ppePersons.length){
+    toast(`⚠ 서명 미완료 ${ppePersons.length - L.signedCount}명 — 빈 서명란으로 진행합니다`,'info');
+  }
+  toast('일지 PDF 생성 중…','info');
+
+  const area = document.getElementById('pdf-area');
+  area.innerHTML = ppeBuildLedgerHTML(ppePersons);
+  await new Promise(r=>setTimeout(r,450));
+  try{
+    const cv = await html2canvas(area.firstElementChild,{scale:2,useCORS:true,allowTaint:true,logging:false,windowWidth:780});
+    const {jsPDF} = window.jspdf;
+    const pdf = new jsPDF('p','mm','a4');
+    const pw = pdf.internal.pageSize.getWidth(), ph = pdf.internal.pageSize.getHeight();
+    // ★ 서명 행 페이지 분할 보호 (교육일지와 동일) — 인원이 많아 2장 이상이 되어도 행이 잘리지 않음
+    await pdfRenderPagesProtected(area, cv, pdf, pw, ph, 2, false);
+
+    const fname = `보호구지급수령증-${L.deptLabel}-${L.nameLabel}-${L.repDate}.pdf`;
+
+    // ★ 인원 스냅샷 (전송완료 화면에서 초기화되어도 안전)
+    const personsSnap = ppePersons.map(p=>({
+      name:p.name, dept:p.dept, join:p.join, date:p.date,
+      empNo:p.empNo||'', sig:p.sig||'',
+      items:(p.items||[]).map(it=>({name:it.name, qty:it.qty}))
+    }));
+
+    // ★ 서명 이미지 압축 (레코드 저장용)
+    const sigImgsCompressed = await Promise.all(personsSnap.map(async p=>{
+      if(!p.sig) return '';
+      try{ return await compressImg(p.sig); }catch(e){ return ''; }
+    }));
+
+    // ★ 1) 기록 저장: 교육일지와 동일 — 같은 submitted 배치로 인원별 누적 저장, pdfFileName 공유
+    ppeSaveRecordsBatch(personsSnap, fname, sigImgsCompressed);
+
+    // ★ 2) 로컬 PDF 저장 (메일 실패와 무관하게 항상 확보)
+    pdf.save(fname);
+    toast(`📄 일지 PDF 저장 완료 (수령자 ${personsSnap.length}명 · 1장)`,'ok');
+
+    // ★ 3) GitHub 업로드 + 메일 1통 발송
+    let pdfB64 = pdf.output('datauristring');
+    await ppeSendEmailAll(personsSnap, fname, pdfB64);
+    pdfB64 = null;
+  }catch(err){toast('PDF 오류: '+err.message,'err');}
+  area.innerHTML='';
+  await new Promise(r=>setTimeout(r,100));
+}
+
+/* ── ★ v17.11: 명부 포함 메일 1통 발송 (기존 개인별 N통 발송 대체) ── */
+async function ppeSendEmailAll(persons, fname, pdfB64){
   if(!CFG.ejsKey||!CFG.ejsSvc||!CFG.ejsTpl){
     toast('⚙ EmailJS 미설정 — ⚙ 설정에서 EmailJS 키·서비스·템플릿 입력 필요','err');
     return;
   }
-  const N='#1c3557',LB='#e8ecf2',BD='#b0bece';
-
-  // ★ 지급물품 압축 텍스트
-  const itemsFlat = p.items.map(i=>`${i.name}×${i.qty}`).join(', ');
+  const N='#1c3557', LB='#e8ecf2', BD='#b0bece';
+  const L = ppeGroupLabels(persons);
+  // 지급물품 요약 (품목명 중복 제거)
+  const itemNames = [...new Set(persons.flatMap(p=>(p.items||[]).map(it=>it.name)).filter(Boolean))];
+  const itemsFlat = itemNames.join(', ');
 
   try{
     if(!window.emailjs){const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js';document.head.appendChild(s);await new Promise(r=>s.onload=r);}
     emailjs.init(CFG.ejsKey);
 
-    // ★ STEP 1: GitHub에 PDF 먼저 업로드 → 다운로드 URL 확보
-    toast(`☁️ ${p.name} GitHub 업로드 중…`,'info');
+    // ── STEP 1: GitHub에 일지 PDF 1장 업로드 → 다운로드 URL 확보
+    toast('☁️ GitHub 업로드 중… (일지 1장)','info');
     let pdfUrl = '';
     if(CFG.ghToken){
-      // ★ v17.8 FIX M: uploadPdfToGitHub가 throw 가능 → try-catch로 감싸기
       try{
         pdfUrl = await uploadPdfToGitHub(pdfB64, fname);
       }catch(uploadErr){
         const m = uploadErr.message || String(uploadErr);
-        console.error('[보호구 PDF 업로드 실패]', m);
+        console.error('[보호구 일지 PDF 업로드 실패]', m);
         toast('⚠ GitHub PDF 업로드 실패: '+m.slice(0,100),'err');
         pdfB64 = null;
-        return; // 이메일 발송 중단 (링크가 없으므로)
+        return; // 링크가 없으므로 이메일 발송 중단 (기록·로컬 PDF는 이미 저장됨)
       }
     }
-    // ★ PDF base64 즉시 메모리 해제 (수 MB 절약)
     pdfB64 = null;
     await new Promise(r => setTimeout(r, 50));
 
-    // ★ STEP 2: chem 메일 스타일 컴팩트 본문 + 지급물품 컴팩트 표 + 다운로드 링크
-    const itemRows = p.items.map((it,idx)=>`
+    // ── STEP 2: 수령자 명부가 포함된 컴팩트 본문 (메일 1통)
+    const rosterRows = persons.map((p,idx)=>`
       <tr style="background:${idx%2===0?'#fff':'#fafbfc'}">
-        <td style="padding:5px 9px;border:1px solid ${BD};text-align:center;font-size:11px;font-weight:700;color:${N};width:30px">${idx+1}</td>
-        <td style="padding:5px 9px;border:1px solid ${BD};font-size:11px">${it.name}</td>
-        <td style="padding:5px 9px;border:1px solid ${BD};text-align:center;font-size:11px;width:50px">×${it.qty}</td>
+        <td style="padding:5px 8px;border:1px solid ${BD};text-align:center;font-size:11px;font-weight:700;color:${N};width:26px">${idx+1}</td>
+        <td style="padding:5px 8px;border:1px solid ${BD};font-size:11px;font-weight:700;text-align:center;width:64px">${p.name||''}</td>
+        <td style="padding:5px 8px;border:1px solid ${BD};font-size:11px;text-align:center;width:86px">${p.dept||''}</td>
+        <td style="padding:5px 8px;border:1px solid ${BD};font-size:10.5px;line-height:1.5">${(p.items||[]).map(it=>`${it.name}×${it.qty}`).join(', ')}</td>
+        <td style="padding:5px 8px;border:1px solid ${BD};font-size:11px;text-align:center;width:80px;white-space:nowrap">${p.date||''}</td>
+        <td style="padding:5px 8px;border:1px solid ${BD};font-size:11px;text-align:center;width:44px">${p.sig?'✓':'-'}</td>
       </tr>`).join('');
 
     const downloadRow = pdfUrl
       ? `<tr><td style="padding:6px 10px;border:1px solid ${BD};background:#fafbfc;font-size:11px;line-height:1.5">
-          <span style="font-weight:700;color:${N};display:inline-block;min-width:90px">📎 수령증 PDF</span>
+          <span style="font-weight:700;color:${N};display:inline-block;min-width:90px">📎 수령증 일지 PDF</span>
           <a href="${pdfUrl}" style="color:#2563eb;text-decoration:underline;word-break:break-all">${fname}</a>
         </td></tr>`
       : `<tr><td style="padding:5px 9px;border:1px solid ${BD};background:#fafbfc;color:#94a3b8;font-size:11px"><i>PDF 업로드 실패 — GitHub 토큰 확인 필요</i></td></tr>`;
@@ -7760,17 +7894,27 @@ async function ppeSendEmailOne(p, fname, pdfB64, sigImg){
     const msgHtml = `<div style="font-family:'Malgun Gothic',sans-serif;color:#222;padding:6px;max-width:680px">
       <div style="background:${N};color:#fff;padding:8px 14px;border-radius:4px 4px 0 0;display:flex;justify-content:space-between;align-items:center">
         <div style="font-size:12px;font-weight:700;letter-spacing:0.3px">🦺 보호구 지급수령증<span style="opacity:0.7;font-weight:400;font-size:10px;margin-left:6px">· 인당의료재단 부민병원</span></div>
-        <div style="font-size:10.5px;opacity:0.95;white-space:nowrap">수령일 <b>${p.date||''}</b></div>
+        <div style="font-size:10.5px;opacity:0.95;white-space:nowrap">지급일 <b>${L.dateLabel}</b></div>
       </div>
       <div style="border:1px solid ${BD};border-top:none;padding:10px 14px;background:#fff">
-        <p style="font-size:11.5px;margin:0 0 8px;color:#475569">아래와 같이 보호구 지급 수령증을 제출합니다.</p>
+        <p style="font-size:11.5px;margin:0 0 8px;color:#475569">아래와 같이 보호구 지급수령증(일지)을 제출합니다. <b>수령자 전원(${persons.length}명)이 한 장의 일지에 기록</b>되어 있습니다.</p>
         <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px">
-          <tr><td style="padding:5px 9px;border:1px solid ${BD};background:${LB};font-weight:700;width:70px;color:${N};font-size:11px">이름</td><td style="padding:5px 9px;border:1px solid ${BD};font-size:11px;font-weight:700">${p.name||''}</td></tr>
-          <tr><td style="padding:5px 9px;border:1px solid ${BD};background:${LB};font-weight:700;width:70px;color:${N};font-size:11px">부서</td><td style="padding:5px 9px;border:1px solid ${BD};font-size:11px">${p.dept||''}</td></tr>
-          <tr><td style="padding:5px 9px;border:1px solid ${BD};background:${LB};font-weight:700;width:70px;color:${N};font-size:11px">입사일</td><td style="padding:5px 9px;border:1px solid ${BD};font-size:11px"><span style="color:#94a3b8">${p.join||'-'}</span></td></tr>
+          <tr><td style="padding:5px 9px;border:1px solid ${BD};background:${LB};font-weight:700;width:70px;color:${N};font-size:11px">지급부서</td><td style="padding:5px 9px;border:1px solid ${BD};font-size:11px">${L.depts.join(', ')||'-'}</td></tr>
+          <tr><td style="padding:5px 9px;border:1px solid ${BD};background:${LB};font-weight:700;width:70px;color:${N};font-size:11px">지급일</td><td style="padding:5px 9px;border:1px solid ${BD};font-size:11px">${L.dateLabel}</td></tr>
+          <tr><td style="padding:5px 9px;border:1px solid ${BD};background:${LB};font-weight:700;width:70px;color:${N};font-size:11px">수령인원</td><td style="padding:5px 9px;border:1px solid ${BD};font-size:11px">${persons.length}명 <span style="color:#94a3b8">(서명 ${L.signedCount}명)</span></td></tr>
         </table>
-        <div style="font-size:11px;font-weight:700;color:${N};margin:0 0 4px">📦 지급물품 (${p.items.length}종)</div>
-        <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px">${itemRows}</table>
+        <div style="font-size:11px;font-weight:700;color:${N};margin:0 0 4px">📋 수령자 명단 (${persons.length}명)</div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px">
+          <tr style="background:${LB}">
+            <td style="padding:4px 8px;border:1px solid ${BD};font-size:10.5px;font-weight:700;color:${N};text-align:center">번호</td>
+            <td style="padding:4px 8px;border:1px solid ${BD};font-size:10.5px;font-weight:700;color:${N};text-align:center">성명</td>
+            <td style="padding:4px 8px;border:1px solid ${BD};font-size:10.5px;font-weight:700;color:${N};text-align:center">부서</td>
+            <td style="padding:4px 8px;border:1px solid ${BD};font-size:10.5px;font-weight:700;color:${N};text-align:center">지급물품</td>
+            <td style="padding:4px 8px;border:1px solid ${BD};font-size:10.5px;font-weight:700;color:${N};text-align:center">수령일</td>
+            <td style="padding:4px 8px;border:1px solid ${BD};font-size:10.5px;font-weight:700;color:${N};text-align:center">서명</td>
+          </tr>
+          ${rosterRows}
+        </table>
         <div style="font-size:11px;color:#444;line-height:1.65;background:#fafbfc;padding:8px 10px;border-radius:4px;border:1px solid #eef2f6">
           <b style="color:${N}">📎 첨부 다운로드</b>
           <table style="width:100%;border-collapse:collapse;margin-top:5px">${downloadRow}</table>
@@ -7782,53 +7926,61 @@ async function ppeSendEmailOne(p, fname, pdfB64, sigImg){
       </div>
     </div>`;
 
+    const _recipient = (CFG.emailPpe&&CFG.emailPpe.trim())||DEFAULT_CFG.emailPpe||CFG.email;
+    const namesJoined = persons.map(p=>p.name).join(', ');
     await emailjs.send(CFG.ejsSvc,CFG.ejsTpl,{
-      to_email:(CFG.emailPpe&&CFG.emailPpe.trim())||DEFAULT_CFG.emailPpe||CFG.email,
-      subject:`[보호구지급수령증] ${p.dept} ${p.name} ${p.date}`,
-      department:p.dept, chemical:itemsFlat,
-      date:p.date, participants:'1명', sig_count:'서명완료', names:p.name,
-      message:msgHtml
+      to_email:     _recipient,
+      subject:      `[보호구지급수령증] ${L.deptLabel} ${L.nameLabel} ${L.repDate}`,
+      department:   L.depts.join(', '),
+      chemical:     itemsFlat.length>100?itemsFlat.slice(0,97)+'…':itemsFlat,
+      date:         L.dateLabel,
+      participants: persons.length+'명',
+      sig_count:    L.signedCount+'명 서명',
+      names:        namesJoined.length>100?namesJoined.slice(0,97)+'…':namesJoined,
+      message:      msgHtml
     });
-    toast(`📧 ${p.name} 메일 발송 완료 (PDF 다운로드 링크 포함)`,'ok');
+    toast(`📧 이메일 1통 발송 완료 ✓ — 수령자 ${persons.length}명 일지 1장 (수신자: ${_recipient})`,'ok');
     showSendComplete('ppe');
-    if(pdfUrl) toast(`✅ GitHub 저장: ${p.name}`,'ok');
   }catch(err){
     const errMsg = (err.text || err.message || String(err));
-    let userMsg = `⚠ ${p.name||'보호구'} 메일 오류: ` + errMsg.slice(0,80);
-    if(errMsg.includes('422')) userMsg = `⚠ EmailJS 422 (${p.name}) — 템플릿 변수명 불일치`;
-    else if(errMsg.includes('400')) userMsg = `⚠ EmailJS 400 (${p.name}) — API Key 확인`;
-    else if(errMsg.includes('403')) userMsg = `⚠ EmailJS 403 (${p.name}) — 사용량 초과`;
+    let userMsg = '⚠ 보호구 일지 메일 오류: ' + errMsg.slice(0,80);
+    if(errMsg.includes('422')) userMsg = '⚠ EmailJS 422 — 템플릿 변수명 불일치';
+    else if(errMsg.includes('400')) userMsg = '⚠ EmailJS 400 — API Key 확인';
+    else if(errMsg.includes('403')) userMsg = '⚠ EmailJS 403 — 사용량 초과';
     toast(userMsg,'err');
-    console.error('ppeSendEmailOne error:', err);
+    console.error('ppeSendEmailAll error:', err);
   }
 }
 
-function ppeSaveRecord(p, pdfFileName, sigImg){
+/* ── ★ v17.11: 인원별 기록 일괄 저장 (동일 submitted 배치 · pdfFileName 공유) ── */
+function ppeSaveRecordsBatch(persons, pdfFileName, sigImgs){
   try{
-    const stored=JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');
-    const rec={
-      no:stored.length+1,
-      submitted:todayStr()+'_'+Date.now(),
+    const stored = JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');
+    const now = todayStr()+'_'+Date.now();                        // ★ 교육일지와 동일: 배치 공통 submitted
+    const pdfYm = new Date().toISOString().slice(0,7);            // ★ 업로드 폴더(보호구/YYYY-MM) 기록 → 재다운로드 매칭 보장
+    const newRecs = persons.map((p,i)=>({
+      no: stored.length+1+i,
+      submitted: now,
       _localSavedAt: Date.now(),  // ★ v16.5: race condition 방지 보호 마커
       type:'보호구지급',
       name:p.name, dept:p.dept,
       empNo: p.empNo || '',
       joinDate: p.join || p.joinDate || '',
-      // ★ items를 배열 형태로 저장 (미리보기용) + 문자열도 호환
       items: Array.isArray(p.items) ? p.items.map(it => ({name: it.name, qty: it.qty})) : [],
-      itemsStr: Array.isArray(p.items) ? p.items.map(i=>i.name+'×'+i.qty).join(', ') : '',
+      itemsStr: Array.isArray(p.items) ? p.items.map(it=>it.name+'×'+it.qty).join(', ') : '',
       date:p.date, dateStart: p.date,
-      giver:'안전관리자', signed:'✓ 서명완료',
-      sigImg: sigImg || '',  // ★ 서명 이미지
-      pdfFileName: pdfFileName || ''  // ★ PDF 파일명
-    };
-    stored.push(rec);
-    // ★ 글로벌 ID 부여 + 묘비 필터
+      giver:'안전관리자',
+      signed: p.sig ? '✓ 서명완료' : '- 미서명',
+      sigImg: sigImgs[i] || '',
+      pdfFileName: pdfFileName || '',   // ★ 전원 동일 일지 PDF 공유
+      pdfYm: pdfYm                      // ★ v17.11 신설
+    }));
+    newRecs.forEach(r=>stored.push(r));
+
     if(typeof BM !== 'undefined' && BM.ensureIds){
       BM.ensureIds(stored);
-      // ★★★ v17.7 FIX K: save-wins 묘비 정리 (로컬 + GitHub admin_cfg)
-      //              NK 묘비도 정리하여 자동 동기화 후에도 새 레코드 부활 보장
-      BM.clearSaveWinsTombstones('ppe', [rec]);  // 비동기 fire-and-forget
+      // ★★★ v17.7 FIX K: save-wins 묘비 정리 (로컬 + GitHub admin_cfg) — 배치 전체 적용
+      BM.clearSaveWinsTombstones('ppe', newRecs);  // 비동기 fire-and-forget
       const _t = BM.getTombstones('ppe');
       if(_t.size){
         const filtered = stored.filter(r => !_t.has(r.recordId));
@@ -7840,19 +7992,22 @@ function ppeSaveRecord(p, pdfFileName, sigImg){
       localStorage.setItem('bm_ppe_records',JSON.stringify(stored));
     }
     localStorage.removeItem('bm_ppe_cleared');
-    // ★ GitHub에도 저장
-    appendPpeRecordToGitHub(rec);
+    toast(`✅ 보호구 지급기록 ${newRecs.length}명 누적 저장 완료`,'ok');
+
+    // ★ GitHub에도 배치 저장 (1회 커밋)
+    appendPpeRecordToGitHub(newRecs);
+
     // ★ 보호구 관리자 즉시 업데이트
     adminLoaded=false;
     _adminLoading=false;
     refreshAdminDeptFilter();
-    // 현재 필터 상태 유지하며 렌더
     const ppeAdmTb=document.getElementById('ppe-admin-tbody');
     if(ppeAdmTb){
+      const all=JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');
       const dSel=(document.getElementById('adm-ppe-dept-sel')||{}).value||'';
       const fv  =(document.getElementById('adm-ppe-from')||{}).value||'';
       const tv  =(document.getElementById('adm-ppe-to')  ||{}).value||'';
-      const ppeView=(!dSel&&!fv&&!tv)?stored:stored.filter(r=>{
+      const ppeView=(!dSel&&!fv&&!tv)?all:all.filter(r=>{
         if(dSel&&r.dept!==dSel) return false;
         const d=r.date||r.dateStart||'';
         if(fv&&d<fv) return false; if(tv&&d>tv) return false; return true;
@@ -7860,20 +8015,23 @@ function ppeSaveRecord(p, pdfFileName, sigImg){
       renderPpeAdminTable(ppeView);
     }
 
-    // ★ GAS에도 저장 (관리자 대시보드 연동용)
+    // ★ GAS에도 저장 — 교육일지와 동일하게 1회 호출 (이름 '|' 구분 누적)
     if(CFG.url){
+      const L = ppeGroupLabels(persons.map(p=>({...p, sig:p.sig||''})));
+      const itemNames = [...new Set(persons.flatMap(p=>(p.items||[]).map(it=>it.name)).filter(Boolean))];
       const cb='_ppeRec_'+Date.now();
       window[cb]=res=>{delete window[cb];};
       const qs=[
         'action=record','type=보호구지급',
-        'dept='+encodeURIComponent(p.dept),
-        'names='+encodeURIComponent(p.name),
-        'dateStart='+encodeURIComponent(p.date),
-        'dateEnd='+encodeURIComponent(p.date),
-        'chem='+encodeURIComponent(rec.items),
-        'days=1','sigCount=1',
-        'empNos='+encodeURIComponent(p.empNo||''),
-        'joinDates='+encodeURIComponent(p.join||''),
+        'dept='+encodeURIComponent(L.depts.join(', ')),
+        'names='+encodeURIComponent(persons.map(p=>p.name).join('|')),
+        'dateStart='+encodeURIComponent(L.repDate),
+        'dateEnd='+encodeURIComponent(L.repDate),
+        'chem='+encodeURIComponent(itemNames.join(', ').slice(0,150)),
+        'days=1',
+        'sigCount='+encodeURIComponent(String(L.signedCount)),
+        'empNos='+encodeURIComponent(persons.map(p=>p.empNo||'').join('|')),
+        'joinDates='+encodeURIComponent(persons.map(p=>p.join||'').join('|')),
         'genders=','time=보호구지급',
         'callback='+cb
       ].join('&');
@@ -7883,7 +8041,7 @@ function ppeSaveRecord(p, pdfFileName, sigImg){
       document.head.appendChild(sc);
       setTimeout(()=>{if(window[cb]){delete window[cb];sc.remove();}},8000);
     }
-  }catch(e){}
+  }catch(e){ console.error('ppeSaveRecordsBatch:', e); }
 }
 
 function ppeReset(){
@@ -7894,6 +8052,8 @@ function ppeReset(){
   const ci=document.getElementById('ppe-cur-items');if(ci)ci.style.display='none';
   renderPersonList();
   renderPpeSigBlocks();
+  const pvc=document.getElementById('ppe-preview-card');if(pvc)pvc.style.display='none';   // ★ v17.11
+  const pv=document.getElementById('ppe-preview');if(pv)pv.innerHTML='';
 }
 
 function initPpeSig(){
@@ -9035,7 +9195,8 @@ async function viewPpeRecord(idx){
   if(!r.sigImg && r.pdfFileName){
     toast('🔍 원본 PDF 로드 중 (옛 일지)…','info');
     try{
-      const url = getGitHubPdfUrl(r.pdfFileName, (r.date||r.dateStart||'').slice(0,7));
+      // ★ v17.11: pdfYm(업로드 폴더) 우선 — 수령일 월과 발송 월이 달라도 매칭
+      const url = getGitHubPdfUrl(r.pdfFileName, r.pdfYm || (r.date||r.dateStart||'').slice(0,7));
       const res = await fetch(url);
       if(res.ok){
         const blob = await res.blob();
@@ -9570,7 +9731,8 @@ async function openPpePdfFromAdmin(idx){
       return;
     }
   }
-  const ym = (r.date||r.dateStart||'').slice(0,7) || undefined;
+  // ★ v17.11: pdfYm(업로드 폴더) 우선
+  const ym = r.pdfYm || (r.date||r.dateStart||'').slice(0,7) || undefined;
   openPdfFromGitHub(r.pdfFileName, ym);
 }
 
@@ -9598,7 +9760,8 @@ async function downloadPpePdfFromAdmin(idx){
       return;
     }
   }
-  const ym = (r.date||r.dateStart||'').slice(0,7) || undefined;
+  // ★ v17.11: pdfYm(업로드 폴더) 우선 — 수령일 월과 발송 월이 달라도 매칭
+  const ym = r.pdfYm || (r.date||r.dateStart||'').slice(0,7) || undefined;
   await downloadPdfFromGitHub(r.pdfFileName, ym);
 }
 
