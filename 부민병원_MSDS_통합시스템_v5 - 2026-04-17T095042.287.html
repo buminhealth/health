@@ -9,8 +9,44 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v17.14 (2026-07-14)
+  부민병원 MSDS 통합시스템 v17.16 (2026-07-14)
   ════════════════════════════════════════════════════════════════════
+  ★★★ v17.16 (2026-07-14) — 관리자 PDF 출력·다운로드 통일 (요청사항 5):
+    [보고 1] 보호구 지급의 "PDF 출력"이 필터·체크와 무관하게 전체 기록을 출력
+    [보고 2] 보호구 목록 PDF에서 지급물품이 [object Object]로 표시
+    [요청 3] 결재 관리처럼 다른 항목에도 선택 건 개별 PDF / 전체 PDF 병합 다운로드
+    [수정 내용]
+    - 출력 대상 통일 규칙(_admPrintTargets): 체크된 건이 있으면 그 건만,
+      없으면 현재 필터(부서·기간·검색) 조회 결과만 출력 — 교육·보호구·화학 3개 탭 동일 적용
+      · 보호구: 전체 localStorage 출력 → 규칙 적용 (보고 1 해결)
+      · 교육: 필터만 반영·체크 미반영 → 체크 우선 규칙 추가
+      · 화학: 필터만 반영·체크 미반영 → 체크 우선 규칙 추가
+    - [object Object] 수정: _ppeItemsToStr 공통 함수 신설 (itemsStr 우선 →
+      배열이면 품명×수량 조인 — v16.4 관리자 표와 동일 로직) → 목록 PDF에 적용 (보고 2 해결)
+    - 개별/병합 다운로드(요청 3): 교육 현황·보호구 지급·화학물질 탭에
+      "📥 개별 PDF 다운로드"·"📚 전체 PDF 병합 다운로드" 버튼 신설 (결재 관리와 동일 UX)
+      · 체크된 건 필수 (미선택 시 결재와 동일한 안내)
+      · 같은 일지를 공유하는 기록(보호구 다인 일지·교육 다인 일지)은 일지 단위로 중복 제거
+      · 파일 위치: 각 기록의 pdfFileName + pdfYm(없으면 날짜) — 기존 3단 폴백과 동일 경로
+      · 병합은 결재 관리와 동일하게 pdf-lib 사용, 통합_{항목}_{날짜}.pdf로 저장 (도장 합성은 결재 전용 그대로)
+    - 기존 함수 변경은 목록 PDF 3개(printAdminEduList/PpeList/ChemList)의 대상 산정부만 —
+      결재 관리의 기존 개별/병합 기능은 무변경
+
+  ★★★ v17.15 (2026-07-14) — 감사 로그 "화면" 삭제 (요청사항 4):
+    [분석 결과] 감사 로그는 화면과 기록 엔진 두 부분으로 구성:
+    ① 화면(사이드바 메뉴 + 패널)은 처음부터 죽어 있던 기능 — 새로고침 버튼이
+       존재하지 않는 함수(BM.refreshAuditPanel)를 호출하고, 패널 진입 시 표를
+       채우는 코드가 어디서도 호출되지 않아 항상 빈 표로 표시됨 → 삭제 무방.
+    ② 기록 엔진(BM.audit / BM.getAuditLog)은 살아있는 다른 기능 3개의 데이터 원천:
+       · 교육 현황 👁 미리보기의 "📋 수정 이력 (N)" 모달
+       · 정정 PDF 수동 발행 (issueCorrectionPdf — 법적 증빙, 이력 없으면 발행 불가)
+       · 관리자 수정 시 자동 정정 PDF 발행 (_scheduleAutoCorrectionPdf)
+       → 기록까지 삭제하면 위 3개 기능이 "이력 없음"으로 무력화되므로 반드시 유지.
+    [실행] 화면만 제거: 사이드바 '시스템 > 감사 로그' 메뉴·배지, 감사 로그 패널,
+           죽은 렌더 함수 2개(BM.toggleAuditPanel·BM.renderAuditLog), 배지 대상에서 audit 제외.
+           BM.audit·BM.getAuditLog와 모든 기록 호출부(수정·삭제·초기화 시 기록)는 그대로 유지
+           — GitHub records/audit_log.json 장기 증빙 축적도 기존과 동일하게 계속됨.
+
   ★★★ v17.14 (2026-07-14) — 결재 관리 배지 기준 수정 (요청사항 3 보완):
     [보고] 일지 작성 후 교육 현황을 열면 교육 배지는 0이 되는데(정상),
            결재 대기 건이 남아 있는데도 결재 관리 배지까지 0이 되던 문제.
@@ -1225,13 +1261,8 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
           <span class="adm-nav-badge" id="adm-nav-chem-badge"></span>
         </div>
 
-        <div class="adm-sidebar-divider"></div>
-        <div class="adm-sidebar-section">시스템</div>
-        <div class="adm-nav-item" data-pane="audit" onclick="admSwitchPane('audit')">
-          <span class="adm-nav-icon">📋</span>
-          <span class="adm-nav-label">감사 로그</span>
-          <span class="adm-nav-badge" id="adm-nav-audit-badge"></span>
-        </div>
+        <!-- ★ v17.15: '시스템 > 감사 로그' 메뉴 삭제 — 조회 화면은 원래 미작동(죽은 코드)이었음.
+             기록 엔진(BM.audit)은 수정 이력·정정 PDF의 데이터 원천이므로 백그라운드에서 그대로 작동 -->
       </aside>
 
       <!-- 우측 컨텐츠 영역 -->
@@ -1385,6 +1416,8 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
                 <button type="button" onclick="handleTabAction('edu','delete')"  style="padding:7px 14px;background:#fee2e2;color:#dc2626;border:1px solid #ef4444;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="선택된 항목 영구 삭제">🗑 선택삭제</button>
                 <button type="button" onclick="handleTabAction('edu','csv')"     style="padding:7px 14px;background:#10b981;color:#fff;border:1px solid #10b981;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">📥 CSV 출력</button>
                 <button type="button" onclick="handleTabAction('edu','pdf')"     style="padding:7px 14px;background:#2563eb;color:#fff;border:1px solid #2563eb;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">🖨️ PDF 출력</button>
+                <button type="button" id="adm-edu-btn-download" onclick="admBatchDownload('edu')" style="padding:7px 14px;background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">📥 개별 PDF 다운로드</button>
+                <button type="button" id="adm-edu-btn-merge" onclick="admMergeDownload('edu')" style="padding:7px 14px;background:#10b981;color:#fff;border:1px solid #10b981;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">📚 전체 PDF 병합 다운로드</button>
                 <span style="margin-left:auto;font-size:10.5px;color:#94a3b8">※ 비로그인 시 비밀번호 요구</span>
               </div>
               <div id="adm-edu-table-wrap" style="margin-top:12px;overflow-x:auto">
@@ -1455,6 +1488,8 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
                 <button type="button" onclick="handleTabAction('ppe','delete')"  style="padding:7px 14px;background:#fee2e2;color:#dc2626;border:1px solid #ef4444;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="선택된 항목 영구 삭제">🗑 선택삭제</button>
                 <button type="button" onclick="handleTabAction('ppe','csv')"     style="padding:7px 14px;background:#10b981;color:#fff;border:1px solid #10b981;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">📥 CSV 출력</button>
                 <button type="button" onclick="handleTabAction('ppe','pdf')"     style="padding:7px 14px;background:#2563eb;color:#fff;border:1px solid #2563eb;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">🖨️ PDF 출력</button>
+                <button type="button" id="adm-ppe-btn-download" onclick="admBatchDownload('ppe')" style="padding:7px 14px;background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">📥 개별 PDF 다운로드</button>
+                <button type="button" id="adm-ppe-btn-merge" onclick="admMergeDownload('ppe')" style="padding:7px 14px;background:#10b981;color:#fff;border:1px solid #10b981;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">📚 전체 PDF 병합 다운로드</button>
                 <span style="margin-left:auto;font-size:10.5px;color:#94a3b8">※ 비로그인 시 비밀번호 요구</span>
               </div>
               <div id="adm-ppe-table-wrap" style="margin-top:12px;overflow-x:auto">
@@ -1527,6 +1562,8 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
                 <button type="button" onclick="handleTabAction('chem','delete')"  style="padding:7px 14px;background:#fee2e2;color:#dc2626;border:1px solid #ef4444;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="선택된 항목 영구 삭제">🗑 선택삭제</button>
                 <button type="button" onclick="handleTabAction('chem','csv')"     style="padding:7px 14px;background:#10b981;color:#fff;border:1px solid #10b981;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">📥 CSV 출력</button>
                 <button type="button" onclick="handleTabAction('chem','pdf')"     style="padding:7px 14px;background:#2563eb;color:#fff;border:1px solid #2563eb;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">🖨️ PDF 출력</button>
+                <button type="button" id="adm-chem-btn-download" onclick="admBatchDownload('chem')" style="padding:7px 14px;background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">📥 개별 PDF 다운로드</button>
+                <button type="button" id="adm-chem-btn-merge" onclick="admMergeDownload('chem')" style="padding:7px 14px;background:#10b981;color:#fff;border:1px solid #10b981;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">📚 전체 PDF 병합 다운로드</button>
                 <span style="margin-left:auto;font-size:10.5px;color:#94a3b8">※ 비로그인 시 비밀번호 요구</span>
               </div>
               <div id="adm-chem-table-wrap" style="margin-top:12px;overflow-x:auto">
@@ -1555,33 +1592,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
           </div>
         </section>
 
-        <!-- ── 📌 감사 로그 pane ── -->
-        <section class="adm-pane" id="adm-pane-audit">
-          <div class="adm-card">
-            <div class="adm-card-header">
-              <h2 class="adm-card-title">📋 감사 로그 (최근 50건)</h2>
-              <span class="adm-card-stat">노동부·공단 감사 제출용</span>
-            </div>
-            <div class="adm-card-body">
-              <p style="font-size:11.5px;color:#64748b;margin-bottom:10px;line-height:1.6">※ 모든 부분 삭제 · 일괄정리 행위가 자동 기록됩니다. 작성자 / 시각(UTC) / 행위 / 대상 / 상세 정보가 보존됩니다.</p>
-              <div id="bm-audit-panel" style="max-height:500px;overflow-y:auto">
-                <table style="width:100%;border-collapse:collapse;font-size:11.5px">
-                  <thead><tr style="background:#f1f5f9;border-bottom:2px solid #cbd5e1">
-                    <th style="padding:8px;text-align:left">시각(UTC)</th>
-                    <th style="padding:8px;text-align:left">작성자</th>
-                    <th style="padding:8px;text-align:left">행위</th>
-                    <th style="padding:8px;text-align:left">대상</th>
-                    <th style="padding:8px;text-align:left">상세</th>
-                  </tr></thead>
-                  <tbody id="bm-audit-tbody"></tbody>
-                </table>
-              </div>
-              <div style="margin-top:10px;display:flex;gap:6px">
-                <button class="btn btn-s" onclick="if(typeof BM!=='undefined'&&BM.refreshAuditPanel)BM.refreshAuditPanel()" style="font-size:11.5px">🔄 새로고침</button>
-              </div>
-            </div>
-          </div>
-        </section>
+        <!-- ★ v17.15: 감사 로그 패널 삭제 (조회 화면 미작동 — 기록 엔진은 유지) -->
 
       </main>
     </div>
@@ -9560,7 +9571,9 @@ function _schedulePpeSave(){
 
 /* ── 교육현황 출력 ── */
 function printAdminEduList(){
-  const rows=adminRecords||[];
+  // ★ v17.16: 체크된 건 우선, 없으면 현재 필터 조회 결과
+  const _T=_admPrintTargets('edu');
+  const rows=_T.rows;
   if(!rows.length){toast('조회 후 출력하세요','err');return;}
   const N='#1c3557',LB='#e8ecf2',BD='#c0cde0';
   const win=window.open('','_blank','width=1050,height=750');
@@ -9577,7 +9590,7 @@ function printAdminEduList(){
     '.np{display:none}@media print{.np{display:none!important}}',
     '</style></head><body>',
     '<h1>안전보건교육 현황</h1>',
-    '<p class="info">인당의료재단 부민병원 | 총 '+rows.length+'건 | '+todayStr()+'</p>',
+    '<p class="info">인당의료재단 부민병원 | '+_T.mode+' | '+todayStr()+'</p>',
     '<button class="np" onclick="window.print()" style="display:block;margin:0 auto 8px;background:'+N+';color:#fff;border:none;padding:7px 24px;border-radius:6px;cursor:pointer">🖨️ 인쇄</button>',
     '<table><thead><tr><th>번호</th><th>교육구분</th><th>부서</th><th>성명</th><th>사번</th><th>입사일</th><th>교육일</th><th>교육시간</th><th>서명</th></tr></thead><tbody>',
     rows.map((r,i)=>'<tr><td style="text-align:center">'+(i+1)+'</td><td>'+(r.type||'')+'</td><td>'+(r.dept||'')+'</td><td style="font-weight:700">'+(r.name||'')+'</td><td style="color:#64748b">'+(r.empNo||'-')+'</td><td>'+(r.joinDate||'-')+'</td><td>'+(r.dateStart||'')+'</td><td style="text-align:center">'+(r.totalHours||'')+'</td><td style="text-align:center;color:'+((r.signed||'').includes('✓')?'#16a34a':'#94a3b8')+'">'+((r.signed||'').includes('✓')?'✓':'-')+'</td></tr>').join(''),
@@ -9588,11 +9601,203 @@ function printAdminEduList(){
   win.document.close();
 }
 
+/* ════════════════════════════════════════════════════════
+   ★ v17.16: 관리자 PDF 출력·다운로드 통일 모듈 (요청사항 5)
+   - _admPrintTargets: 체크 우선 → 현재 필터 결과 (3개 탭 공통 규칙)
+   - _ppeItemsToStr: 지급물품 안전 문자열화 ([object Object] 방지, v16.4 로직)
+   - admBatchDownload / admMergeDownload: 선택 건의 보관 PDF 개별/병합 다운로드
+     (결재 관리의 apvBatchDownload/apvMergeDownload와 동일 UX · 일지 단위 중복 제거)
+   ════════════════════════════════════════════════════════ */
+
+/* 지급물품 안전 문자열화 — 관리자 표(v16.4)와 동일 로직 */
+function _ppeItemsToStr(r){
+  if(r.itemsStr) return r.itemsStr;
+  if(Array.isArray(r.items)){
+    return r.items.map(it => {
+      if(it === null || it === undefined) return '';
+      if(typeof it === 'object') return (it.name||'') + (it.qty ? '×'+it.qty : '');
+      return String(it);
+    }).filter(Boolean).join(', ');
+  }
+  if(r.items && typeof r.items === 'object'){
+    return (r.items.name||'') + (r.items.qty ? '×'+r.items.qty : '');
+  }
+  return r.items || r.chem || '';
+}
+
+/* 출력 대상 결정 — 체크된 건 우선, 없으면 현재 필터 조회 결과 */
+function _admPrintTargets(cat){
+  const all = (cat==='edu') ? (adminRecords||[])
+            : (cat==='ppe') ? (window._ppeCurrentFiltered||[])
+            : (cat==='chem') ? (window._chemCurrentFiltered||[])
+            : [];
+  let checked = [];
+  try{ if(typeof BM!=='undefined' && BM.getCheckedIds) checked = BM.getCheckedIds(cat) || []; }catch(e){}
+  if(checked.length){
+    const set = new Set(checked);
+    const rows = all.filter(r => r && r.recordId && set.has(r.recordId));
+    if(rows.length) return { rows, mode: '선택 '+rows.length+'건' };
+  }
+  return { rows: all, mode: '조회결과 '+all.length+'건' };
+}
+
+/* 기록 → 보관 PDF 파일명·연월 해석 */
+function _admResolvePdfFile(cat, r){
+  let fileName = r.pdfFileName || r.filename || '';
+  if(!fileName && cat==='chem'){
+    const date = r.date || r.docDate || '';
+    if(date && (r.dept || r.product)){
+      fileName = ('유해화학물질보고서_'+(r.tag||'신규')+'_'+(r.dept||'')+'_'+(r.product||'')+'_'+date+'.pdf').replace(/\s+/g,'');
+    }
+  }
+  if(!fileName) return null;
+  const ym = r.pdfYm || (r.date || r.dateStart || r.docDate || '').slice(0,7) || undefined;
+  return { fileName, ym };
+}
+
+/* 체크된 기록 → 일지 단위 파일 목록 (같은 일지 공유 기록은 1건으로 중복 제거) */
+function _admCollectSelectedFiles(cat){
+  const all = (cat==='edu') ? (adminRecords||[])
+            : (cat==='ppe') ? (window._ppeCurrentFiltered||[])
+            : (window._chemCurrentFiltered||[]);
+  let checked = [];
+  try{ if(typeof BM!=='undefined' && BM.getCheckedIds) checked = BM.getCheckedIds(cat) || []; }catch(e){}
+  if(!checked.length){
+    toast('⚠ 다운로드할 항목을 먼저 선택하세요 (체크박스)','err');
+    return null;
+  }
+  const set = new Set(checked);
+  const rows = all.filter(r => r && r.recordId && set.has(r.recordId));
+  if(!rows.length){ toast('⚠ 선택된 항목을 찾을 수 없음 — 조회 후 다시 선택하세요','err'); return null; }
+  const map = new Map();   // fileName 기준 중복 제거 (다인 일지 = 1장)
+  let noFile = 0;
+  rows.forEach(r => {
+    const f = _admResolvePdfFile(cat, r);
+    if(!f){ noFile++; return; }
+    if(!map.has(f.fileName)){
+      map.set(f.fileName, { ...f,
+        label: (r.dept||'?')+' · '+(r.name||r.product||'')+' · '+(r.date||r.dateStart||r.docDate||'') });
+    }
+  });
+  if(!map.size){ toast('⚠ 선택 건에 PDF 파일 정보가 없습니다 (옛 기록)','err'); return null; }
+  if(noFile>0) toast(`ℹ 파일 정보 없는 옛 기록 ${noFile}건은 건너뜁니다`,'info');
+  return { files: [...map.values()], selectedRows: rows.length };
+}
+
+/* 보관 PDF 바이트 가져오기 — downloadPdfFromGitHub와 동일한 3단 폴백 */
+async function _admFetchStoredPdf(fileName, ym){
+  const url1 = getGitHubPdfUrl(fileName, ym);
+  let res = await fetch(url1);
+  if(!res.ok && res.status === 404 && (fileName||'').includes('보호구')){
+    const url2 = url1.replace('/%EB%B3%B4%ED%98%B8%EA%B5%AC/', '/%EA%B5%90%EC%9C%A1%EC%9D%BC%EC%A7%80/');
+    res = await fetch(url2);
+  }
+  if(!res.ok && res.status === 404){
+    const m = (fileName||'').match(/(\d{4})-(\d{2})-\d{2}\.pdf$/i);
+    if(m){
+      const fileYm = m[1]+'-'+m[2];
+      if(fileYm !== ym) res = await fetch(getGitHubPdfUrl(fileName, fileYm));
+    }
+  }
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  return await res.arrayBuffer();
+}
+
+const _ADM_DL_LABEL = { edu:'교육일지', ppe:'보호구지급수령증', chem:'화학물질보고서' };
+
+/* 📥 선택 건 개별 PDF 다운로드 (결재 관리와 동일 UX) */
+async function admBatchDownload(cat){
+  const col = _admCollectSelectedFiles(cat);
+  if(!col) return;
+  const btn = document.getElementById('adm-'+cat+'-btn-download');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ 다운로드 중…'; }
+  let okCount = 0, failCount = 0;
+  try{
+    toast(`📥 ${_ADM_DL_LABEL[cat]} ${col.files.length}건 개별 다운로드 시작 (선택 ${col.selectedRows}건 → 일지 단위 ${col.files.length}건)`,'info');
+    for(let i=0;i<col.files.length;i++){
+      const f = col.files[i];
+      toast(`📄 다운로드 (${i+1}/${col.files.length}): ${f.label}`,'info');
+      try{
+        await downloadPdfFromGitHub(f.fileName, f.ym);
+        okCount++;
+      }catch(err){
+        console.error(`[admBatchDownload ${cat}] 실패 [${f.label}]:`, err);
+        failCount++;
+      }
+      await new Promise(r => setTimeout(r, 800));
+    }
+    let summary = `✅ 개별 다운로드 완료 — 성공 ${okCount}건`;
+    if(failCount>0) summary += ` · ⚠ 실패 ${failCount}건`;
+    toast(summary, failCount>0 ? 'info' : 'ok');
+  }catch(err){
+    console.error('admBatchDownload error:', err);
+    toast('❌ 다운로드 오류: '+(err.message||err),'err');
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = '📥 개별 PDF 다운로드'; }
+  }
+}
+
+/* 📚 선택 건 전체 PDF 병합 다운로드 (결재 관리와 동일하게 pdf-lib 병합) */
+async function admMergeDownload(cat){
+  const col = _admCollectSelectedFiles(cat);
+  if(!col) return;
+  const btn = document.getElementById('adm-'+cat+'-btn-merge');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ 병합 중…'; }
+  let okCount = 0, failCount = 0;
+  try{
+    if(typeof PDFLib === 'undefined' || !PDFLib.PDFDocument){
+      toast('❌ pdf-lib 미로드 — 새로고침 필요','err');
+      return;
+    }
+    toast(`📚 ${_ADM_DL_LABEL[cat]} ${col.files.length}건 PDF 병합 시작 (선택 ${col.selectedRows}건 → 일지 단위 ${col.files.length}건)`,'info');
+    const { PDFDocument } = PDFLib;
+    const mergedPdf = await PDFDocument.create();
+    for(let i=0;i<col.files.length;i++){
+      const f = col.files[i];
+      toast(`📄 처리 중 (${i+1}/${col.files.length}): ${f.label}`,'info');
+      try{
+        const bytes = await _admFetchStoredPdf(f.fileName, f.ym);
+        const doc = await PDFDocument.load(bytes);
+        const pages = await mergedPdf.copyPages(doc, doc.getPageIndices());
+        pages.forEach(p => mergedPdf.addPage(p));
+        okCount++;
+      }catch(err){
+        console.error(`[admMergeDownload ${cat}] 실패 [${f.label}]:`, err);
+        failCount++;
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+    if(okCount > 0){
+      toast('💾 병합 완료! 파일 다운로드 중...','info');
+      const mergedBytes = await mergedPdf.save();
+      const blob = new Blob([mergedBytes], { type:'application/pdf' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `통합_${_ADM_DL_LABEL[cat]}_${new Date().toISOString().slice(0,10)}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+      let summary = `✅ 병합 완료 — 성공 ${okCount}건`;
+      if(failCount>0) summary += ` · ⚠ 누락 ${failCount}건`;
+      toast(summary, failCount>0 ? 'info' : 'ok');
+    }else{
+      toast('❌ 병합할 PDF를 하나도 가져오지 못했습니다.','err');
+    }
+  }catch(err){
+    console.error('admMergeDownload error:', err);
+    toast('❌ 병합 다운로드 오류: '+(err.message||err),'err');
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = '📚 전체 PDF 병합 다운로드'; }
+  }
+}
+
 /* ── 보호구 현황 출력 ── */
+/* ★ v17.16: 체크 우선 → 현재 필터 결과만 출력 (전체 강제 출력 제거) + [object Object] 수정 */
 function printAdminPpeList(){
-  let data=[];
-  try{data=JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');}catch(e){}
-  if(!data.length){toast('보호구 기록이 없습니다','err');return;}
+  const T = _admPrintTargets('ppe');
+  const data = T.rows;
+  if(!data.length){toast('조회 후 출력하세요 (기록 없음)','err');return;}
   const N='#2a4a72',LB='#e8ecf2',BD='#c0cde0';
   const win=window.open('','_blank','width=900,height=700');
   const html=[
@@ -9608,10 +9813,10 @@ function printAdminPpeList(){
     '.np{display:none}@media print{.np{display:none!important}}',
     '</style></head><body>',
     '<h1>보호구 지급 현황</h1>',
-    '<p class="info">인당의료재단 부민병원 | 총 '+data.length+'건 | '+todayStr()+'</p>',
+    '<p class="info">인당의료재단 부민병원 | '+T.mode+' | '+todayStr()+'</p>',
     '<button class="np" onclick="window.print()" style="display:block;margin:0 auto 8px;background:'+N+';color:#fff;border:none;padding:7px 24px;border-radius:6px;cursor:pointer">🖨️ 인쇄</button>',
     '<table><thead><tr><th>번호</th><th>지급일</th><th>이름</th><th>부서</th><th>지급물품</th><th>서명</th></tr></thead><tbody>',
-    data.map((r,i)=>'<tr><td style="text-align:center">'+(i+1)+'</td><td>'+(r.date||r.dateStart||'')+'</td><td style="font-weight:700">'+(r.name||'')+'</td><td>'+(r.dept||'')+'</td><td style="font-size:9pt">'+(r.items||r.chem||'')+'</td><td style="text-align:center;color:#16a34a;font-weight:700">✓</td></tr>').join(''),
+    data.map((r,i)=>'<tr><td style="text-align:center">'+(i+1)+'</td><td>'+(r.date||r.dateStart||'')+'</td><td style="font-weight:700">'+(r.name||'')+'</td><td>'+(r.dept||'')+'</td><td style="font-size:9pt">'+_ppeItemsToStr(r)+'</td><td style="text-align:center;color:'+((r.signed||'').includes('✓')?'#16a34a':'#94a3b8')+';font-weight:700">'+((r.signed||'').includes('✓')?'✓':'-')+'</td></tr>').join(''),
     '</tbody></table>',
     '</body></html>'
   ].join('');
@@ -10696,36 +10901,9 @@ BM.runDedupe = async function(category){
 };
 
 /* ── 17. 감사 로그 패널 토글 + 렌더 ── */
-BM.toggleAuditPanel = function(){
-  const panel = document.getElementById('bm-audit-panel');
-  if(!panel) return;
-  const open = panel.style.display !== 'none';
-  panel.style.display = open ? 'none' : 'block';
-  if(!open) BM.renderAuditLog();
-};
-
-BM.renderAuditLog = function(){
-  const tbody = document.getElementById('bm-audit-tbody');
-  if(!tbody) return;
-  const log = BM.getAuditLog(50);
-  if(!log.length){
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:18px;color:#94a3b8">감사 로그가 없습니다</td></tr>';
-    return;
-  }
-  tbody.innerHTML = log.map(e => {
-    const detail = e.detail || {};
-    const summary = detail.count
-      ? `${detail.count}건 (${(detail.reason||'').slice(0,40)})`
-      : JSON.stringify(detail).slice(0,80);
-    return `<tr style="border-bottom:1px solid #e2e8f0">
-      <td style="padding:6px 8px;font-size:11px;color:#64748b;white-space:nowrap">${(e.ts||'').replace('T',' ').slice(0,16)}</td>
-      <td style="padding:6px 8px;font-size:11px">${e.actor||'-'}</td>
-      <td style="padding:6px 8px;font-size:11px;color:#dc2626;font-weight:700">${e.action}</td>
-      <td style="padding:6px 8px;font-size:11px">${e.category}</td>
-      <td style="padding:6px 8px;font-size:11px;color:#475569">${summary}</td>
-    </tr>`;
-  }).join('');
-};
+/* ★ v17.15: 조회 화면 삭제에 따라 BM.toggleAuditPanel·BM.renderAuditLog 제거.
+   (두 함수 모두 어디서도 호출되지 않던 죽은 코드 — 새로고침 버튼도 미존재 함수를 참조했음)
+   BM.audit(기록)·BM.getAuditLog(조회 API)는 수정 이력 모달·정정 PDF 발행이 사용하므로 그대로 유지. */
 
 /* ── 18. 중복 행 노란색 표시 (renderAdminTable 후 호출용) ── */
 BM.highlightDuplicates = function(category){
@@ -11267,7 +11445,9 @@ function exportApvCSV(){
 }
 
 function printAdminChemList(){
-  const rows = window._chemCurrentFiltered || [];
+  // ★ v17.16: 체크된 건 우선, 없으면 현재 필터 조회 결과
+  const _T=_admPrintTargets('chem');
+  const rows=_T.rows;
   if(!rows.length){ toast('조회 후 출력하세요','err'); return; }
   const N='#1c3557', LB='#e8ecf2', BD='#c0cde0';
   const win = window.open('','_blank','width=1200,height=800');
@@ -11284,7 +11464,7 @@ function printAdminChemList(){
     '.np{display:none}@media print{.np{display:none!important}}',
     '</style></head><body>',
     '<h1>유해화학물질 신규 사용 및 중단 보고서 — 현황</h1>',
-    '<p class="info">인당의료재단 부민병원 | 총 '+rows.length+'건 | '+todayStr()+'</p>',
+    '<p class="info">인당의료재단 부민병원 | '+_T.mode+' | '+todayStr()+'</p>',
     '<button class="np" onclick="window.print()" style="display:block;margin:0 auto 8px;background:'+N+';color:#fff;border:none;padding:7px 24px;border-radius:6px;cursor:pointer">🖨️ 인쇄</button>',
     '<table><colgroup>',
     '<col style="width:5%"><col style="width:9%"><col style="width:6%"><col style="width:9%"><col style="width:11%"><col style="width:14%"><col style="width:9%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:16%"></colgroup>',
@@ -11585,7 +11765,7 @@ function adminLogout(){
      기록 데이터(로컬 기록·GitHub records·GAS)는 일절 수정하지 않는 읽기 전용 기능
    - 최초 도입 시 기존 기록은 전부 '확인됨' 처리 → 이후 새 입력부터 카운트
    ════════════════════════════════════════════════════════ */
-const ADM_BADGE_CATS = ['apv','edu','ppe','chem','audit'];
+const ADM_BADGE_CATS = ['apv','edu','ppe','chem'];   // ★ v17.15: 감사 로그 화면 삭제로 audit 제외
 
 /* 배지 표기 공통 (100건 이상은 99+) */
 function _admSetBadge(cat, n){
@@ -11630,10 +11810,6 @@ function _admBadgeIds(cat){
     if(cat==='chem'){
       const rows = JSON.parse(localStorage.getItem('bm_chem_records')||'[]');
       return rows.map(r=>r.recordId || ((r.submitted||'')+'|'+(r.name||r.product||'')+'|'+(r.date||r.docDate||''))).filter(Boolean);
-    }
-    if(cat==='audit'){
-      const rows = JSON.parse(localStorage.getItem('bm_audit_log')||'[]');
-      return rows.map(e=>(e.ts||'')+'|'+(e.action||'')+'|'+(e.category||'')+'|'+((e.detail&&e.detail.recordId)||'')).filter(Boolean);
     }
   }catch(e){}
   return [];
