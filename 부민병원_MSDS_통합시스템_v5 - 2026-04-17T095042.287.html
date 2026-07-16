@@ -9,8 +9,20 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v17.17 (2026-07-14)
+  부민병원 MSDS 통합시스템 v17.18 (2026-07-14)
   ════════════════════════════════════════════════════════════════════
+  ★★★ v17.18 (2026-07-14) — 특별교육일지 사진 "촬영" 경로 추가 (요청사항 7):
+    [요청] 특별안전보건교육일지(e1) 현장사진 단계에 갤러리 불러오기만 있던 것을,
+           "사진 촬영"으로도 넣을 수 있게 추가. 저장·이미지 편철 로직은 그대로.
+    [구현]
+    - 사진 슬롯 탭 시 선택 팝업(choosePhotoSrc): "📸 사진 촬영" / "🖼️ 갤러리에서 불러오기"
+      · 촬영 = capture="environment" 입력(photo-cam) → 모바일에서 후면 카메라 즉시 실행
+      · 불러오기 = 기존 photo-in 입력 그대로
+      · 두 경로 모두 기존 onPhoto 핸들러로 합류 → 저장·미리보기·PDF 편철·GitHub 업로드 100% 동일
+    - 변경은 e1 사진 UI뿐: 슬롯 onclick 4개, 카메라용 입력 1개 추가, 함수 2개 추가.
+      onPhoto·delPhoto·업로드/저장 파이프라인·MSDS교육일지(e2)는 무변경.
+      (촬영 경로는 특별안전보건교육에만 삽입 — 요청 범위 그대로)
+
   ★★★ v17.17 (2026-07-14) — 보호구 관리자 행 인덱스 버그 수정 (요청사항 6):
     [보고] 부서(예: 총무팀)로 검색 후 행을 체크하고 👁 미리보기·📥 출력을 누르면
            검색 전 목록의 1번 기록(다른 사람 일지)이 열리는 문제.
@@ -722,14 +734,16 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
   <!-- S5: 사진 -->
   <div id="e1s5" style="display:none">
   <div class="card">
-    <div class="card-ttl">📷 현장사진 <span class="text-xs font-normal text-slate-400">(최대 4장)</span></div>
+    <div class="card-ttl">📷 현장사진 <span class="text-xs font-normal text-slate-400">(최대 4장 · 촬영 또는 불러오기)</span></div>
     <div class="pgrid">
-      <div class="pslot" id="e1ps0" onclick="pickPhoto(0)"><span class="text-2xl">📷</span><span class="text-[10px] text-slate-400 mt-1">추가</span><img id="e1ph0" style="display:none"><button class="pdel" onclick="delPhoto(event,0)">✕</button></div>
-      <div class="pslot" id="e1ps1" onclick="pickPhoto(1)"><span class="text-2xl">📷</span><span class="text-[10px] text-slate-400 mt-1">추가</span><img id="e1ph1" style="display:none"><button class="pdel" onclick="delPhoto(event,1)">✕</button></div>
-      <div class="pslot" id="e1ps2" onclick="pickPhoto(2)"><span class="text-2xl">📷</span><span class="text-[10px] text-slate-400 mt-1">추가</span><img id="e1ph2" style="display:none"><button class="pdel" onclick="delPhoto(event,2)">✕</button></div>
-      <div class="pslot" id="e1ps3" onclick="pickPhoto(3)"><span class="text-2xl">📷</span><span class="text-[10px] text-slate-400 mt-1">추가</span><img id="e1ph3" style="display:none"><button class="pdel" onclick="delPhoto(event,3)">✕</button></div>
+      <div class="pslot" id="e1ps0" onclick="choosePhotoSrc(0)"><span class="text-2xl">📷</span><span class="text-[10px] text-slate-400 mt-1">추가</span><img id="e1ph0" style="display:none"><button class="pdel" onclick="delPhoto(event,0)">✕</button></div>
+      <div class="pslot" id="e1ps1" onclick="choosePhotoSrc(1)"><span class="text-2xl">📷</span><span class="text-[10px] text-slate-400 mt-1">추가</span><img id="e1ph1" style="display:none"><button class="pdel" onclick="delPhoto(event,1)">✕</button></div>
+      <div class="pslot" id="e1ps2" onclick="choosePhotoSrc(2)"><span class="text-2xl">📷</span><span class="text-[10px] text-slate-400 mt-1">추가</span><img id="e1ph2" style="display:none"><button class="pdel" onclick="delPhoto(event,2)">✕</button></div>
+      <div class="pslot" id="e1ps3" onclick="choosePhotoSrc(3)"><span class="text-2xl">📷</span><span class="text-[10px] text-slate-400 mt-1">추가</span><img id="e1ph3" style="display:none"><button class="pdel" onclick="delPhoto(event,3)">✕</button></div>
     </div>
     <input type="file" id="photo-in" accept="image/*" style="display:none" onchange="onPhoto(event)">
+    <!-- ★ v17.18: 촬영 전용 입력 — capture로 모바일 후면 카메라 즉시 실행 (핸들러는 기존 onPhoto 공유) -->
+    <input type="file" id="photo-cam" accept="image/*" capture="environment" style="display:none" onchange="onPhoto(event)">
   </div>
   <div class="brow">
     <button class="btn btn-s" onclick="e1Go(4)">← 이전</button>
@@ -4309,6 +4323,27 @@ function clrSig(di,pi){const cv=document.getElementById(`sig_${di}_${pi}`);if(cv
 function pickPhoto(slot){e1.photoSlot=slot;document.getElementById('photo-in').click();}
 function onPhoto(ev){const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{e1.photos[e1.photoSlot]=e.target.result;const img=document.getElementById('e1ph'+e1.photoSlot);img.src=e.target.result;img.style.display='block';document.getElementById('e1ps'+e1.photoSlot).querySelectorAll('span').forEach(s=>s.style.display='none');};r.readAsDataURL(f);ev.target.value='';}
 function delPhoto(ev,slot){ev.stopPropagation();e1.photos[slot]=null;const img=document.getElementById('e1ph'+slot);img.src='';img.style.display='none';document.getElementById('e1ps'+slot).querySelectorAll('span').forEach(s=>s.style.display='');}
+/* ★ v17.18: 슬롯 탭 → 촬영/불러오기 선택 (기존 onPhoto 핸들러 공유, 저장·편철 로직 무변경) */
+function choosePhotoSrc(slot){
+  e1.photoSlot=slot;
+  const old=document.getElementById('photo-src-modal'); if(old) old.remove();
+  const m=document.createElement('div');
+  m.id='photo-src-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+  m.innerHTML='<div style="background:#fff;border-radius:16px;padding:20px;width:100%;max-width:320px;box-shadow:0 12px 44px rgba(0,0,0,.32)">'
+    +'<div style="font-size:15px;font-weight:700;color:#111827;text-align:center;margin-bottom:16px">📷 현장사진 추가</div>'
+    +'<button type="button" onclick="_photoFrom(\'cam\')" style="width:100%;padding:14px;margin-bottom:9px;background:#10b981;color:#fff;border:none;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">📸 사진 촬영</button>'
+    +'<button type="button" onclick="_photoFrom(\'lib\')" style="width:100%;padding:14px;margin-bottom:9px;background:#f1f5f9;color:#111827;border:none;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">🖼️ 갤러리에서 불러오기</button>'
+    +'<button type="button" onclick="document.getElementById(\'photo-src-modal\').remove()" style="width:100%;padding:10px;background:none;color:#94a3b8;border:none;font-size:13px;cursor:pointer;font-family:inherit">취소</button>'
+    +'</div>';
+  m.addEventListener('click',e=>{ if(e.target===m) m.remove(); });
+  document.body.appendChild(m);
+}
+function _photoFrom(src){
+  const m=document.getElementById('photo-src-modal'); if(m) m.remove();
+  const el=document.getElementById(src==='cam'?'photo-cam':'photo-in');
+  if(el) el.click();
+}
 
 /* ══ 스텝 ══ */
 function e1Go(n){
