@@ -10,7 +10,23 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v17.20 (2026-07-27)
+  부민병원 MSDS 통합시스템 v17.21 (2026-07-27)
+
+  ★★★ v17.21 (2026-07-27) — "업로드 누락" 건 자동 복구 (records 재생성 → GitHub 재업로드):
+    [증상] v17.20 리졸버가 전체 폴더(±1개월 + API listing)를 뒤져도 파일 없음 →
+           "GitHub 전체 폴더 탐색 실패 (업로드 누락 가능)" 2건 (61병동 7/27 · 9병동 7/14).
+           = 제출 시점에 PDF 업로드 자체가 실패(창 닫힘·모바일 이탈·네트워크)한 건.
+           레코드(서명 이미지 포함)는 localStorage/records에 정상 보존되어 있음.
+    [수정]
+    - apvRebuildAndUploadPdf 신설: 저장된 records로 PDF 재생성(기존 v15.43 재생성과
+      동일 렌더러: buildEduPreviewHTML/buildPpePreviewHTML + html2canvas + jsPDF)
+      → "원래 파일명 그대로" GitHub(교육일지/현재월/)에 재업로드 → pdfYm 역저장
+      → 재생성 bytes를 그대로 반환해 도장 합성·병합에 즉시 사용 (재다운로드 불필요).
+    - 개별 재출력(apvReprint): 리졸버 실패 시 confirm 후 재생성·재업로드 → 도장 합성 재시도.
+    - 병합(apvMergeDownload): 리졸버 실패 시 자동 재생성·재업로드 후 병합 계속
+      (요약에 "♻ 재생성 복구 N건" 표시). 토큰 미설정·records 부족 시에만 누락 처리.
+    - 기존 함수 무변경: _regeneratePdfFromRecords(재생성 버튼)·리졸버·업로더 그대로.
+      apvStampOriginalPdf는 preBytes 선택 인자만 추가(기존 호출부 영향 없음).
 
   ★★★ v17.20 (2026-07-27) — 결재 병합 "누락 N건" + 개별 재출력 "PDF 도장 합성 실패" 근본 해결:
     [증상] 7월 교육일지 병합 다운로드 시 2건 누락, 해당 건 개별 재출력 시
@@ -5501,7 +5517,17 @@ async function apvReprint(groupKey){
     // 결재 시점의 날짜로 도장 생성 (현재 날짜 X)
     const stampPng = await apvStampToImage(group.approvedAt);
     if(!stampPng) throw new Error('결재 도장 생성 실패');
-    const ok = await apvStampOriginalPdf(group, stampPng);
+    let ok = await apvStampOriginalPdf(group, stampPng);
+    // ★ v17.21: GitHub에 원본이 없으면 records(서명 포함)로 재생성·재업로드 후 재시도
+    if(!ok){
+      if(confirm(`${group.dept} 원본 PDF가 GitHub 전체에서 확인되지 않습니다.\n(제출 시점 업로드 실패로 추정)\n\n저장된 records(서명 포함)로 PDF를 재생성해서\nGitHub에 재업로드한 뒤 도장 합성을 계속할까요?`)){
+        const rebuilt = await apvRebuildAndUploadPdf(group);
+        if(rebuilt) ok = await apvStampOriginalPdf(group, stampPng, rebuilt);
+      }else{
+        toast('재생성 취소됨 — 재출력 중단','info');
+        return;
+      }
+    }
     if(ok) toast(`✅ ${group.dept} 재출력 완료`,'ok');
     else throw new Error('PDF 도장 합성 실패');
   }catch(err){
@@ -6538,6 +6564,7 @@ async function apvMergeDownload() {
 
     let okCount = 0;
     let failCount = 0;
+    let rebuiltCount = 0;    // ★ v17.21: 재생성 복구 건수
     const failedList = [];   // ★ v17.20: 누락 건 상세 (부서·일자·사유)
 
     try {
@@ -6557,9 +6584,13 @@ async function apvMergeDownload() {
             toast(`📄 처리 중 (${i + 1}/${selectedGroups.length}): ${label}`, 'info');
 
             try {
-                // 1. 원본 PDF 가져오기 (★ v17.20: 공용 리졸버 — 다중 ym 후보 + GitHub API 폴백)
-                const pdfBytes = await apvResolvePdfBytes(group);
-                if (!pdfBytes) throw new Error('GitHub 전체 폴더 탐색 실패 (업로드 누락 가능)');
+                // 1. 원본 PDF 가져오기 (★ v17.20 리졸버 → ★ v17.21 실패 시 records 재생성·재업로드 자동 복구)
+                let pdfBytes = await apvResolvePdfBytes(group);
+                if (!pdfBytes) {
+                    pdfBytes = await apvRebuildAndUploadPdf(group);
+                    if (pdfBytes) rebuiltCount++;
+                }
+                if (!pdfBytes) throw new Error('GitHub 미존재 + 재생성 실패 (records 부족 또는 토큰 미설정)');
                 const pdfDoc = await PDFDocument.load(pdfBytes);
                 const page = pdfDoc.getPages()[0];
                 const { width, height } = page.getSize();
@@ -6615,6 +6646,7 @@ async function apvMergeDownload() {
             URL.revokeObjectURL(link.href);
 
             let summary = `✅ 병합 완료 — 성공 ${okCount}건`;
+            if (rebuiltCount > 0) summary += ` · ♻ 재생성 복구 ${rebuiltCount}건`;
             if (failCount > 0) summary += ` · ⚠ 누락 ${failCount}건`;
             toast(summary, failCount > 0 ? 'info' : 'ok');
             // ★ v17.20: 어느 일지가 왜 누락됐는지 즉시 명시 (콘솔 뒤지지 않아도 됨)
@@ -6746,8 +6778,95 @@ async function apvResolvePdfBytes(group){
   return null;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   ★ v17.21: "업로드 누락" 자동 복구 — records 재생성 → GitHub 재업로드
+   대상: 리졸버(apvResolvePdfBytes)가 전체 탐색 후에도 null인 건
+        = 제출 시점 PDF 업로드 실패 건 (레코드·서명은 정상 보존)
+   원칙: 기존 재생성(v15.43 _regeneratePdfFromRecords)과 동일 렌더러 사용,
+        원래 pdfFileName 그대로 업로드 → 이후 모든 조회·병합·재출력 경로 일치
+   ══════════════════════════════════════════════════════════════ */
+
+/* records 데이터로 jsPDF 객체 렌더 (v15.43 재생성과 동일 로직 — 저장은 안 함) */
+async function _apvRenderGroupPdf(group){
+  const isPpe = (group.type||'').includes('보호구');
+  const html = isPpe
+    ? buildPpePreviewHTML({
+        dept: group.dept, name: group.members[0]?.name, empNo: group.members[0]?.empNo,
+        joinDate: group.members[0]?.joinDate, date: group.dateStart,
+        items: group.members[0]?.items || [],
+        itemsStr: group.members[0]?.itemsStr,
+        signed: group.members[0]?.signed, sigImg: group.members[0]?.sigImg
+      })
+    : buildEduPreviewHTML(group, null);
+  const area = document.getElementById('pdf-area');
+  if(!area) throw new Error('PDF 렌더 영역(pdf-area) 없음');
+  area.innerHTML = `<div style="width:780px">${html}</div>`;
+  await new Promise(r => setTimeout(r, 200));
+  const cv = await html2canvas(area.firstElementChild, {scale:2, useCORS:true, allowTaint:true, logging:false, windowWidth:780});
+  const {jsPDF} = window.jspdf;
+  const pdf = new jsPDF('p','mm','a4');
+  const pw = pdf.internal.pageSize.getWidth();
+  const ph = pdf.internal.pageSize.getHeight();
+  const ratio = pw / cv.width;
+  const imgH = cv.height * ratio;
+  if(imgH <= ph){
+    pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, imgH);
+  } else {
+    let yPos = 0;
+    while(yPos < cv.height){
+      const pageCv = document.createElement('canvas');
+      pageCv.width = cv.width;
+      pageCv.height = Math.min(ph/ratio, cv.height - yPos);
+      pageCv.getContext('2d').drawImage(cv, 0, -yPos);
+      if(yPos > 0) pdf.addPage();
+      pdf.addImage(pageCv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, pageCv.height * ratio);
+      yPos += ph / ratio;
+    }
+  }
+  area.innerHTML = '';
+  return pdf;
+}
+
+/* 재생성 → 원래 파일명으로 GitHub 재업로드 → pdfYm 역저장 → PDF bytes 반환 (실패 시 null) */
+async function apvRebuildAndUploadPdf(group){
+  try{
+    if(!group || !(group.members||[]).length){
+      toast('⚠ 재생성 불가 — 저장된 records 없음','err');
+      return null;
+    }
+    if(typeof CFG === 'undefined' || !CFG.ghToken){
+      toast('⚠ 재생성 불가 — ⚙ 설정에서 GitHub 토큰 필요','err');
+      return null;
+    }
+    // 파일명: 기존 pdfFileName 유지 (없으면 표준 규칙으로 신규 생성)
+    let fileName = group.pdfFileName || '';
+    if(!fileName){
+      const names = (group.members||[]).map(m=>m.name).filter(Boolean);
+      const nmStr = names.length<=1 ? (names[0]||'무명') : names[0]+'외'+(names.length-1)+'명';
+      const prefix = (group.type||'').includes('MSDS') ? 'MSDS교육일지'
+                   : ((group.type||'').includes('보호구') ? '보호구지급수령증' : '특별안전보건교육일지');
+      fileName = `${prefix}-${group.dept}-${nmStr}-${group.dateStart}.pdf`;
+      group.pdfFileName = fileName;
+      try{ _writeBackPdfFileName(group.groupKey, fileName); }catch(_){}
+    }
+    toast(`♻ ${group.dept} records로 PDF 재생성 중…`,'info');
+    const pdf = await _apvRenderGroupPdf(group);
+    const b64 = pdf.output('datauristring');
+    await uploadPdfToGitHub(b64, fileName);        // 교육일지/{현재월 KST}/ 업로드 (실패 시 throw)
+    const ym = todayStr().slice(0,7);
+    _apvWriteBackPdfYm(group, ym);                 // 이후 조회 1차 매칭 보장
+    try{ _ghFolderCache.clear(); }catch(_){}       // 세션 폴더 listing 캐시 무효화
+    toast(`✅ ${group.dept} 재생성·재업로드 완료 (교육일지/${ym}/)`,'ok');
+    return pdf.output('arraybuffer');              // 재다운로드 없이 즉시 사용
+  }catch(err){
+    console.error('apvRebuildAndUploadPdf error:', err);
+    toast(`❌ ${group.dept} 재생성·재업로드 실패: ${(err.message||err).toString().slice(0,80)}`,'err');
+    return null;
+  }
+}
+
 /* ── 원본 PDF 다운로드 → pdf-lib 도장 합성 → 새 PDF 다운로드 ── */
-async function apvStampOriginalPdf(group, stampPngDataUrl){
+async function apvStampOriginalPdf(group, stampPngDataUrl, preBytes){
   try{
     // pdf-lib 라이브러리 체크
     if(typeof PDFLib === 'undefined' || !PDFLib.PDFDocument){
@@ -6757,7 +6876,8 @@ async function apvStampOriginalPdf(group, stampPngDataUrl){
     }
 
     // ★ v17.20: 공용 리졸버 — 다중 ym 후보(±1개월) + GitHub API 폴백 (월경계 404 자가치유)
-    const pdfBytes = await apvResolvePdfBytes(group);
+    // ★ v17.21: preBytes가 주어지면(재생성 직후) 다운로드 생략하고 그대로 도장 합성
+    const pdfBytes = preBytes || await apvResolvePdfBytes(group);
     if(!pdfBytes){
       toast(`⚠ ${group.dept} PDF를 GitHub 전체 폴더에서 찾지 못함 — 업로드 여부 확인 필요`,'err');
       return false;
