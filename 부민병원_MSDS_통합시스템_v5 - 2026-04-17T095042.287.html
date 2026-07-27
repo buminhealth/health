@@ -10,7 +10,18 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v17.21 (2026-07-27)
+  부민병원 MSDS 통합시스템 v17.22 (2026-07-27)
+
+  ★★★ v17.22 (2026-07-27) — 재생성 복구 건 "결재 도장 이중 날인" 수정:
+    [증상] v17.21 복구(재생성→재업로드→도장 합성)로 출력한 PDF의 결재란에 도장이 2개 겹침.
+    [원인] 재생성 렌더러 buildEduPreviewHTML이 group.approved=true면 결재란에 도장 SVG를
+           HTML로 "베이크"함(관리자 미리보기용 동작). 복구 흐름은 그 위에 pdf-lib 도장
+           합성을 1회 더 수행 → 이중 날인. (원본 제출 PDF에는 도장이 없어야 정상)
+    [수정] _apvRenderGroupPdf가 렌더 시에만 approved를 강제 해제한 사본(gRender)으로
+           렌더 → 재생성 PDF = "도장 없는 원본" 복원 → 도장은 합성 단계에서 정확히 1회.
+           실제 결재 상태·기존 미리보기·재생성 버튼(v15.43) 동작은 불변.
+    [조치] v17.21로 이미 복구·업로드된 파일(도장 베이크됨)은 GitHub에서 삭제 후
+           재출력(자동 복구가 깨끗한 버전 재업로드) 또는 콘솔 1줄로 덮어쓰기 필요.
 
   ★★★ v17.21 (2026-07-27) — "업로드 누락" 건 자동 복구 (records 재생성 → GitHub 재업로드):
     [증상] v17.20 리졸버가 전체 폴더(±1개월 + API listing)를 뒤져도 파일 없음 →
@@ -6789,6 +6800,10 @@ async function apvResolvePdfBytes(group){
 /* records 데이터로 jsPDF 객체 렌더 (v15.43 재생성과 동일 로직 — 저장은 안 함) */
 async function _apvRenderGroupPdf(group){
   const isPpe = (group.type||'').includes('보호구');
+  // ★ v17.22: 재생성은 "도장 없는 원본 제출 PDF"를 복원해야 함. 결재완료 상태로 렌더하면
+  //           buildEduPreviewHTML이 결재란에 도장 SVG를 베이크하고, 이후 도장 합성(pdf-lib)이
+  //           한 번 더 찍혀 이중 날인이 됨 → 렌더 시에만 approved 강제 해제 (실제 결재 상태 불변).
+  const gRender = Object.assign({}, group, {approved:false, approvedAt:'', approverName:''});
   const html = isPpe
     ? buildPpePreviewHTML({
         dept: group.dept, name: group.members[0]?.name, empNo: group.members[0]?.empNo,
@@ -6797,7 +6812,7 @@ async function _apvRenderGroupPdf(group){
         itemsStr: group.members[0]?.itemsStr,
         signed: group.members[0]?.signed, sigImg: group.members[0]?.sigImg
       })
-    : buildEduPreviewHTML(group, null);
+    : buildEduPreviewHTML(gRender, null);
   const area = document.getElementById('pdf-area');
   if(!area) throw new Error('PDF 렌더 영역(pdf-area) 없음');
   area.innerHTML = `<div style="width:780px">${html}</div>`;
