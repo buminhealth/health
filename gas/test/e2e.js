@@ -99,9 +99,31 @@ function check(name, cond, extra) {
   check('휴대폰: 가로 넘침 없음', mob.sw <= 390, mob.sw);
   await page.setViewportSize({ width: 1366, height: 768 });
 
-  // 2. 작성 탭 → 로그인 창 → 틀린 PIN → 맞는 PIN
-  await page.evaluate(() => goTab('edu2'));
+  // 1-2. v19.2 홈 (로그인 전)
+  const home0 = await page.evaluate(() => ({
+    vis: getComputedStyle(document.getElementById('pg-home')).display !== 'none',
+    msdsHidden: document.getElementById('pg-msds').style.display === 'none',
+    tabOn: document.getElementById('tab-home').classList.contains('on'),
+    tiles: [...document.querySelectorAll('#hm-tiles .hm-tile strong')].map(x => x.textContent),
+    ems: [...document.querySelectorAll('#hm-tiles .hm-tile em')].map(x => x.textContent),
+    todo: document.getElementById('hm-todo-t').textContent,
+    login: !!document.getElementById('hm-login'),
+    foot: (document.querySelector('#pg-home > .bm-foot') || {}).textContent || '',
+  }));
+  check('홈: 처음 화면은 홈', home0.vis && home0.msdsHidden && home0.tabOn, home0);
+  check('홈: 타일 5개', JSON.stringify(home0.tiles) === JSON.stringify(['MSDS 관리', '교육일지 작성', '보호구 지급', '화학물질 보고서', '관리자 모드']), home0.tiles);
+  check('홈(로그인 전): 작성 타일 버튼은 부서 로그인', home0.ems.slice(1, 4).every(x => x === '부서 로그인'), home0.ems);
+  check('홈(로그인 전): 로그인하면 할 수 있는 일 + 로그인 버튼', home0.todo.includes('할 수 있는 일') && home0.login, home0.todo);
+  check('홈: 연락처는 보건관리실만', home0.foot.includes('보건관리실 내선 3293') && !home0.foot.includes('['), home0.foot);
+  await page.click('#hm-tiles .hm-tile[data-go="msds"]');
+  check('홈: MSDS 타일 → MSDS 화면', await page.evaluate(() => document.getElementById('pg-msds').style.display === 'flex'));
+  await page.click('.bm-logo');
+  check('로고 → 홈', await page.evaluate(() => document.getElementById('pg-home').style.display === 'block'));
+
+  // 2. 작성 탭(홈 교육일지 타일) → 로그인 창 → 틀린 PIN → 맞는 PIN → 가려던 화면으로
+  await page.click('#hm-tiles .hm-tile[data-go="edu"]');
   await page.waitForSelector('#bm-login', { state: 'visible' });
+  check('로그인 창: 작성할 것 표시', (await page.textContent('#bm-login-what')).includes('MSDS 교육일지'));
   await page.waitForFunction(() => document.querySelectorAll('#bm-login-dept option').length > 1);
   const deptOptions = await page.$$eval('#bm-login-dept option', os => os.map(o => o.value));
   check('로그인 창: PIN 등록된 부서만 표시', JSON.stringify(deptOptions) === JSON.stringify(['', '61병동', '71병동']), deptOptions);
@@ -117,6 +139,18 @@ function check(name, cond, extra) {
 
   // 3. 부서 로그인 후
   check('부서 로그인: 배지', (await page.textContent('#bm-auth-badge')).includes('61병동'));
+  check('로그인 후 가려던 교육일지 화면으로', await page.evaluate(() => document.getElementById('pg-edu2').style.display === 'block' && document.getElementById('pg-home').style.display === 'none'));
+  await page.evaluate(() => goTab('home'));
+  await page.waitForFunction(() => !document.getElementById('hm-todo').textContent.includes('불러오는 중'));
+  const home1 = await page.evaluate(() => ({
+    ems: [...document.querySelectorAll('#hm-tiles .hm-tile em')].map(x => x.textContent),
+    edu: document.querySelectorAll('#hm-tiles .hm-tile span')[1].textContent,
+    todo: document.getElementById('hm-todo-t').textContent,
+    rows: document.getElementById('hm-todo').textContent,
+  }));
+  check('홈(로그인 후): 작성하기 · 보고하기', JSON.stringify(home1.ems.slice(1, 4)) === '["작성하기","작성하기","보고하기"]', home1.ems);
+  check('홈(로그인 후): 교육일지 타일에 부서 · 일지 종류', home1.edu.includes('61병동') && /교육일지/.test(home1.edu), home1.edu);
+  check('홈(로그인 후): 부서 할 일', home1.todo === '61병동 할 일' && home1.rows.length > 0, home1);
   const emps = await page.evaluate(() => empList.map(e => e.name + '/' + e.dept + '/' + e.joinDate));
   check('부서 로그인: 자기 부서 직원만', emps.length === 2 && emps.every(x => x.includes('/61병동/')), emps);
   check('직원 입사일 KST 기준 (하루 당김 없음)', emps.includes('김가나/61병동/2026-07-01'), emps);
