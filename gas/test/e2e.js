@@ -408,7 +408,7 @@ function check(name, cond, extra) {
   check('보건관리자에게 회신 알림 메일', mail.sent.some(m => m.to === 'admin@bumin.co.kr' && /최신입/.test(m.subject)));
 
   // 14-1. 부서 제출 현황 탭
-  check('부서 제출 현황 탭 표시', (await page.textContent('#tab-deptview')).includes('61병동'));
+  check('부서 제출 현황 탭 표시', (await page.textContent('#tab-deptview')).includes('부서현황') && (await page.getAttribute('#tab-deptview','title')).includes('61병동'));
   await page.evaluate(() => goTab('deptview'));
   await page.waitForFunction(() => document.getElementById('dv-body').textContent.includes('교육일지'), null, { timeout: 15000 });
   await page.selectOption('#dv-range', '0');
