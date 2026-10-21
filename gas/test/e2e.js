@@ -206,7 +206,7 @@ function check(name, cond, extra) {
   const S = v => ({ stringValue: v });
   fb.docs = [
     { name: 'projects/bumin-hr/databases/(default)/documents/employees/a1', fields: { empNo: S('126051302'), name: S('김가나'), dept: S('61병동'), hireDate: { timestampValue: '2026-06-30T15:00:00Z' }, status: S('재직') } },
-    { name: 'projects/bumin-hr/databases/(default)/documents/employees/a2', fields: { empNo: S('126101801'), name: S('최신입'), dept: S('61병동'), hireDate: S(kstDay(-1)), status: S('재직') } },
+    { name: 'projects/bumin-hr/databases/(default)/documents/employees/a2', fields: { empCode: S('126101801'), name: S('최신입'), dept: S('61병동'), hireDate: S(kstDay(-1)), status: S('재직'), rrn: S('900101-1234567'), phone: S('010-0000-0000') } },
     { name: 'projects/bumin-hr/databases/(default)/documents/employees/a3', fields: { empNo: S('126101802'), name: S('한새봄'), dept: S('71병동'), hireDate: S(kstDay(-1)), status: S('재직') } },
   ];
   await page.evaluate(() => BMSTAFF.open());
@@ -220,6 +220,8 @@ function check(name, cond, extra) {
   await page.click('#staff-hr-go');
   await page.waitForFunction(() => document.getElementById('staff-preview-out').textContent.includes('총 3명'), null, { timeout: 15000 });
   check('인사 사이트 가져오기: Firestore 3명 미리보기', true);
+  const prevText = await page.textContent('#staff-preview-out');
+  check('인사 사이트 가져오기: 주민번호·전화번호 열 제외', !prevText.includes('900101') && !prevText.includes('010-0000') && !/rrn|phone/.test(prevText), prevText.slice(0, 120));
   check('인사 사이트 가져오기: 비밀번호 칸 비움 (저장 안 함)', (await page.$eval('#staff-hr-pw', i => i.value)) === '' && !g.props.HR_PW);
   check('수동 가져오기: 메일 없음', mail.sent.length === 0, mail.sent.length);
 
