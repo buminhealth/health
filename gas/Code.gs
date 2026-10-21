@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v18.5 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v18.6 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -1667,16 +1667,77 @@ function nhResend_(req) {
 //  · 인사 사이트 자동 로그인이 가능할 때만: 직원정보 갱신 → 신규입사자 확인·메일
 //  · 재알림(3일 무회신)은 매일 확인
 // ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+// 인사 사이트 데이터 이상 감지 (사이트 구조가 바뀌어도 조용히 틀린 데이터가 들어오지 않게)
+//  · 인원이 지난번 정상 조회보다 30% 넘게 줄면 중단
+//  · 재직자 중 입사일·부서·사번이 빈 비율이 지난번 정상 때보다 30%p 넘게 늘면 중단 (필드 이름이 바뀐 경우)
+//    (원래부터 비어 있는 데이터는 오탐하지 않도록 '지난번 정상값' 기준. 첫 실행은 기준값만 기록)
+// ════════════════════════════════════════════════════════════════
+const HR_DROP_LIMIT = 0.3;
+const HR_FIELD_JUMP = 0.3;
+function hrSanity_(list) {
+  const cfg = getAdminCfg().data || {};
+  const prev = parseInt(cfg.hr_last_count || '0', 10);
+  let base = null;
+  try { base = JSON.parse(cfg.hr_last_ratios || 'null'); } catch (_) {}
+  const active = list.filter(e => !isResigned_(e));
+  const ratio = f => active.length ? active.filter(e => !String(e[f] || '').trim()).length / active.length : 1;
+  const ratios = { joinDate: ratio('joinDate'), dept: ratio('dept'), empNo: ratio('empNo') };
+  const LABEL = { joinDate: '입사일', dept: '부서', empNo: '사번' };
+  const SUBJ = { joinDate: '입사일이', dept: '부서가', empNo: '사번이' };
+  const problems = [];
+  if (!list.length) problems.push('직원을 한 명도 인식하지 못했습니다 (이름 필드가 바뀌었을 수 있음)');
+  if (prev && list.length < prev * (1 - HR_DROP_LIMIT)) problems.push('인원이 지난번 ' + prev + '명 → ' + list.length + '명으로 크게 줄었습니다');
+  if (base && active.length) Object.keys(LABEL).forEach(f => {
+    if (ratios[f] - (base[f] || 0) > HR_FIELD_JUMP) {
+      problems.push('재직자 중 ' + SUBJ[f] + ' 빈 비율이 ' + Math.round((base[f] || 0) * 100) + '% → ' + Math.round(ratios[f] * 100) +
+                    '%로 늘었습니다 (' + LABEL[f] + ' 필드 이름이 바뀌었을 수 있음)');
+    }
+  });
+  return { ok: !problems.length, problems: problems, count: list.length, prev: prev, ratios: ratios };
+}
+function saveHrBaseline_(chk) {
+  setAdminCfg({ key: 'hr_last_count', value: String(chk.count) });
+  setAdminCfg({ key: 'hr_last_ratios', value: JSON.stringify(chk.ratios) });
+}
+
+// 자동 확인 실패 시 보건관리자에게 메일 (같은 날 같은 사유는 1번만)
+function notifyHrFailure_(msg) {
+  const cfg = sysCfg_();
+  if (!cfg.adminEmail) return false;
+  const key = todayKst_() + '|' + sha256Hex_(msg).slice(0, 12);
+  if ((getAdminCfg().data || {}).hr_fail_mail_key === key) return false;
+  try {
+    MailApp.sendEmail({ to: cfg.adminEmail, name: '부민병원 보건관리',
+      subject: '[보건관리] 인사 사이트 자동 확인 실패 - 신규입사 알림이 멈춰 있습니다',
+      htmlBody: '<div style="font-family:sans-serif;font-size:14px;line-height:1.6">' +
+        '<p>매일 아침 인사 사이트(휴직자관리) 자동 확인이 실패해 <b>직원정보를 반영하지 않았습니다.</b> ' +
+        '이 문제가 해결될 때까지 신규입사 알림 메일이 나가지 않습니다.</p>' +
+        '<p style="background:#fef2f2;padding:10px;border-radius:6px;color:#b91c1c">' + String(msg).replace(/[<>&]/g, '') + '</p>' +
+        '<p>확인할 것: ① 인사 사이트 계정 비밀번호가 바뀌었으면 시트 메뉴 ④에서 다시 저장 ' +
+        '② 인사 사이트의 필드 이름·저장 위치가 바뀌었는지 담당자에게 확인 ③ 관리자 모드 → 직원정보관리에서 오류 내용 확인</p>' +
+        '<p style="color:#64748b;font-size:12px">같은 사유의 메일은 하루 1번만 보냅니다.</p></div>' });
+    setAdminCfg({ key: 'hr_fail_mail_key', value: key });
+    return true;
+  } catch (e) { return false; }
+}
+
 function runAutoCheck_() {
   const out = { created: [], reminded: 0 };
   try {
     const r = hrFetchEmployees_(PROPS.getProperty('HR_ID'), PROPS.getProperty('HR_PW'));
-    out.sync = syncEmployees_(rowsToEmployees_(r.headers, r.rows), fbCfg_().fullList);
+    const list = rowsToEmployees_(r.headers, r.rows);
+    const chk = hrSanity_(list);
+    if (!chk.ok) throw new Error('인사 사이트 데이터가 평소와 달라 반영하지 않았습니다: ' + chk.problems.join(' / '));
+    out.sync = syncEmployees_(list, fbCfg_().fullList);
+    saveHrBaseline_(chk);
     out.created = detectNewHires_();
     setAdminCfg({ key: 'hr_last_error', value: '' });
   } catch (e) {
-    setAdminCfg({ key: 'hr_last_error', value: nowKst_() + ' ' + String(e.message || e).slice(0, 200) });
-    out.error = String(e.message || e);
+    const msg = String(e.message || e);
+    setAdminCfg({ key: 'hr_last_error', value: nowKst_() + ' ' + msg.slice(0, 300) });
+    out.error = msg;
+    out.mailed = notifyHrFailure_(msg);
   }
   out.reminded = sendReminders_();   // 자동 로그인으로 보낸 알림의 재알림
   return out;
@@ -1716,7 +1777,10 @@ function staffOp_(req, s) {
       const useSaved = !req.password;
       const r = hrFetchEmployees_(useSaved ? (PROPS.getProperty('HR_ID') || '') : String(req.id || PROPS.getProperty('HR_ID') || ''),
                                   useSaved ? (PROPS.getProperty('HR_PW') || '') : String(req.password));
-      return { success: true, headers: r.headers, rows: r.rows };
+      // 수동 가져오기도 이상 감지 결과를 함께 돌려줌 (화면에서 경고 후 관리자가 판단)
+      const chk = hrSanity_(rowsToEmployees_(r.headers, r.rows));
+      if (chk.ok && useSaved) saveHrBaseline_(chk);
+      return { success: true, headers: r.headers, rows: r.rows, warnings: chk.problems };
     }
     case 'nh.list':   return requireLogin_(s) || nhList_(s);
     case 'nh.answer': return requireLogin_(s) || nhAnswer_(req, s);

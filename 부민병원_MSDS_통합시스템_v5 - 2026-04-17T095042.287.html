@@ -10,7 +10,12 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v18.4 (2026-10-21)
+  부민병원 MSDS 통합시스템 v18.6 (2026-10-21)
+
+  ★★★ v18.5~18.6 (2026-10-21) — 인사 사이트 연결 안전장치:
+    - 메뉴 ④: 사이트 주소(https://bumin-leave.web.app)만 넣으면 연결 정보 자동 (Firebase /__/firebase/init.json)
+    - 이상 감지: 인원 30%↑ 감소, 재직자 입사일 50%↑·부서/사번 30%↑ 비어 있으면 자동 반영 중단 (서버 hrSanity_)
+    - 자동 확인 실패 시 보건관리자 메일 (같은 날 같은 사유 1번) / 수동 가져오기는 경고 후 관리자 판단
 
   ★★★ v18.4 (2026-10-21) — 서명·사진을 PC 저장소에서 분리 (저장 용량 근본 해결):
     - BMIMG: 서버에 서명이 있는 것이 확인된 기록만 PC에서 서명·사진을 비움(_img:1), 읽을 때 메모리 캐시로 복원
@@ -2370,6 +2375,9 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
         var r = await post('hr.fetch', pwEl ? { id: id, password: pwEl.value } : {});
         if(pwEl) pwEl.value = '';
         if(!r.success){ say(r.error || '가져오기 실패', 'err'); return; }
+        if(r.warnings && r.warnings.length &&
+           !confirm('⚠ 인사 사이트 데이터가 평소와 다릅니다:\n\n- ' + r.warnings.join('\n- ') +
+                    '\n\n사이트 구조가 바뀌었을 수 있습니다. 그래도 미리보기를 볼까요?\n(업데이트는 미리보기 후 직접 눌러야 반영됩니다)')) return;
         parsed = { headers: r.headers, rows: r.rows };
         showPreview();
       }finally{ btn.disabled = false; btn.textContent = label; }
