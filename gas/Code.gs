@@ -98,6 +98,17 @@ function changeAdminPassword() {
   ui.alert('관리자 비밀번호가 변경되었습니다. 기존 관리자 로그인은 모두 해제됩니다.');
 }
 
+// 권한 다시 승인: Apps Script 편집기 위쪽에서 이 함수(authorizeAll)를 고르고 ▶ 실행
+// (드라이브·메일·외부 사이트(Firebase) 접속·자동 실행 권한을 한 번에 요청)
+function authorizeAll() {
+  SS.getName();
+  DriveApp.getRootFolder();
+  MailApp.getRemainingDailyQuota();
+  UrlFetchApp.fetch('https://www.google.com', { muteHttpExceptions: true });
+  ScriptApp.getProjectTriggers();
+  Logger.log('권한 승인 완료 — 시트 메뉴 ④를 다시 실행하세요');
+}
+
 function revokeAllSessions() {
   PROPS.setProperty('TOKEN_SECRET', Utilities.getUuid() + Utilities.getUuid());
   SpreadsheetApp.getUi().alert('모든 기기의 로그인이 해제되었습니다.');
