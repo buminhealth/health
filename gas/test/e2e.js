@@ -54,6 +54,51 @@ function check(name, cond, extra) {
   const anonFs = await page.evaluate(async () => (await fetch('https://api.github.com/repos/buminhealth/health/contents/records/edu_records.json')).status);
   check('비로그인: 기록 파일 401', anonFs === 401, anonFs);
 
+  // 1-1. v19.1 MSDS 관리 화면: 목록 · 검색 · 부서 선택 · 상세 · 교육일지 종류 판정 · 휴대폰 전환
+  const ms = await page.evaluate(() => {
+    // 시험용 물질 2개를 잠시 추가: 관리대상 부서 / 일반 부서
+    const fx = [
+      { name: '시험물질A', manufacturer: '가제조', usage: '소독', targetManage: '해당', specialManage: '', departments: ['시험특별부'], components: [{ compName: '성분A', casNumber: '7722-84-1', amount: '50' }], icons: [], emergency: '[눈] 물로 씻으시오' },
+      { name: '시험물질B', manufacturer: '나제조', usage: '세척', targetManage: false, specialManage: false, departments: ['시험일반부'], components: [], icons: [], emergency: '' },
+    ];
+    fx.forEach(c => { CHEMS.push(c); productMap[c.name] = c; });
+    renderList('all');
+    const n = document.querySelectorAll('#gridContainer .ms-li').length;
+    const cnt = document.getElementById('ms-cnt').textContent;
+    const inList = !!document.querySelector('#productList #deptSelect');
+    showDetail('시험물질A');
+    const k1 = document.querySelector('.ms-kind').textContent, b1 = document.querySelector('.ms-btn.p').getAttribute('onclick');
+    const h2 = document.querySelector('.ms-dh h2').textContent === '시험물질A';
+    const em = !!document.querySelector('.ms-et');
+    showDetail('시험물질B');
+    const k2 = document.querySelector('.ms-kind').textContent, b2 = document.querySelector('.ms-btn.p').getAttribute('onclick');
+    searchChem('7722-84'); const nS = document.querySelectorAll('#gridContainer .ms-li').length;
+    searchChem(''); filterDept('시험일반부'); const nD = document.querySelectorAll('#gridContainer .ms-li').length;
+    filterDept('all');
+    return { n, total: CHEMS.length, cnt, inList, k1, b1, h2, em, k2, b2, nS, nD };
+  });
+  check('MSDS: 전체 물질 목록과 개수', ms.n === ms.total && ms.cnt.includes(String(ms.total)), ms);
+  check('MSDS: 부서 선택은 목록 안', ms.inList);
+  check('MSDS: CAS 검색 · 부서 선택으로 줄어듦', ms.nS === 1 && ms.nD === 1 && ms.n >= 3, ms);
+  check('MSDS: 응급처치 표', ms.em);
+  check('MSDS: 상세 제목', ms.h2);
+  check('MSDS: 관리대상 물질 부서 → 특별안전보건교육일지', ms.k1.includes('특별안전보건교육') && ms.b1.startsWith('startEdu1'), ms.k1);
+  check('MSDS: 관리대상 없는 부서 → MSDS 교육일지', ms.k2.includes('MSDS 교육') && ms.b2.startsWith('startEdu2'), ms.k2);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mob = await page.evaluate(() => {
+    const vis = id => getComputedStyle(document.getElementById(id)).display !== 'none';
+    msdsBack(); const a = [vis('productList'), vis('detailView')];
+    document.querySelector('#gridContainer .ms-li').click(); const b = [vis('productList'), vis('detailView')];
+    msdsBack(); const c = [vis('productList'), vis('detailView')];
+    const sw = document.documentElement.scrollWidth;
+    ['시험물질A', '시험물질B'].forEach(nm => { CHEMS.splice(CHEMS.findIndex(x => x.name === nm), 1); delete productMap[nm]; });
+    curChem = null; renderList('all');
+    return { a, b, c, sw };
+  });
+  check('휴대폰: 목록 → 누르면 상세 → 목록으로', JSON.stringify(mob.a) === '[true,false]' && JSON.stringify(mob.b) === '[false,true]' && JSON.stringify(mob.c) === '[true,false]', mob);
+  check('휴대폰: 가로 넘침 없음', mob.sw <= 390, mob.sw);
+  await page.setViewportSize({ width: 1366, height: 768 });
+
   // 2. 작성 탭 → 로그인 창 → 틀린 PIN → 맞는 PIN
   await page.evaluate(() => goTab('edu2'));
   await page.waitForSelector('#bm-login', { state: 'visible' });
