@@ -515,6 +515,22 @@ function check(name, cond, extra) {
   check('교육일지 열 순서: 구분-대상자-입사일-교육일-취급물질-결재-미리보기', dvHead.join(',') === '구분,대상자,입사일,교육일,취급물질,결재,미리보기', dvHead);
   check('부서 제출 현황: 자기 부서 교육일지 표시', dvText.includes('김가나') && dvText.includes('결재대기'), dvText.slice(0, 150));
   check('부서 제출 현황: 다른 부서(71병동) 기록 없음', !dvText.includes('이다라'));
+  const dv5 = await page.evaluate(() => {
+    const sum = [...document.querySelectorAll('#dv-body .dv-card b')].map(b => b.textContent);
+    const vis = () => [...document.querySelectorAll('#dv-body .dv-sec')].filter(x => x.style.display !== 'none').map(x => x.getAttribute('data-sec'));
+    const all = vis();
+    document.querySelector('#dv-body .dv-tab[data-tab="ppe"]').click(); const ppe = vis();
+    document.querySelector('#dv-body .dv-tab[data-tab="all"]').click();
+    const q = document.getElementById('dv-q'); q.value = '없는이름'; q.oninput();
+    const hidden = [...document.querySelectorAll('#dv-body .dv-tbl tr')].filter(tr => tr.querySelector('td') && tr.style.display !== 'none').length;
+    q.value = '김가나'; q.oninput();
+    const shown = [...document.querySelectorAll('#dv-body .dv-tbl tr')].filter(tr => tr.querySelector('td') && tr.style.display !== 'none').length;
+    q.value = ''; q.oninput();
+    return { sum, all, ppe, hidden, shown };
+  });
+  check('부서현황: 요약 (결재 대기 1명 · 완료 0명)', dv5.sum[0] === '1명' && dv5.sum[1] === '0명', dv5.sum);
+  check('부서현황: 종류 탭', dv5.all.join(',') === 'edu,ppe,chem' && dv5.ppe.join(',') === 'ppe', dv5);
+  check('부서현황: 이름 검색', dv5.hidden === 0 && dv5.shown === 1, dv5);
   check('부서 제출 현황: 다른 화면은 숨김', await page.evaluate(() => document.getElementById('pg-edu2').style.display === 'none' && document.getElementById('pg-deptview').style.display === 'block'));
   // 서명이 있는 기록 → 관리자 모드와 같은 데이터 미리보기
   await page.evaluate(async () => {

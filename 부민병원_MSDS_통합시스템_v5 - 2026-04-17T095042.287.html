@@ -10,8 +10,11 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v19.3 (2026-10-21)
+  부민병원 MSDS 통합시스템 v19.4 (2026-10-21)
 
+  ★★★ v19.4 (2026-10-21) — 리디자인 5단계 부서현황 (최종 시안 D):
+    - 위쪽 요약 3칸: 결재 대기 · 결재 완료(교육일지) · 보호구 · 보고서 건수
+    - 종류 탭(전체 · 교육일지 · 보호구 · 보고서) + 이름 · 물질 검색, 표 새 모양, 결재 상태 표시
   ★★★ v19.3 (2026-10-21) — 리디자인 4단계 교육일지 · 보호구 · 보고서 작성 화면 (최종 시안 D):
     - 화면 제목 · 단계 막대 · 큰 입력칸 · 큰 다음 버튼, 단계별 흐름은 그대로
     - 부서 로그인: 위쪽 메뉴 '교육일지' 하나 (관리대상 · 특별관리 물질 있으면 특별안전보건교육일지, 없으면 MSDS 교육일지)
@@ -858,6 +861,50 @@ b.hm-f{font-weight:700}
   #pg-edu1 .stepbar,#pg-edu2 .stepbar,#pg-chem .stepbar{position:relative;padding-bottom:30px}
   #pg-edu1 .si,#pg-edu2 .si,#pg-chem .si{justify-content:center}
   #pg-edu1 .brow .btn-p,#pg-edu2 .brow .btn-p{flex:1}
+}
+/* v19.4 — 부서현황 (최종 시안 D) */
+#pg-deptview{background:#F5F5F2;min-height:calc(100vh - var(--bm-top) - var(--bm-bot))}
+.dv-wrap{max-width:1100px;margin:0 auto;padding:24px 24px 8px;box-sizing:border-box}
+.dv-ctl{display:flex;gap:8px}
+.dv-ctl select{min-height:42px;border:1px solid #C6C3BB;border-radius:4px;padding:0 10px;font:inherit;font-size:15px;font-weight:700;background:#fff;color:var(--bm-ink)}
+.dv-btn{min-height:38px;padding:0 14px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:14px;font-weight:700;color:var(--bm-ink);cursor:pointer;white-space:nowrap}
+.dv-ctl .dv-btn{min-height:42px}
+.dv-btn:hover{background:#FAFAF8;border-color:var(--bm-g6)}
+.dv-sum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.dv-card{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:16px 18px;border:1px solid var(--bm-line);border-radius:8px;background:#fff}
+.dv-card.wait{border-color:#B9CBE4}
+.dv-card b{font-size:26px;font-weight:800;color:var(--bm-ink);line-height:1.2}
+.dv-card b small{font-size:15px;font-weight:700;margin-left:2px;color:#5A5650}
+.dv-card em{font-style:normal;font-size:14px;color:#5A5650}
+.dv-box{background:#fff;border:1px solid var(--bm-line);border-radius:8px;overflow:hidden}
+.dv-bar{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid var(--bm-line);flex-wrap:wrap}
+.dv-tabs{display:flex;gap:4px;overflow-x:auto}
+.dv-tab{padding:12px 16px;border:0;border-bottom:3px solid transparent;margin-bottom:-1px;background:none;font:inherit;font-size:15px;font-weight:700;color:var(--bm-ink2);cursor:pointer;white-space:nowrap}
+.dv-tab small{margin-left:6px;font-size:13px;color:#5A5650}
+.dv-tab.on{color:var(--bm-g8);border-bottom-color:var(--bm-g5)}
+.dv-q{display:flex;align-items:center;gap:8px;width:240px;height:40px;border:1px solid #C6C3BB;border-radius:4px;padding:0 12px;color:#5A5650;margin:8px 0;box-sizing:border-box}
+.dv-q input{border:0;outline:0;flex:1;min-width:0;font:inherit;font-size:15px;background:transparent}
+.dv-sec{padding:16px 18px;border-top:1px solid #ECEBE7}
+.dv-sec:first-of-type{border-top:0}
+.dv-sec h3{margin:0 0 10px;font-size:17px;font-weight:800;color:var(--bm-ink)}
+.dv-sec h3 small{font-size:14px;font-weight:600;color:#5A5650;margin-left:4px}
+.dv-tw{overflow-x:auto;border:1px solid var(--bm-line);border-radius:6px}
+.dv-tbl{border-collapse:collapse;width:100%}
+.dv-tbl th{background:#E2F0D5;color:var(--bm-g8);font-size:14px;font-weight:800;padding:10px 10px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--bm-line)}
+.dv-tbl td{padding:10px 10px;font-size:15px;color:#333;border-bottom:1px solid #ECEBE7;vertical-align:middle}
+.dv-tbl tr:last-child td{border-bottom:0}
+.dv-tbl td:nth-child(2){font-weight:700;color:var(--bm-ink)}
+.dv-tbl .hm-tg{min-width:0}
+.dv-empty{padding:14px 2px;font-size:15px;color:#5A5650}.dv-empty.err{color:#A3302A}
+#pg-deptview .bm-foot{margin:32px 0 0}
+@media(max-width:760px){
+  .dv-wrap{padding:14px 12px 8px}
+  .dv-sum{grid-template-columns:1fr 1fr;gap:8px}
+  .dv-sum .dv-card:last-child{grid-column:1/-1}
+  .dv-card{padding:12px 14px}.dv-card b{font-size:22px}
+  .dv-q{width:100%}
+  .dv-sec{padding:12px}
+  .dv-tab{padding:12px 10px}
 }
 @media(max-width:1600px){
   #sync-info,#slbl{display:none}
@@ -2941,9 +2988,9 @@ b.hm-f{font-weight:700}
     if(isNaN(d.getTime())) return String(iso).slice(0, 10);
     return new Date(d.getTime() + 9 * 3600e3).toISOString().slice(0, 10);
   };
-  var TH = 'padding:6px 8px;border:1px solid #e2e8f0;background:#f8fafc;white-space:nowrap;font-size:12px';
-  var TD = 'padding:6px 8px;border:1px solid #e2e8f0;font-size:12px;vertical-align:top';
-  var BTN = 'padding:4px 9px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap';
+  // v19.4: 표 · 버튼 모양은 CSS(.dv-tbl, .dv-btn)로
+  var TH = '', TD = '';
+  var BTN = '';
 
   async function readList(path){
     var r = await readGitHubJSON(path);
@@ -2962,8 +3009,8 @@ b.hm-f{font-weight:700}
     return (dateStr || '') >= from.toISOString().slice(0, 10);
   }
   function table(head, rows, empty){
-    if(!rows.length) return '<div style="font-size:12px;color:#64748b;padding:8px 0">' + empty + '</div>';
-    return '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%"><tr>' +
+    if(!rows.length) return '<div class="dv-empty">' + empty + '</div>';
+    return '<div class="dv-tw"><table class="dv-tbl"><tr>' +
       head.map(function(h){ return '<th style="' + TH + '">' + h + '</th>'; }).join('') + '</tr>' + rows.join('') + '</table></div>';
   }
 
@@ -2981,13 +3028,13 @@ b.hm-f{font-weight:700}
       .map(function(x){
         var r = x.r;
         var k = (r.submitted || '') + '|' + (r.dateStart || '') + '|' + (r.type || '');
-        return '<tr><td style="' + TD + ';white-space:nowrap">' + esc(r.type) + '</td>' +
+        return '<tr data-ap="' + (r.approved ? 1 : 0) + '"><td style="' + TD + ';white-space:nowrap">' + esc(r.type) + '</td>' +
           '<td style="' + TD + ';white-space:nowrap;font-weight:700">' + esc(r.name) + '</td>' +
           '<td style="' + TD + ';white-space:nowrap">' + esc(r.joinDate || '') + '</td>' +
           '<td style="' + TD + ';white-space:nowrap">' + esc(x.date) + '</td>' +
           '<td style="' + TD + '">' + esc(String(r.chem || '').slice(0, 60)) + '</td>' +
-          '<td style="' + TD + ';white-space:nowrap;font-weight:800;color:' + (r.approved ? '#15803d' : '#b45309') + '">' + (r.approved ? '✅ 결재완료' : '⏳ 결재대기') + '</td>' +
-          '<td style="' + TD + '"><button style="' + BTN + '" data-edu="' + esc(k) + '">👁 미리보기</button></td></tr>';
+          '<td style="' + TD + ';white-space:nowrap"><span class="hm-tg ' + (r.approved ? 'ok">결재완료' : 'wait">결재대기') + '</span></td>' +
+          '<td style="' + TD + '"><button class="dv-btn" data-edu="' + esc(k) + '">보기</button></td></tr>';
       });
   }
   // 관리자 모드와 같은 미리보기: 저장된 기록(서명·사진 포함)으로 일지를 그림, 옛 일지는 원본 PDF
@@ -3024,7 +3071,7 @@ b.hm-f{font-weight:700}
         return '<tr><td style="' + TD + ';white-space:nowrap">' + esc(x.date) + '</td>' +
           '<td style="' + TD + '">' + esc(x.g.map(function(p){ return p.name; }).filter(Boolean).join(', ')) + '</td>' +
           '<td style="' + TD + '">' + esc(items) + '</td>' +
-          '<td style="' + TD + '"><button style="' + BTN + '" data-ppe="' + (ppeShown.length - 1) + '">👁 미리보기</button></td></tr>';
+          '<td style="' + TD + '"><button class="dv-btn" data-ppe="' + (ppeShown.length - 1) + '">보기</button></td></tr>';
       });
   }
   function chemRows(list){
@@ -3039,32 +3086,58 @@ b.hm-f{font-weight:700}
           '<td style="' + TD + ';white-space:nowrap">' + esc(r.tag || '') + '</td>' +
           '<td style="' + TD + '">' + esc(r.product || r.newProduct || r.stopProduct) + '</td>' +
           '<td style="' + TD + '">' + esc(r.name || '') + '</td>' +
-          '<td style="' + TD + '"><button style="' + BTN + '" data-chem="' + (chemShown.length - 1) + '">👁 미리보기</button></td></tr>';
+          '<td style="' + TD + '"><button class="dv-btn" data-chem="' + (chemShown.length - 1) + '">보기</button></td></tr>';
       });
   }
 
+  var dvTab = 'all';
   async function render(){
     var body = document.getElementById('dv-body');
     if(!body) return;
     var s = BMAUTH.session();
-    if(!s || s.role !== 'dept'){ body.innerHTML = '<div style="color:#64748b">부서로 로그인하면 볼 수 있습니다.</div>'; return; }
-    body.innerHTML = '<div style="color:#64748b;font-size:13px">불러오는 중…</div>';
+    if(!s || s.role !== 'dept'){ body.innerHTML = '<div class="dv-empty">부서로 로그인하면 볼 수 있습니다.</div>'; return; }
+    body.innerHTML = '<div class="dv-empty">불러오는 중…</div>';
     var res = await Promise.all(['records/edu_records.json', 'records/ppe_records.json', 'records/chem_records.json'].map(function(p){
       return readList(p).catch(function(){ return null; });
     }));
-    var box = function(title, inner){
-      return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:12px">' +
-        '<div style="font-weight:800;color:#1c3557;margin-bottom:8px">' + title + '</div>' + inner + '</div>';
-    };
-    var fail = '<div style="font-size:12px;color:#b91c1c">불러오지 못했습니다. 잠시 후 [새로고침]을 눌러 주세요.</div>';
+    var fail = '<div class="dv-empty err">불러오지 못했습니다. 잠시 후 [새로고침]을 눌러 주세요.</div>';
     var e = res[0] ? eduRows(res[0]) : null, p = res[1] ? ppeRows(res[1]) : null, c = res[2] ? chemRows(res[2]) : null;
+    var wait = e ? e.filter(function(h){ return h.indexOf('data-ap="0"') >= 0; }).length : 0;
+    var done = e ? e.length - wait : 0;
+    var sec = function(key, title, n, unit, inner){
+      return '<section class="dv-sec" data-sec="' + key + '"><h3>' + title + (n == null ? '' : ' <small>' + n + unit + '</small>') + '</h3>' + inner + '</section>';
+    };
+    var tab = function(key, label, n){ return '<button type="button" class="dv-tab' + (dvTab === key ? ' on' : '') + '" data-tab="' + key + '">' + label + (n == null ? '' : '<small>' + n + '</small>') + '</button>'; };
     body.innerHTML =
-      box('📝 교육일지 (특별안전보건교육 · MSDS 교육)' + (e ? ' <span style="font-weight:400;color:#64748b;font-size:12px">' + e.length + '명</span>' : ''),
+      '<div class="dv-sum">' +
+        '<div class="dv-card' + (wait ? ' wait' : '') + '"><span class="hm-tg wait">결재 대기</span><b>' + (e ? wait + '<small>명</small>' : '-') + '</b><em>교육일지 · 보건관리자 결재 중</em></div>' +
+        '<div class="dv-card"><span class="hm-tg ok">결재 완료</span><b>' + (e ? done + '<small>명</small>' : '-') + '</b><em>교육일지 이수자</em></div>' +
+        '<div class="dv-card"><span class="hm-tg">보호구 · 보고서</span><b>' + (p ? p.length : '-') + '<small>건</small> · ' + (c ? c.length : '-') + '<small>건</small></b><em>지급수령증 · 화학물질 보고서</em></div>' +
+      '</div>' +
+      '<div class="dv-box"><div class="dv-bar"><nav class="dv-tabs" aria-label="종류">' +
+          tab('all', '전체', null) + tab('edu', '교육일지', e ? e.length : null) + tab('ppe', '보호구', p ? p.length : null) + tab('chem', '보고서', c ? c.length : null) +
+        '</nav><label class="dv-q"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="dv-q" type="search" placeholder="이름 · 물질 검색" aria-label="이름 · 물질 검색"></label></div>' +
+        sec('edu', '교육일지 (특별안전보건교육 · MSDS 교육)', e ? e.length : null, '명',
           e ? table(['구분', '대상자', '입사일', '교육일', '취급물질', '결재', '미리보기'], e, '이 기간에 제출한 교육일지가 없습니다.') : fail) +
-      box('🦺 보호구 지급수령증' + (p ? ' <span style="font-weight:400;color:#64748b;font-size:12px">' + p.length + '건</span>' : ''),
+        sec('ppe', '보호구 지급수령증', p ? p.length : null, '건',
           p ? table(['지급일', '수령자', '지급물품', '미리보기'], p, '이 기간에 제출한 보호구 지급수령증이 없습니다.') : fail) +
-      box('⚗️ 화학물질 보고서 (신규사용 · 사용중단)' + (c ? ' <span style="font-weight:400;color:#64748b;font-size:12px">' + c.length + '건</span>' : ''),
-          c ? table(['작성일', '구분', '제품명', '작성자', '미리보기'], c, '이 기간에 제출한 화학물질 보고서가 없습니다.') : fail);
+        sec('chem', '화학물질 보고서 (신규사용 · 사용중단)', c ? c.length : null, '건',
+          c ? table(['작성일', '구분', '제품명', '작성자', '미리보기'], c, '이 기간에 제출한 화학물질 보고서가 없습니다.') : fail) +
+      '</div>';
+    var showTab = function(){
+      body.querySelectorAll('.dv-tab').forEach(function(t){ t.classList.toggle('on', t.getAttribute('data-tab') === dvTab); });
+      body.querySelectorAll('.dv-sec').forEach(function(x){ x.style.display = dvTab === 'all' || x.getAttribute('data-sec') === dvTab ? '' : 'none'; });
+    };
+    body.querySelectorAll('.dv-tab').forEach(function(t){ t.onclick = function(){ dvTab = t.getAttribute('data-tab'); showTab(); }; });
+    showTab();
+    var q = document.getElementById('dv-q');
+    q.oninput = function(){
+      var v = q.value.trim().toLowerCase();
+      body.querySelectorAll('.dv-tbl tr').forEach(function(tr, i){
+        if(!tr.querySelector('td')) return;
+        tr.style.display = !v || tr.textContent.toLowerCase().indexOf(v) >= 0 ? '' : 'none';
+      });
+    };
     body.querySelectorAll('[data-edu]').forEach(function(b){ b.onclick = function(){ previewEdu(b.getAttribute('data-edu')); }; });
     // 보호구·화학물질: 관리자 모드의 미리보기 함수를 그대로 사용 (그 함수가 읽는 '화면 목록'에 이 기록만 넣어 호출)
     body.querySelectorAll('[data-ppe]').forEach(function(b){ b.onclick = function(){
@@ -3087,15 +3160,15 @@ b.hm-f{font-weight:700}
     adminTab.parentNode.insertBefore(tab, adminTab);
     var pg = document.createElement('div');
     pg.id = 'pg-deptview';
-    pg.style.cssText = 'display:none;padding:16px;max-width:1100px;margin:0 auto';
+    pg.style.display = 'none';
     pg.innerHTML =
-      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">' +
-        '<div><div style="font-size:20px;font-weight:800;color:#1E1E1C">' + esc(s.dept) + ' 부서현황</div>' +
-        '<div style="font-size:12px;color:#64748b">우리 부서가 제출한 기록만 보입니다 (조회 전용 · 수정·삭제는 보건관리자에게 요청)</div></div>' +
-        '<div style="display:flex;gap:6px"><select id="dv-range" class="fc" style="width:auto">' +
+      '<div class="dv-wrap"><div class="ph ph-row">' +
+        '<div><div class="crumb"><b>부서현황</b></div><h1>' + esc(s.dept) + ' 부서현황</h1>' +
+        '<p>우리 부서가 제출한 기록만 보입니다 · 조회 전용 (수정 · 삭제는 보건관리실 3293)</p></div>' +
+        '<div class="dv-ctl"><select id="dv-range" aria-label="기간">' +
           '<option value="3">최근 3개월</option><option value="12">최근 1년</option><option value="0">전체</option></select>' +
-        '<button id="dv-refresh" style="' + BTN + ';padding:7px 12px;font-size:12px">새로고침</button></div>' +
-      '</div><div id="dv-body"></div>';
+        '<button id="dv-refresh" type="button" class="dv-btn">새로고침</button></div>' +
+      '</div><div id="dv-body"></div></div>';
     var anchor = document.getElementById('pg-admin') || document.getElementById('pg-msds');
     anchor.parentNode.insertBefore(pg, anchor);
     document.getElementById('dv-range').onchange = render;
