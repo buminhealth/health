@@ -1166,12 +1166,23 @@ function fsValue_(v) {
   return '';
 }
 
+// 조회 실패 사유를 알기 쉽게 (Firebase가 보낸 메시지 포함)
+function fbErr_(res, c) {
+  const code = res.getResponseCode();
+  let msg = '';
+  try { const j = JSON.parse(res.getContentText() || '{}'); msg = (j.error && (j.error.message || j.error)) || ''; } catch (_) {}
+  const hint = code === 403 ? ' → 이 계정에 "' + c.path + '" 읽기 권한이 없습니다 (Firebase 보안 규칙 또는 데이터 위치 이름 확인)'
+             : code === 404 ? ' → 프로젝트 또는 데이터 위치 "' + c.path + '"를 찾을 수 없습니다'
+             : '';
+  return '인사 데이터 조회 실패 (HTTP ' + code + (msg ? ', ' + String(msg).slice(0, 150) : '') + ')' + hint;
+}
+
 function fbFetchObjects_(c, idToken) {
   const out = [];
   if (c.mode === 'rtdb') {
     const url = c.dbUrl.replace(/\/+$/, '') + '/' + c.path.split('/').map(encodeURIComponent).join('/') + '.json?auth=' + encodeURIComponent(idToken);
     const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-    if (res.getResponseCode() !== 200) throw new Error('인사 데이터 조회 실패 (HTTP ' + res.getResponseCode() + ')');
+    if (res.getResponseCode() !== 200) throw new Error(fbErr_(res, c));
     const data = JSON.parse(res.getContentText() || 'null') || {};
     (Array.isArray(data) ? data : Object.keys(data).map(k => Object.assign({ _key: k }, data[k])))
       .forEach(o => { if (o && typeof o === 'object') out.push(o); });
@@ -1182,7 +1193,7 @@ function fbFetchObjects_(c, idToken) {
     const url = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(c.projectId) + '/databases/(default)/documents/' +
       c.path.split('/').map(encodeURIComponent).join('/') + '?pageSize=300' + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : '');
     const res = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + idToken }, muteHttpExceptions: true });
-    if (res.getResponseCode() !== 200) throw new Error('인사 데이터 조회 실패 (HTTP ' + res.getResponseCode() + ')');
+    if (res.getResponseCode() !== 200) throw new Error(fbErr_(res, c));
     const j = JSON.parse(res.getContentText() || '{}');
     (j.documents || []).forEach(d => {
       const o = { _key: String(d.name || '').split('/').pop() };
