@@ -458,7 +458,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('④ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v19.7'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v19.8'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -593,6 +593,27 @@ function check(name, cond, extra) {
   check('승인: 원본 PDF 링크 연결', /drive\.google\.com\/file/.test(ap3.pdfUrl || ''), ap3);
   const dup = await page.evaluate(d => BMAUTH.post('ai.apply', { data: d }), okDraft);
   check('승인: 같은 이름 제품은 거부 (기존 제품 안 바꿈)', !dup.success && /이미/.test(dup.error), dup);
+  // 13-6. v19.8 개정 MSDS: 기존 제품과 비교 → 개정 반영 (이전 줄은 개정이력에 보관)
+  const follow = await page.evaluate(() => BMAUTH.post('ai.apply', { data: { product: { name: 'AI후속제품' }, components: [{ name: '에탄올', cas: '64-17-5', amount: '70' }] } }));
+  check('개정 준비: 뒤에 다른 제품 추가', follow.success, follow);
+  const cmpRes = await page.evaluate(() => BMAUTH.post('ai.compare', { name: 'AI시험세정제' }));
+  check('개정: 기존 제품 묶음 읽기', cmpRes.success && cmpRes.count === 3 && cmpRes.components.map(c => c.name).join(',') === '메탄올,물,날짜성분' && cmpRes.components[0].hc === '12개월', cmpRes);
+  const plist = await page.evaluate(() => BMAUTH.post('ai.products', {}));
+  check('개정: 기존 제품 목록', plist.success && plist.data.includes('AI시험세정제') && plist.data.includes('AI후속제품'), plist.data);
+  const rowBefore = ch.rows.findIndex(r => r[0] === 'AI시험세정제') + 1;
+  const rev = await page.evaluate(() => BMAUTH.post('ai.apply', { mode: 'revise', target: 'AI시험세정제', data: {
+    product: { name: 'AI시험세정제', manufacturer: 'K사(개정)', usage: '세척' },
+    components: [{ name: '메탄올', cas: '67-56-1', amount: '3~7', hc: '12개월', we: '6개월' }, { name: '새성분', cas: '64-17-5', amount: '<1' }] } }));
+  const H2 = ch.rows[0];
+  const blk = ch.rows.slice(rowBefore - 1, rowBefore + 2);
+  check('개정 반영: 같은 자리에서 3줄 → 2줄로 바꿈', rev.success && rev.mode === 'revise' && rev.row === rowBefore && rev.oldRows === 3 && rev.rows === 2 &&
+    blk[0][H2.indexOf('제조사')] === 'K사(개정)' && blk[0][H2.indexOf('함유량')] === '3~7' && blk[1][H2.indexOf('성분명')] === '새성분' && blk[2][0] === 'AI후속제품', { rev, blk });
+  check('개정 반영: 기존 사용부서 · PDF 링크 유지', blk[0][H2.indexOf('부서')] === '61병동', blk[0]);
+  const hist = g.sheets['개정이력'];
+  check('개정 반영: 이전 3줄을 개정이력 시트에 보관', !!hist && hist.rows.length === 4 && hist.rows[1][1] === 'AI시험세정제' && hist.rows[3].includes('날짜성분'), hist && hist.rows);
+  const revBad = await page.evaluate(() => BMAUTH.post('ai.apply', { mode: 'revise', target: '없는제품', data: { product: { name: '없는제품' }, components: [{ name: 'a', cas: '64-17-5' }] } }));
+  check('개정 반영: 없는 제품은 거부', !revBad.success, revBad);
+
   // 부서가 신규사용 보고서에 첨부한 MSDS 목록 → 경로로 분석
   await page.evaluate(() => uploadFileToGitHub('data:application/pdf;base64,' + btoa('%PDF dept msds'), 'records/chem_msds/신규_1_부서MSDS.pdf'));
   const lst = await page.evaluate(() => BMAUTH.post('ai.list', {}));
@@ -606,6 +627,35 @@ function check(name, cond, extra) {
   check('AI: 부서 계정은 거부', !deptAi.success && deptAi.status === 403, deptAi);
   await page.evaluate(() => { admSwitchPane('ai'); return BMAI.open(); });
   check('관리자 화면: AI MSDS 검토 표시', /관리자가 MSDS 올리기/.test(await page.textContent('#ai-body')) && /신규_1_부서MSDS/.test(await page.textContent('#ai-body')));
+  // 화면: 같은 이름 제품 → 비교 → 추가 · 삭제 · 변경 · 기존 판정 유지
+  gm.reply = { product: { name: 'AI시험세정제', manufacturer: 'K사(2차개정)' }, components: [
+    { name: '메탄올', cas: '67-56-1', amount: '3~7', reg15: {} }, { name: '새성분', cas: '64-17-5', amount: '2' }, { name: '추가성분', cas: '7732-18-5', amount: '90' }] };
+  await page.click('[data-ai-path]');
+  await page.waitForSelector('#ai-cmp', { timeout: 15000 });
+  const guessed = await page.$eval('#ai-target', s => s.value);
+  await page.click('#ai-cmp');
+  await page.waitForFunction(() => /기존 제품과 비교 —/.test(document.getElementById('ai-review').textContent), null, { timeout: 15000 });
+  const cmpUi = await page.evaluate(() => ({ t: document.getElementById('ai-review').textContent, btn: document.getElementById('ai-apply').textContent,
+    hc: document.querySelector('#ai-review [data-k="hc"]').value }));
+  check('개정 비교 화면: 같은 이름 제품 자동 선택', guessed === 'AI시험세정제', guessed);
+  check('개정 비교 화면: 추가 · 변경 · 같음 표시와 개정 반영 버튼', /추가 1/.test(cmpUi.t.replace(/\s+/g, ' ')) && /변경/.test(cmpUi.t) && /개정 반영/.test(cmpUi.btn), cmpUi.t.slice(0, 300));
+  check('개정 비교 화면: 특검 판정 유지 (12개월)', cmpUi.hc === '12개월', cmpUi.hc);
+  const keepUi = await page.evaluate(async () => {
+    // 법령대조표 · 시트 근거가 없는 성분의 기존 판정 · 메모는 새 MSDS에서 비어 있으면 유지
+    const r = await BMAUTH.post('ai.apply', { data: { product: { name: 'AI유지시험' }, components: [{ name: '특이성분', cas: '7440-02-0', amount: '5', hc: '6개월', memo: '임/단시' }] } });
+    document.getElementById('ai-name').value = 'AI유지시험';
+    document.querySelectorAll('#ai-review [data-k="name"]')[0].value = '특이성분';
+    document.querySelectorAll('#ai-review [data-k="cas"]')[0].value = '7440-02-0';
+    document.querySelectorAll('#ai-review [data-k="hc"]')[0].value = '';
+    window.BMAI && 0;
+    const opt = document.createElement('option'); opt.textContent = 'AI유지시험'; document.getElementById('ai-target').appendChild(opt);
+    document.getElementById('ai-target').value = 'AI유지시험';
+    document.getElementById('ai-cmp').click();
+    const t0 = Date.now();
+    while (Date.now() - t0 < 8000 && !/AI유지시험 \(시트/.test(document.getElementById('ai-review').textContent)) await new Promise(x => setTimeout(x, 100));
+    return { ok: r.success, hc: document.querySelectorAll('#ai-review [data-k="hc"]')[0].value, memo: document.querySelectorAll('#ai-review [data-k="memo"]')[0].value, t: document.getElementById('ai-review').textContent };
+  });
+  check("개정 비교 화면: 비어 있는 특검은 기존 값 유지 (기존 판정 유지 표시)", keepUi.ok && keepUi.hc === "6개월" && /기존 판정 유지/.test(keepUi.t), [keepUi.hc, keepUi.memo]);
   // 메모1 · 메모2 → MSDS 목록 데이터, 부서장 시트
   ch.rows[0][8] = '메모1'; ch.rows[0][9] = '메모2';
   const mi = ch.rows.findIndex(r => r[0] === '메탄올A');

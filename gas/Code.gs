@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v19.7 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v19.8 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -173,7 +173,7 @@ function doPost(e) {
                         result = staffOp_(req, s); break;
       case 'chem.audit': case 'chem.seedLaw': case 'chem.apply': case 'chem.lawImport':
                         result = chemOp_(req, s); break;
-      case 'ai.status': case 'ai.setKey': case 'ai.list': case 'ai.analyze': case 'ai.judge': case 'ai.apply':
+      case 'ai.status': case 'ai.setKey': case 'ai.list': case 'ai.analyze': case 'ai.judge': case 'ai.apply': case 'ai.products': case 'ai.compare':
                         result = aiOp_(req, s); break;
       default:          result = { success: false, error: 'unknown op: ' + req.op };
     }
@@ -2265,6 +2265,17 @@ function aiOp_(req, s) {
       if (!r.success) return Object.assign(r, { path: b.path, draft: aiJudge_({ product: {}, components: [] }) });
       return { success: true, path: b.path, model: aiModel_(), draft: aiJudge_(r.data) };
     }
+    case 'ai.products': {   // 비교할 기존 제품 목록
+      const names = [];
+      chemRows_().rows.forEach(r => { if (names.indexOf(r.product) < 0) names.push(r.product); });
+      return { success: true, data: names };
+    }
+    case 'ai.compare': {    // 기존 제품 묶음 (개정 비교용)
+      const sh = findChemSheet_();
+      const b = sh ? chemBlock_(sh, String(req.name || '').trim()) : null;
+      if (!b) return { success: false, error: '기존 제품을 찾지 못했습니다' };
+      return { success: true, row: b.row, count: b.count, product: b.product, components: b.components };
+    }
     case 'ai.judge':   // 직접 입력 · 고친 값으로 다시 판정 (AI 없이)
       return { success: true, draft: aiJudge_(req.data || {}) };
     case 'ai.apply':
@@ -2273,7 +2284,38 @@ function aiOp_(req, s) {
   return { success: false, error: 'unknown op: ' + req.op };
 }
 
+// chemicals 시트 열 위치
+function chemCols_(sheet) {
+  const head = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
+  const ix = (...ks) => { for (const k of ks) { const i = head.indexOf(k); if (i >= 0) return i; } return -1; };
+  return { head: head, C: { name: ix('name', '물질명', '제품명'), mf: ix('manufacturer', '제조사'), dept: ix('department', '부서', '사용부서'), usage: ix('usage', '용도'),
+    comp: ix('compName', '구성성분명', '성분명'), cas: ix('casNumber', 'CAS', 'CAS번호'), amt: ix('amount', '함유량'),
+    tg: ix('targetManage', '관리대상'), sp: ix('specialManage', '특별관리'), we: ix('workEnv', '작업환경측정'), hc: ix('healthCheck', '특수건강검진', '건강검진'),
+    em: ix('emergency', '응급처치'), pdf: ix('pdfUrl', 'PDF'), icon: ix('iconUrl', '위험그림문자'), memo: ix('메모1', '비고'), memo2: ix('메모2') } };
+}
+// 제품 한 묶음(제품 줄 + 아래 성분 줄)의 위치와 값
+function chemBlock_(sheet, name) {
+  const { head, C } = chemCols_(sheet);
+  const v = sheet.getDataRange().getValues();
+  const disp = sheet.getDataRange().getDisplayValues();
+  const nm = r => C.name >= 0 ? String(v[r][C.name] || '').trim() : '';
+  let start = -1;
+  for (let r = 1; r < v.length; r++) if (nm(r) === name) { start = r; break; }
+  if (start < 0) return null;
+  let end = start + 1;
+  while (end < v.length && !nm(end) && disp[end].some(x => String(x).trim())) end++;
+  const g = (r, k) => C[k] >= 0 ? String(disp[r][C[k]] || '').trim() : '';
+  return {
+    row: start + 1, count: end - start, raw: v.slice(start, end), width: head.length,
+    product: { name: name, manufacturer: g(start, 'mf'), department: g(start, 'dept'), usage: g(start, 'usage'), target: g(start, 'tg'), special: g(start, 'sp'),
+               emergency: g(start, 'em'), pdfUrl: g(start, 'pdf'), iconUrl: g(start, 'icon') },
+    components: v.slice(start, end).map((_, i) => ({ name: g(start + i, 'comp'), cas: g(start + i, 'cas'), amount: g(start + i, 'amt'),
+      hc: g(start + i, 'hc'), we: g(start + i, 'we'), memo: g(start + i, 'memo'), memo2: g(start + i, 'memo2') })).filter(c => c.name || c.cas)
+  };
+}
+
 // 승인: chemicals 시트에 새 제품 추가 (첫 줄 = 제품 정보 + 첫 성분, 다음 줄 = 성분만)
+//  mode 'revise' + target: 기존 제품 묶음을 새 내용으로 바꿈 (이전 줄은 '개정이력' 시트에 보관)
 function aiApply_(req) {
   const d = req.data || {};
   const p = d.product || {};
@@ -2289,13 +2331,17 @@ function aiApply_(req) {
   if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
   try {
     const { rows } = chemRows_();
-    if (rows.some(r => r.product === name)) return { success: false, error: '같은 이름의 제품이 이미 있습니다 — 기존 제품은 시트에서 직접 고쳐 주세요' };
-    const head = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
-    const ix = (...ks) => { for (const k of ks) { const i = head.indexOf(k); if (i >= 0) return i; } return -1; };
-    const C = { name: ix('name', '물질명', '제품명'), mf: ix('manufacturer', '제조사'), dept: ix('department', '부서', '사용부서'), usage: ix('usage', '용도'),
-      comp: ix('compName', '구성성분명', '성분명'), cas: ix('casNumber', 'CAS', 'CAS번호'), amt: ix('amount', '함유량'),
-      tg: ix('targetManage', '관리대상'), sp: ix('specialManage', '특별관리'), we: ix('workEnv', '작업환경측정'), hc: ix('healthCheck', '특수건강검진', '건강검진'),
-      em: ix('emergency', '응급처치'), pdf: ix('pdfUrl', 'PDF'), icon: ix('iconUrl', '위험그림문자'), memo: ix('메모1', '비고'), memo2: ix('메모2') };
+    const revise = req.mode === 'revise';
+    const target = String(req.target || '').trim();
+    let old = null;
+    if (revise) {
+      old = chemBlock_(sheet, target);
+      if (!old) return { success: false, error: '개정할 기존 제품을 찾지 못했습니다: ' + target };
+      if (name !== target && rows.some(r => r.product === name)) return { success: false, error: '바꿀 제품명과 같은 이름의 다른 제품이 있습니다' };
+    } else if (rows.some(r => r.product === name)) {
+      return { success: false, error: '같은 이름의 제품이 이미 있습니다 — [기존 제품과 비교]로 개정 반영하세요' };
+    }
+    const { head, C } = chemCols_(sheet);
     // 원본 PDF 링크 (보기 전용 공유 — 실패해도 진행). 직접 입력 + PDF면 여기서 보관
     if (!req.path && req.content) { const b = aiBytes_(req); if (!b.error) req.path = b.path; }
     let pdfUrl = '';
@@ -2311,10 +2357,16 @@ function aiApply_(req) {
     if (C.icon >= 0) sheet.getRange(2, C.icon + 1, Math.max(sheet.getLastRow() - 1, 1), 1).getValues().forEach(r => String(r[0] || '').split(',').forEach(part => {
       const pts = part.trim().split('|'); if (pts[1] && !iconMap[pts[1].trim()]) iconMap[pts[1].trim()] = pts[0].trim();
     }));
-    const icons = (p.pictograms || []).map(x => String(x).trim()).filter(x => iconMap[x]).map(x => iconMap[x] + '|' + x).join(',');
+    let icons = (p.pictograms || []).map(x => String(x).trim()).filter(x => iconMap[x]).map(x => iconMap[x] + '|' + x).join(',');
+    if (revise) {   // 개정: 비어 있는 값은 기존 값 유지
+      if (!icons) icons = old.product.iconUrl;
+      if (!pdfUrl) pdfUrl = old.product.pdfUrl;
+      if (!(d.departments || []).length) d.departments = old.product.department.split(/[,\/]/).map(x => x.trim()).filter(Boolean);
+    }
     const em = p.emergency || {};
-    const emText = [em.eye || em.skin ? '[피부,눈] ' + [em.eye, em.skin].filter(Boolean).join(' ') : '', em.inhalation ? '[흡입] ' + em.inhalation : '',
+    let emText = [em.eye || em.skin ? '[피부,눈] ' + [em.eye, em.skin].filter(Boolean).join(' ') : '', em.inhalation ? '[흡입] ' + em.inhalation : '',
                     em.ingestion ? '[먹었을때] ' + em.ingestion : ''].filter(Boolean).join('\n');
+    if (revise && !emText) emText = old.product.emergency;
     const width = head.length;
     const out = comps.map((c, i) => {
       const r = new Array(width).fill('');
@@ -2326,10 +2378,21 @@ function aiApply_(req) {
       set('comp', c.name); set('cas', String(c.cas || '').trim()); set('amt', c.amount); set('we', c.we); set('hc', c.hc); set('memo', c.memo); set('memo2', c.memo2);
       return r;
     });
-    const start = sheet.getLastRow() + 1;
+    let start = sheet.getLastRow() + 1;
+    if (revise) {
+      // 이전 줄 보관 → 묶음 크기 맞춘 뒤 덮어쓰기
+      let hist = SS.getSheetByName('개정이력');
+      if (!hist) { hist = SS.insertSheet('개정이력'); hist.appendRow(['개정일시', '제품명', '새 제품명', '원본 PDF'].concat(head)); hist.setFrozenRows(1); }
+      const now = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm');
+      hist.getRange(hist.getLastRow() + 1, 1, old.raw.length, 4 + width).setValues(
+        old.raw.map((r, i) => [i ? '' : now, i ? '' : target, i ? '' : name, i ? '' : pdfUrl].concat(r.map(x => x instanceof Date ? fmtDate_(x) : safeCell_(x)))));
+      start = old.row;
+      if (out.length > old.count) sheet.insertRowsAfter(old.row + old.count - 1, out.length - old.count);
+      if (out.length < old.count) sheet.deleteRows(old.row + out.length, old.count - out.length);
+    }
     [C.cas, C.amt].forEach(ci => { if (ci >= 0) sheet.getRange(start, ci + 1, out.length, 1).setNumberFormat('@'); });
     sheet.getRange(start, 1, out.length, width).setValues(out);
-    return { success: true, row: start, rows: out.length, pdfUrl: pdfUrl, icons: icons ? icons.split(',').length : 0 };
+    return { success: true, mode: revise ? 'revise' : 'new', row: start, rows: out.length, oldRows: old ? old.count : 0, pdfUrl: pdfUrl, icons: icons ? icons.split(',').length : 0 };
   } finally {
     lock.releaseLock();
   }

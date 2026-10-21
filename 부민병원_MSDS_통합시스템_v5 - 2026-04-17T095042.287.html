@@ -10,8 +10,12 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v19.7 (2026-10-21)
+  부민병원 MSDS 통합시스템 v19.8 (2026-10-21)
 
+  ★★★ v19.8 (2026-10-21) — 개정 MSDS 기존 제품 비교 (서버 v19.8):
+    - AI MSDS 검토에서 [기존 제품과 비교]: 성분을 CAS(없으면 이름)로 짝지어 추가 · 삭제 · 변경(함유량 · 특검 · 작측 · CAS) · 같음 표시, 제조사 · 용도 · 그림문자 비교
+    - 새 MSDS에서 비어 있는 특검 · 작측 · 메모1 · 메모2 · 사용부서 · 응급조치 · PDF 링크는 기존 값 유지
+    - [개정 반영]: 기존 제품 줄을 새 내용으로 바꾸고, 이전 줄은 '개정이력' 시트에 날짜와 함께 보관
   ★★★ v19.7 (2026-10-21) — AI 3단계: AI MSDS 검토 (Gemini) + 미해당 · 비고 표시 (서버 v19.7):
     - MSDS 화면: 특검 · 작측 빈칸은 '미해당', 시트 메모1(판정 비고) · 메모2(사용 위치)를 성분표 '비고' 칸에 표시
     - 물질 마스터 점검: 빈칸 = 미해당, 주기 불일치에 메모1이 있으면 '설명됨'
@@ -3652,6 +3656,7 @@ b.hm-f{font-weight:700}
   var BTN = 'padding:8px 14px;border-radius:4px;border:1px solid #C6C3BB;background:#fff;font:inherit;font-size:14px;font-weight:700;cursor:pointer';
   var BTN_P = 'padding:8px 16px;border-radius:4px;border:0;background:#4A8F2C;color:#fff;font:inherit;font-size:14px;font-weight:700;cursor:pointer';
   var draft = null, srcPath = '', pdfUrl = '', manualFile = null;
+  var cmp = null, products = null;   // v19.8: 개정 비교 (기존 제품 묶음) · 기존 제품 이름 목록
   function casOk(cas){
     var m = String(cas || '').trim().match(/^(\d{2,7})-(\d{2})-(\d)$/);
     if(!m) return false;
@@ -3723,7 +3728,7 @@ b.hm-f{font-weight:700}
     };
     document.getElementById('ai-manual').onclick = async function(){
       var f = document.getElementById('ai-file').files[0];
-      srcPath = ''; manualFile = f || null; pdfUrl = f ? URL.createObjectURL(f) : '';
+      srcPath = ''; cmp = null; manualFile = f || null; pdfUrl = f ? URL.createObjectURL(f) : '';
       var j = await BMAUTH.post('ai.judge', { data: { product: {}, components: [{}] } });
       draft = (j && j.draft) || { product: {}, components: [] };
       if(!draft.components.length) draft.components.push({});
@@ -3747,11 +3752,81 @@ b.hm-f{font-weight:700}
     box.innerHTML = '<div style="' + BOX + ';color:#2D581B;font-weight:700">AI가 MSDS를 읽는 중… (보통 20초~1분)</div>';
     box.scrollIntoView({ behavior: 'smooth', block: 'start' });
     var x = await BMAUTH.post('ai.analyze', req);
-    srcPath = x.path || '';
+    srcPath = x.path || ''; cmp = null;
     draft = x.draft || { product: {}, components: [] };
     if(req.dept) draft.departments = [req.dept];
     if(!draft.components.length) draft.components.push({});
     renderReview(x.success ? 'AI 추출 (' + esc(x.model || '') + ')' : '직접 입력', x.success ? '' : (x.error || 'AI 실패'), !x.success);
+  }
+
+  // ── v19.8 개정 비교: CAS(정상)로, 없으면 이름으로 짝지음
+  var norm = function(x){ return String(x || '').toLowerCase().replace(/[\s()（）\[\]_\-.,·]/g, ''); };
+  var keyOf = function(c){ return casOk(c.cas) ? 'cas:' + String(c.cas).trim() : 'nm:' + norm(c.name); };
+  function diffRows(){
+    var oldMap = {}, used = {};
+    cmp.components.forEach(function(o, i){ var k = keyOf(o); if(!(k in oldMap)) oldMap[k] = i; });
+    var out = draft.components.map(function(c){
+      var i = oldMap[keyOf(c)];
+      if(i === undefined && c.name){ cmp.components.forEach(function(o, j){ if(i === undefined && !used[j] && norm(o.name) === norm(c.name)) i = j; }); }
+      if(i === undefined) return { st: 'add', n: c };
+      used[i] = 1;
+      var o = cmp.components[i], ch = [];
+      if(String(o.amount).replace(/\s/g, '') !== String(c.amount || '').replace(/\s/g, '')) ch.push('함유량');
+      if((o.hc || '') !== (c.hc || '')) ch.push('특검');
+      if((o.we || '') !== (c.we || '')) ch.push('작측');
+      if(String(o.cas) !== String(c.cas || '')) ch.push('CAS');
+      return { st: ch.length ? 'chg' : 'same', n: c, o: o, ch: ch };
+    });
+    cmp.components.forEach(function(o, j){ if(!used[j]) out.push({ st: 'del', o: o }); });
+    return out;
+  }
+  // 새 MSDS에서 비어 있는 판정 · 메모는 기존 값 유지
+  function carryOver(){
+    var oldMap = {};
+    cmp.components.forEach(function(o){ oldMap[keyOf(o)] = oldMap[keyOf(o)] || o; oldMap['nm:' + norm(o.name)] = oldMap['nm:' + norm(o.name)] || o; });
+    draft.components.forEach(function(c){
+      var o = oldMap[keyOf(c)] || oldMap['nm:' + norm(c.name)];
+      if(!o) return;
+      if(!c.hc && o.hc){ c.hc = o.hc; c.hcSrc = '기존 판정 유지'; }
+      if(!c.we && o.we){ c.we = o.we; c.weSrc = '기존 판정 유지'; }
+      if(!c.memo && o.memo) c.memo = o.memo;
+      if(!c.memo2 && o.memo2) c.memo2 = o.memo2;
+    });
+    if(!(draft.departments || []).length && cmp.product.department) draft.departments = cmp.product.department.split(/[,\/]/).map(function(x){ return x.trim(); }).filter(Boolean);
+  }
+  function cmpHtml(){
+    if(!cmp) return '';
+    var rows = diffRows();
+    var n = { add: 0, del: 0, chg: 0, same: 0 };
+    rows.forEach(function(r){ n[r.st]++; });
+    var tag = { add: '<span class="apv-st ok">추가</span>', del: '<span class="apv-st rj">삭제</span>', chg: '<span class="apv-st wait">변경</span>', same: '<span class="apv-st">같음</span>' };
+    var td = 'padding:6px 8px;border-bottom:1px solid #ECEBE7;vertical-align:top';
+    var side = function(c){ return c ? '<b>' + esc(c.name) + '</b><div style="font-size:12px;color:#5A5650">' + esc(c.cas || '-') + ' · ' + esc(c.amount || '-') + '% · 특검 ' + esc(c.hc || '미해당') + ' · 작측 ' + esc(c.we || '미해당') + '</div>' +
+      (c.memo ? '<div style="font-size:12px;color:#6E4A00">메모1: ' + esc(c.memo) + '</div>' : '') : '<span style="color:#8A867E">—</span>'; };
+    var p = draft.product || {}, op = cmp.product;
+    var pf = function(label, a, b){ var same = norm(a) === norm(b); return '<tr><td style="' + td + ';font-weight:700;white-space:nowrap">' + label + '</td><td style="' + td + '">' + esc(a || '-') + '</td><td style="' + td + '">' + esc(b || '-') + '</td><td style="' + td + '">' + (same ? tag.same : tag.chg) + '</td></tr>'; };
+    return '<div style="border:1px solid #B9CBE4;border-radius:8px;padding:14px;margin:12px 0;background:#F7FAFD">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><b style="font-size:16px">기존 제품과 비교 — ' + esc(op.name) + ' (시트 ' + cmp.row + '행, ' + cmp.count + '줄)</b>' +
+        '<span style="font-size:14px">추가 <b style="color:#2D581B">' + n.add + '</b> · 삭제 <b style="color:#A3302A">' + n.del + '</b> · 변경 <b style="color:#2B4C7E">' + n.chg + '</b> · 같음 ' + n.same + '</span></div>' +
+      '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:14px;background:#fff"><tr>' +
+        ['항목', '기존', '새 MSDS', ''].map(function(h){ return '<th style="text-align:left;padding:8px;background:#E4ECF5;color:#2B4C7E">' + h + '</th>'; }).join('') + '</tr>' +
+        pf('제조사', op.manufacturer, p.manufacturer) + pf('용도', op.usage, p.usage) +
+        pf('그림문자', (op.iconUrl || '').split(',').map(function(x){ return (x.split('|')[1] || '').trim(); }).filter(Boolean).join(', '), (p.pictograms || []).join(', ')) +
+        rows.map(function(r){
+          return '<tr><td style="' + td + '">' + tag[r.st] + (r.ch && r.ch.length ? '<div style="font-size:12px;color:#2B4C7E;margin-top:2px">' + esc(r.ch.join(' · ')) + '</div>' : '') + '</td>' +
+            '<td style="' + td + '">' + side(r.o) + '</td><td style="' + td + '">' + side(r.n) + '</td><td style="' + td + '"></td></tr>';
+        }).join('') +
+      '</table></div>' +
+      '<div style="font-size:13px;color:#45423D;margin-top:8px">새 MSDS에서 비어 있는 특검 · 작측 · 메모는 <b>기존 값을 유지</b>했습니다(위 표에서 고칠 수 있음). [개정 반영]을 누르면 기존 ' + cmp.count + '줄을 새 내용으로 바꾸고, 이전 내용은 <b>개정이력</b> 시트에 보관합니다.</div>' +
+    '</div>';
+  }
+  function guessTarget(){
+    var nm = norm((draft.product || {}).name);
+    if(!nm || !products) return '';
+    var exact = products.filter(function(x){ return norm(x) === nm; })[0];
+    if(exact) return exact;
+    var head = nm.slice(0, 4);
+    return products.filter(function(x){ return head && norm(x).indexOf(head) === 0; })[0] || '';
   }
 
   function evid(c){
@@ -3761,7 +3836,9 @@ b.hm-f{font-weight:700}
     if(e.msds15 && (e.msds15.hc || e.msds15.we || e.msds15.managed)) out.push('MSDS 15번: 특검 ' + (e.msds15.hc || '-') + ' · 측정 ' + (e.msds15.we || '-') + ' · 관리대상 ' + (e.msds15.managed || '-'));
     return out.length ? out.map(esc).join('<br>') : '<span style="color:#8A867E">근거 없음 (미해당으로 둠)</span>';
   }
-  function renderReview(title, note, isErr){
+  async function renderReview(title, note, isErr){
+    if(!products){ try{ var pl = await BMAUTH.post('ai.products', {}); products = (pl && pl.success && pl.data) || []; }catch(_){ products = []; } }
+    if(!cmp && draft.duplicate && !note) note = '같은 이름의 제품이 있습니다 — 아래 [기존 제품과 비교]로 개정 반영하세요';
     var box = document.getElementById('ai-review');
     var p = draft.product || {}, em = p.emergency || {};
     var fld = function(id, label, val, wide){ return '<label style="display:block;' + (wide ? 'grid-column:1/-1' : '') + '"><span style="font-size:13px;font-weight:700;color:#45423D">' + label + '</span><input id="' + id + '" value="' + esc(val || '') + '" style="' + IN + '"></label>'; };
@@ -3783,7 +3860,7 @@ b.hm-f{font-weight:700}
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px"><b style="font-size:17px">③ 검토 · 승인 — ' + title + '</b>' +
           (pdfUrl ? '<button id="ai-pdf" style="' + BTN + '">원본 PDF 보기</button>' : '') + '</div>' +
         (note ? '<div style="padding:10px 12px;border-radius:4px;margin-bottom:10px;font-size:14px;' + (isErr ? 'background:#FBE5E2;color:#A3302A' : 'background:#F2F8EC;color:#2D581B') + '">' + esc(note) + '</div>' : '') +
-        (draft.duplicate ? '<div style="padding:10px 12px;border-radius:4px;margin-bottom:10px;background:#FFF1D6;color:#6E4A00;font-size:14px">같은 이름의 제품이 이미 시트에 있습니다. 개정판이면 시트에서 직접 고치거나 제품명을 구분해 주세요.</div>' : '') +
+        (draft.duplicate && !cmp ? '<div style="padding:10px 12px;border-radius:4px;margin-bottom:10px;background:#FFF1D6;color:#6E4A00;font-size:14px">같은 이름의 제품이 이미 시트에 있습니다. 개정판이면 아래 [기존 제품과 비교] 후 [개정 반영]을 누르세요.</div>' : '') +
         ((draft.warnings || []).length ? '<div style="font-size:13px;color:#6E4A00;margin-bottom:8px">AI 확인 필요: ' + esc(draft.warnings.join(' · ')) + '</div>' : '') +
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:12px">' +
           fld('ai-name', '제품명 *', p.name) + fld('ai-mf', '제조사', p.manufacturer) + fld('ai-usage', '용도', p.usage) +
@@ -3802,11 +3879,26 @@ b.hm-f{font-weight:700}
           '<label style="font-size:14px;font-weight:700"><input type="checkbox" id="ai-sp"' + (draft.specialManage ? ' checked' : '') + '> 특별관리물질</label>' +
           '<span style="font-size:13px;color:#5A5650">특검 · 측정 빈칸은 미해당으로 등록됩니다</span>' +
         '</div>' +
+        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 0;border-top:1px solid #ECEBE7">' +
+          '<b style="font-size:14px">개정 MSDS면</b><select id="ai-target" style="' + IN + ';width:auto;min-width:240px"><option value="">비교할 기존 제품 선택…</option>' +
+            (products || []).map(function(x){ var sel = cmp ? cmp.product.name === x : x === guessTarget(); return '<option' + (sel ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select>' +
+          '<button id="ai-cmp" style="' + BTN + '">기존 제품과 비교</button>' + (cmp ? '<button id="ai-cmp-x" style="' + BTN + '">비교 취소 (새 제품으로)</button>' : '') + '</div>' +
+        cmpHtml() +
         '<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">' +
           '<button id="ai-rejudge" style="' + BTN + '">판정 근거 다시 찾기</button>' +
-          '<button id="ai-apply" style="' + BTN_P + ';padding:10px 18px;font-size:15px">시트에 새 제품으로 추가</button></div>' +
+          '<button id="ai-apply" style="' + BTN_P + ';padding:10px 18px;font-size:15px">' + (cmp ? '개정 반영 (기존 제품 바꾸기)' : '시트에 새 제품으로 추가') + '</button></div>' +
       '</div>';
     if(pdfUrl) document.getElementById('ai-pdf').onclick = function(){ window.open(pdfUrl, '_blank'); };
+    document.getElementById('ai-cmp').onclick = async function(){
+      collect();
+      var t = document.getElementById('ai-target').value;
+      if(!t){ say('비교할 기존 제품을 고르세요', 'err'); return; }
+      var x = await BMAUTH.post('ai.compare', { name: t });
+      if(!x.success){ say(x.error || '실패', 'err'); return; }
+      cmp = x; carryOver();
+      renderReview(title, '기존 제품 "' + t + '"과 비교합니다', false);
+    };
+    if(cmp) document.getElementById('ai-cmp-x').onclick = function(){ collect(); cmp = null; renderReview(title, '', false); };
     box.querySelectorAll('[data-del]').forEach(function(b){ b.onclick = function(){ collect(); draft.components.splice(+b.getAttribute('data-del'), 1); if(!draft.components.length) draft.components.push({}); renderReview(title, note, isErr); }; });
     document.getElementById('ai-add').onclick = function(){ collect(); draft.components.push({}); renderReview(title, note, isErr); };
     document.getElementById('ai-rejudge').onclick = async function(){
@@ -3824,14 +3916,17 @@ b.hm-f{font-weight:700}
       var bad = draft.components.filter(function(c){ return c.cas && /^\d/.test(c.cas) && !casOk(c.cas); });
       if(bad.length){ say('CAS 검증숫자가 맞지 않습니다: ' + bad.map(function(c){ return c.cas; }).join(', '), 'err'); return; }
       if(!draft.product.name){ say('제품명을 입력하세요', 'err'); return; }
-      if(!confirm('"' + draft.product.name + '" (성분 ' + draft.components.filter(function(c){ return c.name; }).length + '개)를 chemicals 시트에 새 제품으로 추가합니다.')) return;
+      var nComp = draft.components.filter(function(c){ return c.name; }).length;
+      if(!confirm(cmp ? '기존 "' + cmp.product.name + '" ' + cmp.count + '줄을 새 MSDS 내용(성분 ' + nComp + '개)으로 바꿉니다.\n이전 내용은 개정이력 시트에 보관됩니다.'
+                      : '"' + draft.product.name + '" (성분 ' + nComp + '개)를 chemicals 시트에 새 제품으로 추가합니다.')) return;
       var req = { path: srcPath, data: draft };
+      if(cmp){ req.mode = 'revise'; req.target = cmp.product.name; }
       if(!srcPath && manualFile){ req.content = await fileB64(manualFile); req.name = manualFile.name; }
       var x = await BMAUTH.post('ai.apply', req);
       if(!x.success){ say(x.error || '실패', 'err'); return; }
-      say('추가했습니다 — 시트 ' + x.row + '행부터 ' + x.rows + '줄' + (x.pdfUrl ? ' · 원본 PDF 링크 연결' : '') + '. MSDS 목록은 [동기화] 후 보입니다.', 'ok');
+      say((x.mode === 'revise' ? '개정 반영했습니다 — 기존 ' + x.oldRows + '줄 → ' : '추가했습니다 — ') + '시트 ' + x.row + '행부터 ' + x.rows + '줄' + (x.pdfUrl ? ' · 원본 PDF 링크 연결' : '') + '. MSDS 목록은 [동기화] 후 보입니다.', 'ok');
       document.getElementById('ai-review').innerHTML = '';
-      draft = null;
+      draft = null; cmp = null; products = null;
       open();
     };
   }
