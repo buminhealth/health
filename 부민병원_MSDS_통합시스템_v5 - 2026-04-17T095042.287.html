@@ -10,7 +10,12 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v18.3 (2026-10-21)
+  부민병원 MSDS 통합시스템 v18.4 (2026-10-21)
+
+  ★★★ v18.4 (2026-10-21) — 서명·사진을 PC 저장소에서 분리 (저장 용량 근본 해결):
+    - BMIMG: 서버에 서명이 있는 것이 확인된 기록만 PC에서 서명·사진을 비움(_img:1), 읽을 때 메모리 캐시로 복원
+      → 미리보기·PDF 재생성·결재 등 기존 기능 무변경. 업로드 전·실패 기록의 서명은 PC에 유지
+    - 서버(Code.gs v18.4): 서명이 빠진 기록이 올라와도 기존 서명 보존, rec.has(서버 보유 확인)
 
   ★★★ v18.3 (2026-10-21) — 부서 제출 현황 미리보기·목록, 서버 버전 표시, 저장 용량 항목별 표시:
     - 부서 제출 현황: 교육일지를 사람 단위(구분-대상자-입사일-교육일-취급물질-결재-미리보기)로,
@@ -1828,6 +1833,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
                  download_url: e.type === 'file' ? rawUrlFor(e.path) : null };
       }));
     }
+    try{ if(window.BMIMG) BMIMG.absorbServer(r.path, r.content); }catch(_){}   // v18.4: 서명 캐시
     return jsonResp(200, { type: 'file', name: r.name, path: r.path, sha: r.sha, size: r.size,
                            encoding: 'base64', content: r.content || '', download_url: rawUrlFor(r.path) });
   }
@@ -1849,6 +1855,9 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
       r = await post('fs.put', Object.assign({}, base, { content: content }));
     }
     if(!r || !r.success) return jsonResp((r && r.status) || 500, { message: (r && r.error) || '업로드 실패' });
+    // v18.4: 관리자 저장은 보낸 내용이 곧 서버 내용 → 서명 확인 표시. (부서 저장은 서버가 자기 부서만 반영하므로
+    //        보낸 내용으로 판단하지 않고, 이후 서버 조회·rec.has로만 확인)
+    try{ if(window.BMIMG && session && session.role === 'admin') BMIMG.absorbServer(path, content); }catch(_){}
     return jsonResp(r.status === 201 ? 201 : 200, {
       content: { name: path.split('/').pop(), path: path, sha: r.sha, download_url: rawUrlFor(path) },
       commit: { message: base.message }
@@ -1867,6 +1876,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
       parts.push(c.content);
       got += c.content.length;
     }
+    try{ if(window.BMIMG) BMIMG.absorbServer(path, parts.join('')); }catch(_){}   // v18.4: 서명 캐시
     var bin = atob(parts.join(''));
     var bytes = new Uint8Array(bin.length);
     for(var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -2101,6 +2111,159 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     }
     renderBadge();   // 처음 화면(MSDS 조회)은 로그인 없이 — 작성 탭을 열 때 로그인 창 표시
     if(session) setTimeout(upgradeMergeOnce, 5000);
+  });
+})();
+
+/* ★★★ v18.4 — 서명·사진을 브라우저 저장소(localStorage)에 두지 않음 (용량 근본 해결)
+   [문제] 교육·보호구 기록마다 서명 이미지(base64)가 들어 있어 PC 저장소 한도(5MB)에 근접
+   [방식]
+   - 쓸 때: 서명·사진은 빼고 글자 정보만 저장 (_img:1 표시). 단, 서버에 그 기록의 서명이 있는 것이
+     확인된 경우에만 뺀다 → 업로드 전·실패한 기록의 서명은 PC에 그대로 남아 사라지지 않음
+   - 읽을 때: 서버에서 받아 둔 서명(메모리)을 다시 붙여 돌려줌 → 미리보기·PDF 재생성·결재 등 기존 기능 무변경
+   - 서버(Code.gs)도 서명이 빠진 기록이 올라오면 기존 서명을 보존 (이중 안전장치)
+   [주의] 아래 BMAUTH의 서버 응답 후크(absorbServer)가 서명 캐시를 채움 */
+(function(){
+  if(window.BMIMG) return;
+  var PATHS = { bm_edu_records: 'records/edu_records.json', bm_ppe_records: 'records/ppe_records.json', bm_chem_records: 'records/chem_records.json' };
+  var FIELDS = ['sigImg', 'sigsByDay', 'photos', 'newSig', 'stopSig'];
+  var cache = {};       // 기록 키 → 서명·사진 값 (이 탭 메모리에만)
+  var enabled = false;  // 서버가 서명 보존 기능(v18.4+)을 가진 것이 확인된 뒤에만 PC에서 서명을 비움
+  var confirmed = {};   // 서버에 서명·사진이 있는 것이 확인된 기록 키
+  var origGet = Storage.prototype.getItem, origSet = Storage.prototype.setItem;
+
+  // gas/Code.gs recordKey_와 같은 규칙
+  function keyOf(r){
+    if(r.recordId) return 'id:' + r.recordId;
+    return 'nk:' + [r.name, r.empNo, r.dept, r.type, String(r.dateStart || r.date || '').slice(0, 10)]
+      .map(function(v){ return String(v == null ? '' : v).trim(); }).join('|');
+  }
+  function empty(v){
+    return v === undefined || v === null || v === '' || (Array.isArray(v) && !v.some(Boolean)) ||
+           (typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length);
+  }
+  function hasImg(r){ return !!r && FIELDS.some(function(f){ return !empty(r[f]); }); }
+  function listOf(d){ return Array.isArray(d) ? d : ((d && Array.isArray(d.records)) ? d.records : null); }
+  function absorb(list, fromServer){
+    (list || []).forEach(function(r){
+      if(!hasImg(r)) return;
+      var k = keyOf(r), o = {};
+      FIELDS.forEach(function(f){ if(!empty(r[f])) o[f] = r[f]; });
+      cache[k] = o;
+      if(fromServer) confirmed[k] = true;
+    });
+  }
+  function isLocal(store){ try{ return store === window.localStorage; }catch(_){ return false; } }
+
+  Storage.prototype.setItem = function(k, v){
+    if(isLocal(this) && PATHS[k] && typeof v === 'string' && v.indexOf('data:image') >= 0){
+      try{
+        var d = JSON.parse(v), list = listOf(d);
+        if(list){
+          absorb(list, false);
+          var changed = false;
+          list.forEach(function(r){
+            if(enabled && hasImg(r) && confirmed[keyOf(r)]){
+              FIELDS.forEach(function(f){ delete r[f]; });
+              r._img = 1;
+              changed = true;
+            }
+          });
+          if(changed) v = JSON.stringify(d);
+        }
+      }catch(_){}
+    }
+    return origSet.call(this, k, v);
+  };
+  Storage.prototype.getItem = function(k){
+    var v = origGet.call(this, k);
+    if(isLocal(this) && PATHS[k] && v && v.indexOf('"_img"') >= 0){
+      try{
+        var d = JSON.parse(v), list = listOf(d), n = 0;
+        (list || []).forEach(function(r){
+          if(r && r._img && cache[keyOf(r)]){ Object.assign(r, cache[keyOf(r)]); delete r._img; n++; }
+        });
+        if(n) v = JSON.stringify(d);
+      }catch(_){}
+    }
+    return v;
+  };
+
+  // 서버에서 받은 기록 파일 → 서명 캐시 채우기 + 확인 표시 (BMAUTH 후크에서 호출)
+  function absorbServer(path, b64){
+    if(!/^records\/(edu|ppe|chem)_records\.json$/.test(path) || !b64) return;
+    try{
+      var bin = atob(String(b64).replace(/\s/g, ''));
+      var bytes = new Uint8Array(bin.length);
+      for(var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      absorb(listOf(JSON.parse(new TextDecoder('utf-8').decode(bytes))), true);
+      scheduleCompact();
+    }catch(_){}
+  }
+
+  // 저장소 정리: 서버 확인된 기록의 서명을 PC에서 비움. 서버 응답에 없던 기록은 서버에 물어본 뒤(rec.has) 비움
+  var timer = null, asked = {};
+  function scheduleCompact(){ clearTimeout(timer); timer = setTimeout(compact, 1500); }
+  async function compact(){
+    if(!enabled) return;
+    var s = window.BMAUTH && BMAUTH.session();
+    for(var k in PATHS){
+      var v = origGet.call(localStorage, k);
+      if(!v || v.indexOf('data:image') < 0) continue;
+      var list;
+      try{ list = listOf(JSON.parse(v)); }catch(_){ continue; }
+      if(!list) continue;
+      var unknown = list.filter(function(r){ return hasImg(r) && !confirmed[keyOf(r)] && !asked[keyOf(r)]; }).map(keyOf);
+      if(unknown.length && s){
+        unknown.forEach(function(x){ asked[x] = true; });
+        try{
+          for(var i = 0; i < unknown.length; i += 300){
+            var r = await BMAUTH.post('rec.has', { path: PATHS[k], keys: unknown.slice(i, i + 300) });
+            if(r && r.success) r.keys.forEach(function(x){ confirmed[x] = true; });
+          }
+        }catch(_){}
+      }
+      try{ localStorage.setItem(k, origGet.call(localStorage, k)); }catch(_){}   // setItem 후크가 확인된 서명만 비움
+    }
+  }
+
+  // 페이지를 새로 열면 메모리 캐시가 비어 있으므로, 서명이 비워진 기록이 있으면 서버에서 다시 받아 둠
+  async function prefetch(){
+    if(!(window.BMAUTH && BMAUTH.session()) || typeof readGitHubJSON !== 'function') return;
+    for(var k in PATHS){
+      var v = origGet.call(localStorage, k);
+      if(v && (v.indexOf('"_img"') >= 0 || v.indexOf('data:image') >= 0)){
+        try{ await readGitHubJSON(PATHS[k]); }catch(_){}
+      }
+    }
+  }
+
+  // 서버 버전 확인 (예전 서버는 서명 보존 기능이 없어, 비운 기록이 올라가면 서버 서명이 지워질 수 있음)
+  function verAtLeast(v, want){
+    var m = String(v || '').match(/v(\d+)\.(\d+)/);
+    if(!m) return false;
+    var a = [+m[1], +m[2]];
+    return a[0] > want[0] || (a[0] === want[0] && a[1] >= want[1]);
+  }
+  async function checkServer(){
+    if(!(window.BMAUTH && BMAUTH.session())) return;
+    try{
+      var r = await BMAUTH.post('whoami', {});
+      enabled = !!(r && r.success && verAtLeast(r.serverVersion, [18, 4]));
+      if(enabled) scheduleCompact();
+    }catch(_){}
+  }
+
+  window.BMIMG = {
+    absorbServer: absorbServer,
+    compact: compact,
+    prefetch: prefetch,
+    rawGet: function(k){ return origGet.call(localStorage, k); },
+    enabled: function(){ return enabled; },
+    _stats: function(){ return { cached: Object.keys(cache).length, confirmed: Object.keys(confirmed).length }; }
+  };
+  window.addEventListener('DOMContentLoaded', function(){
+    checkServer();
+    setTimeout(prefetch, 3000);
   });
 })();
 
@@ -5993,7 +6156,7 @@ function apvGetStorageInfo(){
     }
   }
   // edu_records만 별도 측정
-  const eduRecords = localStorage.getItem('bm_edu_records') || '[]';
+  const eduRecords = (window.BMIMG ? BMIMG.rawGet('bm_edu_records') : localStorage.getItem('bm_edu_records')) || '[]';   // v18.4: 실제 저장값
   const eduBytes = eduRecords.length * 2;
   let recordCount = 0;
   try{ recordCount = JSON.parse(eduRecords).length; }catch(e){}
@@ -6044,7 +6207,7 @@ function _lsTopKeys(){
   try{
     for(let i = 0; i < localStorage.length; i++){
       const k = localStorage.key(i);
-      const v = localStorage.getItem(k) || '';
+      const v = (window.BMIMG ? BMIMG.rawGet(k) : localStorage.getItem(k)) || '';
       let images = 0;
       const m = v.match(/data:image\/[a-z]+;base64,[A-Za-z0-9+\/=]+/g);
       if(m) images = m.reduce((a, x) => a + x.length, 0);
