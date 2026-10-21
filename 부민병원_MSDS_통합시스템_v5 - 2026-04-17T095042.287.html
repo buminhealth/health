@@ -10,8 +10,13 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v19.4 (2026-10-21)
+  부민병원 MSDS 통합시스템 v19.5 (2026-10-21)
 
+  ★★★ v19.5 (2026-10-21) — 리디자인 6단계 관리자 (최종 시안 A-8) + 반려:
+    - 진한 초록 왼쪽 메뉴, 결재 요약 4칸(결재 대기 · 반려 · 이번 달 결재 · 전체), 상태 표시(결재대기 · 반려 · 결재완료)
+    - 줄을 누르면 오른쪽에 저장된 PDF 원본 (새 창으로 열기 · 내려받기 · 인쇄 · 반려 · 이 문서 결재)
+    - 반려: 선택 반려 / 문서별 반려 + 사유 → 부서현황 '처리 필요' · 홈 할 일 '반려 · 다시 작성'
+    - 서버 v19.5: 부서가 올린 기록의 결재 · 반려 칸은 서버 값 유지 (부서가 결재 표시를 바꿀 수 없음)
   ★★★ v19.4 (2026-10-21) — 리디자인 5단계 부서현황 (최종 시안 D):
     - 위쪽 요약 3칸: 결재 대기 · 결재 완료(교육일지) · 보호구 · 보고서 건수
     - 종류 탭(전체 · 교육일지 · 보호구 · 보고서) + 이름 · 물질 검색, 표 새 모양, 결재 상태 표시
@@ -870,7 +875,7 @@ b.hm-f{font-weight:700}
 .dv-btn{min-height:38px;padding:0 14px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:14px;font-weight:700;color:var(--bm-ink);cursor:pointer;white-space:nowrap}
 .dv-ctl .dv-btn{min-height:42px}
 .dv-btn:hover{background:#FAFAF8;border-color:var(--bm-g6)}
-.dv-sum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.dv-sum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
 .dv-card{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:16px 18px;border:1px solid var(--bm-line);border-radius:8px;background:#fff}
 .dv-card.wait{border-color:#B9CBE4}
 .dv-card b{font-size:26px;font-weight:800;color:var(--bm-ink);line-height:1.2}
@@ -900,11 +905,74 @@ b.hm-f{font-weight:700}
 @media(max-width:760px){
   .dv-wrap{padding:14px 12px 8px}
   .dv-sum{grid-template-columns:1fr 1fr;gap:8px}
-  .dv-sum .dv-card:last-child{grid-column:1/-1}
   .dv-card{padding:12px 14px}.dv-card b{font-size:22px}
   .dv-q{width:100%}
   .dv-sec{padding:12px}
   .dv-tab{padding:12px 10px}
+}
+/* v19.5 — 관리자 (최종 시안 A-8: 진한 초록 왼쪽 메뉴 · 요약 · 결재 표 · PDF 원본 보기) */
+#admin-main{background:#F5F5F2!important}
+.adm-topbar{padding:12px 24px;box-shadow:none;border-bottom:1px solid var(--bm-line)}
+.adm-topbar-icon{background:#1F3D13;box-shadow:none;border-radius:6px;font-size:18px;width:38px;height:38px}
+.adm-topbar-title{font-size:18px;color:var(--bm-ink)}
+.adm-topbar-sub{font-size:13px;color:#5A5650}
+.adm-topbar-user{color:var(--bm-g8);background:var(--bm-g50);border-color:#C5E2AB;font-size:14px}
+.adm-topbar-btn{font-size:14px;padding:8px 14px;border-radius:4px}
+.adm-sidebar{background:#1F3D13;color:#E2F0D5;border-right:0;width:232px;padding:16px 12px}
+.adm-sidebar-section{color:#C5E2AB;font-size:13px;letter-spacing:0;text-transform:none;padding:8px 12px 6px}
+.adm-sidebar-divider{background:rgba(255,255,255,.15)}
+.adm-nav-item{color:#E2F0D5;border-left:0;border-radius:6px;padding:10px 12px;font-size:15px;margin-bottom:2px}
+.adm-nav-item:hover{background:rgba(255,255,255,.08);color:#fff}
+.adm-nav-item.active{background:var(--bm-g6);color:#fff;font-weight:800}
+.adm-nav-badge{background:#C23B32;font-size:13px;min-width:22px;border-radius:11px}
+.adm-nav-item.active .adm-nav-badge{background:#fff;color:#1F3D13}
+.adm-content{background:#F5F5F2;padding:24px 28px}
+.adm-card{border-radius:8px;border-color:var(--bm-line);box-shadow:none}
+.adm-card-title{color:var(--bm-ink);font-size:18px}
+.adm-kpi{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.adm-kpi-c{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:14px 18px;background:#fff;border:1px solid var(--bm-line);border-radius:8px;font:inherit;text-align:left;cursor:pointer}
+.adm-kpi-c:hover{border-color:var(--bm-g6)}
+.adm-kpi-c span{font-size:14px;font-weight:700;color:#5A5650}
+.adm-kpi-c b{font-size:28px;font-weight:800;color:var(--bm-ink);line-height:1.2}
+.adm-kpi-c b small{font-size:15px;color:#5A5650}
+.adm-kpi-c em{font-style:normal;font-size:13px;color:#5A5650}
+.adm-kpi-c.hot{border-color:#B9CBE4}.adm-kpi-c.hot b{color:#2B4C7E}
+.adm-kpi-c.bad{border-color:#F1C4BE}.adm-kpi-c.bad b{color:#A3302A}
+.apv-st{display:inline-block;padding:3px 8px;border-radius:2px;font-size:12px;font-weight:800;white-space:nowrap}
+.apv-st.ok{background:#E2F0D5;color:var(--bm-g8)}.apv-st.wait{background:#E4ECF5;color:#2B4C7E}.apv-st.rj{background:#FBE5E2;color:#A3302A}
+.apv-acts{display:inline-flex;gap:6px}
+#apv-btn-approve{background:var(--bm-g6)!important;border-radius:4px!important;font-size:14px!important;padding:8px 16px!important}
+.apv-btn-rj{padding:8px 16px;background:#fff;color:#A3302A;border:1px solid #F1C4BE;border-radius:4px;font-size:14px;font-weight:700;cursor:pointer}
+.apv-btn-rj:hover{background:#FBE5E2}
+#apv-list .apv-row:hover{background:#F2F8EC!important}
+#apv-list .apv-row.on{background:#E2F0D5!important;box-shadow:inset 0 0 0 2px var(--bm-g6)}
+.apv-v{position:fixed;top:var(--bm-top);right:0;bottom:var(--bm-bot);width:min(560px,100vw);z-index:70;background:#fff;border-left:1px solid var(--bm-line);box-shadow:-8px 0 24px rgba(0,0,0,.12);display:flex;flex-direction:column}
+.apv-v-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:14px 16px;border-bottom:1px solid var(--bm-line)}
+.apv-v-hd b{display:block;font-size:16px;color:var(--bm-ink)}.apv-v-hd span{font-size:14px;color:#5A5650}
+.apv-v-x{width:36px;height:36px;border:1px solid var(--bm-line);border-radius:4px;background:#fff;font-size:16px;cursor:pointer;flex:none}
+.apv-v-bar{display:flex;gap:6px;padding:8px 10px;background:#45423D}
+.apv-v-bar button{min-height:34px;padding:0 12px;border:0;border-radius:4px;background:rgba(255,255,255,.14);color:#fff;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.apv-v-bar button:hover{background:rgba(255,255,255,.24)}.apv-v-bar button:disabled{opacity:.45;cursor:default}
+.apv-v-body{flex:1;min-height:0;background:#77736C;display:flex}
+.apv-v-body iframe{flex:1;width:100%;height:100%;border:0;background:#fff}
+.apv-v-msg{margin:auto;padding:24px;text-align:center;color:#fff;font-size:15px;line-height:1.7}
+.apv-v-msg .apv-v-b{margin-top:10px;padding:0 16px}
+.apv-v-ft{padding:12px 16px;border-top:1px solid #ECEBE7;display:flex;flex-direction:column;gap:8px}
+.apv-v-st{font-size:14px;font-weight:700;padding:8px 12px;border-radius:4px}.apv-v-st small{font-weight:600;margin-left:6px}
+.apv-v-st.ok{background:#E2F0D5;color:var(--bm-g8)}.apv-v-st.rj{background:#FBE5E2;color:#A3302A}
+.apv-v-ac{display:flex;gap:8px}
+.apv-v-b{flex:1;min-height:46px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:15px;font-weight:700;color:var(--bm-ink);cursor:pointer}
+.apv-v-b.p{flex:2;background:var(--bm-g6);border-color:var(--bm-g6);color:#fff}
+@media(min-width:1500px){body.apv-vopen #adm-pane-apv{margin-right:560px}}
+.dv-card.bad{border-color:#F1C4BE}.dv-card.bad b{color:#A3302A}
+.dv-rj{margin-top:4px;font-size:13px;color:#A3302A;font-weight:600}
+.dv-btn.p{background:var(--bm-g6);border-color:var(--bm-g6);color:#fff}
+@media(max-width:1180px){.adm-kpi{grid-template-columns:1fr 1fr}}
+@media(max-width:768px){
+  .adm-sidebar{width:100%;padding:6px 8px}
+  .adm-nav-item{border-radius:4px;font-size:14px}
+  .adm-content{padding:12px}
+  .adm-kpi{gap:8px}.adm-kpi-c{padding:10px 12px}.adm-kpi-c b{font-size:22px}
 }
 @media(max-width:1600px){
   #sync-info,#slbl{display:none}
@@ -1799,6 +1867,7 @@ b.hm-f{font-weight:700}
        
         <!-- ── 📌 결재 관리 pane (기본 활성) ── -->
         <section class="adm-pane active" id="adm-pane-apv">
+<div class="adm-kpi" id="adm-kpi"></div>
 <div style="background:transparent;padding:0">
 
   <!-- 헤더 -->
@@ -1850,7 +1919,7 @@ b.hm-f{font-weight:700}
                   <div class="fg" style="margin:0">
                     <label class="fl">결재상태</label>
                     <select class="fc" id="apv-status" onchange="handleTabAction('apv','apply')">
-                      <option value="">전체</option><option value="pending">⏳ 결재대기</option><option value="approved">✅ 결재완료</option>
+                      <option value="">전체</option><option value="pending">결재대기</option><option value="rejected">반려</option><option value="approved">결재완료</option>
                     </select>
                   </div>
                   <div style="display:flex;gap:6px;align-items:flex-end">
@@ -1880,13 +1949,15 @@ b.hm-f{font-weight:700}
                   <label style="cursor:pointer"><input type="checkbox" id="apv-check-all" onchange="apvToggleAll(this.checked)" style="margin-right:5px"> 전체 선택</label>
                   <span style="margin-left:14px">선택: <b id="apv-sel-count" style="color:#1c3557">0</b>건 / 결재대기: <b id="apv-pending-count" style="color:#f59e0b">0</b>건 / 완료: <b id="apv-done-count" style="color:#16a34a">0</b>건</span>
                 </div>
-                <button onclick="apvBatchApprove()" id="apv-btn-approve" style="padding:7px 16px;background:#1c3557;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">✅ 선택 일지 결재</button>
+                <span class="apv-acts"><button onclick="apvBatchReject()" id="apv-btn-reject" class="apv-btn-rj">선택 반려</button>
+                <button onclick="apvBatchApprove()" id="apv-btn-approve" style="padding:7px 16px;background:#1c3557;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">✅ 선택 일지 결재</button></span>
                 <button onclick="apvBatchDownload()" id="apv-btn-download" style="padding:7px 16px;background:#0ea5e9;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;margin-left:6px">📥 개별 PDF 다운로드</button>
 <button onclick="apvMergeDownload()" id="apv-btn-merge" style="padding:7px 16px;background:#10b981;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;margin-left:6px">📚 전체 PDF 병합 다운로드</button>
               </div>
 
     <!-- 일지 목록 -->
   <div style="background:#fff;border-radius:10px;border:1px solid #e2e8f0;overflow:hidden">
+    <div style="padding:8px 14px;font-size:14px;color:#5A5650;border-bottom:1px solid #ECEBE7">줄을 누르면 오른쪽에 제출된 PDF 원본이 열립니다</div>
     <div id="apv-list" style="max-height:calc(100vh - 320px);overflow-y:auto"></div>
   </div>
 </div>
@@ -3028,13 +3099,16 @@ b.hm-f{font-weight:700}
       .map(function(x){
         var r = x.r;
         var k = (r.submitted || '') + '|' + (r.dateStart || '') + '|' + (r.type || '');
-        return '<tr data-ap="' + (r.approved ? 1 : 0) + '"><td style="' + TD + ';white-space:nowrap">' + esc(r.type) + '</td>' +
+        var rj = r.rejected && !r.approved;
+        return '<tr data-ap="' + (r.approved ? 1 : (rj ? 'r' : 0)) + '"><td style="' + TD + ';white-space:nowrap">' + esc(r.type) + '</td>' +
           '<td style="' + TD + ';white-space:nowrap;font-weight:700">' + esc(r.name) + '</td>' +
           '<td style="' + TD + ';white-space:nowrap">' + esc(r.joinDate || '') + '</td>' +
           '<td style="' + TD + ';white-space:nowrap">' + esc(x.date) + '</td>' +
           '<td style="' + TD + '">' + esc(String(r.chem || '').slice(0, 60)) + '</td>' +
-          '<td style="' + TD + ';white-space:nowrap"><span class="hm-tg ' + (r.approved ? 'ok">결재완료' : 'wait">결재대기') + '</span></td>' +
-          '<td style="' + TD + '"><button class="dv-btn" data-edu="' + esc(k) + '">보기</button></td></tr>';
+          '<td style="' + TD + '">' + (rj ? '<span class="hm-tg bad">반려</span><div class="dv-rj">사유: ' + esc(r.rejectReason || '-') + '</div>'
+                                          : '<span class="hm-tg ' + (r.approved ? 'ok">결재완료' : 'wait">결재대기') + '</span>') + '</td>' +
+          '<td style="' + TD + ';white-space:nowrap"><button class="dv-btn" data-edu="' + esc(k) + '">보기</button>' +
+            (rj ? ' <button class="dv-btn p" data-redo="1">다시 작성</button>' : '') + '</td></tr>';
       });
   }
   // 관리자 모드와 같은 미리보기: 저장된 기록(서명·사진 포함)으로 일지를 그림, 옛 일지는 원본 PDF
@@ -3103,13 +3177,15 @@ b.hm-f{font-weight:700}
     var fail = '<div class="dv-empty err">불러오지 못했습니다. 잠시 후 [새로고침]을 눌러 주세요.</div>';
     var e = res[0] ? eduRows(res[0]) : null, p = res[1] ? ppeRows(res[1]) : null, c = res[2] ? chemRows(res[2]) : null;
     var wait = e ? e.filter(function(h){ return h.indexOf('data-ap="0"') >= 0; }).length : 0;
-    var done = e ? e.length - wait : 0;
+    var rjN = e ? e.filter(function(h){ return h.indexOf('data-ap="r"') >= 0; }).length : 0;
+    var done = e ? e.length - wait - rjN : 0;
     var sec = function(key, title, n, unit, inner){
       return '<section class="dv-sec" data-sec="' + key + '"><h3>' + title + (n == null ? '' : ' <small>' + n + unit + '</small>') + '</h3>' + inner + '</section>';
     };
     var tab = function(key, label, n){ return '<button type="button" class="dv-tab' + (dvTab === key ? ' on' : '') + '" data-tab="' + key + '">' + label + (n == null ? '' : '<small>' + n + '</small>') + '</button>'; };
     body.innerHTML =
       '<div class="dv-sum">' +
+        '<div class="dv-card' + (rjN ? ' bad' : '') + '"><span class="hm-tg bad">처리 필요</span><b>' + (e ? rjN + '<small>명</small>' : '-') + '</b><em>반려 · 사유 확인 후 다시 작성</em></div>' +
         '<div class="dv-card' + (wait ? ' wait' : '') + '"><span class="hm-tg wait">결재 대기</span><b>' + (e ? wait + '<small>명</small>' : '-') + '</b><em>교육일지 · 보건관리자 결재 중</em></div>' +
         '<div class="dv-card"><span class="hm-tg ok">결재 완료</span><b>' + (e ? done + '<small>명</small>' : '-') + '</b><em>교육일지 이수자</em></div>' +
         '<div class="dv-card"><span class="hm-tg">보호구 · 보고서</span><b>' + (p ? p.length : '-') + '<small>건</small> · ' + (c ? c.length : '-') + '<small>건</small></b><em>지급수령증 · 화학물질 보고서</em></div>' +
@@ -3139,6 +3215,7 @@ b.hm-f{font-weight:700}
       });
     };
     body.querySelectorAll('[data-edu]').forEach(function(b){ b.onclick = function(){ previewEdu(b.getAttribute('data-edu')); }; });
+    body.querySelectorAll('[data-redo]').forEach(function(b){ b.onclick = function(){ goTab((window.BMHOME && BMHOME.eduTab) ? BMHOME.eduTab() : 'edu2'); }; });
     // 보호구·화학물질: 관리자 모드의 미리보기 함수를 그대로 사용 (그 함수가 읽는 '화면 목록'에 이 기록만 넣어 호출)
     body.querySelectorAll('[data-ppe]').forEach(function(b){ b.onclick = function(){
       window._ppeCurrentFiltered = [ppeShown[+b.getAttribute('data-ppe')]]; viewPpeRecord(0); }; });
@@ -3302,7 +3379,11 @@ b.hm-f{font-weight:700}
       var d = await readGitHubJSON('records/edu_records.json');
       var list = Array.isArray(d.data) ? d.data : ((d.data && d.data.records) || []);
       try{ if(typeof BM !== 'undefined' && BM.filterTombstoned) list = BM.filterTombstoned(list, 'edu'); }catch(_){}
-      var wait = list.filter(function(x){ return !x.approved && (!x.dept || x.dept === s.dept); }).length;
+      var mine = list.filter(function(x){ return !x.approved && (!x.dept || x.dept === s.dept); });
+      var rj = mine.filter(function(x){ return x.rejected; });
+      var wait = mine.length - rj.length;
+      if(rj.length) rows.unshift(row('반려', 'bad', eduName() + ' 다시 작성 · ' + esc(rj.slice(0, 3).map(function(x){ return x.name; }).join(', ')) + (rj.length > 3 ? ' 외 ' + (rj.length - 3) + '명' : ''),
+        '사유: ' + esc(rj[0].rejectReason || '-'), '다시 작성', eduTab()));
       if(wait) rows.push(row('결재 대기', 'wait', '교육일지 ' + wait + '명', '보건관리자 결재 중', '보기', 'deptview'));
     }catch(_){}
     if(my !== todoSeq) return;
@@ -7139,6 +7220,7 @@ function apvLoadAndRender(){
         approved: !!r.approved,
         approvedAt: r.approvedAt || '',
         approverName: r.approverName || '',
+        rejected: false, rejectReason: '', rejectedAt: '', rejectedBy: '',   // v19.5 반려
         isArchive: apvState.archiveMode  // ★ 아카이브 모드에서 로드된 그룹 표시
       });
     }
@@ -7166,7 +7248,14 @@ function apvLoadAndRender(){
       g.approvedAt = r.approvedAt || g.approvedAt;
       g.approverName = r.approverName || g.approverName;
     }
+    if(r.rejected) {
+      g.rejected = true;
+      g.rejectReason = r.rejectReason || g.rejectReason;
+      g.rejectedAt = r.rejectedAt || g.rejectedAt;
+      g.rejectedBy = r.rejectedBy || g.rejectedBy;
+    }
   });
+  groupMap.forEach(g => { if(g.approved) g.rejected = false; });   // 결재되면 반려 해제
 
   apvState.groups = Array.from(groupMap.values()).sort((a,b)=>{
     return (b.dateStart||'').localeCompare(a.dateStart||'');
@@ -7211,16 +7300,18 @@ function apvRender(){
     if(typeFlt  && !((g.type||'').includes(typeFlt) || (typeFlt==='MSDS교육' && (g.type||'').includes('MSDS')))) return false;
     if(deptFlt  && !(g.dept||'').toLowerCase().includes(deptFlt)) return false;
     if(nameFlt  && !g.members.some(m => (m.name||'').includes(nameFlt))) return false;  // ★ 이름 부분일치
-    if(statFlt==='pending'  && g.approved)  return false;
+    if(statFlt==='pending'  && (g.approved || g.rejected))  return false;
+    if(statFlt==='rejected' && !g.rejected) return false;
     if(statFlt==='approved' && !g.approved) return false;
     return true;
   });
 
   // 카운트 갱신
-  const pending = apvState.groups.filter(g=>!g.approved).length;
+  const pending = apvState.groups.filter(g=>!g.approved && !g.rejected).length;
   const done    = apvState.groups.filter(g=> g.approved).length;
   document.getElementById('apv-pending-count').textContent = pending;
   document.getElementById('apv-done-count').textContent    = done;
+  apvKpi();
 
   // 목록 렌더링
   const list = document.getElementById('apv-list');
@@ -7262,8 +7353,8 @@ function apvRender(){
     const typeShort = isMSDS ? 'MSDS' : '특별교육';
     const typeColor = isMSDS ? '#92400e' : '#1e40af';
     const typeBg    = isMSDS ? '#fef3c7' : '#dbeafe';
-    const sideBar   = g.approved ? '#16a34a' : '#f59e0b';
-    const rowBg     = isSelected ? '#eff6ff' : (idx%2===0 ? '#fff' : '#fafbfc');
+    const sideBar   = g.approved ? '#16a34a' : (g.rejected ? '#C23B32' : '#f59e0b');
+    const rowBg     = apvViewKey === g.groupKey ? '#E2F0D5' : (isSelected ? '#F2F8EC' : (idx%2===0 ? '#fff' : '#fafbfc'));
     const memberStr = g.members.slice(0,3).map(m=>m.name).join(', ') + (g.members.length>3?` 외 ${g.members.length-3}명`:'');
     const sigCount = g.members.filter(m=>(m.signed||'').includes('서명완료')).length;
     const chemShort = (g.chem||'-').length > 30 ? (g.chem||'').slice(0,28)+'…' : (g.chem||'-');
@@ -7278,12 +7369,12 @@ function apvRender(){
           <button onclick="apvDownloadPdf('${g.groupKey}')" style="padding:3px 7px;background:#1c3557;color:#fff;border:none;border-radius:4px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap" title="결재 도장 합성 PDF 다운로드">📥</button>
         </div>`
       : `<div style="display:flex;align-items:center;gap:4px;justify-content:flex-end;min-width:200px">
-          <span style="font-size:10.5px;color:#94a3b8">결재대기</span>
+          ${g.rejected ? '<span style="font-size:10.5px;color:#A3302A;font-weight:700">반려</span>' : '<span style="font-size:10.5px;color:#94a3b8">결재대기</span>'}
           <button onclick="viewApvRecord('${g.groupKey}')" style="padding:3px 7px;background:#fff;color:#0891b2;border:1px solid #0891b2;border-radius:4px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap" title="원본 PDF 새 창에서 보기">👁</button>
           <button onclick="apvDownloadPdf('${g.groupKey}')" style="padding:3px 7px;background:#fff;color:#1c3557;border:1px solid #1c3557;border-radius:4px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap" title="원본 PDF 다운로드">📥</button>
         </div>`;
 
-    return `<div title="참석자: ${memberStr}" style="display:grid;grid-template-columns:28px 90px minmax(90px,1fr) 130px 60px 70px minmax(150px,1.4fr) 80px auto;gap:10px;align-items:center;padding:8px 14px 8px 18px;background:${rowBg};border-bottom:1px solid #f1f5f9;border-left:4px solid ${sideBar};font-size:12px;transition:background 0.1s">
+    return `<div title="참석자: ${memberStr}" class="apv-row" data-key="${g.groupKey}" onclick="apvRowClick(event,'${g.groupKey}')" style="display:grid;grid-template-columns:28px 90px minmax(90px,1fr) 130px 60px 70px minmax(150px,1.4fr) 80px auto;gap:10px;align-items:center;padding:8px 14px 8px 18px;background:${rowBg};border-bottom:1px solid #f1f5f9;border-left:4px solid ${sideBar};font-size:12px;transition:background 0.1s;cursor:pointer">
       <input type="checkbox" ${isSelected?'checked':''} 
              onchange="apvToggle('${g.groupKey}', this.checked)"
              title="${g.approved?'결재 완료됨 — 영구 삭제용으로만 선택 가능':'선택하여 결재 또는 삭제'}"
@@ -7294,10 +7385,7 @@ function apvRender(){
       <span style="text-align:center;color:#1c3557;font-weight:600">${g.members.length}/${sigCount}</span>
       <span style="text-align:center;color:#475569;white-space:nowrap">${g.totalHours||g.time||'-'}</span>
       <span style="color:#475569;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${g.chem||''}">${chemShort}</span>
-      <span style="text-align:center">${g.approved 
-        ? `<span style="background:#dcfce7;color:#15803d;padding:3px 8px;border-radius:9px;font-size:10.5px;font-weight:700;white-space:nowrap">✅ 완료</span>`
-        : `<span style="background:#fef3c7;color:#92400e;padding:3px 8px;border-radius:9px;font-size:10.5px;font-weight:700;white-space:nowrap">⏳ 대기</span>`
-      }</span>
+      <span style="text-align:center">${apvStatusChip(g)}</span>
       ${apvCell}
     </div>`;
   }).join('');
@@ -7913,7 +8001,9 @@ async function apvSyncApprovalsFromGitHub(){
 
     // ★ recordId 기준 결재 정보 맵 생성
     const apvMap = new Map();
+    const rjMap = new Map();   // v19.5: 반려 정보
     ghRecords.forEach(r => {
+      if(r.recordId && r.rejected && !r.approved) rjMap.set(r.recordId, { rejected: true, rejectReason: r.rejectReason || '', rejectedAt: r.rejectedAt || '', rejectedBy: r.rejectedBy || '' });
       if(r.recordId && r.approved){
         apvMap.set(r.recordId, {
           approved: true,
@@ -7935,6 +8025,10 @@ async function apvSyncApprovalsFromGitHub(){
         r.approved = apv.approved;
         r.approvedAt = apv.approvedAt;
         r.approverName = apv.approverName;
+        merged++;
+      }
+      if(r.recordId && rjMap.has(r.recordId) && !r.approved && !r.rejected){
+        Object.assign(r, rjMap.get(r.recordId));
         merged++;
       }
     });
@@ -7962,8 +8056,8 @@ function apvRenderMobile(filtered){
     const typeShort = isMSDS ? 'MSDS' : '특별교육';
     const typeColor = isMSDS ? '#92400e' : '#1e40af';
     const typeBg    = isMSDS ? '#fef3c7' : '#dbeafe';
-    const sideBar   = g.approved ? '#16a34a' : '#f59e0b';
-    const cardBg    = isSelected ? '#eff6ff' : '#fff';
+    const sideBar   = g.approved ? '#16a34a' : (g.rejected ? '#C23B32' : '#f59e0b');
+    const cardBg    = isSelected ? '#F2F8EC' : '#fff';
     const memberStr = g.members.slice(0,2).map(m=>m.name).join(', ') + (g.members.length>2?` 외 ${g.members.length-2}명`:'');
     const sigCount = g.members.filter(m=>(m.signed||'').includes('서명완료')).length;
     const chemShort = (g.chem||'-').length > 25 ? (g.chem||'').slice(0,23)+'…' : (g.chem||'-');
@@ -7986,7 +8080,7 @@ function apvRenderMobile(filtered){
           : ''
         );
 
-    return `<div style="background:${cardBg};border:1px solid #e2e8f0;border-left:4px solid ${sideBar};border-radius:8px;margin:8px;padding:10px 12px">
+    return `<div class="apv-row" data-key="${g.groupKey}" onclick="apvRowClick(event,'${g.groupKey}')" style="background:${cardBg};border:1px solid #e2e8f0;border-left:4px solid ${sideBar};border-radius:8px;margin:8px;padding:10px 12px;cursor:pointer">
       <!-- 1행: 체크박스 + 종류 + 상태 -->
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
         <input type="checkbox" ${isSelected?'checked':''} 
@@ -7995,9 +8089,7 @@ function apvRenderMobile(filtered){
                style="width:16px;height:16px;cursor:pointer;accent-color:${g.approved?'#dc2626':'#1c3557'};flex-shrink:0">
         <span style="font-size:10.5px;background:${typeBg};color:${typeColor};padding:3px 7px;border-radius:4px;font-weight:700;flex-shrink:0">${typeIcon} ${typeShort}</span>
         <div style="flex:1"></div>
-        ${g.approved
-          ? `<span style="background:#dcfce7;color:#15803d;padding:3px 8px;border-radius:9px;font-size:10.5px;font-weight:700">✅ 완료</span>`
-          : `<span style="background:#fef3c7;color:#92400e;padding:3px 8px;border-radius:9px;font-size:10.5px;font-weight:700">⏳ 대기</span>`}
+        ${apvStatusChip(g)}
       </div>
 
       <!-- 2행: 부서 + 교육일 (큰 글씨) -->
@@ -8213,6 +8305,126 @@ function apvConfirmDelete(groups, recordCount){
 }
 
 /* ── 일괄 결재 + PDF 생성 + 다운로드 ── */
+/* ════════════════════════════════════════════════════════
+   ★ v19.5: 반려 · PDF 원본 보기 · 결재 요약 (최종 시안 A-8)
+   - 반려: 사유를 적어 기록에 rejected · rejectReason 저장 → 부서현황 · 홈에 '반려 · 다시 작성' 표시
+     (결재하면 반려 표시는 지워짐 · 서버 v19.5는 부서가 결재 · 반려 칸을 바꿀 수 없게 막음)
+   - 줄을 누르면 오른쪽에 저장된 PDF 원본 (새 창으로 열기 · 내려받기 · 인쇄 · 반려 · 이 문서 결재)
+   ════════════════════════════════════════════════════════ */
+let apvViewKey = '', apvViewUrl = '';
+function apvEsc(v){ return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function apvStatusChip(g){
+  if(g.approved) return '<span class="apv-st ok">결재완료</span>';
+  if(g.rejected) return '<span class="apv-st rj" title="반려 사유: '+apvEsc(g.rejectReason)+'">반려</span>';
+  return '<span class="apv-st wait">결재대기</span>';
+}
+function apvKpi(){
+  const el = document.getElementById('adm-kpi');
+  if(!el) return;
+  const G = apvState.groups || [];
+  const ym = new Date(Date.now()+9*3600e3).toISOString().slice(0,7);
+  const wait = G.filter(g=>!g.approved && !g.rejected);
+  const rj = G.filter(g=>g.rejected);
+  const month = G.filter(g=>g.approved && (g.approvedAt||'').slice(0,7)===ym);
+  const people = wait.reduce((n,g)=>n+(g.members||[]).length,0);
+  const card = (label, n, unit, sub, cls, flt) => `<button type="button" class="adm-kpi-c ${cls||''}" onclick="apvKpiFilter('${flt}')"><span>${label}</span><b>${n}<small> ${unit}</small></b><em>${sub}</em></button>`;
+  el.innerHTML =
+    card('결재 대기', wait.length, '건', '대상자 '+people+'명', wait.length?'hot':'', 'pending') +
+    card('반려', rj.length, '건', '부서 다시 작성 대기', rj.length?'bad':'', 'rejected') +
+    card('이번 달 결재', month.length, '건', ym.replace('-','년 ')+'월', '', 'approved') +
+    card('전체 일지', G.length, '건', apvState.archiveMode?'옛 일지 포함':'이 PC 기록 기준', '', '');
+}
+function apvKpiFilter(v){
+  const sel = document.getElementById('apv-status');
+  if(sel){ sel.value = v; apvRender(); }
+}
+async function apvBatchReject(keys){
+  const ks = keys || [...apvState.selected];
+  if(!ks.length){ toast('⚠ 반려할 일지를 먼저 선택하세요','err'); return; }
+  const groups = apvState.groups.filter(g => ks.includes(g.groupKey) && !g.approved);
+  if(!groups.length){ toast('⚠ 결재완료 일지는 반려할 수 없습니다','err'); return; }
+  const reason = (prompt(groups.length+'건을 반려합니다.\n부서에 보여줄 반려 사유를 적어 주세요 (예: 교육 시간 누락)') || '').trim();
+  if(!reason){ toast('반려를 취소했습니다 (사유가 없음)','info'); return; }
+  const now = new Date().toISOString();
+  const by = (CFG.stampName && CFG.stampName.trim()) || CFG.apv1Name || '보건관리자';
+  const keySet = new Set(groups.map(g=>g.groupKey));
+  const mark = r => {
+    if(keySet.has(`${r.submitted}__${r.dept}__${r.dateStart}__${r.type}`) && !r.approved){
+      r.rejected = true; r.rejectReason = reason; r.rejectedAt = now; r.rejectedBy = by;
+    }
+  };
+  let records = [];
+  try{ records = JSON.parse(localStorage.getItem('bm_edu_records')||'[]'); }catch(e){}
+  records.forEach(mark);
+  if(apvState.archiveRecords) apvState.archiveRecords.forEach(mark);
+  localStorage.setItem('bm_edu_records', JSON.stringify(records));
+  if(CFG.ghToken && CFG.ghRepo){
+    try{
+      const dataToUpload = apvState.archiveMode && apvState.archiveRecords ? apvState.archiveRecords : records;
+      const dataURL = 'data:application/json;base64,'+btoa(unescape(encodeURIComponent(JSON.stringify(dataToUpload,null,2))));
+      await uploadFileToGitHub(dataURL, 'records/edu_records.json');
+    }catch(e){ console.warn('반려 동기화 실패:',e); toast('⚠ 서버 반영 실패 — [새로고침] 후 다시 시도하세요','err'); }
+  }
+  apvState.selected.clear();
+  const chkAll = document.getElementById('apv-check-all'); if(chkAll) chkAll.checked = false;
+  apvLoadAndRender();
+  if(apvViewKey && keySet.has(apvViewKey)) apvOpenViewer(apvViewKey);
+  toast(`↩ 반려 ${groups.length}건 — 부서현황 · 홈에 사유가 표시됩니다`,'ok');
+}
+function apvRowClick(ev, key){
+  if(ev.target.closest('input,button,a,label')) return;
+  apvOpenViewer(key);
+}
+function apvCloseViewer(){
+  const v = document.getElementById('apv-viewer');
+  if(v) v.remove();
+  if(apvViewUrl){ try{ URL.revokeObjectURL(apvViewUrl); }catch(_){} apvViewUrl = ''; }
+  apvViewKey = '';
+  document.body.classList.remove('apv-vopen');
+  document.querySelectorAll('#apv-list .apv-row.on').forEach(r=>r.classList.remove('on'));
+}
+async function apvOpenViewer(key){
+  const g = apvState.groups.find(x => x.groupKey === key);
+  if(!g){ toast('대상 없음','err'); return; }
+  if(apvViewUrl){ try{ URL.revokeObjectURL(apvViewUrl); }catch(_){} apvViewUrl = ''; }
+  apvViewKey = key;
+  document.querySelectorAll('#apv-list .apv-row').forEach(r=>r.classList.toggle('on', r.dataset.key===key));
+  let v = document.getElementById('apv-viewer');
+  if(!v){ v = document.createElement('aside'); v.id = 'apv-viewer'; v.className = 'apv-v'; v.setAttribute('aria-label','PDF 원본 보기'); document.body.appendChild(v); }
+  document.body.classList.add('apv-vopen');
+  const isMSDS = (g.type||'').includes('MSDS');
+  const title = `${apvEsc(g.dept)} · ${isMSDS?'MSDS 교육일지':'특별안전보건교육일지'}`;
+  const who = (g.members||[]).map(m=>m.name).filter(Boolean);
+  const ft = g.approved
+    ? `<div class="apv-v-st ok">결재완료 · ${apvEsc(g.approverName||'-')} · ${apvEsc((g.approvedAt||'').slice(0,10))}</div>`
+    : `${g.rejected?`<div class="apv-v-st rj">반려 · ${apvEsc(g.rejectReason)} <small>${apvEsc((g.rejectedAt||'').slice(0,10))}</small></div>`:''}
+       <div class="apv-v-ac"><button type="button" class="apv-v-b" data-v="reject">${g.rejected?'사유 고쳐 다시 반려':'반려'}</button><button type="button" class="apv-v-b p" data-v="approve">이 문서 결재</button></div>`;
+  v.innerHTML = `<div class="apv-v-hd"><div><b>PDF 원본 · ${title}</b><span>${apvEsc(g.dateStart)}${g.dateEnd&&g.dateEnd!==g.dateStart?' ~ '+apvEsc(g.dateEnd):''} · ${apvEsc(who.slice(0,3).join(', '))}${who.length>3?' 외 '+(who.length-3)+'명':''}</span></div><button type="button" class="apv-v-x" data-v="close" aria-label="닫기">✕</button></div>
+    <div class="apv-v-bar"><button type="button" data-v="open" disabled>새 창으로 열기</button><button type="button" data-v="down">내려받기</button><button type="button" data-v="print" disabled>인쇄</button></div>
+    <div class="apv-v-body" id="apv-v-body"><div class="apv-v-msg">PDF 원본 불러오는 중…</div></div>
+    <div class="apv-v-ft">${ft}</div>`;
+  const on = (name, fn) => { const b = v.querySelector(`[data-v="${name}"]`); if(b) b.onclick = fn; };
+  on('close', apvCloseViewer);
+  on('down', () => apvDownloadPdf(key));
+  on('approve', () => { apvState.selected = new Set([key]); apvBatchApprove().then(()=>{ if(apvViewKey===key) apvOpenViewer(key); }); });
+  on('reject', () => apvBatchReject([key]));
+  let bytes = null;
+  try{ bytes = await apvResolvePdfBytes(g); }catch(e){ console.warn('apvOpenViewer:', e); }
+  if(apvViewKey !== key) return;   // 그 사이 다른 줄을 누름
+  const body = document.getElementById('apv-v-body');
+  if(!bytes){
+    body.innerHTML = `<div class="apv-v-msg">저장된 PDF 원본을 찾지 못했습니다.<br><button type="button" class="apv-v-b" id="apv-v-data">기록으로 일지 화면 보기</button></div>`;
+    document.getElementById('apv-v-data').onclick = () => viewApvRecord(key);
+    return;
+  }
+  apvViewUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+  body.innerHTML = `<iframe id="apv-v-frame" title="PDF 원본" src="${apvViewUrl}"></iframe>`;
+  const ob = v.querySelector('[data-v="open"]'), pb = v.querySelector('[data-v="print"]');
+  ob.disabled = false; pb.disabled = false;
+  ob.onclick = () => window.open(apvViewUrl, '_blank');
+  pb.onclick = () => { try{ document.getElementById('apv-v-frame').contentWindow.print(); }catch(e){ window.open(apvViewUrl, '_blank'); } };
+}
+
 async function apvBatchApprove(){
   if(apvState.selected.size === 0){
     toast('⚠ 결재할 일지를 먼저 선택하세요','err');
@@ -8257,6 +8469,7 @@ async function apvBatchApprove(){
           r.approved = true;
           r.approvedAt = now;
           r.approverName = apvName;
+          delete r.rejected; delete r.rejectReason; delete r.rejectedAt; delete r.rejectedBy;
         }
       });
       if(apvState.archiveRecords){
@@ -8266,6 +8479,7 @@ async function apvBatchApprove(){
             r.approved = true;
             r.approvedAt = now;
             r.approverName = apvName;
+          delete r.rejected; delete r.rejectReason; delete r.rejectedAt; delete r.rejectedBy;
           }
         });
       }
@@ -13511,7 +13725,8 @@ function exportApvCSV(){
     if(typeFlt  && !((g.type||'').includes(typeFlt) || (typeFlt==='MSDS교육' && (g.type||'').includes('MSDS')))) return false;
     if(deptFlt  && !(g.dept||'').toLowerCase().includes(deptFlt)) return false;
     if(nameFlt  && !g.members.some(m => (m.name||'').includes(nameFlt))) return false;
-    if(statFlt==='pending'  && g.approved)  return false;
+    if(statFlt==='pending'  && (g.approved || g.rejected))  return false;
+    if(statFlt==='rejected' && !g.rejected) return false;
     if(statFlt==='approved' && !g.approved) return false;
     return true;
   });
@@ -13884,10 +14099,13 @@ function _admApvPendingCount(){
     const g = new Map();
     rows.forEach(r=>{
       const key = `${r.submitted}__${r.dept}__${r.dateStart}__${r.type}`;
-      g.set(key, (g.get(key)||false) || !!r.approved);   // 그룹 내 1명이라도 결재되면 그룹 결재됨 (apvLoadAndRender와 동일)
+      const o = g.get(key) || { ap: false, rj: false };
+      o.ap = o.ap || !!r.approved;   // 그룹 내 1명이라도 결재되면 그룹 결재됨 (apvLoadAndRender와 동일)
+      o.rj = o.rj || !!r.rejected;   // v19.5: 반려는 결재 대기에서 뺌
+      g.set(key, o);
     });
     let n = 0;
-    g.forEach(approved=>{ if(!approved) n++; });
+    g.forEach(o=>{ if(!o.ap && !o.rj) n++; });
     return n;
   }catch(e){ return 0; }
 }
@@ -13966,6 +14184,7 @@ function refreshAdmNavBadges(){
 }
 
 function admSwitchPane(name){
+  if(name !== 'apv' && typeof apvCloseViewer === 'function') apvCloseViewer();
   // nav-item active 토글
   document.querySelectorAll('.adm-nav-item').forEach(el=>{
     el.classList.toggle('active', el.dataset.pane===name);

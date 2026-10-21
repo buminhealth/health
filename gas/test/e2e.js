@@ -187,6 +187,13 @@ function check(name, cond, extra) {
     return (await readGitHubJSON('records/edu_records.json')).data;
   });
   check('부서 저장: 자기 부서 기록만 저장됨', w1.length === 1 && w1[0].dept === '61병동', w1);
+  const selfApv = await page.evaluate(async () => {
+    const cur = await readGitHubJSON('records/edu_records.json');
+    const list = cur.data.map(r => Object.assign({}, r, { approved: true, approverName: '부서가씀', rejected: true }));
+    await writeGitHubJSON('records/edu_records.json', list, cur.sha, 'test');
+    return (await readGitHubJSON('records/edu_records.json')).data;
+  });
+  check('서버: 부서는 결재 · 반려 칸을 바꿀 수 없음', selfApv.length === 1 && !selfApv[0].approved && !selfApv[0].approverName && !selfApv[0].rejected, selfApv);
 
   // 5. 큰 PDF 분할 업로드 (≈6MB base64 → 2조각)
   const big = await page.evaluate(async () => {
@@ -226,6 +233,47 @@ function check(name, cond, extra) {
     return (await res.json()).map(f => f.name);
   });
   check('폴더 목록 (GitHub 형식)', sameGit.includes('MSDS교육일지-61병동-김가나-2026-07-01.pdf'), sameGit);
+
+  // 6-1. v19.5 관리자: 결재 요약 · 반려 · PDF 원본 보기
+  const rj = await page.evaluate(async () => {
+    const cur = await readGitHubJSON('records/edu_records.json');
+    localStorage.setItem('bm_edu_records', JSON.stringify(cur.data.map(r => Object.assign({}, r, { pdfFileName: 'MSDS교육일지-61병동-김가나-2026-07-01.pdf', pdfYm: todayStr().slice(0, 7) }))));
+    apvLoadAndRender();
+    const key = apvState.groups[0].groupKey;
+    const kpi0 = document.getElementById('adm-kpi').textContent;
+    window.prompt = () => '교육 시간 누락';
+    await apvBatchReject([key]);
+    const srv = (await readGitHubJSON('records/edu_records.json')).data;
+    const g = apvState.groups.find(x => x.groupKey === key);
+    const chip = [...document.querySelectorAll('#apv-list .apv-row')].find(r => r.dataset.key === key).textContent;
+    const kpi1 = document.getElementById('adm-kpi').textContent;
+    document.getElementById('apv-status').value = 'pending'; apvRender();
+    const pendingRows = document.querySelectorAll('#apv-list .apv-row').length;
+    document.getElementById('apv-status').value = 'rejected'; apvRender();
+    const rjRows = document.querySelectorAll('#apv-list .apv-row').length;
+    document.getElementById('apv-status').value = ''; apvRender();
+    // 줄 누르면 PDF 원본 보기
+    document.querySelector('#apv-list .apv-row').click();
+    const t0 = Date.now();
+    while (Date.now() - t0 < 8000 && !document.querySelector('#apv-v-frame, #apv-v-data')) await new Promise(r => setTimeout(r, 100));
+    const viewer = { open: !!document.getElementById('apv-viewer'), frame: !!document.getElementById('apv-v-frame'),
+      btns: [...document.querySelectorAll('#apv-viewer .apv-v-bar button, #apv-viewer .apv-v-ac button')].map(b => b.textContent),
+      st: (document.querySelector('#apv-viewer .apv-v-st') || {}).textContent || '' };
+    apvCloseViewer();
+    // 시험 뒤 원래대로 (반려 지움)
+    const back = (await readGitHubJSON('records/edu_records.json'));
+    const clean = back.data.map(r => { const c = Object.assign({}, r); ['rejected', 'rejectReason', 'rejectedAt', 'rejectedBy'].forEach(f => delete c[f]); return c; });
+    await writeGitHubJSON('records/edu_records.json', clean, back.sha, 'test');
+    localStorage.setItem('bm_edu_records', JSON.stringify(clean));
+    return { kpi0, kpi1, srv: srv.map(r => [r.rejected, r.rejectReason]), g: [g.rejected, g.rejectReason], chip, pendingRows, rjRows, viewer, closed: !document.getElementById('apv-viewer') };
+  });
+  check('관리자: 결재 요약 4칸', /결재 대기/.test(rj.kpi0) && /반려/.test(rj.kpi0) && /이번 달 결재/.test(rj.kpi0), rj.kpi0);
+  check('반려: 사유와 함께 서버 기록에 저장', rj.srv.length === 1 && rj.srv[0][0] === true && rj.srv[0][1] === '교육 시간 누락', rj.srv);
+  check('반려: 목록 상태 · 필터', rj.g[0] === true && rj.chip.includes('반려') && rj.pendingRows === 0 && rj.rjRows === 1, rj);
+  check('반려: 요약에 반려 1건', /반려1 건/.test(rj.kpi1.replace(/\s+/g, ' ').replace('반려 1', '반려1')), rj.kpi1);
+  check('PDF 원본 보기: 줄 누르면 오른쪽에 열림 (새 창 · 내려받기 · 인쇄 · 반려 · 결재)', rj.viewer.open && rj.viewer.frame &&
+    ['새 창으로 열기', '내려받기', '인쇄'].every(t => rj.viewer.btns.includes(t)) && rj.viewer.btns.some(t => t.includes('반려')) && rj.viewer.btns.includes('이 문서 결재'), rj.viewer);
+  check('PDF 원본 보기: 닫기', rj.closed);
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
   const other = await page.evaluate(async () => {
@@ -407,7 +455,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('④ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v19.3'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v19.5'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -528,9 +576,34 @@ function check(name, cond, extra) {
     q.value = ''; q.oninput();
     return { sum, all, ppe, hidden, shown };
   });
-  check('부서현황: 요약 (결재 대기 1명 · 완료 0명)', dv5.sum[0] === '1명' && dv5.sum[1] === '0명', dv5.sum);
+  check('부서현황: 요약 (처리 필요 0 · 결재 대기 1명 · 완료 0명)', dv5.sum[0] === '0명' && dv5.sum[1] === '1명' && dv5.sum[2] === '0명', dv5.sum);
   check('부서현황: 종류 탭', dv5.all.join(',') === 'edu,ppe,chem' && dv5.ppe.join(',') === 'ppe', dv5);
   check('부서현황: 이름 검색', dv5.hidden === 0 && dv5.shown === 1, dv5);
+  const rjDept = await page.evaluate(async () => {
+    const orig = window.readGitHubJSON;
+    window.readGitHubJSON = async (path) => {
+      const r = await orig(path);
+      if (path === 'records/edu_records.json') r.data = (r.data || []).map(x => Object.assign({}, x, { rejected: true, rejectReason: '교육 시간 누락' }));
+      return r;
+    };
+    try{
+      await BMDEPT.render();
+      const dv = document.getElementById('dv-body').textContent;
+      const sum0 = document.querySelector('#dv-body .dv-card b').textContent;
+      const redo = !!document.querySelector('#dv-body [data-redo]');
+      goTab('home');
+      const t0 = Date.now();
+      while (Date.now() - t0 < 8000 && document.getElementById('hm-todo').textContent.includes('불러오는 중')) await new Promise(r => setTimeout(r, 100));
+      const home = document.getElementById('hm-todo').textContent;
+      return { dv: dv.includes('반려') && dv.includes('사유: 교육 시간 누락'), sum0, redo, home };
+    } finally {
+      window.readGitHubJSON = orig;
+      goTab('deptview');
+      await BMDEPT.render();
+    }
+  });
+  check('반려 → 부서현황: 처리 필요 · 사유 · 다시 작성', rjDept.dv && rjDept.sum0 === '1명' && rjDept.redo, rjDept);
+  check('반려 → 홈 할 일: 반려 · 다시 작성', rjDept.home.includes('반려') && rjDept.home.includes('다시 작성') && rjDept.home.includes('교육 시간 누락'), rjDept.home);
   check('부서 제출 현황: 다른 화면은 숨김', await page.evaluate(() => document.getElementById('pg-edu2').style.display === 'none' && document.getElementById('pg-deptview').style.display === 'block'));
   // 서명이 있는 기록 → 관리자 모드와 같은 데이터 미리보기
   await page.evaluate(async () => {
