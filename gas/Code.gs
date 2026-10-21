@@ -1623,7 +1623,10 @@ function staffOp_(req, s) {
     }
     case 'hr.fetch': {
       if (deny) return deny;
-      const r = hrFetchEmployees_(String(req.id || PROPS.getProperty('HR_ID') || ''), String(req.password || ''));
+      // 비밀번호를 비우면 메뉴 ④에서 저장한 자동 로그인 계정 사용 (수동 가져오기는 메일 없음)
+      const useSaved = !req.password;
+      const r = hrFetchEmployees_(useSaved ? (PROPS.getProperty('HR_ID') || '') : String(req.id || PROPS.getProperty('HR_ID') || ''),
+                                  useSaved ? (PROPS.getProperty('HR_PW') || '') : String(req.password));
       return { success: true, headers: r.headers, rows: r.rows };
     }
     case 'nh.list':   return requireLogin_(s) || nhList_(s);
