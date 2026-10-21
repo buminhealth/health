@@ -458,7 +458,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('④ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v19.8'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v19.9'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -656,6 +656,29 @@ function check(name, cond, extra) {
     return { ok: r.success, hc: document.querySelectorAll('#ai-review [data-k="hc"]')[0].value, memo: document.querySelectorAll('#ai-review [data-k="memo"]')[0].value, t: document.getElementById('ai-review').textContent };
   });
   check("개정 비교 화면: 비어 있는 특검은 기존 값 유지 (기존 판정 유지 표시)", keepUi.ok && keepUi.hc === "6개월" && /기존 판정 유지/.test(keepUi.t), [keepUi.hc, keepUi.memo]);
+  // 13-7. v19.9 교육이력대장 중복 정리
+  const led = g.sheets['교육이력대장'] || g.ctx.SpreadsheetApp.getActiveSpreadsheet().insertSheet('교육이력대장');
+  const ledBak = led.rows.slice();
+  const LH = ['순번', '제출일시', '교육구분', '교육부서', '취급물질', '교육시작일', '교육종료일', '교육일수', '총교육시간', '사번', '성명', '입사일', '서명여부'];
+  const L = (n, sub, type, dept, ds, no, nm, sig) => [n, sub, type, dept, 'x', ds, ds, '1', '1시간', no, nm, '', sig];
+  led.rows = [LH,
+    L(1, '2026-05-13T07:00Z', 'MSDS교육', '중환자실', '2026-05-11', '126030313', '배건우', '✓ 서명완료'),
+    L(2, '2026-05-14T07:00Z', 'MSDS교육', '중환자실', '2026-05-11', '126030313', '배건우', '✓ 서명완료'),
+    L(3, '2026-05-15T07:00Z', 'MSDS교육', '총무팀', '2026-05-14', '121042601', '장은선', '- 미서명'),
+    L(4, '2026-05-15T08:00Z', 'MSDS교육', '총무팀', '2026-05-14', '121042601', '장은선', '✓ 서명완료'),
+    L(5, '2026-05-16T07:00Z', 'MSDS교육', '응급실', '2026-06-02', '', '정예나', '✓ 서명완료'),
+    L(6, '2026-05-17T07:00Z', 'MSDS교육', '응급실', '2026-06-02', '', '정예나', '✓ 서명완료'),
+    L(7, '2026-05-18T07:00Z', '특별안전보건교육', '중환자실', '2026-05-11', '126030313', '배건우', '✓ 서명완료')];
+  const du = await page.evaluate(() => BMAUTH.post('edu.dupes', {}));
+  const keepRows = (du.groups || []).map(x => x.keep.row).join(','), rmRows = (du.groups || []).flatMap(x => x.remove.map(r => r.row)).join(',');
+  check('중복 정리: 같은 사람 · 구분 · 부서 · 기간 묶음 (사번 없으면 이름)', du.success && du.groups.length === 3 && du.removeCount === 3, du);
+  check('중복 정리: 서명완료 · 먼저 제출한 줄을 남김', keepRows === '2,5,6' && rmRows === '3,4,7', { keepRows, rmRows });
+  const dd = await page.evaluate(rows => BMAUTH.post('edu.dedupe', { rows }), [{ row: 3, sub: '2026-05-14T07:00Z', name: '배건우' }, { row: 4, sub: '2026-05-15T07:00Z', name: '장은선' }, { row: 2, sub: '2026-05-13T07:00Z', name: '배건우' }]);
+  check('중복 정리: 체크한 줄만 삭제 (남길 줄 · 틀린 값은 거부)', dd.success && dd.deleted === 2 && dd.skipped === 1 && led.rows.length === 6 && led.rows.filter(r => r[10] === '배건우').length === 2, { dd, n: led.rows.length });
+  await page.evaluate(() => { admSwitchPane('edu'); return BMEDU.dupes(); });
+  check('관리자 화면: 교육이력대장 중복 정리 표시', /교육이력대장 중복 1묶음/.test(await page.textContent('#edu-dup-box')));
+  led.rows = ledBak;
+
   // 메모1 · 메모2 → MSDS 목록 데이터, 부서장 시트
   ch.rows[0][8] = '메모1'; ch.rows[0][9] = '메모2';
   const mi = ch.rows.findIndex(r => r[0] === '메탄올A');
