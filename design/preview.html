@@ -123,6 +123,45 @@ button{font-family:inherit;font-size:inherit;cursor:pointer}
 .ed-check li{padding:5px 0;color:var(--ink-700);font-size:15px}
 .ed-check li::first-letter{color:var(--green-700);font-weight:800}
 .ed-sum{border:2px solid var(--green-600)}
+/* 교육일지: 기존처럼 단계별 */
+.wz-bar{list-style:none;margin:18px 0 14px;padding:14px 18px;background:#fff;border:1px solid var(--line);border-radius:4px;display:flex;align-items:center;gap:8px}
+.wz-bar li{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--ink-500);white-space:nowrap;cursor:pointer;flex:1}
+.wz-bar li:not(:last-child)::after{content:"";flex:1;height:1px;background:var(--line);margin-left:6px;min-width:12px}
+.wz-bar i{font-style:normal;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--muted);font-size:14px;font-weight:800;flex:none}
+.wz-bar li.on{color:var(--ink-900)} .wz-bar li.on i{background:var(--green-600);color:#fff}
+.wz-bar li.done{color:var(--green-700)} .wz-bar li.done i{background:var(--green-50);color:var(--green-700)}
+.wz{display:none;padding:22px} .wz.on{display:block}
+.wz-grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 14px}
+.wz-two{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:24px}
+.wz-two .ed-chem li label{display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer}
+.wz-two .ed-chem input{width:18px;height:18px;flex:none;accent-color:var(--green-600)}
+.sig-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.sig{border:1px solid var(--line);border-radius:4px;padding:12px}
+.sig b{display:block;color:var(--ink-900)}
+.sig.head{border-color:var(--green-100);background:var(--green-50)}
+.pad-s{margin-top:8px;height:96px;border:2px dashed #C3CAD4;border-radius:4px;display:grid;place-items:center;color:var(--ink-500);font-weight:700;background:#fff}
+.pad-s.done{border-style:solid;border-color:var(--green-600);color:var(--green-700)}
+.sum-box{border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.sum-box div{display:grid;grid-template-columns:140px 1fr;border-top:1px solid var(--line)}
+.sum-box div:first-child{border-top:0}
+.sum-box dt{background:var(--green-50);color:var(--green-700);font-weight:700;padding:10px 14px}
+.sum-box dd{margin:0;padding:10px 14px;color:var(--ink-900)}
+.wz-nav{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:14px 0 40px}
+@media (max-width:760px){ .wz-bar{overflow-x:auto} .wz-bar li{flex:none} .wz-grid3,.wz-two{grid-template-columns:1fr} }
+.pv-note{background:#0F172A;color:#CBD5E1;border-radius:4px;padding:6px 12px;font-size:14px;margin-bottom:12px;display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pv-note select{font:inherit;font-size:14px;padding:2px 6px;border-radius:4px}
+.judge{display:flex;gap:14px;align-items:flex-start;margin-top:16px;padding:14px 18px;border-radius:4px;border:1px solid var(--line);background:#fff}
+.judge.sp{border-color:#F3C99A;background:var(--orange-50)}
+.judge.ms{border-color:var(--green-100);background:var(--green-50)}
+.judge .jt{font-size:17px;font-weight:800;color:var(--ink-900)}
+.judge .jr{margin-top:4px;font-size:15px;color:var(--ink-700)}
+.judge .jr b{color:var(--orange-700)}
+.judge .rule{margin-left:auto;font-size:14px;color:var(--ink-500);background:#fff;border:1px solid var(--line);border-radius:4px;padding:8px 10px;line-height:1.6;flex:none}
+.ed-chem .flags{display:flex;gap:4px;flex-wrap:wrap;margin-top:2px}
+.ed-chem .flags .badge{font-size:14px;padding:0 6px}
+.edu-type{display:block;margin-top:6px;font-size:14px;font-weight:700;text-align:center}
+.edu-type.sp{color:var(--orange-700)} .edu-type.ms{color:var(--green-700)}
+@media (max-width:1100px){ .judge{flex-direction:column} .judge .rule{margin-left:0} }
 @media (max-width:1180px){ .edu{grid-template-columns:1fr} .edu-side{position:static} .ed-grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
 /* 휴대폰 MSDS (PC 상세와 같은 내용, 비율만 조정) */
 .mob .dh{flex-direction:column;gap:12px;padding-bottom:14px}
@@ -395,7 +434,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
   <main class="wrap">
     <div class="quick" role="list" aria-label="빠른 메뉴">
       <a class="qm t-green" href="#" role="listitem" onclick="show('msds');return false"><span class="qi"><svg class="ico"><use href="#i-flask"/></svg></span><strong>MSDS 관리</strong><span>물질 목록 · 그림문자 · 응급조치</span><span class="go">물질 찾기</span></a>
-      <a class="qm t-teal" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-book"/></svg></span><strong>교육일지 작성</strong><span>특별안전보건 · MSDS 교육</span><span class="go">🔒 부서 로그인</span></a>
+      <a class="qm t-teal" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-book"/></svg></span><strong>교육일지 작성</strong><span>부서 물질에 맞게 종류 자동 선택</span><span class="go">🔒 부서 로그인</span></a>
       <a class="qm t-brown" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-shield"/></svg></span><strong>보호구 지급</strong><span>지급수령증 · 서명</span><span class="go">🔒 부서 로그인</span></a>
       <a class="qm t-olive" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-doc"/></svg></span><strong><span class="m-only" style="display:none">물질 보고</span><span class="pc-only">화학물질 보고서</span></strong><span>신규사용 · 사용중단</span><span class="go">🔒 부서 로그인</span></a>
       <a class="qm t-navy" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-gear"/></svg></span><strong><span class="m-only" style="display:none">관리자</span><span class="pc-only">관리자 모드</span></strong><span>결재 · 현황 · 직원정보</span><span class="go">🔒 관리자</span></a>
@@ -569,66 +608,71 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
 
 <!-- ═══════════ ④ 교육일지 작성 ═══════════ -->
 <section class="screen" id="s-edu" aria-label="교육일지 작성">
-  <header class="gnb"><div class="wrap" style="max-width:1440px"><a class="logo" href="#"><span class="logo-mark">B</span><span>MSDS 통합관리<small>부산부민병원 보건관리실</small></span></a><nav><a href="#">홈</a><a href="#">MSDS 관리</a><a href="#" aria-current="page">교육일지</a><a href="#">보호구 지급</a><a href="#">화학물질 보고서</a></nav><div class="user-chip"><span class="dot"></span>61병동</div></div></header>
-  <main class="wrap" style="padding-top:20px;max-width:1440px">
-    <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap">
-      <div><div class="cap">교육일지 › MSDS 교육일지</div><h1 class="h1" style="margin-top:2px">MSDS 교육일지 작성</h1></div>
-      <div class="steps" aria-label="진행 단계" style="margin:0">
-        <span class="step on">1 교육 정보 · 대상자</span><span class="step">2 서명</span><span class="step">3 확인 · 제출</span>
+  <header class="gnb"><div class="wrap" style="max-width:1440px"><a class="logo" href="#"><span class="logo-mark">B</span><span>MSDS 통합관리<small>부산부민병원 보건관리실</small></span></a><nav><a href="#">홈</a><a href="#">MSDS 관리</a><a href="#" aria-current="page">교육일지</a><a href="#">보호구 지급</a><a href="#">화학물질 보고서</a></nav><div class="user-chip"><span class="dot"></span><span id="edu-chip">61병동</span></div></div></header>
+  <main class="wrap" style="padding-top:20px;max-width:1100px">
+    <div class="pv-note">미리보기 전용 — 로그인 부서 바꿔 보기: <select id="edu-dept"></select> <span>(물질 데이터는 실제 앱 56종)</span></div>
+    <div class="cap" id="edu-crumb"></div>
+    <h1 class="h1" style="margin-top:2px" id="edu-title"></h1>
+    <div class="judge" id="edu-judge"></div>
+
+    <ol class="wz-bar" id="wz-bar">
+      <li data-n="1"><i>1</i>대상자 검색</li><li data-n="2"><i>2</i>취급물질 · 일정</li><li data-n="3"><i>3</i>교육내용</li><li data-n="4"><i>4</i>근로자 서명</li><li data-n="5"><i>5</i>확인 · 저장</li>
+    </ol>
+
+    <section class="card wz" data-n="1">
+      <h2 class="ed-h"><svg class="ico" style="width:22px;height:22px"><use href="#i-user"/></svg>교육 대상자 검색</h2>
+      <div class="wz-grid3">
+        <div class="field" style="grid-column:1/-1"><label>이름 검색</label><input placeholder="이름 검색 (979명 등록됨)"></div>
+        <div class="field"><label>교육 부서</label><input id="edu-dname" disabled style="background:var(--muted)"><span class="hint">로그인한 부서로 고정</span></div>
+        <div class="field"><label>입사일</label><input type="date"></div>
+        <div class="field" style="justify-content:flex-start"><label>&nbsp;</label><button class="btn btn-primary">+ 대상자 추가</button></div>
       </div>
-    </div>
-    <div class="edu">
-      <div class="edu-main">
-        <section class="card ed-card">
-          <h2 class="ed-h">교육 정보</h2>
-          <div class="ed-grid">
-            <div class="field"><label>교육 부서</label><input value="61병동" disabled style="background:var(--muted)"><span class="hint">로그인한 부서로 고정</span></div>
-            <div class="field"><label>교육일</label><input type="date" value="2026-10-21"></div>
-            <div class="field"><label>교육 시간</label><select><option>1시간</option><option>2시간</option></select></div>
-            <div class="field"><label>교육 실시자</label><input value="김수간호사"><span class="hint">부서 교육 담당자</span></div>
-          </div>
-        </section>
-        <section class="card ed-card">
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-            <h2 class="ed-h" style="margin:0">대상자 <span class="badge b-green">2명 선택</span></h2>
-            <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="ed-search"><svg class="ico" style="width:18px;height:18px"><use href="#i-search"/></svg><input placeholder="이름 · 사번"></label><button class="btn btn-secondary btn-sm">+ 직원 명단에서 추가</button></div>
-          </div>
-          <div style="overflow-x:auto;margin-top:12px"><table class="tbl" style="min-width:640px">
-            <tr><th style="width:44px"><input type="checkbox" aria-label="전체 선택"></th><th>이름</th><th>사번</th><th>직종</th><th>입사일</th><th>구분</th><th style="width:90px"></th></tr>
-            <tr><td><input type="checkbox" checked aria-label="선택"></td><td><b>최신입</b></td><td>126101801</td><td>간호사</td><td>2026-10-18</td><td><span class="badge b-red">신규 · 기한 10.21</span></td><td><button class="btn btn-danger btn-sm">빼기</button></td></tr>
-            <tr><td><input type="checkbox" checked aria-label="선택"></td><td><b>박간호</b></td><td>125030411</td><td>간호사</td><td>2025-03-04</td><td><span class="badge b-orange">물질 추가 교육</span></td><td><button class="btn btn-danger btn-sm">빼기</button></td></tr>
-            <tr><td><input type="checkbox" aria-label="선택"></td><td><b>김효성</b></td><td>124090102</td><td>간호조무사</td><td>2024-09-01</td><td><span class="badge b-gray">이수 2026-09-17</span></td><td></td></tr>
-            <tr><td><input type="checkbox" aria-label="선택"></td><td><b>조나리</b></td><td>126070101</td><td>간호사</td><td>2026-07-01</td><td><span class="badge b-gray">이수 2026-07-13</span></td><td></td></tr>
-          </table></div>
-          <p class="cap" style="margin:10px 0 0">61병동 직원 명단에서 자동으로 불러옵니다. 신규 입사자와 미이수자가 먼저 체크됩니다.</p>
-        </section>
-      </div>
-      <aside class="edu-side">
-        <section class="card ed-card">
-          <div style="display:flex;justify-content:space-between;align-items:center"><h2 class="ed-h" style="margin:0">교육 물질 <span class="badge b-green">3종</span></h2><button class="btn btn-secondary btn-sm">+ 추가</button></div>
-          <ul class="ed-chem">
-            <li><span class="gi"><svg><use href="#g-health"/></svg><svg><use href="#g-oxid"/></svg><svg><use href="#g-corr"/></svg></span><div><b>플라즈마 과산화수소</b><span class="cap">Renosem · 관리대상</span></div><button class="x" aria-label="빼기">✕</button></li>
-            <li><span class="gi"><svg><use href="#g-flame"/></svg><svg><use href="#g-excl"/></svg></span><div><b>95%_Ethyl_Alcohol</b><span class="cap">(주)강동그룹</span></div><button class="x" aria-label="빼기">✕</button></li>
-            <li><span class="gi"><svg><use href="#g-skull"/></svg><svg><use href="#g-corr"/></svg></span><div><b>Sodium Hydroxide</b><span class="cap">OCI 주식회사 · 관리대상</span></div><button class="x" aria-label="빼기">✕</button></li>
-          </ul>
-        </section>
-        <section class="card ed-card">
-          <h2 class="ed-h">교육 내용 <span class="cap" style="font-weight:600">MSDS 교육 항목</span></h2>
-          <ul class="ed-check">
-            <li>✓ 대상 화학물질의 명칭(제품명)</li><li>✓ 물리적 위험성 및 건강 유해성</li><li>✓ 취급상의 주의사항</li><li>✓ 적절한 보호구</li>
-            <li>✓ 응급조치 요령 및 사고 시 대처방법</li><li>✓ 물질안전보건자료 및 경고표지를 이해하는 방법</li>
-          </ul>
-          <p class="cap" style="margin:8px 0 0">고른 물질의 MSDS 내용이 교육일지에 자동으로 들어갑니다.</p>
-        </section>
-        <div class="card ed-card ed-sum">
-          <div class="cap">요약</div>
-          <div style="font-size:17px;font-weight:800;color:var(--ink-900);margin:2px 0 12px">대상자 2명 · 물질 3종 · 1시간</div>
-          <button class="btn btn-primary" style="width:100%">다음: 서명 받기</button>
-          <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:6px">취소</button>
-          <p class="cap" style="margin:8px 0 0;text-align:center">작성 중인 내용은 자동 저장됩니다</p>
+      <div style="overflow-x:auto;margin-top:6px"><table class="tbl" style="min-width:560px">
+        <tr><th style="width:60px">번호</th><th>성명</th><th>사번</th><th>입사일</th><th>구분</th><th style="width:70px"></th></tr>
+        <tr><td>1</td><td><b>최신입</b></td><td>126101801</td><td>2026-10-18</td><td><span class="badge b-red">신규 · 기한 10.21</span></td><td><button class="btn btn-danger btn-sm" aria-label="빼기">✕</button></td></tr>
+        <tr><td>2</td><td><b>박간호</b></td><td>125030411</td><td>2025-03-04</td><td><span class="badge b-orange">물질 추가 교육</span></td><td><button class="btn btn-danger btn-sm" aria-label="빼기">✕</button></td></tr>
+      </table></div>
+      <p class="cap" style="margin:10px 0 0">신규 입사자(메일 [확인하기]로 들어온 경우)는 자동으로 들어가 있습니다.</p>
+    </section>
+
+    <section class="card wz" data-n="2">
+      <h2 class="ed-h"><svg class="ico" style="width:22px;height:22px"><use href="#i-flask"/></svg>취급물질 · 일정</h2>
+      <div class="wz-two">
+        <div>
+          <div style="font-weight:700;margin-bottom:4px">교육 물질 <span class="badge b-green" id="edu-ncnt"></span></div>
+          <p class="cap" style="margin:0 0 4px">우리 부서 취급 물질 · 관리대상이 위에</p>
+          <ul class="ed-chem" id="edu-chems"></ul>
         </div>
-      </aside>
-    </div>
+        <div>
+          <div class="field"><label>교육일</label><input type="date" value="2026-10-21"></div>
+          <div class="field"><label>교육 시간</label><select id="edu-hours"></select><span class="hint" id="edu-hhint"></span></div>
+          <div class="field"><label>교육 실시자</label><input id="edu-head" disabled style="background:var(--muted)"><span class="hint">부서인증에 설정된 부서장 · 변경은 관리자</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card wz" data-n="3">
+      <h2 class="ed-h"><svg class="ico" style="width:22px;height:22px"><use href="#i-book"/></svg>교육내용</h2>
+      <ul class="ed-check" id="edu-items"></ul>
+      <p class="cap" style="margin:10px 0 0">2단계에서 고른 물질의 MSDS 내용(유해성 · 보호구 · 응급조치)이 교육일지에 자동으로 들어갑니다.</p>
+    </section>
+
+    <section class="card wz" data-n="4">
+      <h2 class="ed-h"><svg class="ico" style="width:22px;height:22px"><use href="#i-doc"/></svg>근로자 서명</h2>
+      <div class="sig-grid">
+        <div class="sig"><b>최신입</b><span class="cap">126101801</span><div class="pad-s done">서명 완료 ✓</div></div>
+        <div class="sig"><b>박간호</b><span class="cap">125030411</span><div class="pad-s">여기를 눌러 서명</div></div>
+        <div class="sig head"><b id="edu-head2"></b><span class="cap">교육 실시자</span><div class="pad-s">여기를 눌러 서명</div></div>
+      </div>
+    </section>
+
+    <section class="card wz" data-n="5">
+      <h2 class="ed-h"><svg class="ico" style="width:22px;height:22px"><use href="#i-check"/></svg>확인 · 저장</h2>
+      <div id="edu-sum" class="sum-box"></div>
+      <p class="cap" style="margin:10px 0 0">저장하면 PDF가 만들어지고 보건관리자 결재로 넘어갑니다.</p>
+    </section>
+
+    <div class="wz-nav"><button class="btn btn-secondary" id="wz-prev">← 이전</button><span class="cap">작성 중인 내용은 자동 저장됩니다</span><button class="btn btn-primary" id="wz-next">다음 →</button></div>
   </main>
 </section>
 
@@ -792,8 +836,8 @@ function msDetail(i, target){
   document.getElementById(target).innerHTML =
     '<div class="dh"><div><h2>' + esc(p.n) + '</h2><p class="s1">' + esc(p.m) + ' | <em>용도: ' + esc(p.u || '-') + '</em></p><p class="s2">취급부서: ' + esc(p.d.join(', ')) + '</p></div>' +
     '<div class="act">' + (p.pdf ? '<button class="btn btn-dark"><svg class="ico"><use href="#i-doc"/></svg>PDF 원본보기</button>' : '') +
-    '<button class="btn btn-secondary" onclick="show(\'pin\')"><svg class="ico"><use href="#i-book"/></svg>특별교육일지 작성</button>' +
-    '<button class="btn btn-primary" onclick="show(\'pin\')"><svg class="ico"><use href="#i-book"/></svg>MSDS 교육일지 작성</button></div></div>' +
+    '<button class="btn btn-primary" onclick="show(\'pin\')"><svg class="ico"><use href="#i-book"/></svg>교육일지 작성</button>' +
+    '<span class="edu-type ' + (t || sp ? 'sp' : 'ms') + '">' + (t || sp ? '이 물질: 특별안전보건교육 대상' : '이 물질: MSDS 교육 대상') + '</span></div></div>' +
     '<h3 class="st"><svg class="ico"><use href="#i-alert"/></svg>경고표지 및 관리대상</h3>' +
     '<div class="warn"><div class="picto">' + (icons || '<span class="cap">그림문자 없음</span>') + '</div><div class="mbs">' +
       '<div class="mb ' + (t ? 'yes' : 'no') + '"><span>관리대상물질</span><b>' + (t ? '해당' : '미해당') + '</b></div>' +
@@ -822,6 +866,63 @@ function mList(){
   document.getElementById('m-dept').innerHTML += Object.keys(depts).sort().map(function(d){ return '<option>' + esc(d) + '</option>'; }).join('');
   document.getElementById('m-dept').onchange = mList; document.getElementById('m-q').oninput = mList;
   mList(); msDetail(pl >= 0 ? pl : 0, 'm-detail');
+})();
+
+/* ═══ 교육일지 종류 자동 판정: 부서 취급 물질 중 관리대상 또는 특별관리대상이 하나라도 있으면 특별안전보건교육, 없으면 MSDS 교육 ═══ */
+var HEADS = { '수술실': '이수술 수간호사', '영양팀': '박영양 팀장', '진단검사의학실': '최진검 실장', '병리과': '정병리 실장', '시설관리팀': '한시설 팀장' };
+function eduRender(dept){
+  var list = CHEMS.filter(function(c){ return c.d.indexOf(dept) >= 0; });
+  var flag = function(c){ return truthy(c.tm) || truthy(c.sm); };
+  list.sort(function(a, b){ return (flag(b) ? 1 : 0) - (flag(a) ? 1 : 0); });
+  var tmN = list.filter(function(c){ return truthy(c.tm); }).length, smN = list.filter(function(c){ return truthy(c.sm); }).length;
+  var special = tmN + smN > 0;
+  var name = special ? '특별안전보건교육일지' : 'MSDS 교육일지';
+  document.getElementById('edu-crumb').textContent = '교육일지 › ' + name;
+  document.getElementById('edu-title').textContent = name + ' 작성';
+  document.getElementById('edu-dname').value = dept;
+  document.getElementById('edu-chip').textContent = dept;
+  document.getElementById('edu-head').value = HEADS[dept] || (dept + ' 부서장');
+  var flagged = list.filter(flag).map(function(c){ return c.n; });
+  var j = document.getElementById('edu-judge');
+  j.className = 'judge ' + (special ? 'sp' : 'ms');
+  j.innerHTML = '<svg class="ico" style="width:26px;height:26px;color:' + (special ? 'var(--orange-700)' : 'var(--green-700)') + ';flex:none"><use href="#' + (special ? 'i-alert' : 'i-book') + '"/></svg>' +
+    '<div><div class="jt">' + esc(dept) + ' 취급 물질 분석 → <span style="color:' + (special ? 'var(--orange-700)' : 'var(--green-700)') + '">' + name + '</span>로 작성합니다</div>' +
+    '<div class="jr">취급 물질 ' + list.length + '종 중 관리대상 <b>' + tmN + '종</b> · 특별관리대상 <b>' + smN + '종</b>' +
+    (special ? ' — ' + esc(flagged.slice(0, 3).join(', ')) + (flagged.length > 3 ? ' 외 ' + (flagged.length - 3) + '종' : '') : ' — 해당 물질 없음') + '</div></div>' +
+    '<div class="rule">판정 기준<br>관리대상 또는 특별관리대상 포함 → 특별안전보건교육<br>둘 다 없음 → MSDS 교육</div>';
+  var hours = special ? ['16시간 (최초 4시간 + 3개월 내 나머지)', '2시간 (일용·단기)', '추가 교육 (남은 시간)'] : ['1시간', '2시간'];
+  document.getElementById('edu-hours').innerHTML = hours.map(function(h){ return '<option>' + h + '</option>'; }).join('');
+  document.getElementById('edu-hhint').textContent = special ? '남은 시간·3개월 기한은 자동 추적' : '';
+  document.getElementById('edu-ncnt').textContent = list.length + '종';
+  document.getElementById('edu-chems').innerHTML = list.map(function(c){
+    return '<li><label><input type="checkbox"' + (flag(c) || !special ? ' checked' : '') + '><span class="gi">' + c.ic.slice(0, 4).map(function(l){ return '<svg><use href="#' + ghsOf(l) + '"/></svg>'; }).join('') + '</span><div><b>' + esc(c.n) + '</b>' +
+      '<span class="flags">' + (truthy(c.tm) ? '<span class="badge b-orange">관리대상</span>' : '') + (truthy(c.sm) ? '<span class="badge b-red">특별관리</span>' : '') +
+      (flag(c) ? '' : '<span class="cap">' + esc(c.m) + '</span>') + '</span></div></label></li>';
+  }).join('');
+  var items = special
+    ? ['취급물질의 성질 및 상태', '유해물질이 인체에 미치는 영향', '국소배기장치 및 안전설비', '안전작업방법 및 보호구 사용', '응급조치 요령 및 사고 시 대처방법', '그 밖에 안전·보건관리에 필요한 사항']
+    : ['대상 화학물질의 명칭(제품명)', '물리적 위험성 및 건강 유해성', '취급상의 주의사항', '적절한 보호구', '응급조치 요령 및 사고 시 대처방법', '물질안전보건자료 및 경고표지를 이해하는 방법'];
+  document.getElementById('edu-items').innerHTML = items.map(function(x){ return '<li>✓ ' + x + '</li>'; }).join('');
+  document.getElementById('edu-head2').textContent = document.getElementById('edu-head').value;
+  document.getElementById('edu-sum').innerHTML = [['교육 종류', name], ['교육 부서', dept], ['대상자', '최신입, 박간호 (2명)'], ['교육 물질', list.filter(flag).length + '종 (관리대상 포함)' ], ['교육일 · 시간', '2026-10-21 · ' + hours[0]], ['교육 실시자', document.getElementById('edu-head').value], ['서명', '근로자 1/2 · 실시자 0/1']]
+    .map(function(r){ return '<div><dt>' + r[0] + '</dt><dd>' + esc(r[1]) + '</dd></div>'; }).join('');
+}
+(function(){
+  var depts = {}; CHEMS.forEach(function(c){ c.d.forEach(function(d){ depts[d] = 1; }); });
+  var sel = document.getElementById('edu-dept');
+  sel.innerHTML = Object.keys(depts).sort().map(function(d){ return '<option' + (d === '수술실' ? ' selected' : '') + '>' + esc(d) + '</option>'; }).join('');
+  sel.onchange = function(){ eduRender(sel.value); };
+  eduRender('수술실');
+  var cur = 1;
+  function go(n){ cur = Math.max(1, Math.min(5, n));
+    document.querySelectorAll('#s-edu .wz').forEach(function(w){ w.classList.toggle('on', +w.dataset.n === cur); });
+    document.querySelectorAll('#wz-bar li').forEach(function(li){ var k = +li.dataset.n; li.className = k === cur ? 'on' : (k < cur ? 'done' : ''); });
+    document.getElementById('wz-prev').style.visibility = cur === 1 ? 'hidden' : 'visible';
+    document.getElementById('wz-next').textContent = cur === 5 ? '저장' : '다음 →'; }
+  document.querySelectorAll('#wz-bar li').forEach(function(li){ li.onclick = function(){ go(+li.dataset.n); }; });
+  document.getElementById('wz-prev').onclick = function(){ go(cur - 1); };
+  document.getElementById('wz-next').onclick = function(){ go(cur + 1); };
+  go(1);
 })();
 show('guest');
 </script>
