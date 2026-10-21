@@ -157,6 +157,24 @@ function check(name, cond, extra) {
   await page.evaluate(() => goTab('edu2'));
   const e2dept = await page.evaluate(() => [...document.getElementById('e2-dept').options].map(o => o.value));
   check('부서 로그인: 교육일지 부서 고정', JSON.stringify(e2dept) === '["61병동"]', e2dept);
+  const edu4 = await page.evaluate(() => {
+    e2DeptCh();
+    const vis = id => { const e = document.getElementById(id); return !!e && e.style.display !== 'none'; };
+    return {
+      head: BMAUTH.session().head,
+      instr: document.getElementById('e2-instr').value,
+      note: document.getElementById('e2-kind').textContent,
+      noteVis: vis('e2-kind'),
+      tabs: [vis('tab-edu1'), vis('tab-edu2')],
+      label: document.querySelector('#tab-edu2 .tbl').textContent,
+      redirect: (goTab('edu1'), [document.getElementById('pg-edu1').style.display, document.getElementById('pg-edu2').style.display]),
+    };
+  });
+  check('서버: 로그인 응답에 부서장 이름', edu4.head === '김부장', edu4.head);
+  check('교육 실시자 = 부서장 자동 입력', edu4.instr === '김부장 / 61병동 부서장', edu4.instr);
+  check('교육일지 위 종류 안내 (관리대상 없음 → MSDS 교육일지)', edu4.noteVis && edu4.note.includes('MSDS 교육일지로 작성') && edu4.note.includes('김부장'), edu4.note);
+  check('부서 로그인: 위쪽 메뉴 교육일지 하나', JSON.stringify(edu4.tabs) === '[false,true]' && edu4.label === '교육일지', edu4);
+  check('부서 로그인: 다른 일지로 가도 부서에 맞는 일지로', JSON.stringify(edu4.redirect) === '["none","block"]', edu4.redirect);
 
   // 4. 기록 저장 (자기 부서 + 다른 부서 섞어서 보냄)
   const w1 = await page.evaluate(async () => {
@@ -389,7 +407,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('④ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v18.7'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v19.3'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';

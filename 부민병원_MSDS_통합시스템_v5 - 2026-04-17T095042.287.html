@@ -10,8 +10,13 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v19.2 (2026-10-21)
+  부민병원 MSDS 통합시스템 v19.3 (2026-10-21)
 
+  ★★★ v19.3 (2026-10-21) — 리디자인 4단계 교육일지 · 보호구 · 보고서 작성 화면 (최종 시안 D):
+    - 화면 제목 · 단계 막대 · 큰 입력칸 · 큰 다음 버튼, 단계별 흐름은 그대로
+    - 부서 로그인: 위쪽 메뉴 '교육일지' 하나 (관리대상 · 특별관리 물질 있으면 특별안전보건교육일지, 없으면 MSDS 교육일지)
+      작성 화면 위에 어떤 일지로 쓰는지 안내, 신규입사 '예'도 부서에 맞는 일지로 이동
+    - 교육 실시자: 부서인증 시트에 '부서장' 열(이름)이 있으면 '이름 / 부서 부서장' 자동 입력 (서버 v19.3 필요)
   ★★★ v19.2 (2026-10-21) — 리디자인 3단계 홈 · 부서 로그인 창 (최종 시안 C):
     - 처음 화면을 홈으로: 큰 초록 타일 5개 + 할 일 + 공지 · 업데이트, 위쪽 메뉴 맨 앞에 '홈'
     - 로그인 전 타일 버튼 '부서 로그인', 로그인 후 '작성하기 · 보고하기'
@@ -790,6 +795,70 @@ b.hm-f{font-weight:700}
   #tab-admin{display:none}
   .bm-lg{padding-top:24px}
 }
+/* v19.3 — 작성 화면 (교육일지 · 보호구 · 보고서, 최종 시안 D) */
+#pg-edu1,#pg-edu2,#pg-ppe,#pg-chem{background:#F5F5F2}
+#pg-chem{min-height:calc(100vh - var(--bm-top) - var(--bm-bot))}
+#pg-edu1 .ew,#pg-edu2 .ew,.ppe-wrap,.chem-wrap{max-width:1000px;margin:0 auto;padding:24px 24px 8px;box-sizing:border-box}
+.ph{margin-bottom:16px}
+.ph.ph-row{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.ph .crumb{font-size:14px;color:#5A5650;margin-bottom:4px}.ph .crumb b{color:var(--bm-ink)}
+.ph h1{margin:0;font-size:26px;font-weight:800;color:var(--bm-ink);line-height:1.3}
+.ph p{margin:4px 0 0;font-size:15px;color:#5A5650}.ph p b{color:var(--bm-g8)}
+.ph-note{background:var(--bm-g50);border:1px solid #A3D07C;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:15px;line-height:1.6}
+.ph-note b{display:block;color:var(--bm-ink)}.ph-note span{color:var(--bm-ink2);font-size:14px}
+#pg-edu1 .stepbar,#pg-edu2 .stepbar,#pg-chem .stepbar{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:4px;background:none;box-shadow:none;border-radius:0;padding:0;margin-bottom:16px;overflow:visible}
+#pg-edu1 .sl,#pg-edu2 .sl,#pg-chem .sl{display:none}
+#pg-edu1 .si,#pg-edu2 .si,#pg-chem .si{display:flex;align-items:center;gap:6px;border-top:4px solid #DDDBD5;padding-top:8px;min-width:0}
+#pg-edu1 .si:has(.sn.act),#pg-edu2 .si:has(.sn.act),#pg-chem .si:has(.sn.act){border-top-color:var(--bm-g6)}
+#pg-edu1 .si:has(.sn.dn),#pg-edu2 .si:has(.sn.dn),#pg-chem .si:has(.sn.dn){border-top-color:var(--bm-g8)}
+#pg-edu1 .sn,#pg-edu2 .sn,#pg-chem .sn{width:24px;height:24px;font-size:13px}
+#pg-edu1 .st,#pg-edu2 .st,#pg-chem .st{font-size:14px;color:#5A5650;white-space:normal;line-height:1.3}
+#pg-edu1 .st.act,#pg-edu2 .st.act,#pg-chem .st.act{color:var(--bm-ink);font-weight:800}
+#pg-edu1 .card,#pg-edu2 .card,#pg-ppe .card{background:#fff;border:1px solid var(--bm-line)!important;border-radius:8px;box-shadow:none;padding:22px 24px;margin-bottom:14px}
+#pg-edu1 .card-ttl,#pg-edu2 .card-ttl,#pg-ppe .card-ttl{font-size:19px;font-weight:800;color:var(--bm-ink);border-bottom:0;padding-bottom:0;margin-bottom:14px;flex-wrap:wrap}
+#pg-edu1 .fl,#pg-edu2 .fl,#pg-ppe .fl{font-size:15px;font-weight:700;color:var(--bm-ink);margin-bottom:5px}
+#pg-edu1 .fc,#pg-edu2 .fc,#pg-ppe .fc{min-height:46px;padding:8px 12px;border:1px solid #C6C3BB;border-radius:4px;font-size:16px;box-sizing:border-box}
+#pg-edu1 textarea.fc,#pg-edu2 textarea.fc,#pg-ppe textarea.fc{font-size:15px;line-height:1.7}
+#pg-edu1 .fc:focus,#pg-edu2 .fc:focus,#pg-ppe .fc:focus{border-color:var(--bm-g6);outline:2px solid var(--bm-g50)}
+#pg-edu1 .fg,#pg-edu2 .fg{margin-bottom:12px}
+#pg-edu1 .g2,#pg-edu1 .g3,#pg-edu1 .g4,#pg-edu2 .g2,#pg-edu2 .g3,#pg-edu2 .g4{gap:14px}
+#pg-edu1 .btn,#pg-edu2 .btn,#pg-ppe .btn,#pg-chem .btn{min-height:46px;padding:0 18px;border-radius:4px;font-size:15px}
+#pg-edu1 .btn-s,#pg-edu2 .btn-s,#pg-ppe .btn-s,#pg-chem .btn-s{background:#fff;border:1px solid #C6C3BB;color:var(--bm-ink)}
+#pg-edu1 .btn-s:hover,#pg-edu2 .btn-s:hover,#pg-ppe .btn-s:hover,#pg-chem .btn-s:hover{background:#FAFAF8}
+#pg-edu1 .brow,#pg-edu2 .brow{align-items:center;margin-top:18px;gap:10px}
+#pg-edu1 .brow .btn-s:first-child,#pg-edu2 .brow .btn-s:first-child{margin-right:auto}
+#pg-edu1 .brow .btn-p,#pg-edu2 .brow .btn-p{min-height:52px;padding:0 28px;font-size:17px;font-weight:800}
+#pg-edu1 .chem-grid,#pg-edu2 .chem-grid{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+#pg-edu1 .chem-chip,#pg-edu2 .chem-chip{padding:12px 14px;border:1px solid #C6C3BB;border-radius:6px;font-size:15px;color:var(--bm-ink)}
+#pg-edu1 .chem-chip.sel,#pg-edu2 .chem-chip.sel{border:2px solid var(--bm-g6);padding:11px 13px;background:var(--bm-g50);color:var(--bm-g8)}
+#pg-edu1 .chem-chip input,#pg-edu2 .chem-chip input{width:18px;height:18px;accent-color:var(--bm-g6)}
+#pg-edu1 .ptbl th,#pg-edu2 .ptbl th,#pg-ppe .ptbl th{white-space:nowrap;background:#E2F0D5;border:1px solid var(--bm-line);color:var(--bm-g8);padding:10px 6px}
+#pg-edu1 .ptbl td,#pg-edu2 .ptbl td,#pg-ppe .ptbl td{border:1px solid var(--bm-line);padding:8px 6px;font-size:15px}
+#pg-edu1 .nsres,#pg-edu2 .nsres,#pg-ppe .nsres{border-radius:4px;max-height:260px}
+#pg-edu1 .nr,#pg-edu2 .nr,#pg-ppe .nr{padding:12px 14px;font-size:15px}
+.chem-box{background:#fff;border:1px solid var(--bm-line);border-radius:8px;padding:22px 24px}
+#pg-chem .chem-card{background:#fff;border:1px solid var(--bm-line);border-radius:8px;padding:20px 22px}
+#pg-chem .chem-card-h{font-size:19px;font-weight:800;color:var(--bm-ink);border-bottom:0;padding-bottom:0;margin-bottom:14px}
+#pg-chem .chem-lbl{font-size:15px;font-weight:700;color:var(--bm-ink)}
+#pg-chem .chem-inp{min-height:46px;border:1px solid #C6C3BB;border-radius:4px;font-size:16px;padding:8px 12px}
+#pg-chem .chem-inp:focus{border-color:var(--bm-g6);box-shadow:0 0 0 2px var(--bm-g50)}
+#pg-chem .chem-chip{padding:10px 14px!important;font-size:15px!important;border:1px solid #C6C3BB;border-radius:6px}
+#pg-chem .chem-chip input[type=checkbox]{accent-color:var(--bm-g6);width:18px;height:18px}
+#pg-edu1 .bm-foot,#pg-edu2 .bm-foot,#pg-ppe .bm-foot,#pg-chem .bm-foot{margin:32px 0 0}
+@media(max-width:760px){
+  #pg-edu1 .ew,#pg-edu2 .ew,.ppe-wrap,.chem-wrap{padding:14px 12px 8px}
+  .ph h1{font-size:21px}
+  .ph p{font-size:14px}
+  #pg-edu1 .card,#pg-edu2 .card,#pg-ppe .card{padding:16px 14px}
+  .chem-box{padding:14px 12px}
+  #pg-chem .chem-card{padding:14px 12px}
+  #pg-edu1 .stepbar,#pg-edu2 .stepbar,#pg-chem .stepbar{gap:3px}
+  #pg-edu1 .st,#pg-edu2 .st,#pg-chem .st{display:none}
+  #pg-edu1 .st.act,#pg-edu2 .st.act,#pg-chem .st.act{display:block;position:absolute;left:0;right:0;top:44px;text-align:center;font-size:15px}
+  #pg-edu1 .stepbar,#pg-edu2 .stepbar,#pg-chem .stepbar{position:relative;padding-bottom:30px}
+  #pg-edu1 .si,#pg-edu2 .si,#pg-chem .si{justify-content:center}
+  #pg-edu1 .brow .btn-p,#pg-edu2 .brow .btn-p{flex:1}
+}
 @media(max-width:1600px){
   #sync-info,#slbl{display:none}
   .bm-hdr{gap:14px}
@@ -974,6 +1043,8 @@ b.hm-f{font-weight:700}
 <!-- ══ 특별안전보건교육일지 ══ -->
 <div id="pg-edu1">
 <div class="ew">
+  <div class="ph"><div class="crumb">교육일지 › <b>특별안전보건교육일지</b></div><h1>특별안전보건교육일지 작성</h1><p>대상자 → 취급물질 · 일정 → 교육내용 → 일자별 서명 → 사진 → 확인 · 저장</p></div>
+  <div class="ph-note" id="e1-kind" style="display:none"></div>
   <div class="stepbar">
     <div class="si"><div class="sn act" id="e1sn1">1</div><div class="st act" id="e1st1">대상자 검색</div></div>
     <div class="sl" id="e1sl1"></div>
@@ -991,7 +1062,7 @@ b.hm-f{font-weight:700}
   <!-- S1: 대상자 검색 -->
   <div id="e1s1">
   <div class="card">
-    <div class="card-ttl">👤 교육 대상자 검색 · 추가</div>
+    <div class="card-ttl">교육 대상자 검색 · 추가</div>
     <!-- 이름 검색 먼저 -->
     <div class="fg">
       <label class="fl">이름 검색 *</label>
@@ -1029,7 +1100,7 @@ b.hm-f{font-weight:700}
   <!-- S2: 취급물질 · 일정 -->
   <div id="e1s2" style="display:none">
   <div class="card">
-    <div class="card-ttl">🧪 취급물질 / 공정 선택 <span class="text-xs font-normal text-slate-400">(복수 선택 가능)</span></div>
+    <div class="card-ttl">취급물질 / 공정 선택 <span class="text-xs font-normal text-slate-400">(복수 선택 가능)</span></div>
     <div id="e1-dept-label" class="text-xs font-bold text-emerald-600 mb-2"></div>
     <div class="mb-2 flex gap-2">
       <button class="btn-sm" onclick="e1SelectAllChem(true)">전체선택</button>
@@ -1044,7 +1115,7 @@ b.hm-f{font-weight:700}
     </div>
   </div>
   <div class="card">
-    <div class="card-ttl">📅 교육 일정 <span class="text-xs font-normal text-slate-400">(기본값: 오늘 / 수정 가능)</span></div>
+    <div class="card-ttl">교육 일정 <span class="text-xs font-normal text-slate-400">(기본값: 오늘 / 수정 가능)</span></div>
     <div class="g4">
       <div class="fg"><label class="fl">시작일 *</label><input class="fc" type="date" id="e1-ds" onchange="e1DateCh()"></div>
       <div class="fg"><label class="fl">종료일 *</label><input class="fc" type="date" id="e1-de" onchange="e1DateCh()"></div>
@@ -1075,11 +1146,11 @@ b.hm-f{font-weight:700}
   <!-- S3: 교육내용 -->
   <div id="e1s3" style="display:none">
   <div class="card">
-    <div class="card-ttl">📖 개별 교육내용 <span class="text-xs font-normal text-slate-400">(구글시트 연동·수정 가능)</span></div>
+    <div class="card-ttl">개별 교육내용 <span class="text-xs font-normal text-slate-400">(구글시트 연동·수정 가능)</span></div>
     <textarea class="fc" id="e1-indiv" rows="7"></textarea>
   </div>
   <div class="card">
-    <div class="card-ttl">📖 공통 교육내용 <span class="text-xs font-normal text-slate-400">(구글시트 연동·수정 가능)</span></div>
+    <div class="card-ttl">공통 교육내용 <span class="text-xs font-normal text-slate-400">(구글시트 연동·수정 가능)</span></div>
     <textarea class="fc" id="e1-common" rows="7"></textarea>
   </div>
   <div class="brow">
@@ -1091,7 +1162,7 @@ b.hm-f{font-weight:700}
   <!-- S4: 일자별 서명 -->
   <div id="e1s4" style="display:none">
   <div class="card">
-    <div class="card-ttl">✍️ 일자별 서명 <span class="text-xs font-normal text-slate-400">(교육 일수마다 각자 서명)</span></div>
+    <div class="card-ttl">일자별 서명 <span class="text-xs font-normal text-slate-400">(교육 일수마다 각자 서명)</span></div>
     <div id="e1-sig-blocks"></div>
   </div>
   <div class="brow">
@@ -1103,7 +1174,7 @@ b.hm-f{font-weight:700}
   <!-- S5: 사진 -->
   <div id="e1s5" style="display:none">
   <div class="card">
-    <div class="card-ttl">📷 현장사진 <span class="text-xs font-normal text-slate-400">(최대 4장 · 촬영 또는 불러오기)</span></div>
+    <div class="card-ttl">현장사진 <span class="text-xs font-normal text-slate-400">(최대 4장 · 촬영 또는 불러오기)</span></div>
     <div class="pgrid">
       <div class="pslot" id="e1ps0" onclick="choosePhotoSrc(0)"><span class="text-2xl">📷</span><span class="text-[10px] text-slate-400 mt-1">추가</span><img id="e1ph0" style="display:none"><button class="pdel" onclick="delPhoto(event,0)">✕</button></div>
       <div class="pslot" id="e1ps1" onclick="choosePhotoSrc(1)"><span class="text-2xl">📷</span><span class="text-[10px] text-slate-400 mt-1">추가</span><img id="e1ph1" style="display:none"><button class="pdel" onclick="delPhoto(event,1)">✕</button></div>
@@ -1122,7 +1193,7 @@ b.hm-f{font-weight:700}
 
   <!-- S6: 확인·저장 -->
   <div id="e1s6" style="display:none">
-  <div class="card"><div class="card-ttl">✅ 최종 확인</div><div id="e1-summary"></div></div>
+  <div class="card"><div class="card-ttl">최종 확인</div><div id="e1-summary"></div></div>
 
   <!-- ★ v15.42: PDF 출력물 미리보기 (유해화학물질 보고서 패턴) -->
   <div class="card" style="margin-top:10px">
@@ -1152,6 +1223,8 @@ b.hm-f{font-weight:700}
 <!-- ══ MSDS교육일지 ══ -->
 <div id="pg-edu2">
 <div class="ew">
+  <div class="ph"><div class="crumb">교육일지 › <b>MSDS 교육일지</b></div><h1>MSDS 교육일지 작성</h1><p>대상자 → 취급물질 · 일정 → 교육내용 → 근로자 서명 → 확인 · 저장</p></div>
+  <div class="ph-note" id="e2-kind" style="display:none"></div>
   <div class="stepbar">
     <div class="si"><div class="sn act" id="e2sn1">1</div><div class="st act" id="e2st1">대상자 검색</div></div>
     <div class="sl" id="e2sl1"></div>
@@ -1166,7 +1239,7 @@ b.hm-f{font-weight:700}
 
   <div id="e2s1">
   <div class="card">
-    <div class="card-ttl">👤 교육 대상자 검색</div>
+    <div class="card-ttl">교육 대상자 검색</div>
     <div class="fg"><label class="fl">이름 검색</label>
       <div class="nsw"><input class="fc" id="e2-nq" placeholder="이름 입력 → 클릭하면 부서·입사일 자동입력…" oninput="searchEmp('e2',this.value)" autocomplete="off"><div class="nsres" id="e2-nres"></div></div></div>
     <div class="g3" style="margin-bottom:10px">
@@ -1184,7 +1257,7 @@ b.hm-f{font-weight:700}
 
   <div id="e2s2" style="display:none">
   <div class="card">
-    <div class="card-ttl">🧪 취급물질 선택</div>
+    <div class="card-ttl">취급물질 선택</div>
     <div class="mb-2 flex gap-2">
       <button class="btn-sm" onclick="e2SelectAllChem(true)">전체선택</button>
       <button class="btn-sm" style="background:#fee2e2;color:#b91c1c" onclick="e2SelectAllChem(false)">전체해제</button>
@@ -1197,7 +1270,7 @@ b.hm-f{font-weight:700}
     </div>
   </div>
   <div class="card">
-    <div class="card-ttl">📅 교육 정보</div>
+    <div class="card-ttl">교육 정보</div>
     <div class="g3">
       <div class="fg"><label class="fl">교육일 *</label><input class="fc" type="date" id="e2-ds"></div>
       <div class="fg"><label class="fl">교육 시간</label><input class="fc" id="e2-time" placeholder="10:00~11:00(1시간)"></div>
@@ -1218,15 +1291,15 @@ b.hm-f{font-weight:700}
   </div>
 
   <div id="e2s3" style="display:none">
-  <div class="card"><div class="card-ttl">📖 개별 교육내용</div><textarea class="fc" id="e2-indiv" rows="6"></textarea></div>
-  <div class="card"><div class="card-ttl">📖 공통 교육내용</div><textarea class="fc" id="e2-common" rows="6"></textarea></div>
+  <div class="card"><div class="card-ttl">개별 교육내용</div><textarea class="fc" id="e2-indiv" rows="6"></textarea></div>
+  <div class="card"><div class="card-ttl">공통 교육내용</div><textarea class="fc" id="e2-common" rows="6"></textarea></div>
   <div class="brow"><button class="btn btn-s" onclick="e2Go(2)">← 이전</button><button class="btn btn-p" onclick="e2Go(4)">다음 →</button></div>
   </div>
 
   <!-- S4: 근로자 서명 -->
   <div id="e2s4" style="display:none">
   <div class="card">
-    <div class="card-ttl">✍️ 근로자 서명 <span class="text-xs font-normal text-slate-400">(교육 이수 확인 서명)</span></div>
+    <div class="card-ttl">근로자 서명 <span class="text-xs font-normal text-slate-400">(교육 이수 확인 서명)</span></div>
     <div id="e2-sig-blocks"></div>
   </div>
   <div class="brow">
@@ -1236,7 +1309,7 @@ b.hm-f{font-weight:700}
   </div>
 
   <div id="e2s5" style="display:none">
-  <div class="card"><div class="card-ttl">✅ 최종 확인</div><div id="e2-summary"></div></div>
+  <div class="card"><div class="card-ttl">최종 확인</div><div id="e2-summary"></div></div>
 
   <!-- ★ v15.42: PDF 출력물 미리보기 (유해화학물질 보고서 패턴) -->
   <div class="card" style="margin-top:10px">
@@ -1265,19 +1338,16 @@ b.hm-f{font-weight:700}
 
 <!-- ══ 보호구 지급수령증 ══ -->
 <div id="pg-ppe">
-  <div style="max-width:860px;margin:0 auto;padding:16px">
+  <div class="ppe-wrap">
     <!-- 헤더 -->
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <div>
-        <h2 style="font-size:17px;font-weight:900;color:#1c3557;margin:0">🦺 보호구 지급수령증</h2>
-        <p style="font-size:11px;color:#64748b;margin:3px 0 0">산업안전보건법 제38조 | 이름 검색 → 수령자 누적 추가 → 서명 → <b style="color:#1c3557">일지 1장</b> 저장</p>
-      </div>
-      <button class="btn btn-s" style="font-size:11px" onclick="ppeReset()">전체 초기화</button>
+    <div class="ph ph-row">
+      <div><div class="crumb">보호구 지급 › <b>지급수령증</b></div><h1>보호구 지급수령증</h1><p>산업안전보건법 제38조 · 이름 검색 → 수령자 추가 → 서명 → <b>일지 1장</b> 저장</p></div>
+      <button class="btn btn-s" onclick="ppeReset()">전체 초기화</button>
     </div>
 
     <!-- STEP1: 수령자 추가 -->
     <div class="card" style="margin-bottom:12px;border:2px solid #e2e8f0">
-      <div class="card-ttl" style="margin-bottom:12px">👤 STEP 1. 수령자 검색 및 추가</div>
+      <div class="card-ttl" style="margin-bottom:12px">STEP 1. 수령자 검색 및 추가</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
         <div class="fg" style="margin:0;flex:2;min-width:160px">
           <label class="fl">이름 검색</label>
@@ -1312,7 +1382,7 @@ b.hm-f{font-weight:700}
 
     <!-- STEP2: 추가된 수령자 목록 -->
     <div class="card" style="margin-bottom:12px" id="ppe-list-card">
-      <div class="card-ttl" style="margin-bottom:10px">📋 STEP 2. 수령자 목록 <span id="ppe-count" style="color:#64748b;font-weight:400;font-size:12px">(0명)</span></div>
+      <div class="card-ttl" style="margin-bottom:10px">STEP 2. 수령자 목록 <span id="ppe-count" style="color:#64748b;font-weight:400;font-size:12px">(0명)</span></div>
       <div id="ppe-person-list">
         <p style="color:#94a3b8;font-size:12px;text-align:center;padding:16px">수령자를 추가하세요</p>
       </div>
@@ -1320,14 +1390,14 @@ b.hm-f{font-weight:700}
 
     <!-- STEP3: 서명 -->
     <div class="card" style="margin-bottom:12px" id="ppe-sig-card">
-      <div class="card-ttl" style="margin-bottom:5px">✍️ STEP 3. 수령자 서명</div>
+      <div class="card-ttl" style="margin-bottom:5px">STEP 3. 수령자 서명</div>
       <p style="font-size:11px;color:#64748b;margin:0 0 8px">보호구를 수령한 직원은 본인 서명란에 직접 서명해주세요. 수령자를 추가·삭제해도 기존 서명은 유지됩니다.</p>
       <div id="ppe-sig-blocks"></div>
     </div>
 
     <!-- ★ v17.11 STEP4: 일지 미리보기 (교육일지 미리보기와 동일 패턴) -->
     <div class="card" style="margin-bottom:12px;display:none" id="ppe-preview-card">
-      <div class="card-ttl" style="margin-bottom:8px">📋 STEP 4. 일지 미리보기 <span style="color:#64748b;font-weight:400;font-size:12px">— 수령자 전원이 아래 한 장의 일지에 기록됩니다</span></div>
+      <div class="card-ttl" style="margin-bottom:8px">STEP 4. 일지 미리보기 <span style="color:#64748b;font-weight:400;font-size:12px">— 수령자 전원이 아래 한 장의 일지에 기록됩니다</span></div>
       <div id="ppe-preview" style="border:1px solid #e2e8f0;border-radius:8px;overflow:auto;max-height:520px;background:#f8fafc"></div>
     </div>
 
@@ -1344,11 +1414,12 @@ b.hm-f{font-weight:700}
 
 
 <!-- ══ 화학물질 보고서 ══ -->
-<div id="pg-chem" style="display:none;background:#f1f5f9;padding:18px 16px;min-height:calc(100vh - 110px)">
-<div style="max-width:1100px;margin:0 auto">
+<div id="pg-chem" style="display:none">
+<div class="chem-wrap">
+<div class="ph"><div class="crumb">화학물질 보고서 › <b>신규사용 · 사용중단</b></div><h1>화학물질 보고서</h1><p>제출 → 보건관리실 검토 · 관리대상 판정 → 승인되면 MSDS 목록에 반영</p></div>
 
-<!-- 본문 (e1 작성 화면처럼 헤더 박스 없이 시작) -->
-<div style="background:#fff;padding:22px 24px;border-radius:14px">
+<!-- 본문 -->
+<div class="chem-box">
 
 <!-- 단계 표시 (교육일지 stepbar와 통일) -->
 <div class="stepbar" style="margin-bottom:18px">
@@ -2276,7 +2347,7 @@ b.hm-f{font-weight:700}
       try{
         var r = await post('login', { kind: 'dept', dept: sel.value, pin: pin.value });
         if(!r.success){ err.textContent = r.error || '로그인 실패'; pin.value = ''; return; }
-        saveSession({ token: r.token, role: r.role, dept: r.dept, exp: r.exp });
+        saveSession({ token: r.token, role: r.role, dept: r.dept, head: r.head || '', exp: r.exp });
         location.reload();
       }catch(e){
         err.textContent = '서버 연결 실패: ' + e.message;
@@ -2785,12 +2856,13 @@ b.hm-f{font-weight:700}
 
   /* ── 부서: 신규입사 확인 요청 창 ── */
   function startEdu(o){
-    try{ goTab('edu2'); }catch(_){}
+    var et = (window.BMHOME && BMHOME.eduTab) ? BMHOME.eduTab() : 'edu2', ep = et === 'edu1' ? 'e1' : 'e2';
+    try{ goTab(et); }catch(_){}
     setTimeout(function(){
       try{
         var emp = (typeof empList !== 'undefined' ? empList : []).find(function(e){ return e.name === o['이름'] && e.dept === o['부서']; }) || {};
-        selectEmp('e2', o['이름'], o['부서'], emp.joinDate || o['입사일'], '', emp.empNo || o['사번'] || '');
-        e2AddPart();
+        selectEmp(ep, o['이름'], o['부서'], emp.joinDate || o['입사일'], '', emp.empNo || o['사번'] || '');
+        window[ep + 'AddPart']();
         say('📋 ' + o['이름'] + ' 님을 교육 대상자로 추가했습니다. 교육 후 일지를 작성해 주세요.', 'ok');
       }catch(e){ say('교육일지 화면에서 대상자를 직접 추가해 주세요', 'info'); }
     }, 400);
@@ -3175,16 +3247,39 @@ b.hm-f{font-weight:700}
   }
   function render(){ tiles(); news(); todo(); }
 
-  window.BMHOME = { render: render };
+  // 부서 로그인: 위쪽 메뉴는 '교육일지' 하나 (부서에 맞는 일지만), 작성 화면 위에 종류 안내
+  function navEdu(){
+    var s = sess();
+    if(!s || s.role !== 'dept') return;
+    var keep = eduTab(), drop = keep === 'edu1' ? 'edu2' : 'edu1';
+    var d = document.getElementById('tab-' + drop); if(d) d.style.display = 'none';
+    var k = document.getElementById('tab-' + keep);
+    if(k){ k.querySelector('.tbl').textContent = '교육일지'; k.querySelector('.tbs').textContent = '교육일지'; k.title = s.dept + ' · ' + eduName(); }
+  }
+  function kindNote(t){
+    var s = sess(), el = document.getElementById(t === 'edu1' ? 'e1-kind' : 'e2-kind');
+    if(!el) return;
+    if(!s || s.role !== 'dept'){ el.style.display = 'none'; return; }
+    var sp = t === 'edu1';
+    el.innerHTML = '<b>' + esc(s.dept) + ': 관리대상 · 특별관리 물질이 ' + (sp ? '있어 특별안전보건교육일지' : '없어 MSDS 교육일지') + '로 작성합니다.</b>' +
+      '<span>교육 실시자: ' + esc(bmInstr(s.dept, '부서의 장')) + (s.head ? ' (부서인증 시트 부서장)' : ' · 부서장 이름은 부서인증 시트에 넣으면 자동 입력') + '</span>';
+    el.style.display = 'block';
+  }
+
+  window.BMHOME = { render: render, eduTab: eduTab };
   window.addEventListener('DOMContentLoaded', function(){
     var orig = window.goTab;
     if(typeof orig === 'function'){
       window.goTab = function(t){
-        var r = orig.apply(this, arguments);
+        var s = sess();
+        if(s && s.role === 'dept' && (t === 'edu1' || t === 'edu2')) t = eduTab();
+        var r = orig.call(this, t);
         if(t === 'home') render();
+        if(t === 'edu1' || t === 'edu2') kindNote(t);
         return r;
       };
     }
+    navEdu();
     var next = '';
     try{ next = sessionStorage.getItem('bm_next') || ''; sessionStorage.removeItem('bm_next'); }catch(_){}
     if(next && sess()) goTab(next === 'edu1' || next === 'edu2' ? eduTab() : next);
@@ -3690,6 +3785,14 @@ function diagEdu(){
 function getDirectImgUrl(url){if(!url)return'';try{let id='';if(url.includes('id='))id=url.split('id=')[1].split('&')[0];else if(url.includes('/d/'))id=url.split('/d/')[1].split('/')[0];else return url;return'https://lh3.googleusercontent.com/d/'+id;}catch(e){return url;}}
 function searchChem(q){srchQ=q.toLowerCase();renderList(deptF);}
 function filterDept(d){deptF=d;renderList(d);}
+// v19.3 — 교육 실시자: 부서 로그인 + 부서인증 시트에 부서장 이름이 있으면 '이름 / 부서 부서장'
+function bmInstr(dept, fallback){
+  try{
+    const s=BMAUTH.session();
+    if(s&&s.role==='dept'&&s.head&&(!dept||dept===s.dept)) return s.head+' / '+s.dept+' 부서장';
+  }catch(_){}
+  return fallback;
+}
 function bmEsc(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 // v19.1 — 관리대상·특별관리 표기 판정 (true / "해당" / "O" / "●" 등)
 function bmTruthy(v){
@@ -3935,8 +4038,9 @@ function applyDeptEdu(prefix, dept){
     document.getElementById('e1-time').value  = timeStr;
     if(edu.method)   document.getElementById('e1-mth').value   = edu.method.trim();
     if(edu.place)    document.getElementById('e1-place').value  = edu.place;
+    ['e1-mth','e1-place'].forEach(id=>{const el=document.getElementById(id);if(el&&el.selectedIndex<0)el.selectedIndex=0;});   // v19.3: 시트 값이 선택지에 없으면 첫 선택지
     // ★ 강사명/소속직위: 항상 '부서의 장' 고정
-    document.getElementById('e1-instr').value = '부서의 장';
+    document.getElementById('e1-instr').value = bmInstr(dept, '부서의 장');
     // ★ 교육시작일: 기존값 유지 or 오늘 (입사일 사용 안 함)
     const existingDs = document.getElementById('e1-ds').value;
     const startDate = existingDs || todayStr();
@@ -3954,7 +4058,9 @@ function applyDeptEdu(prefix, dept){
     document.getElementById('e2-time').value  = timeStr || '10:00~11:00(1시간)';
     if(edu.method)   document.getElementById('e2-mth').value   = edu.method.trim();
     if(edu.place)    document.getElementById('e2-place').value  = edu.place;
+    ['e2-mth','e2-place'].forEach(id=>{const el=document.getElementById(id);if(el&&el.selectedIndex<0)el.selectedIndex=0;});
     if(edu.instrPos) document.getElementById('e2-instr').value  = edu.instrPos;
+    if(bmInstr(dept, '')) document.getElementById('e2-instr').value = bmInstr(dept, '');
     document.getElementById('e2-indiv').value  = edu.individual || INDIV_EDU;
     document.getElementById('e2-common').value = edu.common     || COMMON_EDU;
     // ★ 교육시작일: 기존값 or 오늘 (입사일 사용 안 함)

@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v18.7 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v19.3 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -222,7 +222,8 @@ function login_(req) {
   }
   cache.remove(lockKey);
   payload.exp = Date.now() + TOKEN_TTL_MS;
-  return { success: true, token: signToken_(payload), role: payload.role, dept: payload.dept || '', exp: payload.exp };
+  return { success: true, token: signToken_(payload), role: payload.role, dept: payload.dept || '', exp: payload.exp,
+           head: payload.role === 'dept' ? deptHead_(payload.dept) : '' };
 }
 
 function signToken_(payload) {
@@ -1524,6 +1525,18 @@ function deptEmails_() {
   sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getDisplayValues()
     .forEach(r => { if (String(r[0]).trim()) out[String(r[0]).trim()] = String(r[ci]).trim(); });
   return out;
+}
+
+// 부서장 이름 — 부서인증 시트의 '부서장'(또는 '부서장 이름' · '부서장명') 열. 교육일지 교육 실시자 자동 입력용
+function deptHead_(dept) {
+  const sheet = SS.getSheetByName(AUTH_SHEET);
+  if (!sheet || sheet.getLastRow() < 2) return '';
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
+  const ci = ['부서장', '부서장 이름', '부서장명'].map(h => headers.indexOf(h)).find(i => i >= 0);
+  if (ci === undefined) return '';
+  const row = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getDisplayValues()
+    .find(r => sameDept_(r[0], dept));
+  return row ? String(row[ci]).trim() : '';
 }
 
 function deptEmail_(dept) {

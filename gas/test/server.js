@@ -16,10 +16,10 @@ function start(codePath, htmlPath, port) {
   g.props.ADMIN_PW_HASH = g.api.sha256Hex_('salt' + 'admin-pass-1');
   const ss = g.ctx.SpreadsheetApp.getActiveSpreadsheet();
   const auth = ss.insertSheet('부서인증');
-  auth.appendRow(['부서', 'PIN', '담당자', '사용(Y/N)', '부서장 이메일', '비고']);
-  auth.appendRow(['61병동', '1234', '', 'Y', 'head61@bumin.co.kr', '']);
-  auth.appendRow(['71병동', '5678', '', 'Y', '', '']);
-  auth.appendRow(['9병동', '', '', 'Y', '', 'PIN 미입력']);
+  auth.appendRow(['부서', 'PIN', '담당자', '사용(Y/N)', '부서장 이메일', '비고', '부서장']);
+  auth.appendRow(['61병동', '1234', '', 'Y', 'head61@bumin.co.kr', '', '김부장']);
+  auth.appendRow(['71병동', '5678', '', 'Y', '', '', '']);
+  auth.appendRow(['9병동', '', '', 'Y', '', 'PIN 미입력', '']);
   const cfgSheet = ss.insertSheet('관리자설정');
   cfgSheet.appendRow(['키', '값', '수정일시']);
   cfgSheet.appendRow(['앱주소', 'https://buminhealth.github.io/health/app.html', '']);
