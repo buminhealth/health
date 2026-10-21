@@ -19,6 +19,9 @@
     - 퇴사자는 목록에서 지우지 않고 '퇴사' 표시 → 교육·보호구 기록 보존, 부서 직원 검색에서만 제외
     - 부서 로그인 시 신규입사 확인 요청 창(메일 [확인하기] 링크 ?nh=ID 포함) → '예'면 MSDS 교육일지로
       이동해 대상자 자동 추가 / 서버: 부서장 메일·3일 무회신 재알림·보건관리자 회신 알림 (gas/Code.gs)
+    - 인사 사이트 = Firebase(이메일·비밀번호 로그인 → Firestore/RTDB 조회). 알림 메일은 자동 로그인일 때만.
+    - 교육 기한: 입사일로부터 3일 (메일·확인 창·관리자 표에 표시, 지나면 ⚠ 기한초과)
+    - 성별 삭제: 교육일지 입력·대상자 표·검색 결과·특별교육일지 PDF 인원 칸(계만 표시)·저장 데이터
 
   ★★★ v18.0 (2026-10-21) — 1단계: 서버 인증 + 비공개 저장소 (GitHub 토큰 제거):
     [배경] GitHub 쓰기 토큰·관리자 비밀번호가 공개 HTML에 있었고, 기록·PDF·서명이 공개 저장소에 있었음.
@@ -709,10 +712,6 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
         <select class="fc" id="e1-dept" onchange="e1DeptCh()"><option value="">선택…</option></select>
       </div>
       <div class="fg">
-        <label class="fl">성별</label>
-        <select class="fc" id="e1-gender"><option value="남">남</option><option value="여">여</option></select>
-      </div>
-      <div class="fg">
         <label class="fl">입사일 <span class="text-emerald-500 text-[10px]">(자동)</span></label>
         <input class="fc" type="date" id="e1-join">
       </div>
@@ -721,7 +720,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     <div style="overflow-x:auto">
       <table class="ptbl">
         <thead><tr>
-          <th style="width:28px">번호</th><th>성명</th><th style="width:44px">성별</th>
+          <th style="width:28px">번호</th><th>성명</th>
           <th style="width:94px">입사일</th><th style="width:26px">✕</th>
         </tr></thead>
         <tbody id="e1-ptbody"></tbody>
@@ -876,12 +875,12 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
       <div class="nsw"><input class="fc" id="e2-nq" placeholder="이름 입력 → 클릭하면 부서·입사일 자동입력…" oninput="searchEmp('e2',this.value)" autocomplete="off"><div class="nsres" id="e2-nres"></div></div></div>
     <div class="g3" style="margin-bottom:10px">
       <div class="fg"><label class="fl">교육 부서</label><select class="fc" id="e2-dept" onchange="e2DeptCh()"><option value="">선택…</option></select></div>
-      <div class="fg"><label class="fl">성별</label><select class="fc" id="e2-gender"><option>남</option><option>여</option></select></div>
+
       <div class="fg"><label class="fl">입사일</label><input class="fc" type="date" id="e2-join"></div>
     </div>
     <button class="btn btn-p mb-3" onclick="e2AddPart()">+ 대상자 추가</button>
     <div style="overflow-x:auto">
-      <table class="ptbl"><thead><tr><th style="width:28px">번호</th><th>성명</th><th style="width:44px">성별</th><th style="width:94px">입사일</th><th style="width:26px">✕</th></tr></thead><tbody id="e2-ptbody"></tbody></table>
+      <table class="ptbl"><thead><tr><th style="width:28px">번호</th><th>성명</th><th style="width:94px">입사일</th><th style="width:26px">✕</th></tr></thead><tbody id="e2-ptbody"></tbody></table>
     </div>
   </div>
   <div class="brow"><button class="btn btn-p" onclick="e2Go(2)">다음 →</button></div>
@@ -2143,15 +2142,16 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
               '<input id="staff-hr-id" class="fc" placeholder="아이디(이메일)" style="max-width:220px" autocomplete="off">' +
               '<input id="staff-hr-pw" class="fc" type="password" placeholder="비밀번호 (저장하지 않음)" style="max-width:200px" autocomplete="new-password">' +
               '<button id="staff-hr-go" style="' + BTN_P + '">가져오기</button></div>'
-          : '<div style="font-size:12px;color:#64748b">인사 사이트 접속 방식을 확인한 뒤 활성화됩니다. 그동안은 ② 엑셀 붙여넣기를 사용하세요.</div>') +
+          : '<div style="font-size:12px;color:#64748b">시트 메뉴 [보건관리 시스템 → ④ 인사 사이트(Firebase) 연결]을 먼저 설정하세요. 그동안은 ② 엑셀 붙여넣기를 사용하세요.</div>') +
+        '<div style="font-size:12px;color:#64748b;margin-top:6px">가져온 내용은 미리보기 후 [직원정보 업데이트]로 반영됩니다. 비밀번호는 저장하지 않습니다.</div>' +
       '</div>' +
       '<div style="' + BOX + '">' +
         '<div style="font-weight:800;color:#1c3557;margin-bottom:4px">② 엑셀에서 붙여넣기</div>' +
-        '<div style="font-size:12px;color:#64748b;margin-bottom:6px">엑셀에서 <b>제목 줄까지</b> 복사해 붙여넣으세요. 필요한 열: 사번 · 이름 · 부서 · 입사일 (있으면 성별 · 재직상태 · 퇴사일 · 이메일 · 직위)</div>' +
+        '<div style="font-size:12px;color:#64748b;margin-bottom:6px">엑셀에서 <b>제목 줄까지</b> 복사해 붙여넣으세요. 필요한 열: 사번 · 이름 · 부서 · 입사일 (있으면 재직상태 · 퇴사일 · 이메일 · 직위)</div>' +
         '<textarea id="staff-paste" class="fc" style="width:100%;height:110px;font-family:monospace;font-size:12px"></textarea>' +
         '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:6px;font-size:12px">' +
           '<label><input type="checkbox" id="staff-full"> 전체 직원 명단입니다 (명단에 없는 재직자는 퇴사로 표시)</label>' +
-          '<label><input type="checkbox" id="staff-notify" checked> 업데이트 후 신규입사 알림 메일 보내기</label>' +
+
         '</div>' +
         '<div style="display:flex;gap:6px;margin-top:8px"><button id="staff-preview" style="' + BTN + '">미리보기</button>' +
         '<button id="staff-sync" style="' + BTN_P + '" disabled>직원정보 업데이트</button></div>' +
@@ -2162,8 +2162,9 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
           '<div style="font-weight:800;color:#1c3557">③ 신규입사 유해화학물질 취급 확인</div>' +
           '<div style="display:flex;gap:6px"><select id="staff-nh-filter" class="fc" style="width:auto">' +
             '<option value="">전체</option><option>회신대기</option><option>이메일없음</option><option>취급-교육대기</option><option>취급-교육완료</option><option>미취급</option>' +
-          '</select><button id="staff-nh-run" style="' + BTN + '">지금 확인</button></div>' +
+          '</select><button id="staff-nh-run" style="' + BTN + '"' + (st.hrAuto ? '' : ' disabled title="자동 로그인 설정 후 사용"') + '>지금 자동 확인</button></div>' +
         '</div>' +
+        '<div style="font-size:12px;color:#64748b;margin-bottom:8px">알림 메일은 <b>인사 사이트 자동 로그인</b>(매일 아침 7시 · 지금 자동 확인)일 때만 발송됩니다. 교육 기한: 입사일로부터 3일.</div>' +
         '<div id="staff-nh-out" style="overflow-x:auto"></div>' +
       '</div>';
 
@@ -2189,11 +2190,10 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
       var full = document.getElementById('staff-full').checked;
       if(full && !confirm('명단에 없는 재직자를 모두 "퇴사"로 표시합니다. 전체 직원 명단이 맞나요?')) return;
       var btn = this; btn.disabled = true;
-      var r = await post('emp.sync', { headers: parsed.headers, rows: parsed.rows, fullList: full,
-                                       notify: document.getElementById('staff-notify').checked });
+      var r = await post('emp.sync', { headers: parsed.headers, rows: parsed.rows, fullList: full });
       btn.disabled = false;
       if(!r.success){ say(r.error || '업데이트 실패', 'err'); return; }
-      say('✅ 추가 ' + r.added + ' · 변경 ' + r.updated + ' · 퇴사표시 ' + r.resigned + ' · 신규입사 알림 ' + (r.notified || []).length + '건', 'ok');
+      say('✅ 추가 ' + r.added + ' · 변경 ' + r.updated + ' · 퇴사표시 ' + r.resigned, 'ok');
       parsed = null;
       try{ if(typeof loadEmps === 'function') loadEmps(); }catch(_){}
       open();
@@ -2202,7 +2202,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     document.getElementById('staff-nh-run').onclick = async function(){
       var r = await post('nh.run', {});
       if(!r.success){ say(r.error || '확인 실패', 'err'); return; }
-      say('신규 알림 ' + r.created.length + '건 · 재알림 ' + r.reminded + '건', 'ok');
+      say(r.error ? ('⚠ ' + r.error) : ('신규 알림 ' + r.created.length + '건 · 재알림 ' + r.reminded + '건'), r.error ? 'err' : 'ok');
       renderNh();
     };
     renderNh();
@@ -2227,14 +2227,17 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     var f = document.getElementById('staff-nh-filter').value;
     var list = r.data.filter(function(o){ return !f || o['상태'] === f; }).reverse();
     if(!list.length){ out.innerHTML = '<div style="font-size:12px;color:#64748b">해당하는 알림이 없습니다.</div>'; return; }
-    var th = ['상태','부서','이름','입사일','최초발송','재알림','회신일시','취급','교육일지',''].map(function(h){
+    var today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+    var overdue = function(o){ return o['교육기한'] && today > o['교육기한'] && ['회신대기','이메일없음','취급-교육대기'].indexOf(o['상태']) >= 0; };
+    var th = ['상태','부서','이름','입사일','교육기한','최초발송','재알림','회신일시','취급','교육일지',''].map(function(h){
       return '<th style="padding:5px 6px;border:1px solid #e2e8f0;background:#f8fafc;white-space:nowrap">' + h + '</th>';
     }).join('');
     out.innerHTML = '<table style="border-collapse:collapse;font-size:12px;width:100%"><tr>' + th + '</tr>' + list.map(function(o){
       var can = o['상태'] === '회신대기' || o['상태'] === '이메일없음';
       var td = function(v){ return '<td style="padding:5px 6px;border:1px solid #e2e8f0;white-space:nowrap">' + esc(v) + '</td>'; };
-      return '<tr><td style="padding:5px 6px;border:1px solid #e2e8f0;font-weight:800;color:' + (NH_COLORS[o['상태']] || '#334155') + '">' + esc(o['상태']) + '</td>' +
-        td(o['부서']) + td(o['이름']) + td(o['입사일']) + td((o['최초발송'] || '').slice(0, 10)) +
+      return '<tr><td style="padding:5px 6px;border:1px solid #e2e8f0;font-weight:800;white-space:nowrap;color:' + (NH_COLORS[o['상태']] || '#334155') + '">' + esc(o['상태']) +
+          (overdue(o) ? ' <span style="color:#dc2626">⚠ 기한초과</span>' : '') + '</td>' +
+        td(o['부서']) + td(o['이름']) + td(o['입사일']) + td(o['교육기한']) + td((o['최초발송'] || '').slice(0, 10)) +
         td(o['재알림횟수'] && o['재알림횟수'] !== '0' ? o['재알림횟수'] + '회' : '') + td((o['회신일시'] || '').slice(0, 10)) +
         td(o['취급여부']) + td(o['교육일지제출일']) +
         '<td style="padding:5px 6px;border:1px solid #e2e8f0">' + (can ? '<button data-nh="' + esc(o['알림ID']) + '" style="' + BTN + '">재발송</button>' : '') + '</td></tr>';
@@ -2255,7 +2258,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     setTimeout(function(){
       try{
         var emp = (typeof empList !== 'undefined' ? empList : []).find(function(e){ return e.name === o['이름'] && e.dept === o['부서']; }) || {};
-        selectEmp('e2', o['이름'], o['부서'], emp.joinDate || o['입사일'], emp.gender || '', emp.empNo || o['사번'] || '');
+        selectEmp('e2', o['이름'], o['부서'], emp.joinDate || o['입사일'], '', emp.empNo || o['사번'] || '');
         e2AddPart();
         say('📋 ' + o['이름'] + ' 님을 교육 대상자로 추가했습니다. 교육 후 일지를 작성해 주세요.', 'ok');
       }catch(e){ say('교육일지 화면에서 대상자를 직접 추가해 주세요', 'info'); }
@@ -2274,6 +2277,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
       var waiting = o['상태'] === '회신대기' || o['상태'] === '이메일없음';
       return '<div style="border:1px solid ' + (o['알림ID'] === focusId ? '#1c3557' : '#e2e8f0') + ';border-radius:10px;padding:12px;margin-bottom:10px">' +
         '<div style="font-weight:800;color:#1c3557">' + esc(o['이름']) + ' <span style="font-weight:400;color:#64748b;font-size:12px">입사 ' + esc(o['입사일']) + '</span></div>' +
+        (o['교육기한'] ? '<div style="font-size:12px;color:#b91c1c;font-weight:700">교육 기한: ' + esc(o['교육기한']) + ' (입사일로부터 3일)</div>' : '') +
         '<div style="font-size:12px;color:#475569;margin:4px 0 8px">부서 사용 물질: ' + esc(o['취급물질']) + '</div>' +
         (waiting
           ? '<div style="font-size:13px;margin-bottom:6px">이 직원이 위 물질을 취급하나요?</div>' +
@@ -2294,6 +2298,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
       var x = await post('nh.answer', { id: id, handles: yes });
       if(!x.success){ say(x.error || '회신 실패', 'err'); return; }
       ov.remove();
+      try{ history.replaceState(null, '', location.pathname); }catch(_){}   // 새로고침해도 다시 뜨지 않게 ?nh 제거
       say('회신했습니다', 'ok');
       if(yes) startEdu(byId[id]);
     };
@@ -2301,7 +2306,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     ov.querySelectorAll('[data-no]').forEach(function(b){
       b.onclick = function(){ if(confirm('취급하지 않는 것으로 회신할까요?')) answer(b.getAttribute('data-no'), false); };
     });
-    ov.querySelectorAll('[data-edu]').forEach(function(b){ b.onclick = function(){ ov.remove(); startEdu(byId[b.getAttribute('data-edu')]); }; });
+    ov.querySelectorAll('[data-edu]').forEach(function(b){ b.onclick = function(){ ov.remove(); try{ history.replaceState(null, '', location.pathname); }catch(_){} startEdu(byId[b.getAttribute('data-edu')]); }; });
   }
 
   window.BMSTAFF = { open: open, showDeptRequests: showDeptRequests };
@@ -4447,14 +4452,13 @@ function e1SelectAllDates(all){
 function e1AddPart(){
   const name=document.getElementById('e1-nq').value.trim();
   if(!name){toast('이름을 입력하세요','err');return;}
-  const gender=document.getElementById('e1-gender').value;
   // ★ 입사일: empList 우선, 없으면 필드값 사용
   const empMatch=empList.find(e=>e.name===name);
   const join=empMatch&&empMatch.joinDate ? empMatch.joinDate
             : empMatch&&empMatch.join    ? empMatch.join
             : document.getElementById('e1-join').value;
   const empNo=empMatch?empMatch.empNo||'':'';
-  e1.parts.push({name,gender,join,empNo});
+  e1.parts.push({name,join,empNo});
   // ★ 추가 후 입력 필드 초기화 (입사일이 다음 사람에 오염되지 않도록)
   document.getElementById('e1-nq').value='';
   document.getElementById('e1-join').value=''; // 입사일 초기화
@@ -4465,18 +4469,17 @@ function e1AddPart(){
   if(e1.parts.length===1&&e1.dept) applyDeptEdu('e1',e1.dept);
 }
 function e1RemPart(i){e1.parts.splice(i,1);renderE1Parts();}
-function renderE1Parts(){document.getElementById('e1-ptbody').innerHTML=e1.parts.map((p,i)=>`<tr><td class="text-center">${i+1}</td><td><input class="pi" value="${p.name}" oninput="e1.parts[${i}].name=this.value"></td><td><select class="pi" onchange="e1.parts[${i}].gender=this.value"><option ${p.gender==='남'?'selected':''}>남</option><option ${p.gender==='여'?'selected':''}>여</option></select></td><td><input class="pi" type="date" value="${p.join}" oninput="e1.parts[${i}].join=this.value"></td><td class="text-center"><button onclick="e1RemPart(${i})" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:13px;font-weight:700">✕</button></td></tr>`).join('');}
+function renderE1Parts(){document.getElementById('e1-ptbody').innerHTML=e1.parts.map((p,i)=>`<tr><td class="text-center">${i+1}</td><td><input class="pi" value="${p.name}" oninput="e1.parts[${i}].name=this.value"></td><td><input class="pi" type="date" value="${p.join}" oninput="e1.parts[${i}].join=this.value"></td><td class="text-center"><button onclick="e1RemPart(${i})" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:13px;font-weight:700">✕</button></td></tr>`).join('');}
 function e2AddPart(){
   const name=document.getElementById('e2-nq').value.trim();
   if(!name){toast('이름을 입력하세요','err');return;}
-  const gender=document.getElementById('e2-gender').value;
   // ★ 입사일: empList 우선
   const empMatch=empList.find(e=>e.name===name);
   const join=empMatch&&empMatch.joinDate ? empMatch.joinDate
             : empMatch&&empMatch.join    ? empMatch.join
             : document.getElementById('e2-join').value;
   const empNo=empMatch?empMatch.empNo||'':'';
-  e2.parts.push({name,gender,join,empNo});
+  e2.parts.push({name,join,empNo});
   // ★ 추가 후 초기화
   document.getElementById('e2-nq').value='';
   document.getElementById('e2-join').value='';
@@ -4485,7 +4488,7 @@ function e2AddPart(){
   renderE2Parts();
 }
 function e2RemPart(i){e2.parts.splice(i,1);renderE2Parts();}
-function renderE2Parts(){document.getElementById('e2-ptbody').innerHTML=e2.parts.map((p,i)=>`<tr><td class="text-center">${i+1}</td><td><input class="pi" value="${p.name}" oninput="e2.parts[${i}].name=this.value"></td><td><select class="pi" onchange="e2.parts[${i}].gender=this.value"><option ${p.gender==='남'?'selected':''}>남</option><option ${p.gender==='여'?'selected':''}>여</option></select></td><td><input class="pi" type="date" value="${p.join}" oninput="e2.parts[${i}].join=this.value"></td><td class="text-center"><button onclick="e2RemPart(${i})" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:13px;font-weight:700">✕</button></td></tr>`).join('');}
+function renderE2Parts(){document.getElementById('e2-ptbody').innerHTML=e2.parts.map((p,i)=>`<tr><td class="text-center">${i+1}</td><td><input class="pi" value="${p.name}" oninput="e2.parts[${i}].name=this.value"></td><td><input class="pi" type="date" value="${p.join}" oninput="e2.parts[${i}].join=this.value"></td><td class="text-center"><button onclick="e2RemPart(${i})" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:13px;font-weight:700">✕</button></td></tr>`).join('');}
 
 /* ══ 직원검색 (이름 먼저) ══ */
 function loadPpeItems(){
@@ -4521,7 +4524,6 @@ function loadEmps(){
         dept:     e.dept    || '',
         empNo:    e.empNo   || '',
         joinDate: e.joinDate|| e.join || '',
-        gender:   e.gender  || '',
       })).filter(e=>e.name);
       // GAS 디버그 정보 콘솔 출력
       if(res.debug) console.log('[직원목록 GAS 디버그]', res.debug);
@@ -4943,11 +4945,8 @@ function searchEmp(pfx,q){
   if(!m.length){res.style.display='none';return;}
   res.style.display='block';
   res.innerHTML=m.slice(0,8).map(e=>{
-    const gBadge=e.gender==='여'
-      ?`<span style="background:#fce7f3;color:#be185d;padding:1px 5px;border-radius:8px;font-size:9px;font-weight:700">여</span>`
-      :`<span style="background:#dbeafe;color:#1d4ed8;padding:1px 5px;border-radius:8px;font-size:9px;font-weight:700">남</span>`;
-    return `<div class="nr" onclick="selectEmp('${pfx}','${e.name}','${e.dept}','${e.joinDate||''}','${e.gender||''}','${e.empNo||''}')">
-      <span>${e.name} ${gBadge}</span><small>${e.dept||''} ${e.joinDate||''} ${e.empNo?'('+e.empNo+')':''}</small></div>`;
+    return `<div class="nr" onclick="selectEmp('${pfx}','${e.name}','${e.dept}','${e.joinDate||''}','','${e.empNo||''}')">
+      <span>${e.name}</span><small>${e.dept||''} ${e.joinDate||''} ${e.empNo?'('+e.empNo+')':''}</small></div>`;
   }).join('');
 }
 function selectEmp(pfx,name,dept,join,gender,empNo){
@@ -4985,17 +4984,6 @@ function selectEmp(pfx,name,dept,join,gender,empNo){
   if(empNo){
     const empNoEl=document.getElementById(pfx+'-empno');
     if(empNoEl) empNoEl.value=empNo;
-  }
-  // ★ 성별 자동입력 (구글시트 남여 컬럼)
-  if(gender){
-    const gSel=document.getElementById(pfx+'-gender');
-    if(gSel){
-      for(let i=0;i<gSel.options.length;i++){
-        if(gSel.options[i].value===gender||gSel.options[i].text===gender){
-          gSel.selectedIndex=i; break;
-        }
-      }
-    }
   }
 }
 
@@ -5102,7 +5090,7 @@ function e1Val(s){
 function e2Val(s){if(s===1){if(!e2.parts.length){toast('대상자를 추가하세요','err');return false;}}if(s===2){if(!e2.dept){toast('부서를 선택하세요','err');return false;}}return true;}
 
 /* ══ 요약 ══ */
-function e1RenderSummary(){const dept=document.getElementById('e1-dept').value,male=e1.parts.filter(p=>p.gender==='남').length,female=e1.parts.filter(p=>p.gender==='여').length;document.getElementById('e1-summary').innerHTML=`<div class="sbox">${[['교육부서',dept],['취급물질',e1.chems.join(', ')],['교육기간',e1.dates[0]+(e1.dates.length>1?' ~ '+e1.dates[e1.dates.length-1]:'')+'  ('+e1.dates.length+'일)'],['교육시간',document.getElementById('e1-time').value||'-'],['교육장소',document.getElementById('e1-place').value||'-'],['강사',document.getElementById('e1-instr').value||'-'],['교육인원',`${e1.parts.length}명 (남 ${male} / 여 ${female})`],['사진',e1.photos.filter(Boolean).length+'장']].map(([k,v])=>`<div class="srow"><div class="sk">${k}</div><div class="sv">${v}</div></div>`).join('')}</div>`; e1RenderPreview();}
+function e1RenderSummary(){const dept=document.getElementById('e1-dept').value;document.getElementById('e1-summary').innerHTML=`<div class="sbox">${[['교육부서',dept],['취급물질',e1.chems.join(', ')],['교육기간',e1.dates[0]+(e1.dates.length>1?' ~ '+e1.dates[e1.dates.length-1]:'')+'  ('+e1.dates.length+'일)'],['교육시간',document.getElementById('e1-time').value||'-'],['교육장소',document.getElementById('e1-place').value||'-'],['강사',document.getElementById('e1-instr').value||'-'],['교육인원',`${e1.parts.length}명`],['사진',e1.photos.filter(Boolean).length+'장']].map(([k,v])=>`<div class="srow"><div class="sk">${k}</div><div class="sv">${v}</div></div>`).join('')}</div>`; e1RenderPreview();}
 function e2RenderSummary(){const dept=document.getElementById('e2-dept').value;document.getElementById('e2-summary').innerHTML=`<div class="sbox">${[['교육부서',dept],['취급물질',e2.chems.join(', ')],['교육일',document.getElementById('e2-ds').value],['교육시간',document.getElementById('e2-time').value||'-'],['강사',document.getElementById('e2-instr').value||'-'],['교육인원',e2.parts.length+'명 (서명 완료: '+Object.keys(e2.sigData).length+'명)']].map(([k,v])=>`<div class="srow"><div class="sk">${k}</div><div class="sv">${v}</div></div>`).join('')}</div>`; e2RenderPreview();}
 
 /* ★ v15.42: PDF 미리보기 렌더 (e1, e2 공통 패턴) - 유해화학물질 보고서와 동일 */
@@ -5189,8 +5177,6 @@ function e1BuildPdfHTML(){
   const instrPos  = instrFull.includes('/') ? instrFull.split('/')[1].trim() : '';
   const indiv     = document.getElementById('e1-indiv').value;
   const common    = document.getElementById('e1-common').value;
-  const male      = e1.parts.filter(p=>p.gender==='남').length;
-  const female    = e1.parts.filter(p=>p.gender==='여').length;
   const minJoin   = e1.parts.map(p=>p.join).filter(Boolean).sort()[0]||'-';
   const fmt       = t => (t||'').replace(/\n/g,'<br>');
   const DAYS      = ['일','월','화','수','목','금','토'];
@@ -5300,8 +5286,6 @@ function e1BuildPdfHTML(){
             <tr>
               <td style="padding:10px 13px;font-size:12px;font-weight:400;color:${P.txtSub};border-right:1px dotted ${P.border};width:140px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle">교육 참석 근로자수</td>
               <td style="padding:10px 8px;font-size:12px;font-weight:400;text-align:center;border-right:1px dotted ${P.border};width:70px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle"><span style="color:${P.txtGray}">계</span> <b style="color:${P.txt};font-weight:700">${e1.parts.length}명</b></td>
-              <td style="padding:10px 8px;font-size:12px;font-weight:400;text-align:center;border-right:1px dotted ${P.border};width:78px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle"><span style="color:${P.txtGray}">남자</span> <b style="color:${P.txt};font-weight:700">${male}명</b></td>
-              <td style="padding:10px 8px;font-size:12px;font-weight:400;text-align:center;border-right:1px dotted ${P.border};width:78px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle"><span style="color:${P.txtGray}">여자</span> <b style="color:${P.txt};font-weight:700">${female}명</b></td>
               <td style="padding:10px 13px;font-size:12px;font-weight:400;color:${P.txtSub};text-align:right;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle">입사일: ${minJoin} / 취득일: ${minJoin}</td>
             </tr>
           </table>
@@ -5413,7 +5397,6 @@ async function e1GenPDF(){
       names: e1.parts.map(p=>p.name).join('|'),
       empNos: e1.parts.map(p=>p.empNo||'').join('|'),
       joinDates: e1.parts.map(p=>p.join||'').join('|'),
-      genders: e1.parts.map(p=>p.gender||'').join('|'),
       sigImgs: sigImgs,  // ★ 서명 이미지 배열 (1일차 대표)
       sigsByDay: sigsByDay,  // ★ v15.43: 모든 일자 서명 (members[0]에 저장)
       eduDates: e1.dates,  // ★ v15.43: 일자 배열 (members[0]에 저장)
@@ -5441,7 +5424,7 @@ async function e1GenPDF(){
       sigCount: e1SigCount+'명 서명',
       names: e1.parts.map(p=>p.name).join(', '),
       partsDetail: await Promise.all(e1.parts.map(async (p,i)=>({
-        no:i+1, name:p.name, join:p.join||'', gender:p.gender||'',
+        no:i+1, name:p.name, join:p.join||'',
         signed: i<e1SigCount ? '✓' : '-',
         sigImg: i<3 ? await compressImg((e1.sigData[0]&&e1.sigData[0][i])||'') : ''
       }))),
@@ -5634,7 +5617,6 @@ async function e2GenPDF(){
       names: e2.parts.map(p=>p.name).join('|'),
       empNos: e2.parts.map(p=>p.empNo||'').join('|'),
       joinDates: e2.parts.map(p=>p.join||'').join('|'),
-      genders: e2.parts.map(p=>p.gender||'').join('|'),
       sigImgs: e2SigImgs,  // ★ 서명 이미지 배열
       fileName: _e2FileName
     });
@@ -5659,7 +5641,7 @@ async function e2GenPDF(){
       sigCount: e2SigCount+'명 서명',
       names: e2.parts.map(p=>p.name).join(', '),
       partsDetail: await Promise.all(e2.parts.map(async (p,i)=>({
-        no:i+1, name:p.name, join:p.join||'', gender:p.gender||'',
+        no:i+1, name:p.name, join:p.join||'',
         signed: i<e2SigCount ? '✓' : '-',
         sigImg: i<3 ? await compressImg(e2.sigData[i]||'') : ''
       })))
@@ -5964,7 +5946,7 @@ function apvLoadAndRender(){
     g.members.push({
       name: r.name||'', empNo: r.empNo||'',
       joinDate: normalizeDate(r.joinDate||''),  // ★ v15.43: 입사일 정규화
-      gender: r.gender||'', signed: r.signed||'',
+      signed: r.signed||'',
       // ★ v15.43: 미리보기 누락 버그 수정 — 모든 필드 보존
       sigImg: r.sigImg||'',           // 서명 이미지
       photos: r.photos,                // 사진 (members[0]에만 있음)
@@ -8691,7 +8673,7 @@ function ppeSaveRecordsBatch(persons, pdfFileName, sigImgs){
         'sigCount='+encodeURIComponent(String(L.signedCount)),
         'empNos='+encodeURIComponent(persons.map(p=>p.empNo||'').join('|')),
         'joinDates='+encodeURIComponent(persons.map(p=>p.join||'').join('|')),
-        'genders=','time=보호구지급',
+        'time=보호구지급',
         'callback='+cb
       ].join('&');
       const sc=document.createElement('script');
@@ -8737,7 +8719,6 @@ function saveEduRecord(params){
     const names  = params.names ? params.names.split('|') : [];
     const empNos = params.empNos ? params.empNos.split('|') : [];
     const joinDates = params.joinDates ? params.joinDates.split('|') : [];
-    const genders = params.genders ? params.genders.split('|') : [];
     const sigImgs = Array.isArray(params.sigImgs) ? params.sigImgs : [];  // ★ 서명 이미지 배열
     const photos = Array.isArray(params.photos) ? params.photos : [];  // ★ 사진 배열 (e1 전용)
     const sigsByDay = params.sigsByDay || null;  // ★ v15.43: 다일 교육 일자별 서명
@@ -8774,7 +8755,6 @@ function saveEduRecord(params){
         empNo: empNos[i]||'',
         name: name.trim(),
         joinDate: joinDates[i]||'',
-        gender: genders[i]||'',
         signed: i<sigCount ? '✓ 서명완료' : '- 미서명',
         sigImg: sigImgs[i] || '',  // ★ 서명 이미지 (압축된 base64)
         photos: i===0 ? photos : undefined,  // ★ 사진은 첫 인원에만 (일지 단위 정보)
@@ -8829,7 +8809,6 @@ function saveEduRecord(params){
     names:  params.names||'',
     empNos: params.empNos||'',
     joinDates: params.joinDates||'',
-    genders:   params.genders||'',
     dateStart: params.dateStart||'',
     dateEnd:   params.dateEnd||'',
     days:      params.days||'',
@@ -8966,7 +8945,7 @@ async function _regenerateEduFromRecord(r){
       approved: !!r.approved,
       members: [{
         name: r.name || '', empNo: r.empNo || '', joinDate: r.joinDate || '',
-        gender: r.gender || '', signed: r.signed || '',
+        signed: r.signed || '',
         sigImg: r.sigImg || '', photos: r.photos,
         sigsByDay: r.sigsByDay, eduDates: r.eduDates,
         time: r.time, totalHours: r.totalHours,

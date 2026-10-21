@@ -77,6 +77,25 @@ function makeEnv() {
     DriveApp: { createFolder: n => root.createFolder(n), getFolderById: id => { if (!folders[id]) throw new Error('no folder'); return folders[id]; } },
     MimeType: { PLAIN_TEXT: 'text/plain' },
     MailApp: { sent: [], sendEmail(o) { this.sent.push(o); } },
+    // 가짜 Firebase: signInWithPassword + Firestore 목록 (FIREBASE.users / FIREBASE.docs 로 데이터 지정)
+    FIREBASE: { users: {}, docs: [], calls: [] },
+    UrlFetchApp: {
+      fetch(u, opt) {
+        const fb = this.__fb;
+        fb.calls.push(u);
+        const resp = (code, obj) => ({ getResponseCode: () => code, getContentText: () => JSON.stringify(obj) });
+        if (u.startsWith('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword')) {
+          const b = JSON.parse(opt.payload);
+          if (fb.users[b.email] !== b.password) return resp(400, { error: { message: 'INVALID_LOGIN_CREDENTIALS' } });
+          return resp(200, { idToken: 'fb-id-token' });
+        }
+        if (u.startsWith('https://firestore.googleapis.com/v1/projects/')) {
+          if (!opt || !opt.headers || opt.headers.Authorization !== 'Bearer fb-id-token') return resp(403, {});
+          return resp(200, { documents: fb.docs });
+        }
+        return resp(404, {});
+      },
+    },
     ScriptApp: { getProjectTriggers: () => [] },
     ContentService: {
       MimeType: { JAVASCRIPT: 'js', JSON: 'json' },
@@ -99,12 +118,13 @@ function makeEnv() {
       },
     },
   };
+  env.UrlFetchApp.__fb = env.FIREBASE;
   return { env, sheets, props, root, Sheet };
 }
 function load(codePath) {
   const m = makeEnv();
   const ctx = vm.createContext(m.env);
-  vm.runInContext(fs.readFileSync(codePath, 'utf8') + '\n;this.__api={doGet,doPost,sha256Hex_,sendReminders_,nhRows_,nhWrite_};', ctx);
+  vm.runInContext(fs.readFileSync(codePath, 'utf8') + '\n;this.__api={doGet,doPost,sha256Hex_,sendReminders_,nhRows_,nhWrite_,dailyCheck};', ctx);
   return Object.assign(m, { ctx, api: ctx.__api });
 }
 module.exports = { load };
