@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v19.9 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v20.0 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -175,7 +175,7 @@ function doPost(e) {
                         result = chemOp_(req, s); break;
       case 'ai.status': case 'ai.setKey': case 'ai.list': case 'ai.analyze': case 'ai.judge': case 'ai.apply': case 'ai.products': case 'ai.compare':
                         result = aiOp_(req, s); break;
-      case 'edu.dupes': case 'edu.dedupe':
+      case 'edu.dupes': case 'edu.dedupe': case 'edu.status': case 'edu.exclude': case 'edu.askMail': case 'edu.newChem':
                         result = eduOp_(req, s); break;
       default:          result = { success: false, error: 'unknown op: ' + req.op };
     }
@@ -2394,7 +2394,18 @@ function aiApply_(req) {
     }
     [C.cas, C.amt].forEach(ci => { if (ci >= 0) sheet.getRange(start, ci + 1, out.length, 1).setNumberFormat('@'); });
     sheet.getRange(start, 1, out.length, width).setValues(out);
-    return { success: true, mode: revise ? 'revise' : 'new', row: start, rows: out.length, oldRows: old ? old.count : 0, pdfUrl: pdfUrl, icons: icons ? icons.split(',').length : 0 };
+    // v20.0: 새 물질 → 사용 부서 교육 대상 (개정은 성분이 새로 들어온 경우만)
+    let eduAdded = 0;
+    try {
+      const depts = d.departments || [];
+      if (!revise) eduAdded = newChemAdd_(name, depts, 'AI MSDS 검토 승인', '');
+      else {
+        const oldKeys = old.components.map(c => casCheck_(c.cas) ? c.cas : normChem_(c.name));
+        const added = comps.filter(c => oldKeys.indexOf(casCheck_(String(c.cas || '').trim()) ? String(c.cas).trim() : normChem_(c.name)) < 0).map(c => c.name);
+        if (added.length) eduAdded = newChemAdd_(name, depts, 'MSDS 개정 승인', '성분 추가: ' + added.join(', '));
+      }
+    } catch (_) {}
+    return { success: true, eduAdded: eduAdded, mode: revise ? 'revise' : 'new', row: start, rows: out.length, oldRows: old ? old.count : 0, pdfUrl: pdfUrl, icons: icons ? icons.split(',').length : 0 };
   } finally {
     lock.releaseLock();
   }
@@ -2428,9 +2439,229 @@ function eduDupes_() {
   }).sort((a, b) => a.keep.row - b.keep.row);
   return { groups: groups, total: v.length - 1, removeCount: groups.reduce((n, x) => n + x.remove.length, 0) };
 }
+// ════════════════════════════════════════════════════════════════
+// 교육 보완 (v20.0): 이수 현황 · 교육 제외 · 새 물질 교육
+//  · 대상: 재직자 중 화학물질 사용 부서 직원 — 기본은 모두 대상
+//  · 제외: 관리자 또는 부서장이 '취급 안 함'으로 확인한 사람만 (교육제외 시트, 신규입사 '아니오' 회신 포함)
+//          단, 교육일지를 작성한 사람은 제외 확인이 있어도 대상으로 봄
+//  · 특별교육: 현장 교육 시간 + 공통 온라인 8시간 ≥ 16시간이면 이수, 남은 시간은 첫 교육일부터 3개월 안에
+//  · 새 물질: AI MSDS 검토에서 새 제품 · 성분을 승인하면 사용 부서에 교육 대상 생성 (기한 14일)
+// ════════════════════════════════════════════════════════════════
+const EXCL_SHEET = '교육제외', EXCL_HEADER = ['사번', '이름', '부서', '사유', '확인자', '확인일', '경로', '해제일'];
+const NEWCHEM_SHEET = '새물질교육', NEWCHEM_HEADER = ['등록일', '물질', '부서', '기한', '출처', '비고'];
+const SPECIAL_HOURS = 16, SPECIAL_ONLINE = 8, SPECIAL_MONTHS = 3, NEWCHEM_DAYS = 14, NEWHIRE_WINDOW = 90;
+
+function eduSheet_(name, header) {
+  let sh = SS.getSheetByName(name);
+  if (!sh) { sh = SS.insertSheet(name); sh.appendRow(header); sh.setFrozenRows(1); }
+  return sh;
+}
+function addMonths_(ymd, n) {
+  const d = new Date(ymd + 'T00:00:00');
+  d.setMonth(d.getMonth() + n);
+  return Utilities.formatDate(d, TZ, 'yyyy-MM-dd');
+}
+const eduKey_ = (no, name, dept) => /^\d{6,}$/.test(String(no || '').trim()) ? 'no:' + String(no).trim() : 'nm:' + String(name || '').trim() + '|' + normDept_(dept);
+const normChem_ = x => String(x || '').toLowerCase().replace(/[\s()（）\[\]_\-.,·%]/g, '');
+
+function exclMap_() {
+  const out = {};
+  const sh = SS.getSheetByName(EXCL_SHEET);
+  if (sh && sh.getLastRow() >= 2) {
+    sh.getRange(2, 1, sh.getLastRow() - 1, EXCL_HEADER.length).getDisplayValues().forEach((r, i) => {
+      if (!String(r[1]).trim() || String(r[7]).trim()) return;   // 해제된 줄은 무시
+      const o = { row: i + 2, reason: r[3], by: r[4], date: r[5], route: r[6] };
+      out[eduKey_(r[0], r[1], r[2])] = o;
+      out['nm:' + String(r[1]).trim() + '|' + normDept_(r[2])] = o;
+    });
+  }
+  try {   // 신규입사 알림에서 '취급 안 함'으로 회신한 직원
+    nhRows_().forEach(o => {
+      if (o['상태'] !== '미취급') return;
+      const x = { reason: '신규입사 회신: 취급 안 함', by: o['부서'] + ' 부서장', date: String(o['회신일시'] || '').slice(0, 10), route: '신규입사 회신' };
+      const k1 = eduKey_(o['사번'], o['이름'], o['부서']), k2 = 'nm:' + o['이름'] + '|' + normDept_(o['부서']);
+      if (!out[k1]) out[k1] = x;
+      if (!out[k2]) out[k2] = x;
+    });
+  } catch (_) {}
+  return out;
+}
+function ledgerRows_() {
+  const sh = SS.getSheetByName('교육이력대장');
+  if (!sh || sh.getLastRow() < 2) return [];
+  const v = sh.getDataRange().getDisplayValues();
+  const h = v[0].map(x => String(x).trim());
+  const c = k => h.indexOf(k);
+  const C = { type: c('교육구분'), dept: c('교육부서'), chem: c('취급물질'), ds: c('교육시작일'), de: c('교육종료일'), hrs: c('총교육시간'), no: c('사번'), name: c('성명') };
+  if (C.name < 0 || C.type < 0) return [];
+  return v.slice(1).filter(r => String(r[C.name] || '').trim()).map(r => ({
+    no: C.no >= 0 ? String(r[C.no] || '').trim() : '', name: String(r[C.name]).trim(), dept: C.dept >= 0 ? String(r[C.dept] || '').trim() : '',
+    type: String(r[C.type] || ''), special: /특별/.test(String(r[C.type] || '')), chem: C.chem >= 0 ? String(r[C.chem] || '') : '',
+    ds: C.ds >= 0 ? String(r[C.ds] || '').trim() : '', de: C.de >= 0 ? String(r[C.de] || '').trim() : '',
+    hrs: (() => { const m = String(C.hrs >= 0 ? r[C.hrs] : '').match(/(\d+(?:\.\d+)?)/); return m ? Number(m[1]) : 0; })()
+  }));
+}
+function newChemRows_() {
+  const sh = SS.getSheetByName(NEWCHEM_SHEET);
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, NEWCHEM_HEADER.length).getDisplayValues()
+    .filter(r => String(r[1]).trim() && String(r[2]).trim())
+    .map(r => ({ date: String(r[0]).trim(), chem: String(r[1]).trim(), dept: String(r[2]).trim(), due: String(r[3]).trim() || addDays_(String(r[0]).trim(), NEWCHEM_DAYS), src: r[4] }));
+}
+function newChemAdd_(chem, depts, src, note) {
+  const sh = eduSheet_(NEWCHEM_SHEET, NEWCHEM_HEADER);
+  const today = todayKst_();
+  const have = newChemRows_().map(x => normChem_(x.chem) + '|' + normDept_(x.dept) + '|' + x.date);
+  const rows = (depts || []).map(d => String(d).trim()).filter(Boolean)
+    .filter(d => have.indexOf(normChem_(chem) + '|' + normDept_(d) + '|' + today) < 0)
+    .map(d => [today, chem, d, addDays_(today, NEWCHEM_DAYS), src || '', note || ''].map(safeCell_));
+  if (rows.length) sh.getRange(sh.getLastRow() + 1, 1, rows.length, NEWCHEM_HEADER.length).setValues(rows);
+  return rows.length;
+}
+
+function eduStatus_(s) {
+  const today = todayKst_();
+  const map = handlingDepts_();
+  const chems = getChemicals().data || [];
+  const yes = c => c.targetManage || c.specialManage;
+  const deptInfo = {};
+  const info = dept => {
+    const k = normDept_(dept);
+    if (deptInfo[k] !== undefined) return deptInfo[k];
+    const names = chemsForDept_(map, dept);
+    if (!names) return (deptInfo[k] = null);
+    const special = chems.some(c => names.indexOf(c.name) >= 0 && yes(c));
+    return (deptInfo[k] = { need: special ? '특별' : 'MSDS', chems: names });
+  };
+  const excl = exclMap_();
+  const recs = ledgerRows_();
+  const byNo = {}, byName = {};
+  recs.forEach(r => {
+    if (/^\d{6,}$/.test(r.no)) (byNo[r.no] = byNo[r.no] || []).push(r);
+    (byName[r.name] = byName[r.name] || []).push(r);
+  });
+  const newChems = newChemRows_();
+  const emps = (readEmployees_() || []).filter(e => !isResigned_(e) && !(e.leaveDate && e.leaveDate < today) && e.dept);
+  const people = [];
+  emps.forEach(e => {
+    if (s.role === 'dept' && !sameDept_(e.dept, s.dept)) return;
+    const di = info(e.dept);
+    if (!di) return;
+    let mine = /^\d{6,}$/.test(e.empNo) ? (byNo[e.empNo] || []) : [];
+    if (!mine.length) mine = (byName[e.name] || []).filter(r => !r.no || !/^\d{6,}$/.test(r.no) || r.no === e.empNo).filter(r => sameDept_(r.dept, e.dept) || /^\d{6,}$/.test(e.empNo) === false);
+    const ex = excl[eduKey_(e.empNo, e.name, e.dept)] || excl['nm:' + e.name + '|' + normDept_(e.dept)];
+    const p = { no: e.empNo, name: e.name, dept: e.dept, joinDate: e.joinDate, need: di.need, records: mine.length,
+                lastEdu: mine.map(r => r.ds).sort().pop() || '' };
+    if (ex && !mine.length) { p.status = '제외'; p.excluded = ex; people.push(p); return; }
+    const isNew = e.joinDate && e.joinDate >= addDays_(today, -NEWHIRE_WINDOW);
+    if (di.need === '특별') {
+      const sp = mine.filter(r => r.special);
+      const seen = {};
+      let h = 0;
+      sp.forEach(r => { const k = r.ds + '|' + r.de; if (!seen[k]) { seen[k] = 1; h += r.hrs; } });
+      const first = sp.map(r => r.ds).filter(Boolean).sort()[0] || '';
+      p.hours = sp.length ? h + SPECIAL_ONLINE : 0;
+      if (!sp.length) { p.status = '미이수'; p.deadline = isNew ? e.joinDate : ''; }
+      else if (p.hours >= SPECIAL_HOURS) p.status = '이수';
+      else { p.status = '진행중'; p.remain = SPECIAL_HOURS - p.hours; p.deadline = addMonths_(first, SPECIAL_MONTHS); }
+    } else {
+      if (mine.length) p.status = '이수';
+      else { p.status = '미이수'; p.deadline = isNew ? addDays_(e.joinDate, EDU_PERIOD_DAYS) : ''; }
+    }
+    if (p.deadline && p.status !== '이수' && today > p.deadline) p.overdue = true;
+    // 새 물질 교육
+    p.newChem = newChems.filter(n => (sameDept_(n.dept, e.dept) || (n.dept === '병동' && (WARDS.some(w => sameDept_(w, e.dept)) || /병동/.test(e.dept))))
+                                   && !(e.joinDate && e.joinDate >= n.date))
+      .map(n => {
+        const done = mine.some(r => r.ds >= n.date && normChem_(r.chem).indexOf(normChem_(n.chem)) >= 0);
+        return { chem: n.chem, date: n.date, due: n.due, done: done, overdue: !done && today > n.due };
+      });
+    if (p.newChem.some(n => !n.done)) p.newChemPending = true;
+    people.push(p);
+  });
+  const depts = {};
+  people.forEach(p => {
+    const d = depts[p.dept] = depts[p.dept] || { dept: p.dept, need: p.need, total: 0, done: 0, progress: 0, missing: 0, overdue: 0, excluded: 0, newChem: 0 };
+    if (p.status === '제외') { d.excluded++; return; }
+    d.total++;
+    if (p.status === '이수') d.done++; else if (p.status === '진행중') d.progress++; else d.missing++;
+    if (p.overdue) d.overdue++;
+    if (p.newChemPending) d.newChem++;
+  });
+  return { success: true, today: today, people: people, depts: Object.keys(depts).sort().map(k => depts[k]),
+           rules: { specialHours: SPECIAL_HOURS, online: SPECIAL_ONLINE, months: SPECIAL_MONTHS, newChemDays: NEWCHEM_DAYS } };
+}
+
+function eduExclude_(req, s) {
+  const name = String(req.name || '').trim(), dept = String(req.dept || '').trim(), no = String(req.no || '').trim();
+  if (!name || !dept) return { success: false, error: '직원을 고르세요' };
+  if (s.role === 'dept' && !sameDept_(dept, s.dept)) return { success: false, status: 403, error: '다른 부서 직원입니다' };
+  const emp = (readEmployees_() || []).find(e => e.name === name && sameDept_(e.dept, dept) && (!no || !e.empNo || e.empNo === no));
+  if (!emp) return { success: false, error: '직원목록에서 찾지 못했습니다' };
+  const sh = eduSheet_(EXCL_SHEET, EXCL_HEADER);
+  const today = todayKst_();
+  const by = s.role === 'admin' ? '보건관리자' : (deptHead_(s.dept) || s.dept + ' 부서장');
+  const route = s.role === 'admin' ? '관리자' : (req.fromMail ? '부서장(메일)' : '부서장(프로그램)');
+  if (req.undo) {
+    const ex = exclMap_()[eduKey_(emp.empNo, emp.name, emp.dept)];
+    if (!ex || !ex.row) return { success: false, error: '제외 기록이 없습니다 (신규입사 회신 제외는 직원정보관리에서 바꾸세요)' };
+    sh.getRange(ex.row, 8).setValue(today + ' ' + by);
+    return { success: true, undone: true };
+  }
+  const reason = String(req.reason || '').trim();
+  if (!reason) return { success: false, error: '제외 사유를 적어 주세요 (예: 행정 업무만 · 물질 취급 안 함)' };
+  sh.appendRow([emp.empNo || '', emp.name, emp.dept, reason, by, today, route, ''].map(safeCell_));
+  return { success: true };
+}
+
+function eduAskMail_(req) {
+  const st = eduStatus_({ role: 'admin' });
+  const cfg = sysCfg_();
+  const emails = deptEmails_();
+  try {   // '부서장' 시트의 이메일도 사용
+    const hs = SS.getSheetByName('부서장');
+    if (hs && hs.getLastRow() >= 2) {
+      const h = hs.getRange(1, 1, 1, hs.getLastColumn()).getValues()[0].map(x => String(x).trim());
+      const ei = h.indexOf('이메일');
+      if (ei >= 0) hs.getRange(2, 1, hs.getLastRow() - 1, hs.getLastColumn()).getDisplayValues().forEach(r => { if (String(r[ei]).trim()) emails[String(r[0]).trim()] = String(r[ei]).trim(); });
+    }
+  } catch (_) {}
+  const esc = v => String(v || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const want = (req.depts || []).map(String);
+  let sent = 0;
+  const noMail = [];
+  st.depts.forEach(d => {
+    if (want.length && want.indexOf(d.dept) < 0) return;
+    const todo = st.people.filter(p => p.dept === d.dept && p.status !== '제외' && (p.status !== '이수' || p.newChemPending));
+    if (!todo.length) return;
+    const to = Object.keys(emails).filter(k => sameDept_(k, d.dept)).map(k => emails[k]).find(Boolean);
+    if (!to) { noMail.push(d.dept); return; }
+    const link = cfg.appUrl ? cfg.appUrl + (cfg.appUrl.indexOf('?') >= 0 ? '&' : '?') + 'dv=edu' : '';
+    const rows = todo.map(p => '<tr><td>' + esc(p.name) + '</td><td>' + esc(p.need === '특별' ? '특별안전보건교육' : 'MSDS 교육') + '</td><td>' +
+      esc(p.status === '진행중' ? '진행중 (남은 ' + p.remain + '시간, 기한 ' + p.deadline + ')' : (p.status === '이수' ? '새 물질 교육 필요' : '미이수' + (p.deadline ? ' (기한 ' + p.deadline + ')' : ''))) + '</td></tr>').join('');
+    const html = '<div style="font-family:sans-serif;font-size:14px;line-height:1.6"><p>' + esc(d.dept) + ' 부서장님, 유해화학물질 교육 대상자 확인을 부탁드립니다.</p>' +
+      '<table style="border-collapse:collapse" cellpadding="6" border="1"><tr><th>이름</th><th>교육</th><th>상태</th></tr>' + rows + '</table>' +
+      '<p>위 직원 중 <b>화학물질을 취급하지 않는 직원</b>은 앱에서 [제외]로 확인해 주세요. 확인하지 않으면 교육 대상으로 봅니다.</p>' +
+      (link ? '<p><a href="' + esc(link) + '" style="display:inline-block;background:#2D581B;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">확인하기</a></p>' : '') +
+      '<p style="color:#64748b;font-size:12px">부민병원 보건관리실</p></div>';
+    const opts = { to: to, subject: '[보건관리] 화학물질 교육 대상자 확인 요청 - ' + d.dept, htmlBody: html, name: '부민병원 보건관리' };
+    if (cfg.adminEmail) opts.replyTo = cfg.adminEmail;
+    MailApp.sendEmail(opts);
+    sent++;
+  });
+  return { success: true, sent: sent, noMail: noMail };
+}
+
 function eduOp_(req, s) {
+  if (req.op === 'edu.status') return requireLogin_(s) || eduStatus_(s);
+  if (req.op === 'edu.exclude') return requireLogin_(s) || eduExclude_(req, s);
   const deny = requireAdmin_(s);
   if (deny) return deny;
+  if (req.op === 'edu.askMail') return eduAskMail_(req);
+  if (req.op === 'edu.newChem') {
+    const n = newChemAdd_(String(req.chem || '').trim(), req.depts || [], '관리자 등록', String(req.note || ''));
+    return n ? { success: true, added: n } : { success: false, error: '물질명과 부서를 확인하세요 (같은 날 같은 등록은 한 번만)' };
+  }
   if (req.op === 'edu.dupes') return Object.assign({ success: true }, eduDupes_());
   if (req.op === 'edu.dedupe') {
     const lock = LockService.getScriptLock();
