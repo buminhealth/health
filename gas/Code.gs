@@ -603,14 +603,14 @@ function findEmpSheet_() {
 
 // 직원목록 열 이름 (첫 번째가 새로 만들 때 쓰는 이름, 나머지는 기존 시트·엑셀 붙여넣기 호환 이름)
 const EMP_COLS = {
-  empNo:     ['사번','직원번호','사원번호','사원코드','직원코드','empNo','employeeNo','사번(직원번호)','empId','employeeId','staffNo','sabun','empCode','emp_code','employeeCode'],
+  empNo:     ['사번','직원번호','사원번호','사원코드','직원코드','empNo','employeeNo','사번(직원번호)','empId','employeeId','staffNo','sabun','empCode','emp_code','employeeCode','_key'],   // _key: Firestore 문서 ID (휴직자관리 employees_public은 문서 ID가 사번)
   name:      ['이름','성명','직원이름','직원명','성함','name','성명(이름)','이름(성명)','empName','userName','fullName'],
   dept:      ['부서','부서명','소속','소속부서','팀','dept','department','부서(팀)','팀(부서)','deptName','team'],
   joinDate:  ['입사일','입사일자','입사년월일','joinDate','join','입사일(joinDate)','입사년월','hireDate','startDate','entryDate'],
   status:    ['재직상태','상태','재직구분','재직여부','status','state','workStatus'],
-  leaveDate: ['퇴사일','퇴직일','퇴사일자','leaveDate','resignDate','retireDate'],
+  leaveDate: ['퇴사일','퇴직일','퇴사일자','leaveDate','resignDate','retireDate','quitDate'],
   email:     ['이메일','메일','email','E-mail','e-mail','이메일주소','mail'],
-  position:  ['직위','직급','직책','position','rank','title'],
+  position:  ['직위','직급','직책','position','rank','title','jobRank','직무직급'],
   firstSeen: ['최초확인일'],
   lastSeen:  ['최종확인일'],
 };
@@ -1123,6 +1123,8 @@ function fbCfg_() {
     mode: PROPS.getProperty('FB_MODE') || 'firestore',      // firestore | rtdb
     path: PROPS.getProperty('FB_PATH') || '',               // 예: employees
     fullList: PROPS.getProperty('FB_FULL_LIST') === 'Y',    // Y면 사이트에 없는 재직자를 퇴사로 표시
+    // 휴직 기록 위치 (휴직자관리: leaves). 직원 위치가 employees_public이면 기본으로 leaves 사용
+    leavePath: PROPS.getProperty('FB_LEAVE_PATH') || (PROPS.getProperty('FB_PATH') === 'employees_public' ? 'leaves' : ''),
     fieldMap: (function () { try { return JSON.parse(PROPS.getProperty('FB_FIELD_MAP') || '{}'); } catch (_) { return {}; } })(),
   };
 }
@@ -1167,22 +1169,23 @@ function fsValue_(v) {
 }
 
 // 조회 실패 사유를 알기 쉽게 (Firebase가 보낸 메시지 포함)
-function fbErr_(res, c) {
+function fbErr_(res, path) {
   const code = res.getResponseCode();
   let msg = '';
   try { const j = JSON.parse(res.getContentText() || '{}'); msg = (j.error && (j.error.message || j.error)) || ''; } catch (_) {}
-  const hint = code === 403 ? ' → 이 계정에 "' + c.path + '" 읽기 권한이 없습니다 (Firebase 보안 규칙 또는 데이터 위치 이름 확인)'
-             : code === 404 ? ' → 프로젝트 또는 데이터 위치 "' + c.path + '"를 찾을 수 없습니다'
+  const hint = code === 403 ? ' → 이 계정에 "' + path + '" 읽기 권한이 없습니다 (데이터 위치 이름 또는 Firebase 보안 규칙 확인)'
+             : code === 404 ? ' → 프로젝트 또는 데이터 위치 "' + path + '"를 찾을 수 없습니다'
              : '';
   return '인사 데이터 조회 실패 (HTTP ' + code + (msg ? ', ' + String(msg).slice(0, 150) : '') + ')' + hint;
 }
 
-function fbFetchObjects_(c, idToken) {
+function fbFetchObjects_(c, idToken, path) {
+  path = path || c.path;
   const out = [];
   if (c.mode === 'rtdb') {
-    const url = c.dbUrl.replace(/\/+$/, '') + '/' + c.path.split('/').map(encodeURIComponent).join('/') + '.json?auth=' + encodeURIComponent(idToken);
+    const url = c.dbUrl.replace(/\/+$/, '') + '/' + path.split('/').map(encodeURIComponent).join('/') + '.json?auth=' + encodeURIComponent(idToken);
     const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-    if (res.getResponseCode() !== 200) throw new Error(fbErr_(res, c));
+    if (res.getResponseCode() !== 200) throw new Error(fbErr_(res, path));
     const data = JSON.parse(res.getContentText() || 'null') || {};
     (Array.isArray(data) ? data : Object.keys(data).map(k => Object.assign({ _key: k }, data[k])))
       .forEach(o => { if (o && typeof o === 'object') out.push(o); });
@@ -1191,9 +1194,9 @@ function fbFetchObjects_(c, idToken) {
   let pageToken = '';
   for (let page = 0; page < 50; page++) {
     const url = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(c.projectId) + '/databases/(default)/documents/' +
-      c.path.split('/').map(encodeURIComponent).join('/') + '?pageSize=300' + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : '');
+      path.split('/').map(encodeURIComponent).join('/') + '?pageSize=300' + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : '');
     const res = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + idToken }, muteHttpExceptions: true });
-    if (res.getResponseCode() !== 200) throw new Error(fbErr_(res, c));
+    if (res.getResponseCode() !== 200) throw new Error(fbErr_(res, path));
     const j = JSON.parse(res.getContentText() || '{}');
     (j.documents || []).forEach(d => {
       const o = { _key: String(d.name || '').split('/').pop() };
@@ -1211,7 +1214,26 @@ function hrFetchEmployees_(id, password) {
   const c = fbCfg_();
   if (!hrConnectorReady_()) throw new Error('인사 사이트 연결 정보가 없습니다 (시트 메뉴 ④에서 설정)');
   if (!id || !password) throw new Error('인사 사이트 아이디와 비밀번호를 입력하세요');
-  const objs = fbFetchObjects_(c, fbSignIn_(c, id, password));
+  const idToken = fbSignIn_(c, id, password);
+  const objs = fbFetchObjects_(c, idToken);
+  // 재직상태가 없으면 퇴사일·휴직 기록으로 계산 (퇴사일이 오늘 이전 → 퇴사, 오늘이 휴직 기간 → 휴직)
+  const today = todayKst_();
+  let onLeave = {};
+  if (c.leavePath) {
+    try {
+      fbFetchObjects_(c, idToken, c.leavePath).forEach(l => {
+        const code = String(l.empCode || '').trim();
+        const st = normDate_(l.start || ''), en = normDate_(l.end || '');
+        if (code && (!st || st <= today) && (!en || en >= today)) onLeave[code] = l.type || '휴직';
+      });
+    } catch (e) { onLeave = {}; }   // 휴직 기록을 못 읽어도 직원 명단은 계속 사용
+  }
+  objs.forEach(o => {
+    if (o.status || o['재직상태']) return;
+    const code = String(o.empCode || o.empNo || o['사번'] || o._key || '').trim();
+    const quit = normDate_(o.quitDate || o.leaveDate || o['퇴사일'] || '');
+    o.status = quit && quit <= today ? '퇴사' : (onLeave[code] ? '휴직(' + onLeave[code] + ')' : '재직');
+  });
   const flat = objs.map(o => {
     const f = {};
     Object.keys(o).forEach(k => {
