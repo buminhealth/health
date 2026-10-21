@@ -40,6 +40,11 @@ function onOpen() {
     .addItem('① 초기 설정', 'setupSystem')
     .addItem('② 관리자 비밀번호 변경', 'changeAdminPassword')
     .addItem('③ 모든 로그인 강제 해제', 'revokeAllSessions')
+    .addSeparator()
+    .addItem('④ 인사 사이트 자동 로그인 정보 저장', 'saveHrCredentials')
+    .addItem('④-1 인사 사이트 로그인 정보 삭제', 'clearHrCredentials')
+    .addItem('⑤ 매일 아침 자동 확인 켜기', 'enableDailyCheck')
+    .addItem('⑤-1 매일 아침 자동 확인 끄기', 'disableDailyCheck')
     .addToUi();
 }
 
@@ -62,6 +67,12 @@ function setupSystem() {
     depts.forEach(d => sheet.appendRow([d, '', '', 'N', '', 'PIN 입력 후 사용을 Y로 변경']));
   }
   if (!PROPS.getProperty('ADMIN_PW_HASH')) changeAdminPassword();
+  // 신규입사 알림 기본값 (관리자설정 시트에서 수정 가능)
+  const cfg = getAdminCfg().data || {};
+  if (!cfg['앱주소']) setAdminCfg({ key: '앱주소', value: 'https://buminhealth.github.io/health/' + encodeURI('부민병원_MSDS_통합시스템_v5 - 2026-04-17T095042.287.html') });
+  if (!cfg['보건관리자이메일']) setAdminCfg({ key: '보건관리자이메일', value: 'clover8477@bumin.co.kr' });
+  if (!cfg['신규입사기준일수']) setAdminCfg({ key: '신규입사기준일수', value: '30' });
+  if (!cfg['재알림간격일']) setAdminCfg({ key: '재알림간격일', value: '3' });
   const root = DriveApp.getFolderById(PROPS.getProperty('DATA_ROOT_ID'));
   ui.alert('초기 설정 완료',
     '1) [' + AUTH_SHEET + '] 시트에 부서별 PIN(4~6자리)을 넣고 사용을 Y로 바꾸세요.\n' +
@@ -141,6 +152,9 @@ function doPost(e) {
                                    : { success: false, status: 401, error: '로그인 필요' }; break;
       case 'fs.get':    result = requireLogin_(s) || fsGet_(req, s); break;
       case 'fs.put':    result = requireLogin_(s) || fsPut_(req, s); break;
+      case 'emp.status': case 'emp.sync': case 'hr.fetch':
+      case 'nh.list': case 'nh.answer': case 'nh.resend': case 'nh.run':
+                        result = staffOp_(req, s); break;
       default:          result = { success: false, error: 'unknown op: ' + req.op };
     }
   } catch (err) {
@@ -576,43 +590,66 @@ function findEmpSheet_() {
       || SS.getSheetByName('employees') || SS.getSheetByName('Employees');
 }
 
+// 직원목록 열 이름 (첫 번째가 새로 만들 때 쓰는 이름, 나머지는 기존 시트·엑셀 붙여넣기 호환 이름)
+const EMP_COLS = {
+  empNo:     ['사번','직원번호','사원번호','사원코드','직원코드','empNo','employeeNo','사번(직원번호)'],
+  name:      ['이름','성명','직원이름','직원명','성함','name','성명(이름)','이름(성명)'],
+  dept:      ['부서','부서명','소속','소속부서','팀','dept','department','부서(팀)','팀(부서)'],
+  joinDate:  ['입사일','입사일자','입사년월일','joinDate','join','입사일(joinDate)','입사년월'],
+  gender:    ['성별','gender','남녀','성(남/여)'],
+  status:    ['재직상태','상태','재직구분','재직여부','status'],
+  leaveDate: ['퇴사일','퇴직일','퇴사일자','leaveDate'],
+  email:     ['이메일','메일','email','E-mail','e-mail','이메일주소'],
+  position:  ['직위','직급','직책','position'],
+  firstSeen: ['최초확인일'],
+  lastSeen:  ['최종확인일'],
+};
+const EMP_FALLBACK = { empNo: 0, name: 1, dept: 2, joinDate: 3, gender: 4 };   // v1 위치 기반 폴백
+
+function empColIndex_(headers) {
+  const col = {};
+  headers.forEach((h, i) => { const k = String(h).trim(); if (k && col[k] === undefined) col[k] = i; });
+  const idx = {};
+  Object.keys(EMP_COLS).forEach(f => {
+    idx[f] = -1;
+    for (const k of EMP_COLS[f]) if (col[k] !== undefined) { idx[f] = col[k]; break; }
+  });
+  return idx;
+}
+
 function readEmployees_() {
   const sheet = findEmpSheet_();
   if (!sheet) return null;
   const data = sheet.getDataRange().getValues();
   if (data.length < 2) return [];
-  const headers = data[0].map(h => String(h).trim());
-  const col = {};
-  headers.forEach((h, i) => { if (h) col[h] = i; });
-  const findCol = keys => { for (const k of keys) if (col[k] !== undefined) return col[k]; return -1; };
-  const nameIdx     = findCol(['이름','성명','직원이름','직원명','성함','name','성명(이름)','이름(성명)']);
-  const deptIdx     = findCol(['부서','부서명','소속','소속부서','팀','dept','department','부서(팀)','팀(부서)']);
-  const empNoIdx    = findCol(['사번','직원번호','사원번호','사원코드','직원코드','empNo','employeeNo','사번(직원번호)']);
-  const joinDateIdx = findCol(['입사일','입사일자','입사년월일','joinDate','join','입사일(joinDate)','입사년월']);
-  const genderIdx   = findCol(['성별','gender','남녀','성(남/여)']);
-  const getCell = (row, idx, fb) => {
-    const i = idx >= 0 ? idx : fb;
+  const idx = empColIndex_(data[0]);
+  const getCell = (row, f) => {
+    const i = idx[f] >= 0 ? idx[f] : (EMP_FALLBACK[f] !== undefined ? EMP_FALLBACK[f] : -1);
     return (i < 0 || i >= row.length) ? '' : fmtDate_(row[i]);
   };
-  return data.slice(1).map(row => ({
-    name:     getCell(row, nameIdx, 1),
-    dept:     getCell(row, deptIdx, 2),
-    empNo:    getCell(row, empNoIdx, 0),
-    joinDate: getCell(row, joinDateIdx, 3),
-    gender:   getCell(row, genderIdx, 4),
-  })).filter(e => e.name);
+  return data.slice(1).map(row => {
+    const e = {};
+    Object.keys(EMP_COLS).forEach(f => { e[f] = getCell(row, f); });
+    return e;
+  }).filter(e => e.name);
 }
 
+function isResigned_(e) { return /퇴사|퇴직/.test(e.status || ''); }
+
+// 부서 토큰: 자기 부서 재직·휴직자만 (퇴사자 제외) / 관리자: 전체 + 재직상태
 function getEmployees(s) {
   const list = readEmployees_();
   if (list === null) return { success: false, error: '직원목록 시트가 없습니다. 시트명을 "직원목록"으로 해주세요.' };
-  const data = s && s.role === 'dept' ? list.filter(e => e.dept === s.dept) : list;
+  const pick = e => ({ name: e.name, dept: e.dept, empNo: e.empNo, joinDate: e.joinDate, gender: e.gender, status: e.status });
+  const data = s && s.role === 'dept'
+    ? list.filter(e => e.dept === s.dept && !isResigned_(e)).map(pick)
+    : list.map(pick);
   return { success: true, data: data };
 }
 
 function getEmployeeDepts_() {
   const list = readEmployees_() || [];
-  return [...new Set(list.map(e => e.dept).filter(Boolean))].sort();
+  return [...new Set(list.filter(e => !isResigned_(e)).map(e => e.dept).filter(Boolean))].sort();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -779,6 +816,7 @@ function saveRecord(p, s) {
   } finally {
     lock.releaseLock();
   }
+  if (!isPpe) { try { nhMarkEducated_(String(p.dept || '').trim(), p.names ? p.names.split('|') : []); } catch (_) {} }
   return { success: true, message: '저장완료' };
 }
 
@@ -921,4 +959,393 @@ function setAdminCfg(p) {
   }
   sheet.appendRow([safeCell_(key), safeCell_(value), now]);
   return { success: true };
+}
+
+// ════════════════════════════════════════════════════════════════
+// 직원정보 동기화 (관리자)
+//  · 사번 기준으로 추가·갱신. 행을 지우지 않음 (퇴사자도 남김 → 교육기록 조회 가능)
+//  · "전체 명단"으로 올린 경우에만, 명단에 없는 재직자를 '퇴사(명단없음)'으로 표시
+//  · 교육·보호구 기록은 별도 파일/시트라 동기화가 건드리지 않음
+// ════════════════════════════════════════════════════════════════
+const EMP_NEW_HEADER = ['사번','이름','부서','입사일','성별','재직상태','퇴사일','이메일','직위','최초확인일','최종확인일'];
+
+function todayKst_() { return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd'); }
+function nowKst_() { return Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd'T'HH:mm:ss"); }
+
+// 엑셀 붙여넣기·인사 사이트 결과(헤더 + 행 배열)를 직원 객체로 변환
+function rowsToEmployees_(headers, rows) {
+  const idx = empColIndex_(headers);
+  if (idx.name < 0) throw new Error('이름(성명) 열을 찾지 못했습니다. 첫 줄에 열 제목을 포함해 주세요.');
+  return rows.map(r => {
+    const e = {};
+    Object.keys(EMP_COLS).forEach(f => { e[f] = idx[f] >= 0 ? String(r[idx[f]] == null ? '' : r[idx[f]]).trim() : ''; });
+    e.joinDate = normDate_(e.joinDate);
+    e.leaveDate = normDate_(e.leaveDate);
+    return e;
+  }).filter(e => e.name);
+}
+function normDate_(v) {
+  const s = String(v || '').trim();
+  const m = s.match(/^(\d{4})[.\-\/년\s]*(\d{1,2})[.\-\/월\s]*(\d{1,2})/);
+  return m ? m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2) : s;
+}
+
+function syncEmployees_(incoming, fullList) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('서버가 바쁩니다. 잠시 후 다시 시도하세요.');
+  try {
+    let sheet = findEmpSheet_();
+    if (!sheet) { sheet = SS.insertSheet('직원목록'); sheet.appendRow(EMP_NEW_HEADER); }
+    if (sheet.getLastRow() === 0) sheet.appendRow(EMP_NEW_HEADER);
+    // 없는 열은 끝에 추가 (기존 열 순서는 유지)
+    let headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
+    let idx = empColIndex_(headers);
+    Object.keys(EMP_COLS).forEach(f => {
+      if (idx[f] < 0) { headers.push(EMP_COLS[f][0]); sheet.getRange(1, headers.length).setValue(EMP_COLS[f][0]); }
+    });
+    idx = empColIndex_(headers);
+    const width = headers.length;
+    const last = sheet.getLastRow();
+    const data = last > 1 ? sheet.getRange(2, 1, last - 1, width).getValues() : [];
+
+    const today = todayKst_();
+    const keyOf = (empNo, name, joinDate) => empNo ? 'no:' + String(empNo).trim() : 'nm:' + String(name).trim() + '|' + normDate_(fmtDate_(joinDate));
+    const pos = {};
+    data.forEach((r, i) => { pos[keyOf(r[idx.empNo], r[idx.name], r[idx.joinDate])] = i; });
+
+    const seen = new Set();
+    const summary = { added: 0, updated: 0, resigned: 0, unchanged: 0, newEmployees: [] };
+    incoming.forEach(e => {
+      const k = keyOf(e.empNo, e.name, e.joinDate);
+      seen.add(k);
+      if (pos[k] === undefined) {
+        const row = new Array(width).fill('');
+        ['empNo','name','dept','joinDate','gender','leaveDate','email','position'].forEach(f => { row[idx[f]] = e[f] || ''; });
+        row[idx.status] = e.status || '재직';
+        row[idx.firstSeen] = today;
+        row[idx.lastSeen] = today;
+        pos[k] = data.length;
+        data.push(row);
+        summary.added++;
+        summary.newEmployees.push({ name: e.name, dept: e.dept, joinDate: e.joinDate });
+        return;
+      }
+      const row = data[pos[k]];
+      let changed = false;
+      ['name','dept','joinDate','gender','status','leaveDate','email','position'].forEach(f => {
+        if (!e[f]) return;
+        if (fmtDate_(row[idx[f]]) !== e[f]) { row[idx[f]] = e[f]; changed = true; }
+      });
+      if (!e.status && isResigned_({ status: fmtDate_(row[idx.status]) })) { row[idx.status] = '재직'; changed = true; }   // 재입사
+      row[idx.lastSeen] = today;
+      if (changed) summary.updated++; else summary.unchanged++;
+    });
+
+    if (fullList) {
+      data.forEach(row => {
+        const k = keyOf(row[idx.empNo], row[idx.name], row[idx.joinDate]);
+        if (seen.has(k) || isResigned_({ status: fmtDate_(row[idx.status]) })) return;
+        row[idx.status] = '퇴사(명단없음)';
+        if (!fmtDate_(row[idx.leaveDate])) row[idx.leaveDate] = today;
+        summary.resigned++;
+      });
+    }
+    if (data.length) {
+      sheet.getRange(2, 1, data.length, width).setValues(data.map(r => r.map(v => v instanceof Date ? v : safeCell_(v))));
+    }
+    setAdminCfg({ key: 'emp_last_sync', value: nowKst_() + ' (추가 ' + summary.added + ' · 변경 ' + summary.updated + ' · 퇴사표시 ' + summary.resigned + ')' });
+    return summary;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function empStatus_() {
+  const list = readEmployees_() || [];
+  const cfg = getAdminCfg().data || {};
+  return {
+    success: true,
+    total: list.length,
+    active: list.filter(e => !isResigned_(e) && !/휴직/.test(e.status || '')).length,
+    leave: list.filter(e => /휴직/.test(e.status || '')).length,
+    resigned: list.filter(isResigned_).length,
+    lastSync: cfg.emp_last_sync || '',
+    hrAuto: hrAutoReady_(),
+    hrConnector: HR_CONNECTOR_READY,
+    dailyOn: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'dailyCheck'),
+    hrLastError: cfg.hr_last_error || '',
+  };
+}
+
+// ════════════════════════════════════════════════════════════════
+// 인사 사이트 연결 (휴직자관리.html 확인 후 구현 예정)
+//  · 수동: 관리자가 화면에서 비밀번호를 입력 → 이 요청에만 사용, 저장하지 않음
+//  · 자동(매일): 시트 메뉴 ④에서 저장한 아이디·비밀번호(스크립트 속성, 비공개) 사용
+// ════════════════════════════════════════════════════════════════
+const HR_CONNECTOR_READY = false;
+
+function hrFetchEmployees_(id, password) {
+  // TODO: 인사 사이트 로그인·조회 방식 확인 후 구현 → { headers: [...], rows: [[...], ...] } 반환
+  throw new Error('인사 사이트 연결은 아직 준비 중입니다 (사이트 접속 방식 확인 필요). 엑셀 붙여넣기를 사용해 주세요.');
+}
+
+function hrAutoReady_() {
+  return HR_CONNECTOR_READY && !!PROPS.getProperty('HR_ID') && !!PROPS.getProperty('HR_PW');
+}
+
+function saveHrCredentials() {
+  const ui = SpreadsheetApp.getUi();
+  const r1 = ui.prompt('인사 사이트 자동 로그인', '아이디(이메일)', ui.ButtonSet.OK_CANCEL);
+  if (r1.getSelectedButton() !== ui.Button.OK) return;
+  const r2 = ui.prompt('인사 사이트 자동 로그인', '비밀번호 (스크립트 속성에만 저장, 코드·시트에 남지 않음)', ui.ButtonSet.OK_CANCEL);
+  if (r2.getSelectedButton() !== ui.Button.OK) return;
+  PROPS.setProperty('HR_ID', r1.getResponseText().trim());
+  PROPS.setProperty('HR_PW', r2.getResponseText());
+  ui.alert('저장했습니다.' + (HR_CONNECTOR_READY ? '' : '\n(인사 사이트 연결 기능이 준비되면 매일 자동 확인에 사용됩니다)'));
+}
+function clearHrCredentials() {
+  PROPS.deleteProperty('HR_ID');
+  PROPS.deleteProperty('HR_PW');
+  SpreadsheetApp.getUi().alert('인사 사이트 로그인 정보를 삭제했습니다.');
+}
+
+// ════════════════════════════════════════════════════════════════
+// 신규입사 알림
+//  흐름: 새 입사자 중 화학물질 사용부서 소속 → 부서장 메일([확인하기] 링크)
+//        → 부서장 PIN 로그인 후 취급 여부 회신 → '예'면 교육일지 작성
+//        → 보건관리자: 관리자 모드에서 회신·미회신·미교육 확인 + 회신 알림 메일
+//        → 회신이 없으면 3일마다 재알림 (최대 3회)
+// ════════════════════════════════════════════════════════════════
+const NH_SHEET = '신규입사알림';
+const NH_HEADER = ['알림ID','생성일시','사번','이름','부서','입사일','취급물질','부서장이메일','최초발송','최근재알림',
+                   '재알림횟수','회신일시','취급여부','회신메모','교육일지제출일','상태'];
+const NH_MAX_REMIND = 3;
+
+function sysCfg_() {
+  const c = getAdminCfg().data || {};
+  return {
+    appUrl: c['앱주소'] || '',
+    adminEmail: c['보건관리자이메일'] || '',
+    newHireDays: parseInt(c['신규입사기준일수'] || '30', 10),
+    remindDays: parseInt(c['재알림간격일'] || '3', 10),
+  };
+}
+
+function nhSheet_() {
+  let sh = SS.getSheetByName(NH_SHEET);
+  if (!sh) { sh = SS.insertSheet(NH_SHEET); sh.appendRow(NH_HEADER); sh.setFrozenRows(1); }
+  return sh;
+}
+function nhRows_() {
+  const sh = nhSheet_();
+  const last = sh.getLastRow();
+  if (last < 2) return [];
+  return sh.getRange(2, 1, last - 1, NH_HEADER.length).getValues().map((r, i) => {
+    const o = { _row: i + 2 };
+    NH_HEADER.forEach((h, j) => { o[h] = cellStr_(r[j]); });
+    return o;
+  });
+}
+function nhWrite_(o) {
+  nhSheet_().getRange(o._row, 1, 1, NH_HEADER.length).setValues([NH_HEADER.map(h => safeCell_(o[h] === undefined ? '' : o[h]))]);
+}
+
+// 부서 → 그 부서가 사용하는 화학물질 이름 목록 (chemicals 시트의 부서 열 기준)
+function handlingDepts_() {
+  const map = {};
+  (getChemicals().data || []).forEach(c => {
+    (c.departments || []).forEach(d => { (map[d] = map[d] || []).push(c.name); });
+  });
+  return map;
+}
+function chemsForDept_(map, dept) {
+  if (map[dept]) return map[dept];
+  if (/병동$/.test(dept) && map['병동']) return map['병동'];   // 시트의 '병동'은 모든 세부 병동
+  return null;
+}
+
+function deptEmail_(dept) {
+  const sheet = SS.getSheetByName(AUTH_SHEET);
+  if (!sheet || sheet.getLastRow() < 2) return '';
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
+  const ci = headers.indexOf('부서장 이메일');
+  if (ci < 0) return '';
+  const row = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getDisplayValues()
+    .find(r => String(r[0]).trim() === dept);
+  return row ? String(row[ci]).trim() : '';
+}
+
+function detectNewHires_() {
+  const cfg = sysCfg_();
+  const map = handlingDepts_();
+  const existing = new Set(nhRows_().map(o => (o['사번'] || '') + '|' + o['이름'] + '|' + o['부서']));
+  const today = new Date(todayKst_() + 'T00:00:00');
+  const from = new Date(today.getTime() - cfg.newHireDays * 86400000);
+  const created = [];
+  (readEmployees_() || []).forEach(e => {
+    if (isResigned_(e) || !e.joinDate) return;
+    const jd = new Date(normDate_(e.joinDate) + 'T00:00:00');
+    if (isNaN(jd.getTime()) || jd < from) return;
+    const chems = chemsForDept_(map, e.dept);
+    if (!chems) return;
+    const key = (e.empNo || '') + '|' + e.name + '|' + e.dept;
+    if (existing.has(key)) return;
+    existing.add(key);
+    const o = { '알림ID': 'NH' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+                '생성일시': nowKst_(), '사번': e.empNo, '이름': e.name, '부서': e.dept, '입사일': normDate_(e.joinDate),
+                '취급물질': chems.slice(0, 30).join(', '), '부서장이메일': deptEmail_(e.dept), '재알림횟수': '0' };
+    nhSheet_().appendRow(NH_HEADER.map(h => safeCell_(o[h] || '')));
+    o._row = nhSheet_().getLastRow();
+    o['상태'] = nhSend_(o, false) ? '회신대기' : '이메일없음';
+    if (o['상태'] === '회신대기') o['최초발송'] = nowKst_();
+    nhWrite_(o);
+    created.push({ name: o['이름'], dept: o['부서'], status: o['상태'] });
+  });
+  return created;
+}
+
+function nhSend_(o, isReminder) {
+  if (!o['부서장이메일']) return false;
+  const cfg = sysCfg_();
+  const link = cfg.appUrl ? cfg.appUrl + (cfg.appUrl.indexOf('?') >= 0 ? '&' : '?') + 'nh=' + encodeURIComponent(o['알림ID']) : '';
+  const esc = v => String(v || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const html =
+    '<div style="font-family:sans-serif;font-size:14px;line-height:1.6">' +
+    (isReminder ? '<p style="color:#b91c1c"><b>[재알림] 아직 회신이 없어 다시 보내드립니다.</b></p>' : '') +
+    '<p>' + esc(o['부서']) + ' 부서장님, 유해화학물질 사용 부서에 신규 입사자가 있습니다.</p>' +
+    '<table style="border-collapse:collapse" cellpadding="6" border="1">' +
+    '<tr><th align="left">이름</th><td>' + esc(o['이름']) + '</td></tr>' +
+    '<tr><th align="left">입사일</th><td>' + esc(o['입사일']) + '</td></tr>' +
+    '<tr><th align="left">부서 사용 물질</th><td>' + esc(o['취급물질']) + '</td></tr></table>' +
+    '<p>이 직원이 위 물질을 <b>취급하는지</b> 확인해 주세요. 취급하면 MSDS 교육 후 교육일지를 작성해 주세요.</p>' +
+    (link ? '<p><a href="' + esc(link) + '" style="display:inline-block;background:#1c3557;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">확인하기</a></p>'
+          : '<p>앱에 부서 PIN으로 로그인하면 확인 요청이 표시됩니다.</p>') +
+    '<p style="color:#64748b;font-size:12px">부민병원 보건관리실 · 이 메일에 답장하지 말고 위 버튼으로 회신해 주세요.</p></div>';
+  const opts = { to: o['부서장이메일'], subject: (isReminder ? '[재알림] ' : '') + '[보건관리] 신규 입사자 유해화학물질 취급 확인 요청 - ' + o['이름'],
+                 htmlBody: html, name: '부민병원 보건관리' };
+  if (cfg.adminEmail) opts.replyTo = cfg.adminEmail;
+  MailApp.sendEmail(opts);
+  return true;
+}
+
+function sendReminders_() {
+  const cfg = sysCfg_();
+  const now = Date.now();
+  let sent = 0;
+  nhRows_().forEach(o => {
+    if (o['상태'] !== '회신대기') return;
+    const n = parseInt(o['재알림횟수'] || '0', 10);
+    if (n >= NH_MAX_REMIND) return;
+    const lastSent = new Date((o['최근재알림'] || o['최초발송']).replace(' ', 'T') + '+09:00').getTime();
+    if (isNaN(lastSent) || now - lastSent < cfg.remindDays * 86400000) return;
+    if (nhSend_(o, true)) { o['최근재알림'] = nowKst_(); o['재알림횟수'] = String(n + 1); nhWrite_(o); sent++; }
+  });
+  return sent;
+}
+
+function nhList_(s) {
+  const rows = nhRows_().map(o => { const c = Object.assign({}, o); delete c._row; return c; });
+  if (s.role === 'admin') return { success: true, data: rows };
+  return { success: true, data: rows.filter(o => o['부서'] === s.dept && (o['상태'] === '회신대기' || o['상태'] === '이메일없음' || o['상태'] === '취급-교육대기')) };
+}
+
+function nhAnswer_(req, s) {
+  const o = nhRows_().find(x => x['알림ID'] === req.id);
+  if (!o) return { success: false, status: 404, error: '알림을 찾을 수 없습니다' };
+  if (s.role !== 'admin' && o['부서'] !== s.dept) return { success: false, status: 403, error: '다른 부서 알림입니다' };
+  const handles = req.handles === true;
+  o['회신일시'] = nowKst_();
+  o['취급여부'] = handles ? '예' : '아니오';
+  o['회신메모'] = String(req.memo || '').slice(0, 300);
+  o['상태'] = handles ? (o['교육일지제출일'] ? '취급-교육완료' : '취급-교육대기') : '미취급';
+  nhWrite_(o);
+  const cfg = sysCfg_();
+  if (cfg.adminEmail) {
+    try {
+      MailApp.sendEmail({ to: cfg.adminEmail, name: '부민병원 보건관리',
+        subject: '[보건관리] 신규입사 회신 - ' + o['부서'] + ' ' + o['이름'] + ' (취급: ' + o['취급여부'] + ')',
+        htmlBody: '<p>' + o['부서'] + ' ' + o['이름'] + ' (입사 ' + o['입사일'] + ')</p><p>유해화학물질 취급: <b>' + o['취급여부'] + '</b>' +
+                  (o['회신메모'] ? '<br>메모: ' + o['회신메모'].replace(/[<>&]/g, '') : '') + '</p><p>관리자 모드 → 직원정보관리에서 확인하세요.</p>' });
+    } catch (e) { /* 메일 실패는 회신 기록에 영향 없음 */ }
+  }
+  return { success: true, status: o['상태'] };
+}
+
+// 교육일지 저장 시: 같은 부서·이름의 '취급-교육대기' 알림을 교육완료로 표시
+function nhMarkEducated_(dept, names) {
+  if (!SS.getSheetByName(NH_SHEET)) return;
+  const set = new Set(names.map(n => String(n).trim()));
+  nhRows_().forEach(o => {
+    if (o['부서'] !== dept || !set.has(o['이름']) || o['교육일지제출일']) return;
+    o['교육일지제출일'] = todayKst_();
+    if (o['상태'] === '취급-교육대기') o['상태'] = '취급-교육완료';   // 회신 전 제출이면 회신 '예' 때 완료 처리
+    nhWrite_(o);
+  });
+}
+
+function nhResend_(req) {
+  const o = nhRows_().find(x => x['알림ID'] === req.id);
+  if (!o) return { success: false, status: 404, error: '알림을 찾을 수 없습니다' };
+  if (!o['부서장이메일']) o['부서장이메일'] = deptEmail_(o['부서']);
+  if (!nhSend_(o, true)) return { success: false, error: '부서장 이메일이 없습니다 (부서인증 시트에 입력)' };
+  o['최근재알림'] = nowKst_();
+  if (o['상태'] === '이메일없음') { o['상태'] = '회신대기'; o['최초발송'] = o['최초발송'] || nowKst_(); }
+  nhWrite_(o);
+  return { success: true };
+}
+
+// ════════════════════════════════════════════════════════════════
+// 매일 아침 자동 확인 (시트 메뉴 ⑤에서 켜기)
+//  · 인사 사이트 자동 로그인이 가능할 때만: 직원정보 갱신 → 신규입사자 확인·메일
+//  · 재알림(3일 무회신)은 매일 확인
+// ════════════════════════════════════════════════════════════════
+function dailyCheck() {
+  if (hrAutoReady_()) {
+    try {
+      const r = hrFetchEmployees_(PROPS.getProperty('HR_ID'), PROPS.getProperty('HR_PW'));
+      syncEmployees_(rowsToEmployees_(r.headers, r.rows), true);
+      detectNewHires_();
+      setAdminCfg({ key: 'hr_last_error', value: '' });
+    } catch (e) {
+      setAdminCfg({ key: 'hr_last_error', value: nowKst_() + ' ' + String(e.message || e).slice(0, 200) });
+    }
+  }
+  sendReminders_();
+}
+
+function enableDailyCheck() {
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'dailyCheck').forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('dailyCheck').timeBased().everyDays(1).atHour(7).inTimezone(TZ).create();
+  SpreadsheetApp.getUi().alert('매일 아침 7시경 자동 확인을 켰습니다.' +
+    (hrAutoReady_() ? '' : '\n(인사 사이트 자동 로그인이 준비되기 전까지는 재알림만 보냅니다)'));
+}
+function disableDailyCheck() {
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'dailyCheck').forEach(t => ScriptApp.deleteTrigger(t));
+  SpreadsheetApp.getUi().alert('매일 자동 확인을 껐습니다.');
+}
+
+// 관리자 화면 요청 처리
+function staffOp_(req, s) {
+  const deny = requireAdmin_(s);
+  switch (req.op) {
+    case 'emp.status': return deny || empStatus_();
+    case 'emp.sync': {
+      if (deny) return deny;
+      const list = rowsToEmployees_(req.headers || [], req.rows || []);
+      if (!list.length) return { success: false, error: '올릴 직원이 없습니다' };
+      const summary = syncEmployees_(list, req.fullList === true);
+      summary.notified = req.notify === false ? [] : detectNewHires_();
+      return Object.assign({ success: true }, summary);
+    }
+    case 'hr.fetch': {
+      if (deny) return deny;
+      const r = hrFetchEmployees_(String(req.id || PROPS.getProperty('HR_ID') || ''), String(req.password || ''));
+      return { success: true, headers: r.headers, rows: r.rows };
+    }
+    case 'nh.list':   return requireLogin_(s) || nhList_(s);
+    case 'nh.answer': return requireLogin_(s) || nhAnswer_(req, s);
+    case 'nh.resend': return deny || nhResend_(req);
+    case 'nh.run':    return deny || { success: true, created: detectNewHires_(), reminded: sendReminders_() };
+  }
+  return { success: false, error: 'unknown op: ' + req.op };
 }

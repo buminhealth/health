@@ -166,6 +166,74 @@ function check(name, cond, extra) {
   const after = await page.evaluate(async () => (await BMAUTH.post('fs.get', { path: 'records/edu_records.json', t: window.__t61 })).status);
   check('PIN 변경 → 기존 부서 토큰 무효', revoked && after === 401, after);
 
+  // 11. 직원정보관리: 엑셀 붙여넣기 → 업데이트 (관리자)
+  const mail = g.ctx.MailApp;
+  const d = new Date(Date.now() + 9 * 3600e3 - 3 * 86400e3).toISOString().slice(0, 10);   // KST 기준 3일 전
+  await page.evaluate(() => goTab('admin'));
+  await page.fill('#admin-pw', 'admin-pass-1');
+  await page.evaluate(() => adminLogin());   // 실제 관리자 로그인 폼 경로
+  await page.waitForSelector('#admin-main', { state: 'visible' });
+  await page.click('.adm-nav-item[data-pane="staff"]');
+  await page.waitForSelector('#staff-paste');
+  await page.fill('#staff-paste', [
+    '사번\t이름\t부서\t입사일\t재직상태',
+    '126051302\t김가나\t61병동\t2026-07-01\t재직',
+    `126101801\t최신입\t61병동\t${d}\t재직`,
+    '126051303\t이다라\t71병동\t2026.07.02\t휴직',
+  ].join('\n'));
+  await page.click('#staff-preview');
+  await page.check('#staff-full');
+  await page.click('#staff-sync');
+  await page.waitForFunction(() => document.getElementById('staff-stat').textContent.indexOf('퇴사 1') >= 0, null, { timeout: 15000 });
+  const empRows = g.sheets['직원목록'].rows;
+  const byName = n => empRows.find(r => r[1] === n);
+  const hdr = empRows[0];
+  const stCol = hdr.indexOf('재직상태');
+  check('직원 동기화: 행 삭제 없음 (4명 유지)', empRows.length === 5, empRows.length);
+  check('직원 동기화: 명단에 없는 박마바 → 퇴사 표시', byName('박마바') && byName('박마바')[stCol] === '퇴사(명단없음)', byName('박마바'));
+  check('직원 동기화: 이다라 휴직 반영', byName('이다라')[stCol] === '휴직', byName('이다라')[stCol]);
+  check('직원 동기화: 신규 최신입 추가', !!byName('최신입'));
+  const nhMail = mail.sent.find(m => m.to === 'head61@bumin.co.kr');
+  check('신규입사 알림: 61병동 부서장에게 메일', !!nhMail && /최신입/.test(nhMail.subject), mail.sent.map(m => m.to + ' ' + m.subject));
+  check('신규입사 알림: [확인하기] 링크 포함', !!nhMail && /app\.html\?nh=NH/.test(nhMail.htmlBody));
+  check('신규입사 알림: 오래된 입사자·비취급 부서는 제외', mail.sent.length === 1, mail.sent.length);
+  const nhId = g.api.nhRows_()[0]['알림ID'];
+  await page.waitForFunction(() => document.querySelectorAll('#staff-nh-out tr').length >= 2, null, { timeout: 15000 });
+  check('관리자 화면: 신규입사 알림 표 (회신대기)', (await page.textContent('#staff-nh-out')).includes('회신대기'));
+
+  // 12. 부서장: 메일 링크(?nh=) → 확인 창 → '예' → 교육일지 대상자 자동 추가
+  const tok = await page.evaluate(async () => (await BMAUTH.post('login', { kind: 'dept', dept: '61병동', pin: '4321' })));
+  await page.evaluate(t => localStorage.setItem('bm_session', JSON.stringify({ token: t.token, role: 'dept', dept: '61병동', exp: t.exp })), tok);
+  await page.goto(`http://localhost:${PORT}/index.html?nh=${nhId}`);
+  await page.waitForSelector('#bm-nh [data-yes]', { timeout: 15000 });
+  const deptEmps = await page.evaluate(() => empList.map(e => e.name));
+  check('부서 직원 검색: 퇴사자 제외', !deptEmps.includes('박마바') && deptEmps.includes('최신입'), deptEmps);
+  await page.click('#bm-nh [data-yes]');
+  await page.waitForFunction(() => typeof e2 !== 'undefined' && e2.parts.some(p => p.name === '최신입'), null, { timeout: 15000 });
+  const part = await page.evaluate(() => e2.parts.find(p => p.name === '최신입'));
+  check("'예' → MSDS 교육일지에 대상자 자동 추가", part && part.empNo === '126101801', part);
+  check("'예' → 상태 취급-교육대기", g.api.nhRows_()[0]['상태'] === '취급-교육대기', g.api.nhRows_()[0]['상태']);
+  check('보건관리자에게 회신 알림 메일', mail.sent.some(m => m.to === 'admin@bumin.co.kr' && /최신입/.test(m.subject)));
+
+  // 13. 교육일지 저장 → 교육완료
+  await page.evaluate(() => new Promise(res => {
+    window.__cb2 = r => { window.__rec2 = r; res(); };
+    const sc = document.createElement('script');
+    sc.src = CFG.url + '?action=record&type=MSDS교육&dept=' + encodeURIComponent('61병동') + '&names=' + encodeURIComponent('최신입') + '&callback=__cb2';
+    document.head.appendChild(sc);
+  }));
+  check('교육일지 저장 → 취급-교육완료', g.api.nhRows_()[0]['상태'] === '취급-교육완료', g.api.nhRows_()[0]);
+
+  // 14. 3일 무회신 재알림
+  const o = g.api.nhRows_()[0];
+  o['상태'] = '회신대기';
+  o['최초발송'] = new Date(Date.now() + 9 * 3600e3 - 4 * 86400e3).toISOString().slice(0, 19);
+  g.api.nhWrite_(o);
+  const before = mail.sent.length;
+  const reminded = g.api.sendReminders_();
+  check('3일 무회신 → 재알림 1건', reminded === 1 && mail.sent.length === before + 1 && /재알림/.test(mail.sent[mail.sent.length - 1].subject), reminded);
+  check('재알림 직후 다시 실행해도 중복 없음', g.api.sendReminders_() === 0);
+
   check('페이지 스크립트 오류 없음', errors.length === 0, errors.slice(0, 5));
   await ctx.unrouteAll({ behavior: 'ignoreErrors' });
   await browser.close();

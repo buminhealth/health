@@ -10,7 +10,15 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v18.0 (2026-10-21)
+  부민병원 MSDS 통합시스템 v18.1 (2026-10-21)
+
+  ★★★ v18.1 (2026-10-21) — 직원정보관리 + 신규입사 유해화학물질 취급 확인:
+    - 관리자 모드 > 👥 직원정보관리: 엑셀 붙여넣기로 직원정보 업데이트(사번 기준 추가·갱신),
+      인사 사이트 가져오기(연결 방식 확인 후 활성화, 비밀번호는 요청에만 사용·저장 안 함),
+      신규입사 알림 현황(회신대기·이메일없음·취급-교육대기·취급-교육완료·미취급)과 재발송
+    - 퇴사자는 목록에서 지우지 않고 '퇴사' 표시 → 교육·보호구 기록 보존, 부서 직원 검색에서만 제외
+    - 부서 로그인 시 신규입사 확인 요청 창(메일 [확인하기] 링크 ?nh=ID 포함) → '예'면 MSDS 교육일지로
+      이동해 대상자 자동 추가 / 서버: 부서장 메일·3일 무회신 재알림·보건관리자 회신 알림 (gas/Code.gs)
 
   ★★★ v18.0 (2026-10-21) — 1단계: 서버 인증 + 비공개 저장소 (GitHub 토큰 제거):
     [배경] GitHub 쓰기 토큰·관리자 비밀번호가 공개 HTML에 있었고, 기록·PDF·서명이 공개 저장소에 있었음.
@@ -1359,6 +1367,11 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
           <span class="adm-nav-label">화학물질 보고서</span>
           <span class="adm-nav-badge" id="adm-nav-chem-badge"></span>
         </div>
+        <div class="adm-nav-item" data-pane="staff" onclick="admSwitchPane('staff'); BMSTAFF.open();">
+          <span class="adm-nav-icon">👥</span>
+          <span class="adm-nav-label">직원정보관리</span>
+          <span class="adm-nav-badge" id="adm-nav-staff-badge"></span>
+        </div>
 
         <!-- ★ v17.15: '시스템 > 감사 로그' 메뉴 삭제 — 조회 화면은 원래 미작동(죽은 코드)이었음.
              기록 엔진(BM.audit)은 수정 이력·정정 PDF의 데이터 원천이므로 백그라운드에서 그대로 작동 -->
@@ -1614,6 +1627,17 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
           </div>
         </section>
 
+        <!-- ── 📌 직원정보관리 pane (v18.1) — 내용은 BMSTAFF.open()이 그림 ── -->
+        <section class="adm-pane" id="adm-pane-staff">
+          <div class="adm-card">
+            <div class="adm-card-header">
+              <h2 class="adm-card-title">👥 직원정보관리</h2>
+              <span id="staff-stat" class="adm-card-stat"></span>
+            </div>
+            <div class="adm-card-body" id="staff-body"></div>
+          </div>
+        </section>
+
         <!-- ── 📌 화학물질 보고서 pane ── -->
         <section class="adm-pane" id="adm-pane-chem">
           <div class="adm-card">
@@ -1764,7 +1788,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     });
     var j;
     try{ j = await res.json(); }catch(e){ j = { success:false, status:502, error:'서버 응답 오류 (GAS 배포 확인)' }; }
-    if(j && j.status === 401 && session && op !== 'login') onAuthLost();
+    if(j && j.status === 401 && session && op !== 'login' && payload.t === session.token) onAuthLost();
     return j;
   }
 
@@ -2064,6 +2088,230 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     }
     renderBadge();   // 처음 화면(MSDS 조회)은 로그인 없이 — 작성 탭을 열 때 로그인 창 표시
     if(session) setTimeout(upgradeMergeOnce, 5000);
+  });
+})();
+
+/* ★★★ v18.1 — 직원정보관리 (관리자) + 신규입사 확인 요청 (부서)
+   - 관리자 모드 > 👥 직원정보관리: 인사 사이트 가져오기(비밀번호는 이번 요청에만 사용) · 엑셀 붙여넣기 ·
+     신규입사 알림 현황(회신·미회신·미교육)과 재발송
+   - 퇴사자는 직원목록에서 지우지 않고 '퇴사' 상태로 표시 → 교육·보호구 기록은 그대로 보존
+   - 부서 로그인 시 신규입사 확인 요청이 있으면 창으로 표시. 메일의 [확인하기] 링크(?nh=ID)도 같은 창으로 연결.
+     '예' → MSDS 교육일지 화면으로 이동하고 해당 직원을 대상자로 자동 추가 */
+(function(){
+  if(window.BMSTAFF) return;
+  var esc = function(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+  };
+  var say = function(m, t){ try{ toast(m, t || 'info'); }catch(_){ alert(m); } };
+  var post = function(op, body){ return BMAUTH.post(op, body); };
+  var BTN = 'padding:7px 12px;border-radius:7px;border:1px solid #cbd5e1;background:#fff;font-weight:700;font-size:12px;cursor:pointer';
+  var BTN_P = 'padding:7px 12px;border-radius:7px;border:0;background:#1c3557;color:#fff;font-weight:700;font-size:12px;cursor:pointer';
+  var BOX = 'border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:12px;background:#fff';
+  var NH_COLORS = { '회신대기':'#b45309', '이메일없음':'#b91c1c', '취급-교육대기':'#1d4ed8', '취급-교육완료':'#15803d', '미취급':'#64748b' };
+  var parsed = null;
+
+  function parseSheetText(text){
+    var lines = String(text || '').replace(/\r/g, '').split('\n').filter(function(l){ return l.trim(); });
+    if(lines.length < 2) return null;
+    var sep = lines[0].indexOf('\t') >= 0 ? '\t' : ',';
+    var split = function(l){ return l.split(sep).map(function(c){ return c.trim().replace(/^"|"$/g, ''); }); };
+    return { headers: split(lines[0]), rows: lines.slice(1).map(split) };
+  }
+
+  async function open(){
+    var body = document.getElementById('staff-body');
+    if(!body) return;
+    body.innerHTML = '<div style="color:#64748b;font-size:13px">불러오는 중…</div>';
+    var st = await post('emp.status', {});
+    if(!st.success){ body.innerHTML = '<div style="color:#b91c1c">' + esc(st.error || '조회 실패') + '</div>'; return; }
+    var stat = document.getElementById('staff-stat');
+    if(stat) stat.textContent = '재직 ' + st.active + ' · 휴직 ' + st.leave + ' · 퇴사 ' + st.resigned;
+    body.innerHTML =
+      '<div style="' + BOX + 'font-size:13px;color:#334155">' +
+        '<b>마지막 업데이트:</b> ' + esc(st.lastSync || '없음') + '<br>' +
+        '<b>매일 아침 자동 확인:</b> ' + (st.dailyOn ? '켜짐' : '꺼짐') + ' · ' +
+        '<b>인사 사이트 자동 로그인:</b> ' + (st.hrAuto ? '사용 가능' : (st.hrConnector ? '로그인 정보 미저장 (시트 메뉴 ④)' : '연결 준비 중')) +
+        (st.hrLastError ? '<br><span style="color:#b91c1c">최근 자동 확인 오류: ' + esc(st.hrLastError) + '</span>' : '') +
+        '<div style="margin-top:6px;color:#64748b;font-size:12px">퇴사자는 목록에서 지우지 않고 "퇴사"로만 표시합니다. 교육·보호구 기록은 그대로 보존됩니다.</div>' +
+      '</div>' +
+      '<div style="' + BOX + '">' +
+        '<div style="font-weight:800;color:#1c3557;margin-bottom:8px">① 인사 사이트에서 가져오기</div>' +
+        (st.hrConnector
+          ? '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+              '<input id="staff-hr-id" class="fc" placeholder="아이디(이메일)" style="max-width:220px" autocomplete="off">' +
+              '<input id="staff-hr-pw" class="fc" type="password" placeholder="비밀번호 (저장하지 않음)" style="max-width:200px" autocomplete="new-password">' +
+              '<button id="staff-hr-go" style="' + BTN_P + '">가져오기</button></div>'
+          : '<div style="font-size:12px;color:#64748b">인사 사이트 접속 방식을 확인한 뒤 활성화됩니다. 그동안은 ② 엑셀 붙여넣기를 사용하세요.</div>') +
+      '</div>' +
+      '<div style="' + BOX + '">' +
+        '<div style="font-weight:800;color:#1c3557;margin-bottom:4px">② 엑셀에서 붙여넣기</div>' +
+        '<div style="font-size:12px;color:#64748b;margin-bottom:6px">엑셀에서 <b>제목 줄까지</b> 복사해 붙여넣으세요. 필요한 열: 사번 · 이름 · 부서 · 입사일 (있으면 성별 · 재직상태 · 퇴사일 · 이메일 · 직위)</div>' +
+        '<textarea id="staff-paste" class="fc" style="width:100%;height:110px;font-family:monospace;font-size:12px"></textarea>' +
+        '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:6px;font-size:12px">' +
+          '<label><input type="checkbox" id="staff-full"> 전체 직원 명단입니다 (명단에 없는 재직자는 퇴사로 표시)</label>' +
+          '<label><input type="checkbox" id="staff-notify" checked> 업데이트 후 신규입사 알림 메일 보내기</label>' +
+        '</div>' +
+        '<div style="display:flex;gap:6px;margin-top:8px"><button id="staff-preview" style="' + BTN + '">미리보기</button>' +
+        '<button id="staff-sync" style="' + BTN_P + '" disabled>직원정보 업데이트</button></div>' +
+        '<div id="staff-preview-out" style="margin-top:8px"></div>' +
+      '</div>' +
+      '<div style="' + BOX + '">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px">' +
+          '<div style="font-weight:800;color:#1c3557">③ 신규입사 유해화학물질 취급 확인</div>' +
+          '<div style="display:flex;gap:6px"><select id="staff-nh-filter" class="fc" style="width:auto">' +
+            '<option value="">전체</option><option>회신대기</option><option>이메일없음</option><option>취급-교육대기</option><option>취급-교육완료</option><option>미취급</option>' +
+          '</select><button id="staff-nh-run" style="' + BTN + '">지금 확인</button></div>' +
+        '</div>' +
+        '<div id="staff-nh-out" style="overflow-x:auto"></div>' +
+      '</div>';
+
+    var hrGo = document.getElementById('staff-hr-go');
+    if(hrGo) hrGo.onclick = async function(){
+      var pw = document.getElementById('staff-hr-pw');
+      hrGo.disabled = true;
+      try{
+        var r = await post('hr.fetch', { id: document.getElementById('staff-hr-id').value.trim(), password: pw.value });
+        pw.value = '';
+        if(!r.success){ say(r.error || '가져오기 실패', 'err'); return; }
+        parsed = { headers: r.headers, rows: r.rows };
+        showPreview();
+      }finally{ hrGo.disabled = false; }
+    };
+    document.getElementById('staff-preview').onclick = function(){
+      parsed = parseSheetText(document.getElementById('staff-paste').value);
+      if(!parsed){ say('제목 줄과 직원 줄을 함께 붙여넣으세요', 'err'); return; }
+      showPreview();
+    };
+    document.getElementById('staff-sync').onclick = async function(){
+      if(!parsed) return;
+      var full = document.getElementById('staff-full').checked;
+      if(full && !confirm('명단에 없는 재직자를 모두 "퇴사"로 표시합니다. 전체 직원 명단이 맞나요?')) return;
+      var btn = this; btn.disabled = true;
+      var r = await post('emp.sync', { headers: parsed.headers, rows: parsed.rows, fullList: full,
+                                       notify: document.getElementById('staff-notify').checked });
+      btn.disabled = false;
+      if(!r.success){ say(r.error || '업데이트 실패', 'err'); return; }
+      say('✅ 추가 ' + r.added + ' · 변경 ' + r.updated + ' · 퇴사표시 ' + r.resigned + ' · 신규입사 알림 ' + (r.notified || []).length + '건', 'ok');
+      parsed = null;
+      try{ if(typeof loadEmps === 'function') loadEmps(); }catch(_){}
+      open();
+    };
+    document.getElementById('staff-nh-filter').onchange = renderNh;
+    document.getElementById('staff-nh-run').onclick = async function(){
+      var r = await post('nh.run', {});
+      if(!r.success){ say(r.error || '확인 실패', 'err'); return; }
+      say('신규 알림 ' + r.created.length + '건 · 재알림 ' + r.reminded + '건', 'ok');
+      renderNh();
+    };
+    renderNh();
+  }
+
+  function showPreview(){
+    var out = document.getElementById('staff-preview-out');
+    var head = parsed.headers.map(function(h){ return '<th style="padding:4px 6px;border:1px solid #e2e8f0;background:#f8fafc">' + esc(h) + '</th>'; }).join('');
+    var rows = parsed.rows.slice(0, 8).map(function(r){
+      return '<tr>' + r.map(function(c){ return '<td style="padding:4px 6px;border:1px solid #e2e8f0">' + esc(c) + '</td>'; }).join('') + '</tr>';
+    }).join('');
+    out.innerHTML = '<div style="font-size:12px;margin-bottom:4px">총 <b>' + parsed.rows.length + '명</b> (처음 8줄 표시)</div>' +
+      '<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:12px"><tr>' + head + '</tr>' + rows + '</table></div>';
+    document.getElementById('staff-sync').disabled = false;
+  }
+
+  async function renderNh(){
+    var out = document.getElementById('staff-nh-out');
+    if(!out) return;
+    var r = await post('nh.list', {});
+    if(!r.success){ out.innerHTML = '<div style="color:#b91c1c">' + esc(r.error) + '</div>'; return; }
+    var f = document.getElementById('staff-nh-filter').value;
+    var list = r.data.filter(function(o){ return !f || o['상태'] === f; }).reverse();
+    if(!list.length){ out.innerHTML = '<div style="font-size:12px;color:#64748b">해당하는 알림이 없습니다.</div>'; return; }
+    var th = ['상태','부서','이름','입사일','최초발송','재알림','회신일시','취급','교육일지',''].map(function(h){
+      return '<th style="padding:5px 6px;border:1px solid #e2e8f0;background:#f8fafc;white-space:nowrap">' + h + '</th>';
+    }).join('');
+    out.innerHTML = '<table style="border-collapse:collapse;font-size:12px;width:100%"><tr>' + th + '</tr>' + list.map(function(o){
+      var can = o['상태'] === '회신대기' || o['상태'] === '이메일없음';
+      var td = function(v){ return '<td style="padding:5px 6px;border:1px solid #e2e8f0;white-space:nowrap">' + esc(v) + '</td>'; };
+      return '<tr><td style="padding:5px 6px;border:1px solid #e2e8f0;font-weight:800;color:' + (NH_COLORS[o['상태']] || '#334155') + '">' + esc(o['상태']) + '</td>' +
+        td(o['부서']) + td(o['이름']) + td(o['입사일']) + td((o['최초발송'] || '').slice(0, 10)) +
+        td(o['재알림횟수'] && o['재알림횟수'] !== '0' ? o['재알림횟수'] + '회' : '') + td((o['회신일시'] || '').slice(0, 10)) +
+        td(o['취급여부']) + td(o['교육일지제출일']) +
+        '<td style="padding:5px 6px;border:1px solid #e2e8f0">' + (can ? '<button data-nh="' + esc(o['알림ID']) + '" style="' + BTN + '">재발송</button>' : '') + '</td></tr>';
+    }).join('') + '</table>';
+    out.querySelectorAll('button[data-nh]').forEach(function(b){
+      b.onclick = async function(){
+        b.disabled = true;
+        var x = await post('nh.resend', { id: b.getAttribute('data-nh') });
+        say(x.success ? '재발송했습니다' : (x.error || '재발송 실패'), x.success ? 'ok' : 'err');
+        renderNh();
+      };
+    });
+  }
+
+  /* ── 부서: 신규입사 확인 요청 창 ── */
+  function startEdu(o){
+    try{ goTab('edu2'); }catch(_){}
+    setTimeout(function(){
+      try{
+        var emp = (typeof empList !== 'undefined' ? empList : []).find(function(e){ return e.name === o['이름'] && e.dept === o['부서']; }) || {};
+        selectEmp('e2', o['이름'], o['부서'], emp.joinDate || o['입사일'], emp.gender || '', emp.empNo || o['사번'] || '');
+        e2AddPart();
+        say('📋 ' + o['이름'] + ' 님을 교육 대상자로 추가했습니다. 교육 후 일지를 작성해 주세요.', 'ok');
+      }catch(e){ say('교육일지 화면에서 대상자를 직접 추가해 주세요', 'info'); }
+    }, 400);
+  }
+
+  async function showDeptRequests(focusId){
+    var r = await post('nh.list', {});
+    if(!r.success || !r.data.length) return;
+    var ov = document.getElementById('bm-nh');
+    if(ov) ov.remove();
+    ov = document.createElement('div');
+    ov.id = 'bm-nh';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99998;display:flex;align-items:center;justify-content:center;padding:16px';
+    var items = r.data.map(function(o){
+      var waiting = o['상태'] === '회신대기' || o['상태'] === '이메일없음';
+      return '<div style="border:1px solid ' + (o['알림ID'] === focusId ? '#1c3557' : '#e2e8f0') + ';border-radius:10px;padding:12px;margin-bottom:10px">' +
+        '<div style="font-weight:800;color:#1c3557">' + esc(o['이름']) + ' <span style="font-weight:400;color:#64748b;font-size:12px">입사 ' + esc(o['입사일']) + '</span></div>' +
+        '<div style="font-size:12px;color:#475569;margin:4px 0 8px">부서 사용 물질: ' + esc(o['취급물질']) + '</div>' +
+        (waiting
+          ? '<div style="font-size:13px;margin-bottom:6px">이 직원이 위 물질을 취급하나요?</div>' +
+            '<div style="display:flex;gap:6px"><button data-yes="' + esc(o['알림ID']) + '" style="' + BTN_P + '">예 (교육일지 작성)</button>' +
+            '<button data-no="' + esc(o['알림ID']) + '" style="' + BTN + '">아니오</button></div>'
+          : '<button data-edu="' + esc(o['알림ID']) + '" style="' + BTN_P + '">교육일지 작성</button>') +
+      '</div>';
+    }).join('');
+    ov.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:440px;width:100%;max-height:85vh;overflow:auto;padding:20px;font-family:\'Nanum Gothic\',sans-serif">' +
+      '<div style="font-size:16px;font-weight:800;color:#1c3557;margin-bottom:4px">🆕 신규 입사자 확인 요청</div>' +
+      '<div style="font-size:12px;color:#64748b;margin-bottom:12px">유해화학물질 취급 여부를 알려주세요. 취급하면 MSDS 교육 후 교육일지를 작성합니다.</div>' +
+      items + '<div style="text-align:right"><button id="bm-nh-close" style="' + BTN + '">나중에</button></div></div>';
+    document.body.appendChild(ov);
+    var byId = {};
+    r.data.forEach(function(o){ byId[o['알림ID']] = o; });
+    ov.querySelector('#bm-nh-close').onclick = function(){ ov.remove(); };
+    var answer = async function(id, yes){
+      var x = await post('nh.answer', { id: id, handles: yes });
+      if(!x.success){ say(x.error || '회신 실패', 'err'); return; }
+      ov.remove();
+      say('회신했습니다', 'ok');
+      if(yes) startEdu(byId[id]);
+    };
+    ov.querySelectorAll('[data-yes]').forEach(function(b){ b.onclick = function(){ answer(b.getAttribute('data-yes'), true); }; });
+    ov.querySelectorAll('[data-no]').forEach(function(b){
+      b.onclick = function(){ if(confirm('취급하지 않는 것으로 회신할까요?')) answer(b.getAttribute('data-no'), false); };
+    });
+    ov.querySelectorAll('[data-edu]').forEach(function(b){ b.onclick = function(){ ov.remove(); startEdu(byId[b.getAttribute('data-edu')]); }; });
+  }
+
+  window.BMSTAFF = { open: open, showDeptRequests: showDeptRequests };
+
+  window.addEventListener('DOMContentLoaded', function(){
+    var nh = null;
+    try{ nh = new URLSearchParams(location.search).get('nh'); }catch(_){}
+    var s = BMAUTH.session();
+    if(!s){ if(nh) BMAUTH.showLogin(); return; }
+    if(s.role === 'dept' || nh) setTimeout(function(){ showDeptRequests(nh); }, 2500);
   });
 })();
 

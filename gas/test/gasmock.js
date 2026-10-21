@@ -76,6 +76,8 @@ function makeEnv() {
     LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => {} }) },
     DriveApp: { createFolder: n => root.createFolder(n), getFolderById: id => { if (!folders[id]) throw new Error('no folder'); return folders[id]; } },
     MimeType: { PLAIN_TEXT: 'text/plain' },
+    MailApp: { sent: [], sendEmail(o) { this.sent.push(o); } },
+    ScriptApp: { getProjectTriggers: () => [] },
     ContentService: {
       MimeType: { JAVASCRIPT: 'js', JSON: 'json' },
       createTextOutput: t => ({ text: t, setMimeType() { return this; } }),
@@ -102,7 +104,7 @@ function makeEnv() {
 function load(codePath) {
   const m = makeEnv();
   const ctx = vm.createContext(m.env);
-  vm.runInContext(fs.readFileSync(codePath, 'utf8') + '\n;this.__api={doGet,doPost,sha256Hex_};', ctx);
+  vm.runInContext(fs.readFileSync(codePath, 'utf8') + '\n;this.__api={doGet,doPost,sha256Hex_,sendReminders_,nhRows_,nhWrite_};', ctx);
   return Object.assign(m, { ctx, api: ctx.__api });
 }
 module.exports = { load };
