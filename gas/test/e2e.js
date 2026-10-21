@@ -242,6 +242,33 @@ function check(name, cond, extra) {
   const tableText = await page.textContent('#staff-nh-out');
   check('관리자 화면: 회신대기 + 교육기한 표시', tableText.includes('회신대기') && tableText.includes(kstDay(2)));
 
+  // 13-1. 휴직자관리 실제 구조: employees_public(문서 ID=사번, quitDate) + leaves(현재 휴직)
+  g.props.FB_PATH = 'employees_public';
+  const D2 = (id, f) => ({ name: 'projects/bumin-leave/databases/(default)/documents/employees_public/' + id, fields: f });
+  fb.collections = {
+    employees_public: [
+      D2('126051302', { name: S('김가나'), dept: S('61병동'), jobRank: S('간호사'), joinDate: S('2026-07-01'), quitDate: S('') }),
+      D2('126051303', { name: S('이다라'), dept: S('71병동'), joinDate: S('2026-07-02'), quitDate: S('') }),
+      D2('120000001', { name: S('정퇴사'), dept: S('61병동'), joinDate: S('2020-01-01'), quitDate: S(kstDay(-5)) }),
+    ],
+    leaves: [
+      { name: 'x/leaves/126051303_2026-09-01', fields: { empCode: S('126051303'), type: S('육아휴직'), start: S('2026-09-01'), end: S(kstDay(30)) } },
+    ],
+  };
+  const r131 = await page.evaluate(() => BMAUTH.post('hr.fetch', { id: 'clover8477@bumin.co.kr', password: 'hr-pass' }));
+  const hdr131 = r131.headers || [];
+  const rowOf = n => (r131.rows || []).find(r => r.indexOf(n) >= 0) || [];
+  const stI = hdr131.indexOf('status');
+  check('휴직자관리 구조: 문서 ID를 사번으로 (_key)', hdr131.indexOf('_key') >= 0 && rowOf('김가나')[hdr131.indexOf('_key')] === '126051302', hdr131);
+  check('휴직자관리 구조: 퇴사일 지난 직원 → 퇴사', rowOf('정퇴사')[stI] === '퇴사', rowOf('정퇴사'));
+  check('휴직자관리 구조: 현재 휴직 → 휴직(육아휴직)', rowOf('이다라')[stI] === '휴직(육아휴직)', rowOf('이다라'));
+  check('휴직자관리 구조: 그 외 → 재직', rowOf('김가나')[stI] === '재직');
+  fb.denied = ['wrong_name'];
+  g.props.FB_PATH = 'wrong_name';
+  const r403 = await page.evaluate(() => BMAUTH.post('hr.fetch', { id: 'clover8477@bumin.co.kr', password: 'hr-pass' }));
+  check('잘못된 데이터 위치 → 403 사유 안내', !r403.success && /wrong_name/.test(r403.error) && /권한/.test(r403.error), r403.error);
+  g.props.FB_PATH = 'employees'; fb.collections = null; fb.denied = null;
+
   // 14. 부서장: 메일 링크(?nh=) → 로그인 창 → PIN 로그인 → 확인 창 → '예' → 교육일지 대상자 자동 추가
   await page.evaluate(() => { localStorage.removeItem('bm_session'); localStorage.removeItem('bm_admin_ok'); });
   await page.goto(`http://localhost:${PORT}/index.html?nh=${nh0['알림ID']}`);

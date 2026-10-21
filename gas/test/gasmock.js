@@ -91,6 +91,9 @@ function makeEnv() {
         }
         if (u.startsWith('https://firestore.googleapis.com/v1/projects/')) {
           if (!opt || !opt.headers || opt.headers.Authorization !== 'Bearer fb-id-token') return resp(403, {});
+          const coll = decodeURIComponent(u.split('/documents/')[1].split('?')[0]);
+          if (fb.collections && fb.collections[coll]) return resp(200, { documents: fb.collections[coll] });
+          if (fb.collections && fb.denied && fb.denied.indexOf(coll) >= 0) return resp(403, { error: { message: 'Missing or insufficient permissions.' } });
           return resp(200, { documents: fb.docs });
         }
         return resp(404, {});
