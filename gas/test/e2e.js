@@ -305,7 +305,43 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('④ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v18.5'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v18.6'));
+
+  // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
+  g.props.FB_PATH = 'employees_public';
+  const mk = (id, f) => ({ name: 'x/employees_public/' + id, fields: f });
+  const many = [];
+  for (let i = 0; i < 20; i++) many.push(mk('1300000' + String(i).padStart(2, '0'), { name: S('직원' + i), dept: S('61병동'), joinDate: S('2020-01-01'), quitDate: S('') }));
+  fb.collections = { employees_public: many, leaves: [] };
+  const okRun = await page.evaluate(() => BMAUTH.post('nh.run', {}));
+  check('정상 데이터: 자동 확인 성공·기준 인원 기록', okRun.success && !okRun.error, okRun.error);
+  const cfgVal = k => { const r = g.sheets['관리자설정'].rows.find(x => x[0] === k); return r ? r[1] : ''; };
+  check('정상 데이터: 기준 인원 20명 기록', cfgVal('hr_last_count') === '20', cfgVal('hr_last_count'));
+  const empBefore = g.sheets['직원목록'].rows.length;
+  const mailBefore = mail.sent.length;
+  fb.collections.employees_public = many.slice(0, 5);   // 인원 급감
+  const dropRun = await page.evaluate(() => BMAUTH.post('nh.run', {}));
+  check('이상 감지: 인원 급감 → 반영 중단', !!dropRun.error && /크게 줄었습니다/.test(dropRun.error) && g.sheets['직원목록'].rows.length === empBefore, dropRun.error);
+  const failMail = mail.sent.slice(mailBefore).filter(m => m.to === 'admin@bumin.co.kr' && /자동 확인 실패/.test(m.subject));
+  check('실패 시 보건관리자 메일 1통', failMail.length === 1, mail.sent.slice(mailBefore).map(m => m.subject));
+  await page.evaluate(() => BMAUTH.post('nh.run', {}));
+  check('같은 날 같은 실패는 메일 다시 안 보냄', mail.sent.slice(mailBefore).filter(m => /자동 확인 실패/.test(m.subject)).length === 1);
+  fb.collections.employees_public = many.map(d => ({ name: d.name, fields: { name: d.fields.name, dept: d.fields.dept, hireDt: d.fields.joinDate } }));   // 필드 이름 변경
+  const renRun = await page.evaluate(() => BMAUTH.post('nh.run', {}));
+  check('이상 감지: 입사일 필드 이름 변경(빈 비율 0%→100%) → 반영 중단', !!renRun.error && /입사일/.test(renRun.error), renRun.error);
+  check('다른 사유의 실패는 새로 메일', mail.sent.slice(mailBefore).filter(m => /자동 확인 실패/.test(m.subject)).length === 2);
+  const manual = await page.evaluate(() => BMAUTH.post('hr.fetch', {}));
+  check('수동 가져오기: 이상 경고를 함께 반환', manual.success && manual.warnings.length > 0, manual.warnings);
+  const st186 = await page.evaluate(() => BMAUTH.post('emp.status', {}));
+  check('관리자 화면용 최근 오류에 사유 표시', /입사일/.test(st186.hrLastError), st186.hrLastError);
+  // 원래부터 입사일이 대부분 비어 있는 데이터는 오탐하지 않음 (기준값을 지우고 첫 실행처럼)
+  g.sheets['관리자설정'].rows = g.sheets['관리자설정'].rows.filter(x => !/^hr_last_(count|ratios)$/.test(x[0]));
+  fb.collections.employees_public = many.map((d, i) => ({ name: d.name, fields: i < 15 ? { name: d.fields.name, dept: d.fields.dept }
+                                                                                    : { name: d.fields.name, dept: d.fields.dept, joinDate: d.fields.joinDate } }));
+  const noFalse1 = await page.evaluate(() => BMAUTH.post('nh.run', {}));
+  const noFalse2 = await page.evaluate(() => BMAUTH.post('nh.run', {}));
+  check('오탐 방지: 원래 입사일 75%가 빈 데이터도 정상 반영 (첫 실행·다음 실행 모두)', !noFalse1.error && !noFalse2.error, [noFalse1.error, noFalse2.error]);
+  fb.collections = null; g.props.FB_PATH = 'employees';
 
   // 14. 부서장: 메일 링크(?nh=) → 로그인 창 → PIN 로그인 → 확인 창 → '예' → 교육일지 대상자 자동 추가
   await page.evaluate(() => { localStorage.removeItem('bm_session'); localStorage.removeItem('bm_admin_ok'); });
