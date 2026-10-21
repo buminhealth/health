@@ -55,6 +55,8 @@ class Sheet {
   appendRow(a) { this.rows.push(a.slice()); }
   insertRowBefore(i) { this.rows.splice(i - 1, 0, []); }
   deleteRow(i) { this.rows.splice(i - 1, 1); }
+  insertRowsAfter(i, n) { this.rows.splice(i, 0, ...Array.from({ length: n }, () => [])); }
+  deleteRows(i, n) { this.rows.splice(i - 1, n); }
   getRange(a, b, c, d) { if (typeof a === 'string') return new Range(this, 1, 2, 1, 1); return new Range(this, a, b, c, d); }
   getDataRange() { return new Range(this, 1, 1, this.rows.length, this.getLastColumn()); }
   setFrozenRows() {}
