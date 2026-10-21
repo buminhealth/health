@@ -1,0 +1,62 @@
+# 서버(Apps Script) 자동 배포
+# gas/Code.gs가 main에 올라오면 Apps Script 프로젝트에 붙여넣고 기존 웹 앱 배포를 새 버전으로 바꿈.
+# 준비(한 번): gas/배포안내.md '서버 자동 배포' — 시크릿 CLASPRC_JSON, 변수 GAS_SCRIPT_ID · GAS_DEPLOYMENT_ID
+name: 서버(Apps Script) 배포
+
+on:
+  push:
+    branches: [main]
+    paths: ['gas/Code.gs']
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-gas
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLASPRC: ${{ secrets.CLASPRC_JSON }}
+      SCRIPT_ID: ${{ vars.GAS_SCRIPT_ID }}
+      DEPLOYMENT_ID: ${{ vars.GAS_DEPLOYMENT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 준비 확인
+        id: ready
+        run: |
+          if [ -z "$CLASPRC" ] || [ -z "$SCRIPT_ID" ] || [ -z "$DEPLOYMENT_ID" ]; then
+            echo "::warning::자동 배포 준비가 안 됐습니다 (CLASPRC_JSON 시크릿, GAS_SCRIPT_ID · GAS_DEPLOYMENT_ID 변수). Apps Script에 직접 붙여넣어 배포하세요."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: 시험 (모의 서버 + 브라우저)
+        if: steps.ready.outputs.ok == 'true'
+        run: |
+          npm i -g playwright@1 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+          NODE_PATH=$(npm root -g) node gas/test/e2e.js
+      - name: Apps Script에 올리고 웹 앱 배포 갱신
+        if: steps.ready.outputs.ok == 'true'
+        run: |
+          npm i -g @google/clasp@3.4.1 >/dev/null
+          umask 077
+          printf '%s' "$CLASPRC" > ~/.clasprc.json
+          mkdir -p "$RUNNER_TEMP/gas" && cd "$RUNNER_TEMP/gas"
+          printf '{"scriptId":"%s","rootDir":"."}' "$SCRIPT_ID" > .clasp.json
+          clasp pull
+          TARGET=$(ls | grep -E '^Code\.(js|gs)$' | head -1)
+          if [ -z "$TARGET" ]; then echo "::error::Apps Script 프로젝트에 Code 파일이 없습니다: $(ls)"; exit 1; fi
+          cp "$GITHUB_WORKSPACE/gas/Code.gs" "$TARGET"
+          clasp push -f
+          VER=$(grep -o "SERVER_VERSION = '[^']*'" "$GITHUB_WORKSPACE/gas/Code.gs" | sed "s/SERVER_VERSION = '//; s/'$//")
+          clasp deploy -i "$DEPLOYMENT_ID" -d "$VER (GitHub ${GITHUB_SHA::7})"
+          echo "### 서버 배포 완료: $VER" >> "$GITHUB_STEP_SUMMARY"
+      - name: 로그인 정보 지우기
+        if: always()
+        run: rm -f ~/.clasprc.json

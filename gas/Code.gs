@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v20.0 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v20.1 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -124,6 +124,7 @@ function revokeAllSessions() {
 
 // GET (JSONP) — 기존 HTML 호출 호환. 보호 대상은 t=토큰 필요
 function doGet(e) {
+  DEPT_ALIAS_CACHE = null;
   const p = e.parameter || {};
   const cb = /^[A-Za-z0-9_$.]+$/.test(p.callback || '') ? p.callback : 'callback';
   let result;
@@ -156,6 +157,7 @@ function doGet(e) {
 
 // POST (JSON) — 로그인 · 파일 저장소
 function doPost(e) {
+  DEPT_ALIAS_CACHE = null;
   let result;
   try {
     const req = JSON.parse((e.postData && e.postData.contents) || '{}');
@@ -294,6 +296,14 @@ function readDeptMap_() {
     if (raw) map[raw] = String(r[1] || '').trim();
   });
   return map;
+}
+// v20.1: 직원목록에 남아 있는 인사 사이트 부서명도 부서매핑대로 앱 부서명으로 봄
+//  (동기화 때만 바꾸면 매핑을 나중에 적은 경우 기존 직원은 그대로라 교육 대상 · 부서 로그인 명단에서 빠짐)
+let DEPT_ALIAS_CACHE = null;   // 요청마다 doGet/doPost 시작 때 비움
+function deptAlias_(d) {
+  if (!DEPT_ALIAS_CACHE) DEPT_ALIAS_CACHE = readDeptMap_();
+  const v = DEPT_ALIAS_CACHE[normDept_(d)];
+  return v ? v : d;
 }
 // 앱에서 쓰는 부서 이름들 (부서인증 + chemicals + 세부 병동)
 function knownAppDepts_() {
@@ -766,7 +776,7 @@ function getEmployees(s) {
   if (list === null) return { success: false, error: '직원목록 시트가 없습니다. 시트명을 "직원목록"으로 해주세요.' };
   const pick = e => ({ name: e.name, dept: e.dept, empNo: e.empNo, joinDate: e.joinDate, status: e.status });
   const data = s && s.role === 'dept'
-    ? list.filter(e => sameDept_(e.dept, s.dept) && !isResigned_(e)).map(pick)
+    ? list.filter(e => (sameDept_(e.dept, s.dept) || sameDept_(deptAlias_(e.dept), s.dept)) && !isResigned_(e)).map(pick)
     : list.map(pick);
   return { success: true, data: data };
 }
@@ -943,6 +953,7 @@ function saveRecord(p, s) {
     lock.releaseLock();
   }
   if (!isPpe) { try { nhMarkEducated_(String(p.dept || '').trim(), p.names ? p.names.split('|') : []); } catch (_) {} }
+  eduCacheClear_();   // v20.1 교육 현황 캐시 비움
   return { success: true, message: '저장완료' };
 }
 
@@ -1525,6 +1536,7 @@ function handlingDepts_() {
 }
 // 그 부서 전용 물질 + (병동이면) chemicals 시트 '병동' 공통 물질. 없으면 null
 function chemsForDept_(map, dept) {
+  dept = deptAlias_(dept);
   const key = Object.keys(map).find(k => k !== '병동' && sameDept_(k, dept));
   // 시트의 '병동'은 앱 화면과 같은 세부 병동 목록(+ 이름이 '병동'으로 끝나는 부서)에 적용
   const isWard = WARDS.some(w => sameDept_(w, dept)) || /병동(\(.*\))?$/.test(normDept_(dept));
@@ -2515,7 +2527,7 @@ function newChemAdd_(chem, depts, src, note) {
   const rows = (depts || []).map(d => String(d).trim()).filter(Boolean)
     .filter(d => have.indexOf(normChem_(chem) + '|' + normDept_(d) + '|' + today) < 0)
     .map(d => [today, chem, d, addDays_(today, NEWCHEM_DAYS), src || '', note || ''].map(safeCell_));
-  if (rows.length) sh.getRange(sh.getLastRow() + 1, 1, rows.length, NEWCHEM_HEADER.length).setValues(rows);
+  if (rows.length) { sh.getRange(sh.getLastRow() + 1, 1, rows.length, NEWCHEM_HEADER.length).setValues(rows); eduCacheClear_(); }
   return rows.length;
 }
 
@@ -2541,7 +2553,8 @@ function eduStatus_(s) {
     (byName[r.name] = byName[r.name] || []).push(r);
   });
   const newChems = newChemRows_();
-  const emps = (readEmployees_() || []).filter(e => !isResigned_(e) && !(e.leaveDate && e.leaveDate < today) && e.dept);
+  const emps = (readEmployees_() || []).filter(e => !isResigned_(e) && !(e.leaveDate && e.leaveDate < today) && e.dept)
+    .map(e => Object.assign({}, e, { dept: deptAlias_(e.dept) }));
   const people = [];
   emps.forEach(e => {
     if (s.role === 'dept' && !sameDept_(e.dept, s.dept)) return;
@@ -2596,7 +2609,8 @@ function eduExclude_(req, s) {
   const name = String(req.name || '').trim(), dept = String(req.dept || '').trim(), no = String(req.no || '').trim();
   if (!name || !dept) return { success: false, error: '직원을 고르세요' };
   if (s.role === 'dept' && !sameDept_(dept, s.dept)) return { success: false, status: 403, error: '다른 부서 직원입니다' };
-  const emp = (readEmployees_() || []).find(e => e.name === name && sameDept_(e.dept, dept) && (!no || !e.empNo || e.empNo === no));
+  const emp = (readEmployees_() || []).map(e => Object.assign({}, e, { dept: deptAlias_(e.dept) }))
+    .find(e => e.name === name && sameDept_(e.dept, dept) && (!no || !e.empNo || e.empNo === no));
   if (!emp) return { success: false, error: '직원목록에서 찾지 못했습니다' };
   const sh = eduSheet_(EXCL_SHEET, EXCL_HEADER);
   const today = todayKst_();
@@ -2652,14 +2666,28 @@ function eduAskMail_(req) {
   return { success: true, sent: sent, noMail: noMail };
 }
 
+function eduCacheKey_(s) { return 'edu:' + (s.role === 'admin' ? 'admin' : sha256Hex_(normDept_(s.dept)).slice(0, 16)); }
+function eduCacheClear_() { try { CacheService.getScriptCache().put('edu:ver', String(Date.now()), 21600); } catch (_) {} }
+function eduStatusCached_(s) {
+  const c = CacheService.getScriptCache();
+  const ver = c.get('edu:ver') || '0';
+  const k = eduCacheKey_(s) + ':' + ver;
+  const hit = c.get(k);
+  if (hit) { try { return JSON.parse(hit); } catch (_) {} }
+  const r = eduStatus_(s);
+  const txt = JSON.stringify(r);
+  if (txt.length < 95000) c.put(k, txt, 60);
+  return r;
+}
 function eduOp_(req, s) {
-  if (req.op === 'edu.status') return requireLogin_(s) || eduStatus_(s);
-  if (req.op === 'edu.exclude') return requireLogin_(s) || eduExclude_(req, s);
+  if (req.op === 'edu.status') return requireLogin_(s) || (req.fresh ? eduStatus_(s) : eduStatusCached_(s));
+  if (req.op === 'edu.exclude') { const d = requireLogin_(s); if (d) return d; const r = eduExclude_(req, s); if (r.success) eduCacheClear_(); return r; }
   const deny = requireAdmin_(s);
   if (deny) return deny;
   if (req.op === 'edu.askMail') return eduAskMail_(req);
   if (req.op === 'edu.newChem') {
     const n = newChemAdd_(String(req.chem || '').trim(), req.depts || [], '관리자 등록', String(req.note || ''));
+    if (n) eduCacheClear_();
     return n ? { success: true, added: n } : { success: false, error: '물질명과 부서를 확인하세요 (같은 날 같은 등록은 한 번만)' };
   }
   if (req.op === 'edu.dupes') return Object.assign({ success: true }, eduDupes_());
@@ -2674,6 +2702,7 @@ function eduOp_(req, s) {
       const sh = SS.getSheetByName('교육이력대장');
       const uniq = [...new Set(want)].sort((a, b) => b - a);   // 아래 줄부터 지워야 행 번호가 안 밀림
       uniq.forEach(r => sh.deleteRow(r));
+      if (uniq.length) eduCacheClear_();
       return { success: true, deleted: uniq.length, skipped: (req.rows || []).length - uniq.length };
     } finally {
       lock.releaseLock();
