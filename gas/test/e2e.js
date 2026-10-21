@@ -458,7 +458,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('④ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v19.9'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v20.0'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -677,7 +677,61 @@ function check(name, cond, extra) {
   check('중복 정리: 체크한 줄만 삭제 (남길 줄 · 틀린 값은 거부)', dd.success && dd.deleted === 2 && dd.skipped === 1 && led.rows.length === 6 && led.rows.filter(r => r[10] === '배건우').length === 2, { dd, n: led.rows.length });
   await page.evaluate(() => { admSwitchPane('edu'); return BMEDU.dupes(); });
   check('관리자 화면: 교육이력대장 중복 정리 표시', /교육이력대장 중복 1묶음/.test(await page.textContent('#edu-dup-box')));
+  // 13-8. v20.0 교육 이수 현황 · 교육 제외 · 새 물질 교육
+  const empSh = g.sheets['직원목록'];
+  const chHead = ch.rows[0].slice();
+  ch.rows[0][10] = '관리대상';
+  const spRow = new Array(11).fill(''); spRow[0] = '특별시험물질'; spRow[2] = '61병동'; spRow[3] = '포름알데히드'; spRow[4] = '50-00-0'; spRow[10] = 'o';
+  ch.rows.push(spRow);
+  empSh.appendRow(['126000001', '교육가', '61병동', '2020-01-01', '여']);
+  empSh.appendRow(['126000002', '교육나', '61병동', '2020-01-01', '여']);
+  empSh.appendRow(['126000003', '교육다', '61병동', '2020-01-01', '남']);
+  led.rows = [LH,
+    ['1', '2026-08-01T01:00Z', '특별안전보건교육', '61병동', '포름알데히드', '2026-08-01', '2026-08-02', '2', '8시간', '126000001', '교육가', '', '✓ 서명완료'],
+    ['2', '2026-08-01T01:00Z', '특별안전보건교육', '61병동', '포름알데히드', '2026-08-01', '2026-08-01', '1', '4시간', '126000002', '교육나', '', '✓ 서명완료']];
+  const est = await page.evaluate(() => BMAUTH.post('edu.status', {}));
+  const P = n => (est.people || []).find(p => p.name === n) || {};
+  check('교육 현황: 61병동은 관리대상 물질 → 특별교육 대상', P('교육가').need === '특별', P('교육가'));
+  check('교육 현황: 현장 8 + 온라인 8 = 16시간 → 이수', P('교육가').status === '이수' && P('교육가').hours === 16, P('교육가'));
+  check('교육 현황: 현장 4시간 → 진행중 (남은 4시간, 기한 첫 교육일+3개월)', P('교육나').status === '진행중' && P('교육나').remain === 4 && P('교육나').deadline === '2026-11-01', P('교육나'));
+  check('교육 현황: 일지 없음 → 미이수 (확인 안 해도 대상)', P('교육다').status === '미이수', P('교육다'));
+  const d61 = (est.depts || []).find(d => d.dept === '61병동') || {};
+  check('교육 현황: 부서 요약', d61.total >= 3 && d61.done >= 1 && d61.progress >= 1 && d61.missing >= 1, d61);
+  const ex1 = await page.evaluate(() => BMAUTH.post('edu.exclude', { no: '126000003', name: '교육다', dept: '61병동', reason: '행정 업무만' }));
+  const ex0 = await page.evaluate(() => BMAUTH.post('edu.exclude', { no: '126000003', name: '교육다', dept: '61병동', reason: '' }));
+  const est2 = await page.evaluate(() => BMAUTH.post('edu.status', {}));
+  const Q = (st, n) => (st.people || []).find(p => p.name === n) || {};
+  check('교육 제외: 사유 없으면 거부', !ex0.success, ex0);
+  check('교육 제외: 관리자 확인 → 제외 (사유 · 확인자 기록)', ex1.success && Q(est2, '교육다').status === '제외' && Q(est2, '교육다').excluded.by === '보건관리자' && g.sheets['교육제외'].rows[1][3] === '행정 업무만', Q(est2, '교육다'));
+  const exA = await page.evaluate(() => BMAUTH.post('edu.exclude', { no: '126000001', name: '교육가', dept: '61병동', reason: '시험' }));
+  const est3 = await page.evaluate(() => BMAUTH.post('edu.status', {}));
+  check('교육 제외: 일지를 쓴 사람은 제외해도 대상', exA.success && Q(est3, '교육가').status === '이수', Q(est3, '교육가'));
+  const un = await page.evaluate(() => BMAUTH.post('edu.exclude', { no: '126000003', name: '교육다', dept: '61병동', undo: true }));
+  const est4 = await page.evaluate(() => BMAUTH.post('edu.status', {}));
+  check('교육 제외: 해제 → 다시 대상', un.success && Q(est4, '교육다').status === '미이수', Q(est4, '교육다'));
+  const nc = await page.evaluate(() => BMAUTH.post('edu.newChem', { chem: '신물질X', depts: ['61병동'] }));
+  const est5 = await page.evaluate(() => BMAUTH.post('edu.status', {}));
+  const ncA = (Q(est5, '교육가').newChem || []).find(n => n.chem === '신물질X') || {};
+  check('새 물질 교육: 등록 → 부서 직원 대상 (기한 14일)', nc.success && ncA.done === false && ncA.due > ncA.date, ncA);
+  led.rows.push(['3', '2026-10-21T01:00Z', 'MSDS교육', '61병동', '신물질X, 기타', est5.today, est5.today, '1', '1시간', '126000001', '교육가', '', '✓ 서명완료']);
+  const est6 = await page.evaluate(() => BMAUTH.post('edu.status', {}));
+  check('새 물질 교육: 그 물질이 든 일지를 쓰면 완료', ((Q(est6, '교육가').newChem || []).find(n => n.chem === '신물질X') || {}).done === true, Q(est6, '교육가').newChem);
+  check('새 물질 교육: AI 승인 때 사용 부서에 자동 등록', ap3.eduAdded === 1 && g.sheets['새물질교육'].rows.some(r => r[1] === 'AI시험세정제' && r[2] === '61병동'), ap3.eduAdded);
+  const deptEx = await page.evaluate(async () => {
+    const r = await BMAUTH.post('login', { kind: 'dept', dept: '61병동', pin: '4321' });
+    const own = await BMAUTH.post('edu.status', { t: r.token });
+    const other = await BMAUTH.post('edu.exclude', { name: '이다라', dept: '71병동', reason: 'x', t: r.token });
+    const mail = await BMAUTH.post('edu.askMail', { t: r.token });
+    return { own: own.success && own.people.length > 0 && own.people.every(p => p.dept === '61병동'), other, mail: mail.status };
+  });
+  check('교육 현황: 부서는 자기 부서만 · 다른 부서 제외 불가 · 메일은 관리자만', deptEx.own && !deptEx.other.success && deptEx.other.status === 403 && deptEx.mail === 403, deptEx);
+  g.env.MailApp.sent.length = 0;
+  const am = await page.evaluate(() => BMAUTH.post('edu.askMail', { depts: ['61병동'] }));
+  check('확인 요청 메일: 61병동 부서장에게 미이수 명단 + 링크', am.success && am.sent === 1 && /head61@/.test(g.env.MailApp.sent[0].to) && /교육나/.test(g.env.MailApp.sent[0].htmlBody) && /dv=edu/.test(g.env.MailApp.sent[0].htmlBody), am);
+  await page.evaluate(() => { admSwitchPane('edu'); return BMEDU.board(); });
+  check('관리자 화면: 교육 이수 현황판', /교육 이수 현황/.test(await page.textContent('#edu-board')) && /61병동/.test(await page.textContent('#edu-board')));
   led.rows = ledBak;
+  ch.rows.splice(ch.rows.indexOf(spRow), 1); ch.rows[0] = chHead;
 
   // 메모1 · 메모2 → MSDS 목록 데이터, 부서장 시트
   ch.rows[0][8] = '메모1'; ch.rows[0][9] = '메모2';

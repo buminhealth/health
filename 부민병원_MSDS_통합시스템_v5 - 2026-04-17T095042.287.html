@@ -10,8 +10,15 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v19.9 (2026-10-21)
+  부민병원 MSDS 통합시스템 v20.0 (2026-10-21)
 
+  ★★★ v20.0 (2026-10-21) — 교육 보완 ① 이수 현황판 + 교육 제외 · ③ 새 물질 교육 (서버 v20.0):
+    - 관리자 > 교육 현황 맨 위 '교육 이수 현황': 부서별 대상 · 이수율 · 진행중(특별 16시간 미달) · 미이수 · 기한 초과 · 새 물질 · 제외
+    - 대상은 기본 모두, 관리자 · 부서장이 '취급 안 함'으로 확인한 사람만 제외(사유 · 확인자 · 날짜 기록, 신규입사 '아니오' 회신 포함)
+      교육일지를 쓴 사람은 대상. 부서장은 부서현황 '교육 대상 확인'에서, 메일 링크(?dv=edu)로도 확인
+    - 특별교육: 현장 + 공통 온라인 8시간 ≥ 16시간 이수, 남은 시간은 첫 교육일부터 3개월
+    - 새 물질: AI MSDS 검토 승인(개정은 성분 추가 시) 또는 관리자 등록 → 사용 부서 교육 대상, 기한 14일, 그 물질이 든 일지를 쓰면 완료
+    - 홈 할 일에 교육 미이수 · 새 물질 교육 표시
   ★★★ v19.9 (2026-10-21) — 교육 보완 ④ 교육이력대장 중복 정리 (서버 v19.9):
     - 관리자 > 교육 현황 [🧹 교육이력대장 중복 정리]: 같은 사람(사번, 없으면 이름) · 교육구분 · 부서 · 교육 기간 묶음
     - 서명완료 · 먼저 제출한 줄을 남기고, 관리자가 체크한 줄만 삭제 (서버가 다시 계산해 확인)
@@ -989,6 +996,9 @@ b.hm-f{font-weight:700}
 @media(min-width:1500px){body.apv-vopen #adm-pane-apv{margin-right:560px}}
 .dv-card.bad{border-color:#F1C4BE}.dv-card.bad b{color:#A3302A}
 .dv-rj{margin-top:4px;font-size:13px;color:#A3302A;font-weight:600}
+#dv-edu{padding:16px 18px}
+#dv-edu h3{margin:0 0 10px;font-size:17px;font-weight:800;color:var(--bm-ink)}
+#dv-edu h3 small{font-size:14px;font-weight:600;color:#5A5650;margin-left:4px}
 .dv-btn.p{background:var(--bm-g6);border-color:var(--bm-g6);color:#fff}
 @media(max-width:1180px){.adm-kpi{grid-template-columns:1fr 1fr}}
 @media(max-width:768px){
@@ -3239,7 +3249,8 @@ b.hm-f{font-weight:700}
           p ? table(['지급일', '수령자', '지급물품', '미리보기'], p, '이 기간에 제출한 보호구 지급수령증이 없습니다.') : fail) +
         sec('chem', '화학물질 보고서 (신규사용 · 사용중단)', c ? c.length : null, '건',
           c ? table(['작성일', '구분', '제품명', '작성자', '미리보기'], c, '이 기간에 제출한 화학물질 보고서가 없습니다.') : fail) +
-      '</div>';
+      '</div>' +
+      '<div class="dv-box" id="dv-edu" style="margin-top:16px"></div>';
     var showTab = function(){
       body.querySelectorAll('.dv-tab').forEach(function(t){ t.classList.toggle('on', t.getAttribute('data-tab') === dvTab); });
       body.querySelectorAll('.dv-sec').forEach(function(x){ x.style.display = dvTab === 'all' || x.getAttribute('data-sec') === dvTab ? '' : 'none'; });
@@ -3255,6 +3266,7 @@ b.hm-f{font-weight:700}
       });
     };
     body.querySelectorAll('[data-edu]').forEach(function(b){ b.onclick = function(){ previewEdu(b.getAttribute('data-edu')); }; });
+    try{ if(window.BMEDU) BMEDU.deptSection(document.getElementById('dv-edu')); }catch(_){}
     body.querySelectorAll('[data-redo]').forEach(function(b){ b.onclick = function(){ goTab((window.BMHOME && BMHOME.eduTab) ? BMHOME.eduTab() : 'edu2'); }; });
     // 보호구·화학물질: 관리자 모드의 미리보기 함수를 그대로 사용 (그 함수가 읽는 '화면 목록'에 이 기록만 넣어 호출)
     body.querySelectorAll('[data-ppe]').forEach(function(b){ b.onclick = function(){
@@ -3426,6 +3438,16 @@ b.hm-f{font-weight:700}
         '사유: ' + esc(rj[0].rejectReason || '-'), '다시 작성', eduTab()));
       if(wait) rows.push(row('결재 대기', 'wait', '교육일지 ' + wait + '명', '보건관리자 결재 중', '보기', 'deptview'));
     }catch(_){}
+    try{   // v20.0 교육 미이수 · 새 물질 교육
+      var es = await BMAUTH.post('edu.status', {});
+      if(es && es.success){
+        var miss = es.people.filter(function(p){ return p.status === '미이수' || p.status === '진행중'; });
+        var nc = es.people.filter(function(p){ return p.newChemPending; });
+        var over = miss.filter(function(p){ return p.overdue; }).length;
+        if(miss.length) rows.push(row(over ? '기한 초과' : '교육 필요', over ? 'bad' : 'warn', '교육 미이수 · 진행중 ' + miss.length + '명', esc(miss.slice(0, 4).map(function(p){ return p.name; }).join(', ')) + (miss.length > 4 ? ' 외' : '') + ' · 취급 안 하면 부서현황에서 제외', '확인', 'deptview'));
+        if(nc.length) rows.push(row('새 물질', 'warn', '새 물질 교육 ' + nc.length + '명', esc((nc[0].newChem.find(function(n){ return !n.done; }) || {}).chem || '') + ' · 기한 ' + esc((nc[0].newChem.find(function(n){ return !n.done; }) || {}).due || ''), '작성', eduTab()));
+      }
+    }catch(_){}
     if(my !== todoSeq) return;
     box.innerHTML = rows.length ? rows.join('') : '<div class="hm-row"><span class="hm-tg ok">완료</span><div class="hm-f"><b>지금 처리할 일이 없습니다</b><span>새 입사자 확인 요청이 오면 여기에 나타납니다</span></div></div>';
     bind(box, nh);
@@ -3476,6 +3498,12 @@ b.hm-f{font-weight:700}
     navEdu();
     var next = '';
     try{ next = sessionStorage.getItem('bm_next') || ''; sessionStorage.removeItem('bm_next'); }catch(_){}
+    try{   // v20.0: 교육 대상 확인 메일 링크 (?dv=edu) → 부서현황
+      if(/[?&]dv=edu/.test(location.search)){
+        if(sess() && sess().role === 'dept') next = 'deptview';
+        else { try{ sessionStorage.setItem('bm_next', 'deptview'); }catch(_){} setTimeout(function(){ try{ BMAUTH.showLogin(); }catch(_){} }, 300); }
+      }
+    }catch(_){}
     if(next && sess()) goTab(next === 'edu1' || next === 'edu2' ? eduTab() : next);
     else goTab('home');
   });
@@ -3693,7 +3721,127 @@ b.hm-f{font-weight:700}
       dupes();
     };
   }
-  window.BMEDU = { dupes: dupes };
+  // ── v20.0 교육 이수 현황판 · 교육 제외 확인
+  var ST = { '이수': 'ok', '진행중': 'wait', '미이수': 'rj', '제외': '' };
+  var edu = null, eduDept = '';
+  function statusCell(p){
+    var t = '<span class="apv-st ' + (ST[p.status] || '') + '">' + esc(p.status) + '</span>';
+    if(p.status === '진행중') t += '<div style="font-size:12px;color:#2B4C7E">' + p.hours + '/16시간 · 남은 ' + p.remain + '시간</div>';
+    if(p.status === '이수' && p.need === '특별') t += '<div style="font-size:12px;color:#5A5650">' + p.hours + '시간 (온라인 8 포함)</div>';
+    if(p.deadline && p.status !== '이수') t += '<div style="font-size:12px;color:' + (p.overdue ? '#A3302A;font-weight:700' : '#5A5650') + '">기한 ' + esc(p.deadline) + (p.overdue ? ' · 초과' : '') + '</div>';
+    if(p.status === '제외') t += '<div style="font-size:12px;color:#5A5650">' + esc(p.excluded.reason) + ' · ' + esc(p.excluded.by) + ' ' + esc(p.excluded.date) + '</div>';
+    (p.newChem || []).forEach(function(n){
+      t += '<div style="font-size:12px;color:' + (n.done ? '#3B7322' : (n.overdue ? '#A3302A' : '#6E4A00')) + '">새 물질 ' + esc(n.chem) + ': ' + (n.done ? '교육 완료' : '기한 ' + esc(n.due) + (n.overdue ? ' 초과' : '')) + '</div>';
+    });
+    return t;
+  }
+  function peopleTable(list, canAct){
+    var td = 'padding:7px 8px;border-bottom:1px solid #ECEBE7;font-size:14px;vertical-align:top';
+    return '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%"><tr>' +
+      ['이름', '사번', '입사일', '교육', '상태', '최근 교육', ''].map(function(h){ return '<th style="text-align:left;padding:8px;background:#E2F0D5;color:#2D581B;font-size:13px;white-space:nowrap">' + h + '</th>'; }).join('') + '</tr>' +
+      list.map(function(p, i){
+        return '<tr' + (p.status === '제외' ? ' style="background:#FAFAF8;color:#8A867E"' : '') + '><td style="' + td + '"><b>' + esc(p.name) + '</b></td><td style="' + td + '">' + esc(p.no) + '</td><td style="' + td + ';white-space:nowrap">' + esc(p.joinDate) + '</td>' +
+          '<td style="' + td + ';white-space:nowrap">' + (p.need === '특별' ? '특별안전보건' : 'MSDS') + '</td><td style="' + td + '">' + statusCell(p) + '</td><td style="' + td + ';white-space:nowrap">' + esc(p.lastEdu || '-') + '</td>' +
+          '<td style="' + td + ';white-space:nowrap">' + (!canAct ? '' : (p.status === '제외'
+            ? (p.excluded.route === '신규입사 회신' ? '' : '<button data-unx="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer">제외 해제</button>')
+            : (p.records ? '<span style="font-size:12px;color:#5A5650">일지 있음</span>' : '<button data-x="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer">취급 안 함 (제외)</button>'))) + '</td></tr>';
+      }).join('') + '</table></div>';
+  }
+  function bindPeople(host, list, after){
+    host.querySelectorAll('[data-x]').forEach(function(b){ b.onclick = async function(){
+      var p = list[+b.getAttribute('data-x')];
+      var reason = (prompt(p.name + ' 님을 교육 대상에서 제외합니다.\n사유를 적어 주세요 (예: 행정 업무만, 물질 취급 안 함)') || '').trim();
+      if(!reason) return;
+      var fromMail = /[?&]dv=edu/.test(location.search);
+      var x = await BMAUTH.post('edu.exclude', { no: p.no, name: p.name, dept: p.dept, reason: reason, fromMail: fromMail });
+      say(x.success ? p.name + ' 님을 제외했습니다' : (x.error || '실패'), x.success ? 'ok' : 'err');
+      after();
+    }; });
+    host.querySelectorAll('[data-unx]').forEach(function(b){ b.onclick = async function(){
+      var p = list[+b.getAttribute('data-unx')];
+      if(!confirm(p.name + ' 님을 다시 교육 대상으로 되돌릴까요?')) return;
+      var x = await BMAUTH.post('edu.exclude', { no: p.no, name: p.name, dept: p.dept, undo: true });
+      say(x.success ? '되돌렸습니다' : (x.error || '실패'), x.success ? 'ok' : 'err');
+      after();
+    }; });
+  }
+  // 관리자 > 교육 현황 맨 위
+  async function board(){
+    var host = document.getElementById('edu-board');
+    if(!host){
+      host = document.createElement('div'); host.id = 'edu-board';
+      host.style.cssText = 'border:1px solid #DDDBD5;border-radius:8px;padding:16px;margin:0 0 14px;background:#fff';
+      var body = document.querySelector('#adm-pane-edu .adm-card-body');
+      if(!body) return;
+      body.insertBefore(host, body.firstChild);
+    }
+    host.innerHTML = '<div style="color:#5A5650">교육 이수 현황 계산 중…</div>';
+    var r = await BMAUTH.post('edu.status', {});
+    if(!r.success){ host.innerHTML = '<div style="color:#A3302A">' + esc(r.error || '실패') + (/unknown op/.test(r.error || '') ? ' — 서버(Code.gs)를 v20.0 이상으로 배포하세요.' : '') + '</div>'; return; }
+    edu = r;
+    var T = { total: 0, done: 0, progress: 0, missing: 0, overdue: 0, excluded: 0, newChem: 0 };
+    r.depts.forEach(function(d){ Object.keys(T).forEach(function(k){ T[k] += d[k] || 0; }); });
+    var kpi = function(l, n, sub, color){ return '<div style="border:1px solid #DDDBD5;border-radius:8px;padding:10px 14px;min-width:120px;flex:1"><div style="font-size:13px;font-weight:700;color:#5A5650">' + l + '</div><div style="font-size:24px;font-weight:800;color:' + (color || '#1E1E1C') + '">' + n + '</div><div style="font-size:12px;color:#5A5650">' + (sub || '') + '</div></div>'; };
+    var td = 'padding:7px 8px;border-bottom:1px solid #ECEBE7;font-size:14px';
+    host.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><b style="font-size:17px">교육 이수 현황</b>' +
+        '<span style="display:flex;gap:6px;flex-wrap:wrap"><button id="eb-mail" style="padding:8px 12px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-weight:700;cursor:pointer">부서장에게 확인 요청 메일</button>' +
+        '<button id="eb-nc" style="padding:8px 12px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-weight:700;cursor:pointer">새 물질 교육 등록</button></span></div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">' +
+        kpi('교육 대상', T.total, '제외 ' + T.excluded + '명') + kpi('이수', T.done, T.total ? Math.round(T.done / T.total * 100) + '%' : '', '#2D581B') +
+        kpi('특별교육 진행중', T.progress, '16시간 미달', '#2B4C7E') + kpi('미이수', T.missing, '기한 초과 ' + T.overdue + '명', T.missing ? '#A3302A' : '') +
+        kpi('새 물질 교육 대기', T.newChem, r.rules.newChemDays + '일 안에', T.newChem ? '#6E4A00' : '') + '</div>' +
+      '<div style="font-size:13px;color:#5A5650;margin-bottom:8px">대상: 화학물질 사용 부서 재직자 (기본 모두 대상, <b>관리자 · 부서장이 \'취급 안 함\'으로 확인한 사람만 제외</b>, 일지를 쓴 사람은 대상). 특별교육은 현장 교육 + 공통 온라인 8시간 ≥ 16시간이면 이수, 남은 시간은 첫 교육일부터 3개월 안에.</div>' +
+      '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%"><tr>' +
+        ['부서', '교육', '대상', '이수율', '진행중', '미이수', '기한 초과', '새 물질', '제외'].map(function(h){ return '<th style="text-align:left;padding:8px;background:#E2F0D5;color:#2D581B;font-size:13px;white-space:nowrap">' + h + '</th>'; }).join('') + '</tr>' +
+        r.depts.map(function(d){
+          var pct = d.total ? Math.round(d.done / d.total * 100) : 100;
+          return '<tr data-dept="' + esc(d.dept) + '" style="cursor:pointer' + (eduDept === d.dept ? ';background:#E2F0D5' : '') + '"><td style="' + td + '"><b>' + esc(d.dept) + '</b></td><td style="' + td + '">' + (d.need === '특별' ? '특별' : 'MSDS') + '</td><td style="' + td + '">' + d.total + '</td>' +
+            '<td style="' + td + ';min-width:140px"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:8px;background:#ECEBE7;border-radius:4px;overflow:hidden"><div style="width:' + pct + '%;height:100%;background:' + (pct >= 100 ? '#4A8F2C' : (pct >= 70 ? '#A3D07C' : '#E8A33D')) + '"></div></div><span style="font-size:13px">' + pct + '%</span></div></td>' +
+            '<td style="' + td + '">' + (d.progress || '') + '</td><td style="' + td + ';color:#A3302A;font-weight:700">' + (d.missing || '') + '</td><td style="' + td + ';color:#A3302A">' + (d.overdue || '') + '</td>' +
+            '<td style="' + td + ';color:#6E4A00">' + (d.newChem || '') + '</td><td style="' + td + ';color:#5A5650">' + (d.excluded || '') + '</td></tr>';
+        }).join('') + '</table></div>' +
+      '<div id="eb-people" style="margin-top:12px"></div>';
+    host.querySelectorAll('[data-dept]').forEach(function(tr){ tr.onclick = function(){ eduDept = tr.getAttribute('data-dept'); showDept(); host.querySelectorAll('[data-dept]').forEach(function(x){ x.style.background = x === tr ? '#E2F0D5' : ''; }); }; });
+    if(eduDept) showDept();
+    document.getElementById('eb-mail').onclick = async function(){
+      var pend = r.depts.filter(function(d){ return d.missing || d.progress || d.newChem; }).map(function(d){ return d.dept; });
+      if(!pend.length){ say('미이수 부서가 없습니다', 'ok'); return; }
+      if(!confirm('미이수 · 진행중이 있는 ' + pend.length + '개 부서(' + pend.join(', ') + ')의 부서장에게 확인 요청 메일을 보냅니다.')) return;
+      var x = await BMAUTH.post('edu.askMail', { depts: pend });
+      say(x.success ? x.sent + '개 부서에 보냈습니다' + (x.noMail.length ? ' · 이메일 없음: ' + x.noMail.join(', ') : '') : (x.error || '실패'), x.success ? 'ok' : 'err');
+    };
+    document.getElementById('eb-nc').onclick = async function(){
+      var chem = (prompt('새로 들인 물질(제품) 이름') || '').trim(); if(!chem) return;
+      var deps = (prompt('사용 부서 (쉼표로 구분, 병동 전체는 "병동")') || '').split(',').map(function(x){ return x.trim(); }).filter(Boolean); if(!deps.length) return;
+      var x = await BMAUTH.post('edu.newChem', { chem: chem, depts: deps });
+      say(x.success ? deps.join(', ') + '에 새 물질 교육 대상을 만들었습니다 (기한 ' + r.rules.newChemDays + '일)' : (x.error || '실패'), x.success ? 'ok' : 'err');
+      board();
+    };
+  }
+  function showDept(){
+    var box = document.getElementById('eb-people');
+    if(!box || !edu) return;
+    var order = { '미이수': 0, '진행중': 1, '이수': 2, '제외': 3 };
+    var list = edu.people.filter(function(p){ return p.dept === eduDept; }).sort(function(a, b){ return (order[a.status] - order[b.status]) || ((b.overdue ? 1 : 0) - (a.overdue ? 1 : 0)) || String(a.name).localeCompare(b.name, 'ko'); });
+    box.innerHTML = '<b style="font-size:15px">' + esc(eduDept) + ' ' + list.length + '명</b>' + peopleTable(list, true);
+    bindPeople(box, list, board);
+  }
+  // 부서현황(부서 로그인)의 '교육 대상 확인'
+  async function deptSection(host){
+    if(!host) return;
+    host.innerHTML = '<div class="dv-empty">교육 대상 불러오는 중…</div>';
+    var r = await BMAUTH.post('edu.status', {});
+    if(!r.success){ host.innerHTML = /unknown op/.test(r.error || '') ? '' : '<div class="dv-empty err">' + esc(r.error || '실패') + '</div>'; return; }
+    var order = { '미이수': 0, '진행중': 1, '이수': 2, '제외': 3 };
+    var list = r.people.slice().sort(function(a, b){ return (order[a.status] - order[b.status]) || String(a.name).localeCompare(b.name, 'ko'); });
+    var miss = list.filter(function(p){ return p.status === '미이수' || p.status === '진행중' || p.newChemPending; }).length;
+    host.innerHTML = '<h3>교육 대상 확인 <small>' + list.length + '명 · 미이수 · 진행중 ' + miss + '명</small></h3>' +
+      '<div style="font-size:14px;color:#5A5650;margin-bottom:8px">우리 부서 직원은 기본으로 모두 교육 대상입니다. <b>화학물질을 취급하지 않는 직원</b>만 [취급 안 함 (제외)]를 눌러 사유를 남겨 주세요. 교육일지를 쓴 직원은 대상으로 봅니다.</div>' +
+      peopleTable(list, true);
+    bindPeople(host, list, function(){ deptSection(host); });
+  }
+  window.BMEDU = { dupes: dupes, board: board, deptSection: deptSection };
 })();
 
 /* ★★★ v19.7 — 🤖 AI MSDS 검토 (3단계, Gemini)
@@ -14653,6 +14801,7 @@ function refreshAdmNavBadges(){
 
 function admSwitchPane(name){
   if(name !== 'apv' && typeof apvCloseViewer === 'function') apvCloseViewer();
+  if(name === 'edu' && window.BMEDU) setTimeout(function(){ try{ BMEDU.board(); }catch(_){} }, 0);   // v20.0 교육 이수 현황판
   // nav-item active 토글
   document.querySelectorAll('.adm-nav-item').forEach(el=>{
     el.classList.toggle('active', el.dataset.pane===name);
