@@ -10,6 +10,30 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
+  부민병원 MSDS 통합시스템 v18.1 (2026-10-21)
+
+  ★★★ v18.1 (2026-10-21) — 직원정보관리 + 신규입사 유해화학물질 취급 확인:
+    - 관리자 모드 > 👥 직원정보관리: 엑셀 붙여넣기로 직원정보 업데이트(사번 기준 추가·갱신),
+      인사 사이트 가져오기(연결 방식 확인 후 활성화, 비밀번호는 요청에만 사용·저장 안 함),
+      신규입사 알림 현황(회신대기·이메일없음·취급-교육대기·취급-교육완료·미취급)과 재발송
+    - 퇴사자는 목록에서 지우지 않고 '퇴사' 표시 → 교육·보호구 기록 보존, 부서 직원 검색에서만 제외
+    - 부서 로그인 시 신규입사 확인 요청 창(메일 [확인하기] 링크 ?nh=ID 포함) → '예'면 MSDS 교육일지로
+      이동해 대상자 자동 추가 / 서버: 부서장 메일·3일 무회신 재알림·보건관리자 회신 알림 (gas/Code.gs)
+    - 인사 사이트 = Firebase(이메일·비밀번호 로그인 → Firestore/RTDB 조회). 알림 메일은 자동 로그인일 때만.
+    - 교육 기한: 입사일로부터 3일 (메일·확인 창·관리자 표에 표시, 지나면 ⚠ 기한초과)
+    - 성별 삭제: 교육일지 입력·대상자 표·검색 결과·특별교육일지 PDF 인원 칸(계만 표시)·저장 데이터
+
+  ★★★ v18.0 (2026-10-21) — 1단계: 서버 인증 + 비공개 저장소 (GitHub 토큰 제거):
+    [배경] GitHub 쓰기 토큰·관리자 비밀번호가 공개 HTML에 있었고, 기록·PDF·서명이 공개 저장소에 있었음.
+    [변경]
+    - 부서 PIN / 관리자 비밀번호 로그인을 GAS 서버가 확인 → 12시간 토큰 (BMAUTH, 스크립트 최상단)
+    - GitHub 호출(api.github.com·raw.githubusercontent.com)은 BMAUTH 후크가 GAS(fs.get/fs.put)로 전달
+      → 구글 드라이브 비공개 폴더에 같은 경로로 저장. 응답은 GitHub 형식 그대로라 기존 로직 무변경.
+    - 부서 로그인: 자기 부서 직원·기록·PDF만 조회/저장, 작성 화면 부서 고정. 관리자: 전체.
+    - 코드 내 토큰·비밀번호·재설정 코드 삭제. MSDS 조회는 로그인 없이 그대로.
+    - 첫 로그인 시 이 PC에만 남은 기록을 서버로 1회 병합 (upgradeMergeOnce).
+    - 서버 코드: 저장소 gas/Code.gs (v2) — 이 HTML과 함께 배포해야 동작함.
+
   부민병원 MSDS 통합시스템 v17.22 (2026-07-27)
 
   ★★★ v17.22 (2026-07-27) — 재생성 복구 건 "결재 도장 이중 날인" 수정:
@@ -688,10 +712,6 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
         <select class="fc" id="e1-dept" onchange="e1DeptCh()"><option value="">선택…</option></select>
       </div>
       <div class="fg">
-        <label class="fl">성별</label>
-        <select class="fc" id="e1-gender"><option value="남">남</option><option value="여">여</option></select>
-      </div>
-      <div class="fg">
         <label class="fl">입사일 <span class="text-emerald-500 text-[10px]">(자동)</span></label>
         <input class="fc" type="date" id="e1-join">
       </div>
@@ -700,7 +720,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     <div style="overflow-x:auto">
       <table class="ptbl">
         <thead><tr>
-          <th style="width:28px">번호</th><th>성명</th><th style="width:44px">성별</th>
+          <th style="width:28px">번호</th><th>성명</th>
           <th style="width:94px">입사일</th><th style="width:26px">✕</th>
         </tr></thead>
         <tbody id="e1-ptbody"></tbody>
@@ -855,12 +875,12 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
       <div class="nsw"><input class="fc" id="e2-nq" placeholder="이름 입력 → 클릭하면 부서·입사일 자동입력…" oninput="searchEmp('e2',this.value)" autocomplete="off"><div class="nsres" id="e2-nres"></div></div></div>
     <div class="g3" style="margin-bottom:10px">
       <div class="fg"><label class="fl">교육 부서</label><select class="fc" id="e2-dept" onchange="e2DeptCh()"><option value="">선택…</option></select></div>
-      <div class="fg"><label class="fl">성별</label><select class="fc" id="e2-gender"><option>남</option><option>여</option></select></div>
+
       <div class="fg"><label class="fl">입사일</label><input class="fc" type="date" id="e2-join"></div>
     </div>
     <button class="btn btn-p mb-3" onclick="e2AddPart()">+ 대상자 추가</button>
     <div style="overflow-x:auto">
-      <table class="ptbl"><thead><tr><th style="width:28px">번호</th><th>성명</th><th style="width:44px">성별</th><th style="width:94px">입사일</th><th style="width:26px">✕</th></tr></thead><tbody id="e2-ptbody"></tbody></table>
+      <table class="ptbl"><thead><tr><th style="width:28px">번호</th><th>성명</th><th style="width:94px">입사일</th><th style="width:26px">✕</th></tr></thead><tbody id="e2-ptbody"></tbody></table>
     </div>
   </div>
   <div class="brow"><button class="btn btn-p" onclick="e2Go(2)">다음 →</button></div>
@@ -1346,6 +1366,11 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
           <span class="adm-nav-label">화학물질 보고서</span>
           <span class="adm-nav-badge" id="adm-nav-chem-badge"></span>
         </div>
+        <div class="adm-nav-item" data-pane="staff" onclick="admSwitchPane('staff'); BMSTAFF.open();">
+          <span class="adm-nav-icon">👥</span>
+          <span class="adm-nav-label">직원정보관리</span>
+          <span class="adm-nav-badge" id="adm-nav-staff-badge"></span>
+        </div>
 
         <!-- ★ v17.15: '시스템 > 감사 로그' 메뉴 삭제 — 조회 화면은 원래 미작동(죽은 코드)이었음.
              기록 엔진(BM.audit)은 수정 이력·정정 PDF의 데이터 원천이므로 백그라운드에서 그대로 작동 -->
@@ -1601,6 +1626,17 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
           </div>
         </section>
 
+        <!-- ── 📌 직원정보관리 pane (v18.1) — 내용은 BMSTAFF.open()이 그림 ── -->
+        <section class="adm-pane" id="adm-pane-staff">
+          <div class="adm-card">
+            <div class="adm-card-header">
+              <h2 class="adm-card-title">👥 직원정보관리</h2>
+              <span id="staff-stat" class="adm-card-stat"></span>
+            </div>
+            <div class="adm-card-body" id="staff-body"></div>
+          </div>
+        </section>
+
         <!-- ── 📌 화학물질 보고서 pane ── -->
         <section class="adm-pane" id="adm-pane-chem">
           <div class="adm-card">
@@ -1689,6 +1725,625 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
 <div class="pdf-area" id="pdf-area" style="position:absolute;left:-9999px;top:0"></div>
 
 <script>
+/* ★★★ v18.0 (1단계) — 서버 인증 + 비공개 저장소 프록시 (BMAUTH)
+   [목적] 브라우저에서 GitHub 토큰·관리자 비밀번호를 완전히 없앤다.
+   [동작]
+   - 로그인: 부서 PIN / 관리자 비밀번호를 GAS 서버가 확인 → 12시간 유효 토큰 발급 (localStorage bm_session)
+   - 기존 코드의 GitHub 호출(api.github.com contents API, raw.githubusercontent.com)은 아래
+     fetch 후크가 가로채 GAS 서버(fs.get / fs.put)로 전달 → 구글 드라이브 비공개 폴더에 저장.
+     응답은 GitHub 형식 그대로 돌려주므로 기존 동기화·충돌 재시도·묘비 로직은 변경 없음.
+   - GAS JSONP(직원목록·기록 저장 등) 요청에는 토큰(t=)을 자동으로 붙인다.
+   - 부서 로그인 시 교육일지·화학물질 보고서의 부서 선택은 자기 부서로 고정 (서버도 다른 부서 기록 거부).
+   [주의] 아래 v17.19 raw 캐시 무력화 후크보다 먼저 설치되어야 함 (그 후크가 이 후크를 감쌈). */
+(function(){
+  if(window.BMAUTH) return;
+  var GAS_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbxeQGa9jjHGc5psrelSoqSjpIBgQ9DioBGOrXFEfAL0JCM3RmpG30Wkon5jj6ymVvbG/exec';
+  var SKEY = 'bm_session';
+  var CHUNK = 4 * 1024 * 1024;   // 서버 Code.gs의 CHUNK_CHARS와 동일 (4의 배수)
+  var _fetch = window.fetch.bind(window);
+  var _open = window.open.bind(window);
+
+  function gasUrl(){
+    try{ return (typeof CFG !== 'undefined' && CFG.url) || localStorage.getItem('bm_url') || GAS_URL_DEFAULT; }
+    catch(_){ return GAS_URL_DEFAULT; }
+  }
+  function loadSession(){
+    try{
+      var s = JSON.parse(localStorage.getItem(SKEY) || 'null');
+      if(s && s.token && s.exp > Date.now()) return s;
+    }catch(_){}
+    return null;
+  }
+  var session = loadSession();
+  function saveSession(s){ session = s; try{ localStorage.setItem(SKEY, JSON.stringify(s)); }catch(_){} }
+  function clearSession(){
+    session = null;
+    try{ localStorage.removeItem(SKEY); localStorage.removeItem('bm_admin_ok'); sessionStorage.removeItem('bm_adm_pw'); }catch(_){}
+  }
+
+  // 기존 PC에 저장돼 있던 실제 토큰 제거 + 관리자 표시는 서버 관리자 로그인일 때만 유지
+  try{
+    localStorage.setItem('bm_ghToken', 'gas-proxy');
+    if(!(session && session.role === 'admin')) localStorage.removeItem('bm_admin_ok');
+  }catch(_){}
+
+  var _authLostShown = false;
+  function onAuthLost(){
+    clearSession();
+    renderBadge();
+    if(_authLostShown) return;
+    _authLostShown = true;
+    try{ if(typeof toast === 'function') toast('🔐 로그인이 만료되었습니다. 다시 로그인하세요','err'); }catch(_){}
+    showLogin();
+  }
+
+  async function post(op, body){
+    var payload = Object.assign({ op: op, t: session ? session.token : '' }, body || {});
+    var res = await _fetch(gasUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // 사전 요청(preflight) 없이 GAS로 전달
+      body: JSON.stringify(payload),
+      redirect: 'follow'
+    });
+    var j;
+    try{ j = await res.json(); }catch(e){ j = { success:false, status:502, error:'서버 응답 오류 (GAS 배포 확인)' }; }
+    if(j && j.status === 401 && session && op !== 'login' && payload.t === session.token) onAuthLost();
+    return j;
+  }
+
+  /* ── GitHub API 형식 에뮬레이션 ── */
+  var API_RE = /^https:\/\/api\.github\.com\/repos\/[^\/]+\/[^\/]+\/contents\/([^?#]*)/;
+  var RAW_RE = /^https:\/\/raw\.githubusercontent\.com\/[^\/]+\/[^\/]+\/main\/([^?#]*)/;
+  function normPath(p){
+    var d = p;
+    try{ d = decodeURIComponent(p); }catch(_){}
+    return d.replace(/^\/+|\/+$/g, '');
+  }
+  function rawUrlFor(path){
+    return 'https://raw.githubusercontent.com/buminhealth/health/main/' + path.split('/').map(encodeURIComponent).join('/');
+  }
+  function jsonResp(status, obj){
+    return new Response(JSON.stringify(obj), { status: status, headers: { 'Content-Type': 'application/json' } });
+  }
+  async function apiGet(path){
+    var r = await post('fs.get', { path: path });
+    if(!r.success) return jsonResp(r.status || 500, { message: r.error || 'error' });
+    if(r.type === 'dir'){
+      return jsonResp(200, r.entries.map(function(e){
+        return { type: e.type, name: e.name, path: e.path, sha: e.sha, size: e.size,
+                 download_url: e.type === 'file' ? rawUrlFor(e.path) : null };
+      }));
+    }
+    return jsonResp(200, { type: 'file', name: r.name, path: r.path, sha: r.sha, size: r.size,
+                           encoding: 'base64', content: r.content || '', download_url: rawUrlFor(r.path) });
+  }
+  async function apiPut(path, init){
+    var body = {};
+    try{ body = JSON.parse((init && init.body) || '{}'); }catch(_){}
+    var content = String(body.content || '').replace(/\s/g, '');
+    var base = { path: path, sha: body.sha || '', message: body.message || '' };
+    var r;
+    if(content.length > CHUNK){
+      var id = 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      var n = Math.ceil(content.length / CHUNK);
+      for(var i = 0; i < n; i++){
+        r = await post('fs.put', Object.assign({}, base, { uploadId: id, index: i, count: n,
+                                                           content: content.slice(i * CHUNK, (i + 1) * CHUNK) }));
+        if(!r.success) break;
+      }
+    }else{
+      r = await post('fs.put', Object.assign({}, base, { content: content }));
+    }
+    if(!r || !r.success) return jsonResp((r && r.status) || 500, { message: (r && r.error) || '업로드 실패' });
+    return jsonResp(r.status === 201 ? 201 : 200, {
+      content: { name: path.split('/').pop(), path: path, sha: r.sha, download_url: rawUrlFor(path) },
+      commit: { message: base.message }
+    });
+  }
+  async function rawGet(path){
+    var r = await post('fs.get', { path: path, offset: 0 });
+    if(!r.success) return new Response('', { status: r.status || 500 });
+    var parts = [r.content || ''];
+    var got = parts[0].length;
+    var total = r.totalChars || got;
+    while(got < total){
+      var c = await post('fs.get', { path: path, offset: got });
+      if(!c.success) return new Response('', { status: c.status || 500 });
+      if(!c.content) break;
+      parts.push(c.content);
+      got += c.content.length;
+    }
+    var bin = atob(parts.join(''));
+    var bytes = new Uint8Array(bin.length);
+    for(var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Response(bytes, { status: 200, headers: { 'Content-Type': r.mime || 'application/octet-stream' } });
+  }
+
+  window.fetch = function(input, init){
+    var url = typeof input === 'string' ? input : ((input && input.url) || '');
+    var m = API_RE.exec(url);
+    if(m){
+      var method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+      if(method === 'GET') return apiGet(normPath(m[1]));
+      if(method === 'PUT') return apiPut(normPath(m[1]), init);
+      return Promise.resolve(jsonResp(405, { message: '지원하지 않는 요청: ' + method }));
+    }
+    m = RAW_RE.exec(url);
+    if(m) return rawGet(normPath(m[1]));
+    return _fetch(input, init);
+  };
+
+  // 저장소 PDF 새 창 열기 (기존 raw URL window.open 호출 호환)
+  window.open = function(url, name, features){
+    var m = typeof url === 'string' ? RAW_RE.exec(url) : null;
+    if(!m) return _open.apply(window, arguments);
+    var w = _open('', name || '_blank');
+    try{ if(w) w.document.write('<p style="font-family:sans-serif;padding:16px">PDF 불러오는 중…</p>'); }catch(_){}
+    rawGet(normPath(m[1])).then(function(res){
+      if(!res.ok) throw new Error(res.status === 403 ? '권한 없음' : (res.status === 404 ? '파일 없음' : 'HTTP ' + res.status));
+      return res.blob();
+    }).then(function(b){
+      var u = URL.createObjectURL(b);
+      if(w) w.location.href = u; else _open(u, '_blank');
+    }).catch(function(e){
+      try{ if(w) w.document.body.innerHTML = '<p style="font-family:sans-serif;padding:16px">열기 실패: ' + e.message + '</p>'; }catch(_){}
+    });
+    return w;
+  };
+
+  // GAS JSONP 요청에 토큰 자동 첨부
+  var head = document.head || document.getElementsByTagName('head')[0];
+  var _append = head.appendChild.bind(head);
+  head.appendChild = function(node){
+    try{
+      if(node && node.tagName === 'SCRIPT' && node.src && node.src.indexOf('script.google.com/macros/') >= 0
+         && session && !/[?&]t=/.test(node.src)){
+        node.src = node.src + (node.src.indexOf('?') >= 0 ? '&' : '?') + 't=' + encodeURIComponent(session.token);
+      }
+    }catch(_){}
+    return _append(node);
+  };
+
+  /* ── 로그인 화면 ── */
+  function esc(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+  }
+  function showLogin(){
+    var ov = document.getElementById('bm-login');
+    if(ov){ ov.style.display = 'flex'; return; }
+    ov = document.createElement('div');
+    ov.id = 'bm-login';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.innerHTML =
+      '<div style="background:#fff;border-radius:14px;max-width:360px;width:100%;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,.25);font-family:\'Nanum Gothic\',sans-serif">' +
+        '<div style="font-size:17px;font-weight:800;color:#1c3557;margin-bottom:4px">🔐 부서 로그인</div>' +
+        '<div style="font-size:12px;color:#64748b;margin-bottom:14px">교육일지·보호구·화학물질 보고서 작성은 부서 로그인이 필요합니다.</div>' +
+        '<label style="font-size:12px;font-weight:700;color:#334155">부서</label>' +
+        '<select id="bm-login-dept" style="width:100%;margin:4px 0 10px;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px"><option value="">불러오는 중…</option></select>' +
+        '<label style="font-size:12px;font-weight:700;color:#334155">PIN</label>' +
+        '<input id="bm-login-pin" type="password" inputmode="numeric" autocomplete="off" maxlength="12" style="width:100%;margin:4px 0 6px;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px;letter-spacing:4px">' +
+        '<div id="bm-login-err" style="min-height:16px;font-size:12px;color:#dc2626;margin-bottom:8px"></div>' +
+        '<button id="bm-login-go" style="width:100%;padding:11px;border:0;border-radius:8px;background:#1c3557;color:#fff;font-weight:800;font-size:14px;cursor:pointer">로그인</button>' +
+        '<div style="display:flex;justify-content:space-between;margin-top:12px;font-size:12px">' +
+          '<a href="#" id="bm-login-view" style="color:#475569">MSDS 조회만 하기</a>' +
+          '<a href="#" id="bm-login-admin" style="color:#475569">관리자 로그인 →</a>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    var sel = ov.querySelector('#bm-login-dept');
+    var pin = ov.querySelector('#bm-login-pin');
+    var err = ov.querySelector('#bm-login-err');
+    var go = ov.querySelector('#bm-login-go');
+    post('depts', {}).then(function(r){
+      var list = (r && r.success && r.data) || [];
+      sel.innerHTML = '<option value="">부서 선택</option>' + list.map(function(d){
+        return '<option value="' + esc(d) + '">' + esc(d) + '</option>';
+      }).join('');
+      if(!list.length) err.textContent = r && r.success ? '등록된 부서가 없습니다 (보건관리자에게 문의)' : '서버 연결 실패';
+    }).catch(function(){ sel.innerHTML = '<option value="">서버 연결 실패</option>'; });
+    async function doLogin(){
+      err.textContent = '';
+      if(!sel.value){ err.textContent = '부서를 선택하세요'; return; }
+      if(!pin.value){ err.textContent = 'PIN을 입력하세요'; return; }
+      go.disabled = true; go.textContent = '확인 중…';
+      try{
+        var r = await post('login', { kind: 'dept', dept: sel.value, pin: pin.value });
+        if(!r.success){ err.textContent = r.error || '로그인 실패'; pin.value = ''; return; }
+        saveSession({ token: r.token, role: r.role, dept: r.dept, exp: r.exp });
+        location.reload();
+      }catch(e){
+        err.textContent = '서버 연결 실패: ' + e.message;
+      }finally{
+        go.disabled = false; go.textContent = '로그인';
+      }
+    }
+    go.onclick = doLogin;
+    pin.onkeydown = function(e){ if(e.key === 'Enter') doLogin(); };
+    ov.querySelector('#bm-login-view').onclick = function(e){ e.preventDefault(); ov.style.display = 'none'; };
+    ov.querySelector('#bm-login-admin').onclick = function(e){
+      e.preventDefault(); ov.style.display = 'none';
+      try{ goTab('admin'); }catch(_){}
+    };
+  }
+
+  function renderBadge(){
+    var b = document.getElementById('bm-auth-badge');
+    if(!b){
+      b = document.createElement('div');
+      b.id = 'bm-auth-badge';
+      b.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:9999;background:#1c3557;color:#fff;font-size:12px;font-weight:700;padding:7px 12px;border-radius:999px;box-shadow:0 4px 12px rgba(0,0,0,.2);cursor:pointer;font-family:\'Nanum Gothic\',sans-serif';
+      document.body.appendChild(b);
+    }
+    if(session){
+      b.textContent = (session.role === 'admin' ? '🛡 관리자' : '🔓 ' + session.dept) + ' · 로그아웃';
+      b.onclick = function(){
+        if(!confirm('로그아웃할까요?')) return;
+        clearSession(); location.reload();
+      };
+    }else{
+      b.textContent = '🔒 부서 로그인';
+      b.onclick = showLogin;
+    }
+  }
+
+  // 부서 로그인: 작성 화면의 부서 선택을 자기 부서로 고정
+  function lockDeptSelects(){
+    if(!session || session.role !== 'dept') return;
+    ['e1-dept', 'e2-dept', 'chem-dept-new', 'chem-dept-stop'].forEach(function(id){
+      var el = document.getElementById(id);
+      if(!el) return;
+      if(el.options.length === 1 && el.value === session.dept) return;
+      el.innerHTML = '<option value="' + esc(session.dept) + '">' + esc(session.dept) + '</option>';
+      el.value = session.dept;
+      try{ el.dispatchEvent(new Event('change')); }catch(_){}
+    });
+  }
+
+  // 1단계 전환 1회 병합: 이 PC 브라우저에만 남아 있는 기록을 서버로 올림 (서버에 이미 있으면 건너뜀)
+  async function upgradeMergeOnce(){
+    if(!session || typeof readGitHubJSON !== 'function' || typeof writeGitHubJSON !== 'function') return;
+    var flag = 'bm_v18_merged_' + (session.role === 'admin' ? 'admin' : session.dept);
+    if(localStorage.getItem(flag)) return;
+    var cats = [['edu', 'records/edu_records.json', 'bm_edu_records'],
+                ['ppe', 'records/ppe_records.json', 'bm_ppe_records'],
+                ['chem', 'records/chem_records.json', 'bm_chem_records']];
+    var keyOf = function(r){
+      return r.recordId || [r.name, r.empNo, r.dept, r.type, String(r.dateStart || r.date || '').slice(0, 10)].join('|');
+    };
+    var added = 0;
+    for(var i = 0; i < cats.length; i++){
+      var cat = cats[i][0], path = cats[i][1], lsKey = cats[i][2];
+      var local = [];
+      try{ local = JSON.parse(localStorage.getItem(lsKey) || '[]'); }catch(_){}
+      if(!Array.isArray(local)) local = (local && Array.isArray(local.records)) ? local.records : [];
+      if(session.role === 'dept') local = local.filter(function(r){ return r && r.dept === session.dept; });
+      try{ if(typeof BM !== 'undefined' && BM.filterTombstoned) local = BM.filterTombstoned(local, cat); }catch(_){}
+      if(!local.length) continue;
+      var build = function(server){
+        var isObj = server && !Array.isArray(server) && Array.isArray(server.records);
+        var list = isObj ? server.records.slice() : (Array.isArray(server) ? server.slice() : []);
+        var seen = new Set(list.map(keyOf));
+        var n = 0;
+        local.forEach(function(r){ var k = keyOf(r); if(!seen.has(k)){ seen.add(k); list.push(r); n++; } });
+        build.count = n;
+        if(isObj) return Object.assign({}, server, { records: list });
+        return (cat === 'ppe' && !server) ? { records: list } : list;
+      };
+      try{
+        var cur = await readGitHubJSON(path);
+        var next = build(cur.data);
+        if(build.count > 0){
+          await writeGitHubJSON(path, next, cur.sha, 'v18 전환 병합', build);
+          added += build.count;
+        }
+      }catch(e){
+        console.warn('[v18] 전환 병합 실패 (' + path + '):', e.message);
+        return;   // 다음 접속 때 다시 시도
+      }
+    }
+    localStorage.setItem(flag, new Date().toISOString());
+    if(added > 0){ try{ toast('☁ 이 PC에만 있던 기록 ' + added + '건을 서버에 합쳤습니다', 'ok'); }catch(_){} }
+  }
+
+  window.BMAUTH = {
+    session: function(){ return session; },
+    post: post,
+    showLogin: showLogin,
+    adminLogin: async function(pw){
+      var r;
+      try{ r = await post('login', { kind: 'admin', password: pw }); }
+      catch(e){ return { success: false, error: '서버 연결 실패: ' + e.message }; }
+      if(!r.success) return r;
+      saveSession({ token: r.token, role: 'admin', dept: '', exp: r.exp });
+      try{ sessionStorage.setItem('bm_adm_pw', pw); }catch(_){}
+      try{ adminPw = pw; }catch(_){}
+      renderBadge();
+      setTimeout(upgradeMergeOnce, 1500);
+      return r;
+    },
+    logout: function(){ clearSession(); renderBadge(); }
+  };
+
+  window.addEventListener('DOMContentLoaded', function(){
+    ['buildDeptSelects', 'chemFillDeptSelects'].forEach(function(fn){
+      var orig = window[fn];
+      if(typeof orig !== 'function') return;
+      window[fn] = function(){
+        var r = orig.apply(this, arguments);
+        try{ lockDeptSelects(); }catch(_){}
+        return r;
+      };
+    });
+    var origGoTab = window.goTab;
+    if(typeof origGoTab === 'function'){
+      window.goTab = function(t){
+        var r = origGoTab.apply(this, arguments);
+        if(!session && ['edu1', 'edu2', 'ppe', 'chem'].indexOf(t) >= 0) showLogin();
+        try{ lockDeptSelects(); }catch(_){}
+        return r;
+      };
+    }
+    renderBadge();   // 처음 화면(MSDS 조회)은 로그인 없이 — 작성 탭을 열 때 로그인 창 표시
+    if(session) setTimeout(upgradeMergeOnce, 5000);
+  });
+})();
+
+/* ★★★ v18.1 — 직원정보관리 (관리자) + 신규입사 확인 요청 (부서)
+   - 관리자 모드 > 👥 직원정보관리: 인사 사이트 가져오기(비밀번호는 이번 요청에만 사용) · 엑셀 붙여넣기 ·
+     신규입사 알림 현황(회신·미회신·미교육)과 재발송
+   - 퇴사자는 직원목록에서 지우지 않고 '퇴사' 상태로 표시 → 교육·보호구 기록은 그대로 보존
+   - 부서 로그인 시 신규입사 확인 요청이 있으면 창으로 표시. 메일의 [확인하기] 링크(?nh=ID)도 같은 창으로 연결.
+     '예' → MSDS 교육일지 화면으로 이동하고 해당 직원을 대상자로 자동 추가 */
+(function(){
+  if(window.BMSTAFF) return;
+  var esc = function(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+  };
+  var say = function(m, t){ try{ toast(m, t || 'info'); }catch(_){ alert(m); } };
+  var post = function(op, body){ return BMAUTH.post(op, body); };
+  var BTN = 'padding:7px 12px;border-radius:7px;border:1px solid #cbd5e1;background:#fff;font-weight:700;font-size:12px;cursor:pointer';
+  var BTN_P = 'padding:7px 12px;border-radius:7px;border:0;background:#1c3557;color:#fff;font-weight:700;font-size:12px;cursor:pointer';
+  var BOX = 'border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:12px;background:#fff';
+  var NH_COLORS = { '회신대기':'#b45309', '이메일없음':'#b91c1c', '취급-교육대기':'#1d4ed8', '취급-교육완료':'#15803d', '미취급':'#64748b' };
+  var parsed = null;
+
+  function parseSheetText(text){
+    var lines = String(text || '').replace(/\r/g, '').split('\n').filter(function(l){ return l.trim(); });
+    if(lines.length < 2) return null;
+    var sep = lines[0].indexOf('\t') >= 0 ? '\t' : ',';
+    var split = function(l){ return l.split(sep).map(function(c){ return c.trim().replace(/^"|"$/g, ''); }); };
+    return { headers: split(lines[0]), rows: lines.slice(1).map(split) };
+  }
+
+  async function open(){
+    var body = document.getElementById('staff-body');
+    if(!body) return;
+    body.innerHTML = '<div style="color:#64748b;font-size:13px">불러오는 중…</div>';
+    var st = await post('emp.status', {});
+    if(!st.success){ body.innerHTML = '<div style="color:#b91c1c">' + esc(st.error || '조회 실패') + '</div>'; return; }
+    var stat = document.getElementById('staff-stat');
+    if(stat) stat.textContent = '재직 ' + st.active + ' · 휴직 ' + st.leave + ' · 퇴사 ' + st.resigned;
+    body.innerHTML =
+      '<div style="' + BOX + 'font-size:13px;color:#334155">' +
+        '<b>마지막 업데이트:</b> ' + esc(st.lastSync || '없음') + '<br>' +
+        '<b>매일 아침 자동 확인:</b> ' + (st.dailyOn ? '켜짐' : '꺼짐') + ' · ' +
+        '<b>인사 사이트 자동 로그인:</b> ' + (st.hrAuto ? '사용 가능' : (st.hrConnector ? '로그인 정보 미저장 (시트 메뉴 ④)' : '연결 준비 중')) +
+        (st.hrLastError ? '<br><span style="color:#b91c1c">최근 자동 확인 오류: ' + esc(st.hrLastError) + '</span>' : '') +
+        '<div style="margin-top:6px;color:#64748b;font-size:12px">퇴사자는 목록에서 지우지 않고 "퇴사"로만 표시합니다. 교육·보호구 기록은 그대로 보존됩니다.</div>' +
+      '</div>' +
+      '<div style="' + BOX + '">' +
+        '<div style="font-weight:800;color:#1c3557;margin-bottom:8px">① 인사 사이트에서 가져오기</div>' +
+        (st.hrConnector
+          ? '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+              '<input id="staff-hr-id" class="fc" placeholder="아이디(이메일)" style="max-width:220px" autocomplete="off">' +
+              '<input id="staff-hr-pw" class="fc" type="password" placeholder="비밀번호 (저장하지 않음)" style="max-width:200px" autocomplete="new-password">' +
+              '<button id="staff-hr-go" style="' + BTN_P + '">가져오기</button></div>'
+          : '<div style="font-size:12px;color:#64748b">시트 메뉴 [보건관리 시스템 → ④ 인사 사이트(Firebase) 연결]을 먼저 설정하세요. 그동안은 ② 엑셀 붙여넣기를 사용하세요.</div>') +
+        '<div style="font-size:12px;color:#64748b;margin-top:6px">가져온 내용은 미리보기 후 [직원정보 업데이트]로 반영됩니다. 비밀번호는 저장하지 않습니다.</div>' +
+      '</div>' +
+      '<div style="' + BOX + '">' +
+        '<div style="font-weight:800;color:#1c3557;margin-bottom:4px">② 엑셀에서 붙여넣기</div>' +
+        '<div style="font-size:12px;color:#64748b;margin-bottom:6px">엑셀에서 <b>제목 줄까지</b> 복사해 붙여넣으세요. 필요한 열: 사번 · 이름 · 부서 · 입사일 (있으면 재직상태 · 퇴사일 · 이메일 · 직위)</div>' +
+        '<textarea id="staff-paste" class="fc" style="width:100%;height:110px;font-family:monospace;font-size:12px"></textarea>' +
+        '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:6px;font-size:12px">' +
+          '<label><input type="checkbox" id="staff-full"> 전체 직원 명단입니다 (명단에 없는 재직자는 퇴사로 표시)</label>' +
+
+        '</div>' +
+        '<div style="display:flex;gap:6px;margin-top:8px"><button id="staff-preview" style="' + BTN + '">미리보기</button>' +
+        '<button id="staff-sync" style="' + BTN_P + '" disabled>직원정보 업데이트</button></div>' +
+        '<div id="staff-preview-out" style="margin-top:8px"></div>' +
+      '</div>' +
+      '<div style="' + BOX + '">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px">' +
+          '<div style="font-weight:800;color:#1c3557">③ 신규입사 유해화학물질 취급 확인</div>' +
+          '<div style="display:flex;gap:6px"><select id="staff-nh-filter" class="fc" style="width:auto">' +
+            '<option value="">전체</option><option>회신대기</option><option>이메일없음</option><option>취급-교육대기</option><option>취급-교육완료</option><option>미취급</option>' +
+          '</select><button id="staff-nh-run" style="' + BTN + '"' + (st.hrAuto ? '' : ' disabled title="자동 로그인 설정 후 사용"') + '>지금 자동 확인</button></div>' +
+        '</div>' +
+        '<div style="font-size:12px;color:#64748b;margin-bottom:8px">알림 메일은 <b>인사 사이트 자동 로그인</b>(매일 아침 7시 · 지금 자동 확인)일 때만 발송됩니다. 교육 기한: 입사일로부터 3일.</div>' +
+        '<div id="staff-nh-out" style="overflow-x:auto"></div>' +
+      '</div>' +
+      '<div style="' + BOX + '">' +
+        '<div style="font-weight:800;color:#1c3557;margin-bottom:4px">④ 부서 이름 점검</div>' +
+        '<div style="font-size:12px;color:#64748b;margin-bottom:8px">직원목록의 부서 이름이 <b>부서인증</b>·<b>chemicals</b> 시트와 같아야 로그인·알림이 됩니다. ' +
+          '이름이 다르면 시트의 <b>부서매핑</b>에 "인사 사이트 부서명 → 앱 부서명"을 적은 뒤 다시 업데이트하세요. (띄어쓰기 차이는 자동으로 같게 처리)</div>' +
+        '<div style="overflow-x:auto">' + deptCheckTable(st.deptCheck || []) + '</div>' +
+      '</div>';
+
+    var hrGo = document.getElementById('staff-hr-go');
+    if(hrGo) hrGo.onclick = async function(){
+      var pw = document.getElementById('staff-hr-pw');
+      hrGo.disabled = true;
+      try{
+        var r = await post('hr.fetch', { id: document.getElementById('staff-hr-id').value.trim(), password: pw.value });
+        pw.value = '';
+        if(!r.success){ say(r.error || '가져오기 실패', 'err'); return; }
+        parsed = { headers: r.headers, rows: r.rows };
+        showPreview();
+      }finally{ hrGo.disabled = false; }
+    };
+    document.getElementById('staff-preview').onclick = function(){
+      parsed = parseSheetText(document.getElementById('staff-paste').value);
+      if(!parsed){ say('제목 줄과 직원 줄을 함께 붙여넣으세요', 'err'); return; }
+      showPreview();
+    };
+    document.getElementById('staff-sync').onclick = async function(){
+      if(!parsed) return;
+      var full = document.getElementById('staff-full').checked;
+      if(full && !confirm('명단에 없는 재직자를 모두 "퇴사"로 표시합니다. 전체 직원 명단이 맞나요?')) return;
+      var btn = this; btn.disabled = true;
+      var r = await post('emp.sync', { headers: parsed.headers, rows: parsed.rows, fullList: full });
+      btn.disabled = false;
+      if(!r.success){ say(r.error || '업데이트 실패', 'err'); return; }
+      say('✅ 추가 ' + r.added + ' · 변경 ' + r.updated + ' · 퇴사표시 ' + r.resigned, 'ok');
+      if(r.unknownDepts && r.unknownDepts.length){
+        alert('처음 보는 부서 이름 ' + r.unknownDepts.length + '개를 시트의 [부서매핑]에 추가했습니다:\n\n' + r.unknownDepts.join(', ') +
+              '\n\n앱의 기존 부서와 같은 부서면 "앱 부서명" 칸에 기존 이름을 적고 다시 업데이트하세요.\n새 부서면 부서인증 시트에 PIN을 추가하세요.');
+      }
+      parsed = null;
+      try{ if(typeof loadEmps === 'function') loadEmps(); }catch(_){}
+      open();
+    };
+    document.getElementById('staff-nh-filter').onchange = renderNh;
+    document.getElementById('staff-nh-run').onclick = async function(){
+      var r = await post('nh.run', {});
+      if(!r.success){ say(r.error || '확인 실패', 'err'); return; }
+      say(r.error ? ('⚠ ' + r.error) : ('신규 알림 ' + r.created.length + '건 · 재알림 ' + r.reminded + '건'), r.error ? 'err' : 'ok');
+      renderNh();
+    };
+    renderNh();
+  }
+
+  function deptCheckTable(list){
+    if(!list.length) return '<div style="font-size:12px;color:#64748b">직원목록이 비어 있습니다.</div>';
+    var td = function(v, warn){ return '<td style="padding:5px 6px;border:1px solid #e2e8f0;white-space:nowrap' + (warn ? ';color:#b91c1c;font-weight:800' : '') + '">' + v + '</td>'; };
+    var th = ['부서','재직','부서 로그인','부서장 메일','사용 물질'].map(function(h){
+      return '<th style="padding:5px 6px;border:1px solid #e2e8f0;background:#f8fafc;white-space:nowrap">' + h + '</th>';
+    }).join('');
+    return '<table style="border-collapse:collapse;font-size:12px"><tr>' + th + '</tr>' + list.map(function(d){
+      return '<tr>' + td(esc(d.dept)) + td(d.staff + '명') +
+        td(d.login ? '✓' : '✕ PIN 없음', !d.login) +
+        td(d.email ? '✓' : (d.chems ? '✕ 없음' : '-'), !d.email && d.chems > 0) +
+        td(d.chems ? d.chems + '종' : '-') + '</tr>';
+    }).join('') + '</table>';
+  }
+
+  function showPreview(){
+    var out = document.getElementById('staff-preview-out');
+    var head = parsed.headers.map(function(h){ return '<th style="padding:4px 6px;border:1px solid #e2e8f0;background:#f8fafc">' + esc(h) + '</th>'; }).join('');
+    var rows = parsed.rows.slice(0, 8).map(function(r){
+      return '<tr>' + r.map(function(c){ return '<td style="padding:4px 6px;border:1px solid #e2e8f0">' + esc(c) + '</td>'; }).join('') + '</tr>';
+    }).join('');
+    out.innerHTML = '<div style="font-size:12px;margin-bottom:4px">총 <b>' + parsed.rows.length + '명</b> (처음 8줄 표시)</div>' +
+      '<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:12px"><tr>' + head + '</tr>' + rows + '</table></div>';
+    document.getElementById('staff-sync').disabled = false;
+  }
+
+  async function renderNh(){
+    var out = document.getElementById('staff-nh-out');
+    if(!out) return;
+    var r = await post('nh.list', {});
+    if(!r.success){ out.innerHTML = '<div style="color:#b91c1c">' + esc(r.error) + '</div>'; return; }
+    var f = document.getElementById('staff-nh-filter').value;
+    var list = r.data.filter(function(o){ return !f || o['상태'] === f; }).reverse();
+    if(!list.length){ out.innerHTML = '<div style="font-size:12px;color:#64748b">해당하는 알림이 없습니다.</div>'; return; }
+    var today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+    var overdue = function(o){ return o['교육기한'] && today > o['교육기한'] && ['회신대기','이메일없음','취급-교육대기'].indexOf(o['상태']) >= 0; };
+    var th = ['상태','부서','이름','입사일','교육기한','최초발송','재알림','회신일시','취급','교육일지',''].map(function(h){
+      return '<th style="padding:5px 6px;border:1px solid #e2e8f0;background:#f8fafc;white-space:nowrap">' + h + '</th>';
+    }).join('');
+    out.innerHTML = '<table style="border-collapse:collapse;font-size:12px;width:100%"><tr>' + th + '</tr>' + list.map(function(o){
+      var can = o['상태'] === '회신대기' || o['상태'] === '이메일없음';
+      var td = function(v){ return '<td style="padding:5px 6px;border:1px solid #e2e8f0;white-space:nowrap">' + esc(v) + '</td>'; };
+      return '<tr><td style="padding:5px 6px;border:1px solid #e2e8f0;font-weight:800;white-space:nowrap;color:' + (NH_COLORS[o['상태']] || '#334155') + '">' + esc(o['상태']) +
+          (overdue(o) ? ' <span style="color:#dc2626">⚠ 기한초과</span>' : '') + '</td>' +
+        td(o['부서']) + td(o['이름']) + td(o['입사일']) + td(o['교육기한']) + td((o['최초발송'] || '').slice(0, 10)) +
+        td(o['재알림횟수'] && o['재알림횟수'] !== '0' ? o['재알림횟수'] + '회' : '') + td((o['회신일시'] || '').slice(0, 10)) +
+        td(o['취급여부']) + td(o['교육일지제출일']) +
+        '<td style="padding:5px 6px;border:1px solid #e2e8f0">' + (can ? '<button data-nh="' + esc(o['알림ID']) + '" style="' + BTN + '">재발송</button>' : '') + '</td></tr>';
+    }).join('') + '</table>';
+    out.querySelectorAll('button[data-nh]').forEach(function(b){
+      b.onclick = async function(){
+        b.disabled = true;
+        var x = await post('nh.resend', { id: b.getAttribute('data-nh') });
+        say(x.success ? '재발송했습니다' : (x.error || '재발송 실패'), x.success ? 'ok' : 'err');
+        renderNh();
+      };
+    });
+  }
+
+  /* ── 부서: 신규입사 확인 요청 창 ── */
+  function startEdu(o){
+    try{ goTab('edu2'); }catch(_){}
+    setTimeout(function(){
+      try{
+        var emp = (typeof empList !== 'undefined' ? empList : []).find(function(e){ return e.name === o['이름'] && e.dept === o['부서']; }) || {};
+        selectEmp('e2', o['이름'], o['부서'], emp.joinDate || o['입사일'], '', emp.empNo || o['사번'] || '');
+        e2AddPart();
+        say('📋 ' + o['이름'] + ' 님을 교육 대상자로 추가했습니다. 교육 후 일지를 작성해 주세요.', 'ok');
+      }catch(e){ say('교육일지 화면에서 대상자를 직접 추가해 주세요', 'info'); }
+    }, 400);
+  }
+
+  async function showDeptRequests(focusId){
+    var r = await post('nh.list', {});
+    if(!r.success || !r.data.length) return;
+    var ov = document.getElementById('bm-nh');
+    if(ov) ov.remove();
+    ov = document.createElement('div');
+    ov.id = 'bm-nh';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99998;display:flex;align-items:center;justify-content:center;padding:16px';
+    var items = r.data.map(function(o){
+      var waiting = o['상태'] === '회신대기' || o['상태'] === '이메일없음';
+      return '<div style="border:1px solid ' + (o['알림ID'] === focusId ? '#1c3557' : '#e2e8f0') + ';border-radius:10px;padding:12px;margin-bottom:10px">' +
+        '<div style="font-weight:800;color:#1c3557">' + esc(o['이름']) + ' <span style="font-weight:400;color:#64748b;font-size:12px">입사 ' + esc(o['입사일']) + '</span></div>' +
+        (o['교육기한'] ? '<div style="font-size:12px;color:#b91c1c;font-weight:700">교육 기한: ' + esc(o['교육기한']) + ' (입사일로부터 3일)</div>' : '') +
+        '<div style="font-size:12px;color:#475569;margin:4px 0 8px">부서 사용 물질: ' + esc(o['취급물질']) + '</div>' +
+        (waiting
+          ? '<div style="font-size:13px;margin-bottom:6px">이 직원이 위 물질을 취급하나요?</div>' +
+            '<div style="display:flex;gap:6px"><button data-yes="' + esc(o['알림ID']) + '" style="' + BTN_P + '">예 (교육일지 작성)</button>' +
+            '<button data-no="' + esc(o['알림ID']) + '" style="' + BTN + '">아니오</button></div>'
+          : '<button data-edu="' + esc(o['알림ID']) + '" style="' + BTN_P + '">교육일지 작성</button>') +
+      '</div>';
+    }).join('');
+    ov.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:440px;width:100%;max-height:85vh;overflow:auto;padding:20px;font-family:\'Nanum Gothic\',sans-serif">' +
+      '<div style="font-size:16px;font-weight:800;color:#1c3557;margin-bottom:4px">🆕 신규 입사자 확인 요청</div>' +
+      '<div style="font-size:12px;color:#64748b;margin-bottom:12px">유해화학물질 취급 여부를 알려주세요. 취급하면 MSDS 교육 후 교육일지를 작성합니다.</div>' +
+      items + '<div style="text-align:right"><button id="bm-nh-close" style="' + BTN + '">나중에</button></div></div>';
+    document.body.appendChild(ov);
+    var byId = {};
+    r.data.forEach(function(o){ byId[o['알림ID']] = o; });
+    ov.querySelector('#bm-nh-close').onclick = function(){ ov.remove(); };
+    var answer = async function(id, yes){
+      var x = await post('nh.answer', { id: id, handles: yes });
+      if(!x.success){ say(x.error || '회신 실패', 'err'); return; }
+      ov.remove();
+      try{ history.replaceState(null, '', location.pathname); }catch(_){}   // 새로고침해도 다시 뜨지 않게 ?nh 제거
+      say('회신했습니다', 'ok');
+      if(yes) startEdu(byId[id]);
+    };
+    ov.querySelectorAll('[data-yes]').forEach(function(b){ b.onclick = function(){ answer(b.getAttribute('data-yes'), true); }; });
+    ov.querySelectorAll('[data-no]').forEach(function(b){
+      b.onclick = function(){ if(confirm('취급하지 않는 것으로 회신할까요?')) answer(b.getAttribute('data-no'), false); };
+    });
+    ov.querySelectorAll('[data-edu]').forEach(function(b){ b.onclick = function(){ ov.remove(); try{ history.replaceState(null, '', location.pathname); }catch(_){} startEdu(byId[b.getAttribute('data-edu')]); }; });
+  }
+
+  window.BMSTAFF = { open: open, showDeptRequests: showDeptRequests };
+
+  window.addEventListener('DOMContentLoaded', function(){
+    var nh = null;
+    try{ nh = new URLSearchParams(location.search).get('nh'); }catch(_){}
+    var s = BMAUTH.session();
+    if(!s){ if(nh) BMAUTH.showLogin(); return; }
+    if(s.role === 'dept' || nh) setTimeout(function(){ showDeptRequests(nh); }, 2500);
+  });
+})();
+
 /* ★★★ v17.19 (2026-07-27) — raw.githubusercontent.com CDN 캐시 무력화 (병합 다운로드 404 해결):
    [증상] 결재 병합 다운로드 시 일부 건이 간헐적으로 "병합 실패"(ERR_ABORTED 404)로 누락됨.
           개별 다운로드·직접 열기는 정상. GitHub에 파일은 정상 업로드되어 있었음.
@@ -1741,7 +2396,7 @@ const DEFAULT_CFG = {
   ejsKey: 'qNbA0-IiBtJSP3PcU',
   ejsSvc: 'service_gwzupm6',
   ejsTpl: 'template_54nyehm',
-  ghToken:['ghp_MNwb','v78PN9uPkzde','PzJ5AlTQmLRH5C1ComO1'].join(''),
+  ghToken:'gas-proxy',   // ★ v18.0: 실제 토큰 없음 — GitHub 호출은 BMAUTH 프록시가 GAS 서버로 전달
   ghRepo: 'buminhealth/health',
   // ★ 결재자 정보 (v15.43: 보건관리자 1인 결재 단일화)
   apv1Name: '보건관리자', apv1Email: 'clover8477@bumin.co.kr',   // 담당자
@@ -1860,7 +2515,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 });
 
 /* 병동 → 세부 병동 매핑 */
-const WARD_EXPAND = ['51병동','61병동','71병동','6병동','7병동','8병동','9병동','응급실','중환자실','인공신장실'];
+const WARD_EXPAND = ['51병동','61병동','71병동','6병동','7병동','8병동','9병동','응급실','중환자실','인공신장실'];   // ★ gas/Code.gs의 WARDS와 같게 유지 (신규입사 알림 대상 판정)
 
 function buildDeptSelects(){
   const depts=[...new Set(CHEMS.flatMap(c=>c.departments))].sort();
@@ -3821,14 +4476,13 @@ function e1SelectAllDates(all){
 function e1AddPart(){
   const name=document.getElementById('e1-nq').value.trim();
   if(!name){toast('이름을 입력하세요','err');return;}
-  const gender=document.getElementById('e1-gender').value;
   // ★ 입사일: empList 우선, 없으면 필드값 사용
   const empMatch=empList.find(e=>e.name===name);
   const join=empMatch&&empMatch.joinDate ? empMatch.joinDate
             : empMatch&&empMatch.join    ? empMatch.join
             : document.getElementById('e1-join').value;
   const empNo=empMatch?empMatch.empNo||'':'';
-  e1.parts.push({name,gender,join,empNo});
+  e1.parts.push({name,join,empNo});
   // ★ 추가 후 입력 필드 초기화 (입사일이 다음 사람에 오염되지 않도록)
   document.getElementById('e1-nq').value='';
   document.getElementById('e1-join').value=''; // 입사일 초기화
@@ -3839,18 +4493,17 @@ function e1AddPart(){
   if(e1.parts.length===1&&e1.dept) applyDeptEdu('e1',e1.dept);
 }
 function e1RemPart(i){e1.parts.splice(i,1);renderE1Parts();}
-function renderE1Parts(){document.getElementById('e1-ptbody').innerHTML=e1.parts.map((p,i)=>`<tr><td class="text-center">${i+1}</td><td><input class="pi" value="${p.name}" oninput="e1.parts[${i}].name=this.value"></td><td><select class="pi" onchange="e1.parts[${i}].gender=this.value"><option ${p.gender==='남'?'selected':''}>남</option><option ${p.gender==='여'?'selected':''}>여</option></select></td><td><input class="pi" type="date" value="${p.join}" oninput="e1.parts[${i}].join=this.value"></td><td class="text-center"><button onclick="e1RemPart(${i})" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:13px;font-weight:700">✕</button></td></tr>`).join('');}
+function renderE1Parts(){document.getElementById('e1-ptbody').innerHTML=e1.parts.map((p,i)=>`<tr><td class="text-center">${i+1}</td><td><input class="pi" value="${p.name}" oninput="e1.parts[${i}].name=this.value"></td><td><input class="pi" type="date" value="${p.join}" oninput="e1.parts[${i}].join=this.value"></td><td class="text-center"><button onclick="e1RemPart(${i})" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:13px;font-weight:700">✕</button></td></tr>`).join('');}
 function e2AddPart(){
   const name=document.getElementById('e2-nq').value.trim();
   if(!name){toast('이름을 입력하세요','err');return;}
-  const gender=document.getElementById('e2-gender').value;
   // ★ 입사일: empList 우선
   const empMatch=empList.find(e=>e.name===name);
   const join=empMatch&&empMatch.joinDate ? empMatch.joinDate
             : empMatch&&empMatch.join    ? empMatch.join
             : document.getElementById('e2-join').value;
   const empNo=empMatch?empMatch.empNo||'':'';
-  e2.parts.push({name,gender,join,empNo});
+  e2.parts.push({name,join,empNo});
   // ★ 추가 후 초기화
   document.getElementById('e2-nq').value='';
   document.getElementById('e2-join').value='';
@@ -3859,7 +4512,7 @@ function e2AddPart(){
   renderE2Parts();
 }
 function e2RemPart(i){e2.parts.splice(i,1);renderE2Parts();}
-function renderE2Parts(){document.getElementById('e2-ptbody').innerHTML=e2.parts.map((p,i)=>`<tr><td class="text-center">${i+1}</td><td><input class="pi" value="${p.name}" oninput="e2.parts[${i}].name=this.value"></td><td><select class="pi" onchange="e2.parts[${i}].gender=this.value"><option ${p.gender==='남'?'selected':''}>남</option><option ${p.gender==='여'?'selected':''}>여</option></select></td><td><input class="pi" type="date" value="${p.join}" oninput="e2.parts[${i}].join=this.value"></td><td class="text-center"><button onclick="e2RemPart(${i})" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:13px;font-weight:700">✕</button></td></tr>`).join('');}
+function renderE2Parts(){document.getElementById('e2-ptbody').innerHTML=e2.parts.map((p,i)=>`<tr><td class="text-center">${i+1}</td><td><input class="pi" value="${p.name}" oninput="e2.parts[${i}].name=this.value"></td><td><input class="pi" type="date" value="${p.join}" oninput="e2.parts[${i}].join=this.value"></td><td class="text-center"><button onclick="e2RemPart(${i})" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:13px;font-weight:700">✕</button></td></tr>`).join('');}
 
 /* ══ 직원검색 (이름 먼저) ══ */
 function loadPpeItems(){
@@ -3884,6 +4537,7 @@ function loadPpeItems(){
 
 function loadEmps(){
   if(!CFG.url) return;
+  if(!(window.BMAUTH && BMAUTH.session())) return;   // ★ v18.0: 직원목록은 로그인 후에만 (부서 로그인 = 자기 부서 직원만)
   const cb='_bme_'+Date.now();
   window[cb]=res=>{
     delete window[cb];
@@ -3894,7 +4548,6 @@ function loadEmps(){
         dept:     e.dept    || '',
         empNo:    e.empNo   || '',
         joinDate: e.joinDate|| e.join || '',
-        gender:   e.gender  || '',
       })).filter(e=>e.name);
       // GAS 디버그 정보 콘솔 출력
       if(res.debug) console.log('[직원목록 GAS 디버그]', res.debug);
@@ -4316,11 +4969,8 @@ function searchEmp(pfx,q){
   if(!m.length){res.style.display='none';return;}
   res.style.display='block';
   res.innerHTML=m.slice(0,8).map(e=>{
-    const gBadge=e.gender==='여'
-      ?`<span style="background:#fce7f3;color:#be185d;padding:1px 5px;border-radius:8px;font-size:9px;font-weight:700">여</span>`
-      :`<span style="background:#dbeafe;color:#1d4ed8;padding:1px 5px;border-radius:8px;font-size:9px;font-weight:700">남</span>`;
-    return `<div class="nr" onclick="selectEmp('${pfx}','${e.name}','${e.dept}','${e.joinDate||''}','${e.gender||''}','${e.empNo||''}')">
-      <span>${e.name} ${gBadge}</span><small>${e.dept||''} ${e.joinDate||''} ${e.empNo?'('+e.empNo+')':''}</small></div>`;
+    return `<div class="nr" onclick="selectEmp('${pfx}','${e.name}','${e.dept}','${e.joinDate||''}','','${e.empNo||''}')">
+      <span>${e.name}</span><small>${e.dept||''} ${e.joinDate||''} ${e.empNo?'('+e.empNo+')':''}</small></div>`;
   }).join('');
 }
 function selectEmp(pfx,name,dept,join,gender,empNo){
@@ -4358,17 +5008,6 @@ function selectEmp(pfx,name,dept,join,gender,empNo){
   if(empNo){
     const empNoEl=document.getElementById(pfx+'-empno');
     if(empNoEl) empNoEl.value=empNo;
-  }
-  // ★ 성별 자동입력 (구글시트 남여 컬럼)
-  if(gender){
-    const gSel=document.getElementById(pfx+'-gender');
-    if(gSel){
-      for(let i=0;i<gSel.options.length;i++){
-        if(gSel.options[i].value===gender||gSel.options[i].text===gender){
-          gSel.selectedIndex=i; break;
-        }
-      }
-    }
   }
 }
 
@@ -4475,7 +5114,7 @@ function e1Val(s){
 function e2Val(s){if(s===1){if(!e2.parts.length){toast('대상자를 추가하세요','err');return false;}}if(s===2){if(!e2.dept){toast('부서를 선택하세요','err');return false;}}return true;}
 
 /* ══ 요약 ══ */
-function e1RenderSummary(){const dept=document.getElementById('e1-dept').value,male=e1.parts.filter(p=>p.gender==='남').length,female=e1.parts.filter(p=>p.gender==='여').length;document.getElementById('e1-summary').innerHTML=`<div class="sbox">${[['교육부서',dept],['취급물질',e1.chems.join(', ')],['교육기간',e1.dates[0]+(e1.dates.length>1?' ~ '+e1.dates[e1.dates.length-1]:'')+'  ('+e1.dates.length+'일)'],['교육시간',document.getElementById('e1-time').value||'-'],['교육장소',document.getElementById('e1-place').value||'-'],['강사',document.getElementById('e1-instr').value||'-'],['교육인원',`${e1.parts.length}명 (남 ${male} / 여 ${female})`],['사진',e1.photos.filter(Boolean).length+'장']].map(([k,v])=>`<div class="srow"><div class="sk">${k}</div><div class="sv">${v}</div></div>`).join('')}</div>`; e1RenderPreview();}
+function e1RenderSummary(){const dept=document.getElementById('e1-dept').value;document.getElementById('e1-summary').innerHTML=`<div class="sbox">${[['교육부서',dept],['취급물질',e1.chems.join(', ')],['교육기간',e1.dates[0]+(e1.dates.length>1?' ~ '+e1.dates[e1.dates.length-1]:'')+'  ('+e1.dates.length+'일)'],['교육시간',document.getElementById('e1-time').value||'-'],['교육장소',document.getElementById('e1-place').value||'-'],['강사',document.getElementById('e1-instr').value||'-'],['교육인원',`${e1.parts.length}명`],['사진',e1.photos.filter(Boolean).length+'장']].map(([k,v])=>`<div class="srow"><div class="sk">${k}</div><div class="sv">${v}</div></div>`).join('')}</div>`; e1RenderPreview();}
 function e2RenderSummary(){const dept=document.getElementById('e2-dept').value;document.getElementById('e2-summary').innerHTML=`<div class="sbox">${[['교육부서',dept],['취급물질',e2.chems.join(', ')],['교육일',document.getElementById('e2-ds').value],['교육시간',document.getElementById('e2-time').value||'-'],['강사',document.getElementById('e2-instr').value||'-'],['교육인원',e2.parts.length+'명 (서명 완료: '+Object.keys(e2.sigData).length+'명)']].map(([k,v])=>`<div class="srow"><div class="sk">${k}</div><div class="sv">${v}</div></div>`).join('')}</div>`; e2RenderPreview();}
 
 /* ★ v15.42: PDF 미리보기 렌더 (e1, e2 공통 패턴) - 유해화학물질 보고서와 동일 */
@@ -4562,8 +5201,6 @@ function e1BuildPdfHTML(){
   const instrPos  = instrFull.includes('/') ? instrFull.split('/')[1].trim() : '';
   const indiv     = document.getElementById('e1-indiv').value;
   const common    = document.getElementById('e1-common').value;
-  const male      = e1.parts.filter(p=>p.gender==='남').length;
-  const female    = e1.parts.filter(p=>p.gender==='여').length;
   const minJoin   = e1.parts.map(p=>p.join).filter(Boolean).sort()[0]||'-';
   const fmt       = t => (t||'').replace(/\n/g,'<br>');
   const DAYS      = ['일','월','화','수','목','금','토'];
@@ -4673,8 +5310,6 @@ function e1BuildPdfHTML(){
             <tr>
               <td style="padding:10px 13px;font-size:12px;font-weight:400;color:${P.txtSub};border-right:1px dotted ${P.border};width:140px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle">교육 참석 근로자수</td>
               <td style="padding:10px 8px;font-size:12px;font-weight:400;text-align:center;border-right:1px dotted ${P.border};width:70px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle"><span style="color:${P.txtGray}">계</span> <b style="color:${P.txt};font-weight:700">${e1.parts.length}명</b></td>
-              <td style="padding:10px 8px;font-size:12px;font-weight:400;text-align:center;border-right:1px dotted ${P.border};width:78px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle"><span style="color:${P.txtGray}">남자</span> <b style="color:${P.txt};font-weight:700">${male}명</b></td>
-              <td style="padding:10px 8px;font-size:12px;font-weight:400;text-align:center;border-right:1px dotted ${P.border};width:78px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle"><span style="color:${P.txtGray}">여자</span> <b style="color:${P.txt};font-weight:700">${female}명</b></td>
               <td style="padding:10px 13px;font-size:12px;font-weight:400;color:${P.txtSub};text-align:right;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle">입사일: ${minJoin} / 취득일: ${minJoin}</td>
             </tr>
           </table>
@@ -4786,7 +5421,6 @@ async function e1GenPDF(){
       names: e1.parts.map(p=>p.name).join('|'),
       empNos: e1.parts.map(p=>p.empNo||'').join('|'),
       joinDates: e1.parts.map(p=>p.join||'').join('|'),
-      genders: e1.parts.map(p=>p.gender||'').join('|'),
       sigImgs: sigImgs,  // ★ 서명 이미지 배열 (1일차 대표)
       sigsByDay: sigsByDay,  // ★ v15.43: 모든 일자 서명 (members[0]에 저장)
       eduDates: e1.dates,  // ★ v15.43: 일자 배열 (members[0]에 저장)
@@ -4814,7 +5448,7 @@ async function e1GenPDF(){
       sigCount: e1SigCount+'명 서명',
       names: e1.parts.map(p=>p.name).join(', '),
       partsDetail: await Promise.all(e1.parts.map(async (p,i)=>({
-        no:i+1, name:p.name, join:p.join||'', gender:p.gender||'',
+        no:i+1, name:p.name, join:p.join||'',
         signed: i<e1SigCount ? '✓' : '-',
         sigImg: i<3 ? await compressImg((e1.sigData[0]&&e1.sigData[0][i])||'') : ''
       }))),
@@ -5007,7 +5641,6 @@ async function e2GenPDF(){
       names: e2.parts.map(p=>p.name).join('|'),
       empNos: e2.parts.map(p=>p.empNo||'').join('|'),
       joinDates: e2.parts.map(p=>p.join||'').join('|'),
-      genders: e2.parts.map(p=>p.gender||'').join('|'),
       sigImgs: e2SigImgs,  // ★ 서명 이미지 배열
       fileName: _e2FileName
     });
@@ -5032,7 +5665,7 @@ async function e2GenPDF(){
       sigCount: e2SigCount+'명 서명',
       names: e2.parts.map(p=>p.name).join(', '),
       partsDetail: await Promise.all(e2.parts.map(async (p,i)=>({
-        no:i+1, name:p.name, join:p.join||'', gender:p.gender||'',
+        no:i+1, name:p.name, join:p.join||'',
         signed: i<e2SigCount ? '✓' : '-',
         sigImg: i<3 ? await compressImg(e2.sigData[i]||'') : ''
       })))
@@ -5337,7 +5970,7 @@ function apvLoadAndRender(){
     g.members.push({
       name: r.name||'', empNo: r.empNo||'',
       joinDate: normalizeDate(r.joinDate||''),  // ★ v15.43: 입사일 정규화
-      gender: r.gender||'', signed: r.signed||'',
+      signed: r.signed||'',
       // ★ v15.43: 미리보기 누락 버그 수정 — 모든 필드 보존
       sigImg: r.sigImg||'',           // 서명 이미지
       photos: r.photos,                // 사진 (members[0]에만 있음)
@@ -8064,7 +8697,7 @@ function ppeSaveRecordsBatch(persons, pdfFileName, sigImgs){
         'sigCount='+encodeURIComponent(String(L.signedCount)),
         'empNos='+encodeURIComponent(persons.map(p=>p.empNo||'').join('|')),
         'joinDates='+encodeURIComponent(persons.map(p=>p.join||'').join('|')),
-        'genders=','time=보호구지급',
+        'time=보호구지급',
         'callback='+cb
       ].join('&');
       const sc=document.createElement('script');
@@ -8110,7 +8743,6 @@ function saveEduRecord(params){
     const names  = params.names ? params.names.split('|') : [];
     const empNos = params.empNos ? params.empNos.split('|') : [];
     const joinDates = params.joinDates ? params.joinDates.split('|') : [];
-    const genders = params.genders ? params.genders.split('|') : [];
     const sigImgs = Array.isArray(params.sigImgs) ? params.sigImgs : [];  // ★ 서명 이미지 배열
     const photos = Array.isArray(params.photos) ? params.photos : [];  // ★ 사진 배열 (e1 전용)
     const sigsByDay = params.sigsByDay || null;  // ★ v15.43: 다일 교육 일자별 서명
@@ -8147,7 +8779,6 @@ function saveEduRecord(params){
         empNo: empNos[i]||'',
         name: name.trim(),
         joinDate: joinDates[i]||'',
-        gender: genders[i]||'',
         signed: i<sigCount ? '✓ 서명완료' : '- 미서명',
         sigImg: sigImgs[i] || '',  // ★ 서명 이미지 (압축된 base64)
         photos: i===0 ? photos : undefined,  // ★ 사진은 첫 인원에만 (일지 단위 정보)
@@ -8202,7 +8833,6 @@ function saveEduRecord(params){
     names:  params.names||'',
     empNos: params.empNos||'',
     joinDates: params.joinDates||'',
-    genders:   params.genders||'',
     dateStart: params.dateStart||'',
     dateEnd:   params.dateEnd||'',
     days:      params.days||'',
@@ -8339,7 +8969,7 @@ async function _regenerateEduFromRecord(r){
       approved: !!r.approved,
       members: [{
         name: r.name || '', empNo: r.empNo || '', joinDate: r.joinDate || '',
-        gender: r.gender || '', signed: r.signed || '',
+        signed: r.signed || '',
         sigImg: r.sigImg || '', photos: r.photos,
         sigsByDay: r.sigsByDay, eduDates: r.eduDates,
         time: r.time, totalHours: r.totalHours,
@@ -10329,75 +10959,17 @@ window.apPpeRows=[];
 /* ══ 관리자 대시보드 ══ */
 
 // ════════════════════════════════════════════
-// ★ 비밀번호 잠금 관리 (관리자/설정 공용)
+// ★ v18.0: 비밀번호 확인은 서버(GAS)에서 — 코드에 비밀번호·재설정 코드 없음
+//   관리자 로그인 시 서버가 확인한 비밀번호를 이 탭(sessionStorage)에만 보관하고,
+//   삭제·초기화 같은 재확인 단계는 그 값과 비교한다. 잠금(5회/15분)은 서버가 관리.
 // ════════════════════════════════════════════
-const LOCK_MAX_TRIES = 8;       // 최대 시도 횟수
-const RESET_CODE = 'bumin';     // 재설정 코드
-
-function _getLockData(key){
-  try{ return JSON.parse(localStorage.getItem('bm_lock_'+key)||'{"tries":0,"locked":false}'); }
-  catch(e){ return {tries:0,locked:false}; }
-}
-function _setLockData(key,data){
-  localStorage.setItem('bm_lock_'+key, JSON.stringify(data));
-}
-function _resetLock(key){
-  localStorage.removeItem('bm_lock_'+key);
-}
-
-// 비밀번호 확인 (관리자/설정 공용)
-// returns: true=성공, false=실패
 function _checkPassword(key, inputPw){
-  let lock = _getLockData(key);
-
-  // 잠금 상태 확인
-  if(lock.locked){
-    const code = prompt(
-      `⛔ 비밀번호 8회 오류로 잠겼습니다.\n재설정 코드를 입력하세요:`
-    );
-    if(!code) return false;
-    if(code.trim() === RESET_CODE){
-      // 재설정: 새 비밀번호 입력
-      const newPw = prompt('새 비밀번호를 입력하세요:');
-      if(!newPw||newPw.trim().length<4){
-        toast('비밀번호는 4자 이상이어야 합니다','err');
-        return false;
-      }
-      const newPw2 = prompt('새 비밀번호를 다시 입력하세요:');
-      if(newPw.trim() !== newPw2.trim()){
-        toast('비밀번호가 일치하지 않습니다','err');
-        return false;
-      }
-      adminPw = newPw.trim();
-      _resetLock(key);
-      toast('✅ 비밀번호가 재설정되었습니다. 다시 로그인해주세요.','ok');
-      return false; // 재설정 후 다시 입력하도록
-    } else {
-      toast('재설정 코드가 올바르지 않습니다','err');
-      return false;
-    }
-  }
-
-  // 비밀번호 확인
-  if(inputPw === adminPw){
-    _resetLock(key); // 성공 시 카운터 초기화
-    return true;
-  } else {
-    lock.tries = (lock.tries||0) + 1;
-    const remain = LOCK_MAX_TRIES - lock.tries;
-    if(lock.tries >= LOCK_MAX_TRIES){
-      lock.locked = true;
-      _setLockData(key, lock);
-      toast(`⛔ 비밀번호 ${LOCK_MAX_TRIES}회 오류 — 잠금됩니다. 재설정 코드: bumin`,'err');
-    } else {
-      _setLockData(key, lock);
-      toast(`비밀번호 오류 (${lock.tries}/${LOCK_MAX_TRIES}회, 남은 시도: ${remain}회)`,'err');
-    }
-    return false;
-  }
+  if(adminPw && inputPw === adminPw) return true;
+  toast(adminPw ? '비밀번호가 올바르지 않습니다' : '관리자 모드에서 먼저 로그인하세요','err');
+  return false;
 }
 
-let adminLoaded=false, adminRecords=[], adminPw='bumin2024';
+let adminLoaded=false, adminRecords=[], adminPw=(function(){ try{ return sessionStorage.getItem('bm_adm_pw')||''; }catch(_){ return ''; } })();
 let _adminLoading=false; // 중복 로딩 방지
 
 
@@ -12101,6 +12673,7 @@ function adminLogin(){
 
 function adminLogout(){
   localStorage.removeItem('bm_admin_ok');
+  try{ BMAUTH.logout(); }catch(_){}   // ★ v18.0: 서버 로그인도 해제
   adminLoaded=false;
   showAdminLogin();
 }
@@ -13647,13 +14220,14 @@ self.addEventListener('fetch',e=>{
       apv:  'apvRender'
     };
 
-    window.handleTabAction = function(type, action){
-      // §4 보안: 비로그인 시 비밀번호 prompt
+    window.handleTabAction = async function(type, action){
+      // §4 보안: 비로그인 시 비밀번호 prompt (v18.0: 서버 인증)
       if(localStorage.getItem('bm_admin_ok') !== '1'){
         const pw = prompt('🔐 관리자 비밀번호를 입력하세요\n(관리 기능은 관리자만 사용 가능합니다)');
         if(pw === null || pw === '') return;
-        if(!_safeCheckPw('admin', pw)){
-          toast('관리자 인증 실패','err'); return;
+        const r = await BMAUTH.adminLogin(pw);
+        if(!r.success){
+          toast(r.error || '관리자 인증 실패','err'); return;
         }
         localStorage.setItem('bm_admin_ok','1');
         if(typeof initAdmin === 'function') initAdmin();
@@ -14000,9 +14574,8 @@ self.addEventListener('fetch',e=>{
     window.openCfg = function(){
       const isAdmin = localStorage.getItem('bm_admin_ok') === '1';
       if(!isAdmin){
-        const pw = prompt('🔐 관리자 비밀번호를 입력하세요\n(설정 변경은 관리자만 가능합니다)');
-        if(pw === null) return;
-        if(!_checkPassword('cfg', pw)) return;
+        toast('🔐 설정 변경은 관리자 모드에서 로그인한 뒤 가능합니다','err');
+        return;
       }
       try{
         document.getElementById('cfg-url').value      = CFG.url     || DEFAULT_CFG.url;
@@ -14037,8 +14610,9 @@ self.addEventListener('fetch',e=>{
     window.adminLogin = async function(){
       const pw = document.getElementById('admin-pw').value;
       const errEl = document.getElementById('admin-pw-err');
-      if(!_checkPassword('admin', pw)){
-        if(errEl) errEl.style.display = 'block';
+      const r = await BMAUTH.adminLogin(pw);   // ★ v18.0: 서버 인증
+      if(!r.success){
+        if(errEl){ errEl.textContent = r.error || '비밀번호가 틀렸습니다'; errEl.style.display = 'block'; }
         document.getElementById('admin-pw').value = '';
         return;
       }
