@@ -10,8 +10,14 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v19.0 (2026-10-21)
+  부민병원 MSDS 통합시스템 v19.1 (2026-10-21)
 
+  ★★★ v19.1 (2026-10-21) — 리디자인 2단계 MSDS 관리 화면 (최종 시안 C):
+    - 목록: 부서 선택(위쪽 메뉴에서 이동) · 검색(물질명 · 제조사 · CAS) · 개수, 줄 목록 + 선택 표시
+    - 상세: 큰 제목, PDF 원본보기 · 교육일지 작성 버튼 하나로 통합
+      (취급부서에 관리대상 · 특별관리 물질이 있으면 특별안전보건교육일지, 없으면 MSDS 교육일지)
+    - 그림문자 80px 칸 + 이름, 관리대상 4칸(해당이면 초록), 성분표 · 응급처치표 새 모양
+    - 휴대폰: 목록만 보이고 누르면 상세 화면, '← 목록으로'로 돌아감
   ★★★ v19.0 (2026-10-21) — 리디자인 1단계 (최종 시안 확정: 색 · 위쪽 메뉴 · 연락처 · 휴대폰 자동 전환):
     - 부민병원 HI 그린(#4A8F2C 등)으로 색 통일 — CSS + Tailwind emerald 계열 재지정, 글꼴 Pretendard
     - 머리줄: 로고(MSDS 통합관리 / 부산부민병원 보건관리실) + 메뉴 한 줄 + 부서 선택 · 동기화 · 설정 · 로그인 칩
@@ -628,6 +634,84 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
 .bm-foot{background:var(--bm-g8);color:#fff;margin:28px -14px -48px;padding:14px 20px;display:flex;flex-wrap:wrap;gap:6px 20px;align-items:center;font-size:14px}
 .bm-foot .m{background:#fff;color:var(--bm-g8);padding:2px 10px;border-radius:2px;font-weight:800}
 #detailView .bm-foot,#pg-chem .bm-foot{margin:28px 0 0;border-radius:4px}
+/* v19.1 — MSDS 관리 화면 (최종 시안 C) */
+#pg-msds{flex-direction:row;gap:16px;padding:16px 20px;box-sizing:border-box;background:#F5F5F2}
+#productList{width:340px;flex:0 0 340px;height:100%;display:flex;flex-direction:column;background:#fff;border:1px solid var(--bm-line);border-radius:8px;overflow:hidden;padding:0}
+#gridContainer{flex:1;overflow-y:auto}
+.ms-head{display:flex;flex-direction:column;gap:8px;padding:14px 16px;border-bottom:1px solid var(--bm-line)}
+.ms-lbl{font-size:14px;font-weight:700;color:var(--bm-ink2)}
+.ms-sel{height:42px;border:1px solid #C6C3BB;border-radius:4px;padding:0 10px;font-size:15px;font-weight:700;color:var(--bm-ink);background:#fff;font-family:inherit}
+.ms-srch{display:flex;align-items:center;gap:8px;height:42px;border:1px solid #C6C3BB;border-radius:4px;padding:0 12px;color:#5A5650;background:#fff}
+.ms-srch:focus-within,.ms-sel:focus{border-color:var(--bm-g6);outline:2px solid var(--bm-g50)}
+.ms-srch input{border:0;outline:0;flex:1;min-width:0;font:inherit;font-size:15px;background:transparent}
+.ms-cnt{font-size:14px;color:#5A5650}.ms-cnt b{color:var(--bm-ink)}
+.ms-li{display:block;width:100%;text-align:left;background:#fff;border:0;border-bottom:1px solid #ECEBE7;padding:12px 16px;font:inherit;cursor:pointer}
+.ms-li:hover{background:#FAFAF8}
+.ms-li.on{background:#E2F0D5;box-shadow:inset 4px 0 0 var(--bm-g6)}
+.ms-li b{display:block;font-size:16px;font-weight:700;color:var(--bm-ink);word-break:break-all}
+.ms-li span{display:block;font-size:14px;color:#5A5650}
+.ms-li em{display:block;font-style:normal;font-size:14px;color:var(--bm-g8);font-weight:700}
+.ms-empty{padding:24px 16px;text-align:center;color:#5A5650;font-size:15px}
+#detailView{flex:1;min-width:0;height:100%;overflow-y:auto;background:#fff;border:1px solid var(--bm-line);border-radius:8px;padding:22px 28px}
+#placeholder p{font-style:normal;color:#8A867E}
+.ms-back{display:none}
+.ms-dh{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-bottom:16px;border-bottom:3px solid var(--bm-g5)}
+.ms-dh h2{margin:0;font-size:30px;font-weight:800;color:var(--bm-ink);word-break:break-all;line-height:1.25}
+.ms-mf{margin:6px 0 0;font-size:16px;color:var(--bm-ink2);font-weight:600}.ms-mf span{color:var(--bm-g8)}
+.ms-dp{margin:2px 0 0;font-size:15px;color:#5A5650}
+.ms-act{display:flex;flex-direction:column;gap:8px;min-width:210px}
+.ms-btn{min-height:44px;border-radius:4px;font:inherit;font-size:15px;font-weight:700;cursor:pointer;padding:0 16px}
+.ms-btn.g{background:#fff;color:var(--bm-ink);border:1px solid #C6C3BB}.ms-btn.g:hover{background:#FAFAF8}
+.ms-btn.p{background:var(--bm-g6);color:#fff;border:1px solid var(--bm-g6)}.ms-btn.p:hover{background:var(--bm-g7)}
+.ms-kind{text-align:center;font-size:14px;font-weight:700;color:#6E4A00}
+.ms-h3{margin:24px 0 10px;font-size:18px;font-weight:800;color:var(--bm-ink);display:flex;align-items:center;gap:10px}
+.ms-h3 i{width:10px;height:10px;background:var(--bm-g5)}
+.ms-h3.em{color:#A3302A}.ms-h3.em i{background:#C23B32}
+.ms-warn{display:flex;flex-wrap:wrap;gap:14px 20px;align-items:center;background:#FAFAF8;border:1px solid #ECEBE7;border-radius:8px;padding:14px 16px}
+.ms-pgms{display:flex;flex-wrap:wrap;gap:8px}
+.ms-pgm{margin:0;width:86px;text-align:center}
+.ms-pgm div{width:80px;height:80px;margin:0 auto;background:#fff;border:1px solid var(--bm-line);border-radius:4px;display:grid;place-items:center;padding:4px;box-sizing:border-box}
+.ms-pgm img{max-width:100%;max-height:100%;object-fit:contain}
+.ms-pgm figcaption{margin-top:4px;font-size:14px;font-weight:700;color:#A3302A;line-height:1.3}
+.ms-none{font-size:15px;color:#8A867E}
+.ms-mbs{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+.ms-mb{width:124px;min-height:92px;background:#fff;border:1px solid var(--bm-line);border-radius:4px;display:flex;flex-direction:column;justify-content:center;gap:2px;text-align:center;padding:6px;box-sizing:border-box}
+.ms-mb span{font-size:14px;color:#5A5650;font-weight:600}
+.ms-mb b{font-size:16px;font-weight:800;color:var(--bm-ink);line-height:1.3;word-break:keep-all}
+.ms-mb.on{border-color:var(--bm-g6);background:#E2F0D5}.ms-mb.on b{color:var(--bm-g8)}
+.ms-tw{border:1px solid var(--bm-line);border-radius:8px}
+.ms-ct,.ms-et{border:0}
+.ms-ct th{background:#E2F0D5;color:var(--bm-g8);border:0;border-bottom:1px solid var(--bm-line);font-size:15px;padding:10px 8px}
+.ms-ct td,.ms-et td,.ms-et th{border:0;border-bottom:1px solid #ECEBE7;font-size:16px;font-weight:500;padding:10px 8px;color:#333}
+.ms-ct tr:last-child td,.ms-et tr:last-child td,.ms-et tr:last-child th{border-bottom:0}
+.ms-cn{text-align:left!important;font-weight:700!important;color:var(--bm-ink)!important}
+.ms-amt{font-weight:800!important;color:var(--bm-g8)!important}
+.ms-et th{width:100px!important;background:#FBE5E2;color:#A3302A;font-weight:800;text-align:center}
+.ms-et td{line-height:1.65;color:var(--bm-ink)}
+#detailView .bm-foot{margin:28px 0 0}
+@media(max-width:1180px){
+  #pg-msds{padding:12px;gap:12px}
+  #productList{width:300px;flex-basis:300px}
+  #detailView{padding:18px 20px}
+  .ms-dh h2{font-size:26px}
+}
+@media(max-width:760px){
+  #pg-msds{padding:0;gap:0;background:#fff}
+  #productList{width:100%;flex:1 1 auto;border:0;border-radius:0}
+  #detailView{display:none;border:0;border-radius:0;padding:12px 14px}
+  #pg-msds.detail-open #productList{display:none}
+  #pg-msds.detail-open #detailView{display:block}
+  .ms-back{display:inline-flex;align-items:center;min-height:40px;margin:0 0 8px;padding:0 12px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:15px;font-weight:700;color:var(--bm-ink);cursor:pointer}
+  .ms-dh h2{font-size:22px}
+  .ms-act{min-width:0;width:100%;flex-direction:row;flex-wrap:wrap}
+  .ms-act .ms-btn{flex:1 1 140px}
+  .ms-act .ms-kind{flex-basis:100%}
+  .ms-warn{padding:12px}
+  .ms-pgms{justify-content:center;width:100%}
+  .ms-pgm{width:76px}.ms-pgm div{width:70px;height:70px}
+  .ms-mbs{margin-left:0;width:100%;display:grid;grid-template-columns:1fr 1fr}
+  .ms-mb{width:auto;min-height:72px}
+}
 @media(max-width:1600px){
   #sync-info,#slbl{display:none}
   .bm-hdr{gap:14px}
@@ -650,7 +734,6 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
   .bm-logo b{font-size:16px}
   .bm-logo small{display:none}
   .bm-logo i{width:30px;height:30px}
-  .bm-sel{max-width:96px;font-size:13px;padding:6px 4px}
   #slbl{display:none}
   .bm-hdr .tab-bar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:60;height:calc(64px + env(safe-area-inset-bottom));margin:0;padding:0 0 env(safe-area-inset-bottom);background:#fff;border-top:1px solid var(--bm-line);box-shadow:0 -2px 8px rgba(0,0,0,.06)}
   .bm-hdr .tb{flex:1 1 0;min-width:0;white-space:nowrap;flex-direction:column;justify-content:center;gap:2px;padding:0 2px;font-size:13px;border-bottom:0;border-top:3px solid transparent}
@@ -665,8 +748,6 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
   .bm-icbtn{padding:0 8px}
 }
 @media(max-width:480px){
-  .bm-logo span{display:none}
-  .bm-sel{max-width:110px}
   .bm-hdr .tb{font-size:11.5px;letter-spacing:-.3px}
   .bm-foot{font-size:13px}
 }
@@ -765,9 +846,6 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
   </nav>
   <div class="bm-ctl" id="bm-auth-slot">
     <div id="sync-info" onclick="diagEdu()" title="클릭하면 부서별 시트값 진단"></div>
-    <select id="deptSelect" class="bm-sel" aria-label="부서 선택" onchange="filterDept(this.value)">
-      <option value="all">전체 부서</option>
-    </select>
     <button onclick="syncAll()" class="bm-icbtn" title="동기화">
       <span id="sdot" class="w-2 h-2 rounded-full bg-green-300 inline-block"></span><span id="slbl">동기화</span>
     </button>
@@ -786,10 +864,16 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
 
 <!-- ══ MSDS ══ -->
 <div id="pg-msds">
-  <aside id="productList" class="p-3 space-y-2">
-    <input id="srch" type="text" placeholder="🔍 물질명·제조사 검색…" oninput="searchChem(this.value)"
-      class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none mb-1 focus:border-emerald-400">
-    <div id="gridContainer" class="space-y-2"></div>
+  <aside id="productList" aria-label="물질 목록">
+    <div class="ms-head">
+      <label class="ms-lbl" for="deptSelect">부서</label>
+      <select id="deptSelect" class="ms-sel" onchange="filterDept(this.value)">
+        <option value="all">전체 부서</option>
+      </select>
+      <label class="ms-srch"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="srch" type="search" aria-label="물질 검색" placeholder="물질명 · 제조사 · CAS" oninput="searchChem(this.value)"></label>
+      <span class="ms-cnt" id="ms-cnt"></span>
+    </div>
+    <div id="gridContainer"></div>
   </aside>
   <section id="detailView" class="scroll-smooth">
     <div id="placeholder" class="h-full flex flex-col items-center justify-center text-slate-300">
@@ -3163,7 +3247,7 @@ function buildDeptSelects(){
   const hdSel=document.getElementById('deptSelect');
   if(hdSel){
     // ★ 중복 방지: 전체 재생성
-    hdSel.innerHTML='<option value="all">전체</option>';
+    hdSel.innerHTML='<option value="all">전체 부서</option>';
     depts.forEach(d=>hdSel.innerHTML+=`<option value="${d}">${d}</option>`);
   }
 
@@ -3379,22 +3463,42 @@ function diagEdu(){
 function getDirectImgUrl(url){if(!url)return'';try{let id='';if(url.includes('id='))id=url.split('id=')[1].split('&')[0];else if(url.includes('/d/'))id=url.split('/d/')[1].split('/')[0];else return url;return'https://lh3.googleusercontent.com/d/'+id;}catch(e){return url;}}
 function searchChem(q){srchQ=q.toLowerCase();renderList(deptF);}
 function filterDept(d){deptF=d;renderList(d);}
+function bmEsc(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+// v19.1 — 관리대상·특별관리 표기 판정 (true / "해당" / "O" / "●" 등)
+function bmTruthy(v){
+  if(v===true) return true;
+  if(typeof v!=='string') return false;
+  const s=v.trim().toLowerCase();
+  return s==='해당'||s==='true'||s==='y'||s==='yes'||s==='1'||s==='o'||s==='●'||s==='○'||s==='ㅇ';
+}
+// v19.1 — 부서에 관리대상·특별관리 물질이 하나라도 있으면 특별안전보건교육일지, 없으면 MSDS 교육일지
+function bmDeptNeedsSpecial(dept){
+  return CHEMS.some(c=>(c.departments||[]).includes(dept)&&(bmTruthy(c.targetManage)||bmTruthy(c.specialManage)));
+}
 function renderList(dept){
   const con=document.getElementById('gridContainer');con.innerHTML='';
-  const filtered=CHEMS.filter(p=>{const dm=dept==='all'||p.departments.includes(dept);const sm=!srchQ||p.name.toLowerCase().includes(srchQ)||(p.manufacturer||'').toLowerCase().includes(srchQ);return dm&&sm;});
+  const casOf=p=>(p.components||[]).map(c=>c.casNumber||c.cas||'').join(' ');
+  const filtered=CHEMS.filter(p=>{const dm=dept==='all'||p.departments.includes(dept);const sm=!srchQ||p.name.toLowerCase().includes(srchQ)||(p.manufacturer||'').toLowerCase().includes(srchQ)||casOf(p).includes(srchQ);return dm&&sm;});
+  const cnt=document.getElementById('ms-cnt');
+  if(cnt) cnt.innerHTML=(srchQ?'검색 결과 ':(dept==='all'?'전체 ':bmEsc(dept)+' '))+'<b>'+filtered.length+'</b>종';
   filtered.sort((a,b)=>a.name.localeCompare(b.name)).forEach(p=>{
-    const card=document.createElement('div');
-    card.className='bg-white p-3 rounded-lg border border-slate-200 cursor-pointer shadow-sm active:scale-95 transition-all';
-    card.innerHTML=`<h3 class="list-title">${p.name}</h3><p class="list-sub">${p.manufacturer||''}</p><p class="list-dept">${p.departments.join(' · ')}</p>`;
-    card.onclick=()=>{document.querySelectorAll('#gridContainer div').forEach(d=>d.classList.remove('active-card'));card.classList.add('active-card');showDetail(p.name);if(window.innerWidth<768)document.getElementById('detailView').scrollIntoView({behavior:'smooth'});};
-    con.appendChild(card);
+    const li=document.createElement('button');
+    li.type='button';
+    li.className='ms-li'+(curChem&&curChem.name===p.name?' on':'');
+    li.innerHTML=`<b>${bmEsc(p.name)}</b><span>${bmEsc(p.manufacturer||'')}</span><em>${bmEsc(p.departments.join(' · '))}</em>`;
+    li.onclick=()=>{con.querySelectorAll('.ms-li').forEach(d=>d.classList.remove('on'));li.classList.add('on');showDetail(p.name);};
+    con.appendChild(li);
   });
+  if(!filtered.length) con.innerHTML='<p class="ms-empty">찾는 물질이 없습니다</p>';
 }
+// v19.1 — 휴대폰: 목록 ↔ 상세 화면 전환
+function msdsBack(){document.getElementById('pg-msds').classList.remove('detail-open');}
 function showDetail(name){
   const p=productMap[name];if(!p)return;curChem=p;
+  document.getElementById('pg-msds').classList.add('detail-open');
   document.getElementById('placeholder').style.display='none';
   const con=document.getElementById('detailContent');con.style.display='block';
-  let iconHtml=(p.icons&&p.icons.length)?p.icons.map(ic=>`<div class="flex flex-col items-center gap-1"><div class="w-16 h-16 md:w-20 md:h-20 bg-white border border-slate-100 rounded-lg flex items-center justify-center p-1 shadow-sm"><img src="${getDirectImgUrl(ic.url)}" class="max-w-full max-h-full object-contain" onerror="this.style.display='none'"></div><span class="text-[10px] font-bold text-red-600">${ic.label}</span></div>`).join(''):'없음';
+  let iconHtml=(p.icons&&p.icons.length)?p.icons.map(ic=>`<figure class="ms-pgm"><div><img src="${getDirectImgUrl(ic.url)}" alt="${bmEsc(ic.label)}" onerror="this.style.display='none'"></div><figcaption>${bmEsc(ic.label)}</figcaption></figure>`).join(''):'<span class="ms-none">그림문자 없음</span>';
   // ★★★ v17.1: Google Sheets ISO 날짜 자동 변환 복원 (표시 직전 안전망) ★★★
   // amount: "2026-09-10 00:00:00" → "9-10" (월-일 형식)
   // casNumber: ISO 형식이면 ⚠ 표시
@@ -3416,17 +3520,11 @@ function showDetail(name){
   };
   // ★ 구버전(c.name/c.cas) + 현재(c.compName/c.casNumber) 양쪽 호환
   const _tv=v=>(v||'').trim();
-  const compRows=(p.components||[]).map(c=>`<tr><td class="font-bold bg-slate-50 text-left">${c.compName||c.name||'-'}</td><td>${_fixCas(c.casNumber||c.cas)||'-'}</td><td class="text-emerald-700 font-black">${_fixAmount(c.amount)||'-'}</td><td>${_tv(c.workEnv)||'-'}</td><td>${_tv(c.healthCheck)||'-'}</td></tr>`).join('');
+  const compRows=(p.components||[]).map(c=>`<tr><td class="ms-cn">${c.compName||c.name||'-'}</td><td>${_fixCas(c.casNumber||c.cas)||'-'}</td><td class="ms-amt">${_fixAmount(c.amount)||'-'}</td><td>${_tv(c.workEnv)||'-'}</td><td>${_tv(c.healthCheck)||'-'}</td></tr>`).join('');
   const lines=(p.emergency||'').split('\n').filter(l=>l.trim());
   const emRows=lines.map(line=>{let title='안내',desc=line;if(line.includes(']')){const pts=line.split(']');title=pts[0].replace('[','');desc=pts.slice(1).join(']');}return`<tr><th>[${title}]</th><td>${desc.trim().replace(/\n/g,'<br>')}</td></tr>`;}).join('');
   // ★ boolean(true/false) + string("해당"/"TRUE"/"o"/"O"/"●") 등 모든 표기 처리
-  const _truthy = v => {
-    if (v === true) return true;
-    if (typeof v !== 'string') return false;
-    const s = v.trim().toLowerCase();
-    return s === '해당' || s === 'true' || s === 'y' || s === 'yes' || s === '1' ||
-           s === 'o' || s === '●' || s === '○' || s === '○' || s === 'ㅇ';
-  };
+  const _truthy = bmTruthy;
   const _isTarget = _truthy(p.targetManage);
   const _isSpecial = _truthy(p.specialManage);
 
@@ -3442,31 +3540,37 @@ function showDetail(name){
   const _prodWorkEnv = (p.workEnv || '').trim() || _firstCompVal('workEnv') || '-';
   const _prodHealthCheck = (p.healthCheck || '').trim() || _firstCompVal('healthCheck') || '-';
 
-  const tC=_isTarget?'text-emerald-600':'text-slate-300';
-  const sC=_isSpecial?'text-emerald-600':'text-slate-300';
+  const _eduDept=p.departments[0]||'';
+  const _special=_eduDept?bmDeptNeedsSpecial(_eduDept):(_isTarget||_isSpecial);
+  const _jn=p.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+  const _mb=(t,v,on)=>`<div class="ms-mb${on?' on':''}"><span>${t}</span><b>${v}</b></div>`;
   con.innerHTML=`<div>
-    <div class="detail-header">
-      <div class="text-left"><h2 class="text-xl md:text-3xl font-black break-all">${p.name}</h2><p class="text-sm font-bold mt-1 text-slate-500">${p.manufacturer||''} | <span class="text-emerald-700">용도: ${p.usage||'-'}</span></p><p class="text-xs mt-1 text-slate-400">취급부서: ${p.departments.join(', ')}</p></div>
-      <div class="flex flex-col gap-2 md:items-end">
-        ${p.pdfUrl?`<button onclick="window.open('${p.pdfUrl}','_blank')" class="w-full md:w-auto bg-slate-900 text-white px-4 py-2 rounded-lg font-bold text-xs hover:bg-black transition-colors">📄 PDF 원본보기</button>`:''}
-        <button onclick="startEdu1('${p.name.replace(/'/g,"\\'")}');" class="w-full md:w-auto bg-emerald-500 text-white px-4 py-2 rounded-lg font-bold text-xs hover:bg-emerald-600 transition-colors">📝 특별교육일지 작성</button>
-        <button onclick="startEdu2('${p.name.replace(/'/g,"\\'")}');" class="w-full md:w-auto bg-violet-500 text-white px-4 py-2 rounded-lg font-bold text-xs hover:bg-violet-600 transition-colors">📋 MSDS교육일지 작성</button>
+    <button type="button" class="ms-back" onclick="msdsBack()">← 목록으로</button>
+    <div class="ms-dh">
+      <div>
+        <h2>${bmEsc(p.name)}</h2>
+        <p class="ms-mf">${bmEsc(p.manufacturer||'')} | <span>용도: ${bmEsc(p.usage||'-')}</span></p>
+        <p class="ms-dp">취급부서: ${bmEsc(p.departments.join(', '))}</p>
+      </div>
+      <div class="ms-act">
+        ${p.pdfUrl?`<button type="button" class="ms-btn g" onclick="window.open('${p.pdfUrl}','_blank')">PDF 원본보기</button>`:''}
+        <button type="button" class="ms-btn p" onclick="${_special?'startEdu1':'startEdu2'}('${_jn}')">교육일지 작성</button>
+        <span class="ms-kind">${_eduDept?bmEsc(_eduDept)+' · ':''}${_special?'특별안전보건교육 대상':'MSDS 교육 대상'}</span>
       </div>
     </div>
-    <h4 class="sec-ttl">⚠️ 경고표지 및 관리대상</h4>
-    <div class="flex flex-col md:flex-row items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100 mb-2">
-      <div class="flex flex-wrap justify-center gap-3">${iconHtml}</div>
-      <div class="flex flex-wrap gap-2 w-full md:w-auto md:ml-auto">
-        <div class="mbadge flex-1"><span class="mbadge-t">관리대상물질</span><span class="mbadge-v ${tC}">${_isTarget?'해당':'미해당'}</span></div>
-        <div class="mbadge flex-1"><span class="mbadge-t">특별관리대상</span><span class="mbadge-v ${sC}">${_isSpecial?'해당':'미해당'}</span></div>
-        <div class="mbadge flex-1"><span class="mbadge-t">작업환경측정</span><span class="mbadge-v text-sm">${_prodWorkEnv}</span></div>
-        <div class="mbadge flex-1"><span class="mbadge-t">건강진단</span><span class="mbadge-v text-sm">${_prodHealthCheck}</span></div>
+    <h4 class="ms-h3"><i></i>경고표지 및 관리대상</h4>
+    <div class="ms-warn">
+      <div class="ms-pgms">${iconHtml}</div>
+      <div class="ms-mbs">
+        ${_mb('관리대상물질',_isTarget?'해당':'미해당',_isTarget)}
+        ${_mb('특별관리대상',_isSpecial?'해당':'미해당',_isSpecial)}
+        ${_mb('작업환경측정',bmEsc(_prodWorkEnv),false)}
+        ${_mb('건강진단',bmEsc(_prodHealthCheck),false)}
       </div>
     </div>
-    <h4 class="sec-ttl">🧪 구성성분 및 관리정보</h4>
-    <div class="table-wrap"><table class="ctbl"><thead><tr><th>성분명</th><th>CAS NO.</th><th>함량</th><th>작업측정</th><th>건강진단</th></tr></thead><tbody>${compRows||'<tr><td colspan="5" class="text-slate-400 text-center py-3">정보 없음</td></tr>'}</tbody></table></div>
-    ${emRows?`<h4 class="sec-ttl" style="color:#ef4444;border-color:#ef4444">🚑 응급처치 요령</h4><div class="table-wrap"><table class="ctbl em-tbl"><tbody>${emRows}</tbody></table></div>`:''}
-    <div class="pb-8"></div>
+    <h4 class="ms-h3"><i></i>구성성분 및 관리정보</h4>
+    <div class="table-wrap ms-tw"><table class="ctbl ms-ct"><thead><tr><th>성분명</th><th>CAS NO.</th><th>함량(%)</th><th>작업측정</th><th>건강진단</th></tr></thead><tbody>${compRows||'<tr><td colspan="5" class="ms-none">정보 없음</td></tr>'}</tbody></table></div>
+    ${emRows?`<h4 class="ms-h3 em"><i></i>응급처치 요령</h4><div class="table-wrap ms-tw"><table class="ctbl em-tbl ms-et"><tbody>${emRows}</tbody></table></div>`:''}
   </div>`;
   document.getElementById('detailView').scrollTo({top:0,behavior:'smooth'});
 }
