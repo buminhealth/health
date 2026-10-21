@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v19.3 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v19.5 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -627,6 +627,16 @@ function fsPut_(req, s) {
   }
 }
 
+// 결재 · 반려 칸은 보건관리자만 바꿈 — 부서가 올린 기록에서는 서버 값 유지 (새 기록은 비움)
+const ADMIN_ONLY_FIELDS = ['approved', 'approvedAt', 'approverName', 'rejected', 'rejectReason', 'rejectedAt', 'rejectedBy'];
+function keepAdminFields_(next, prev) {
+  ADMIN_ONLY_FIELDS.forEach(f => {
+    if (prev && prev[f] !== undefined) next[f] = prev[f];
+    else delete next[f];
+  });
+  return next;
+}
+
 // 부서 쓰기 병합: 서버의 다른 부서 기록은 그대로 두고, 자기 부서 기록만 추가·갱신
 function mergeDeptWrite_(path, cur, incoming, s) {
   if (RECORD_FILES[path]) {
@@ -639,10 +649,10 @@ function mergeDeptWrite_(path, cur, incoming, s) {
       if (!r || !sameDept_(r.dept, s.dept)) return;
       const k = recordKey_(r);
       if (index[k] !== undefined) {
-        if (sameDept_(curList[index[k]].dept, s.dept)) curList[index[k]] = r;
+        if (sameDept_(curList[index[k]].dept, s.dept)) curList[index[k]] = keepAdminFields_(r, curList[index[k]]);
       } else {
         index[k] = curList.length;
-        curList.push(r);
+        curList.push(keepAdminFields_(r, null));
       }
     });
     return shape === 'records' ? Object.assign({}, cur || {}, { records: curList }) : curList;
