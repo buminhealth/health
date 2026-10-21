@@ -10,7 +10,14 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v18.1 (2026-10-21)
+  부민병원 MSDS 통합시스템 v18.2 (2026-10-21)
+
+  ★★★ v18.2 (2026-10-21) — 부서 제출 현황 + 저장된 계정으로 인사정보 가져오기:
+    - 부서 로그인 시 '📂 ○○ 제출 현황' 탭: 자기 부서 교육일지(결재 상태)·보호구 지급수령증·화학물질 보고서 목록과
+      PDF 보기 (조회 전용, 서버가 자기 부서 기록만 내려줌)
+    - 직원정보관리: [저장된 계정으로 가져오기] (시트 메뉴 ④의 자동 로그인 계정 사용, 메일 없음)
+    - 부서 이름 점검: 서버가 이전 버전이면 "비어 있음" 대신 재배포 안내
+    - 부서 이름 맞추기: 띄어쓰기 무시 비교, 부서매핑 시트, 병동 범위를 서버와 통일
 
   ★★★ v18.1 (2026-10-21) — 직원정보관리 + 신규입사 유해화학물질 취급 확인:
     - 관리자 모드 > 👥 직원정보관리: 엑셀 붙여넣기로 직원정보 업데이트(사번 기준 추가·갱신),
@@ -2138,10 +2145,13 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
       '<div style="' + BOX + '">' +
         '<div style="font-weight:800;color:#1c3557;margin-bottom:8px">① 인사 사이트에서 가져오기</div>' +
         (st.hrConnector
-          ? '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+          ? (st.hrAuto ? '<div style="margin-bottom:8px"><button id="staff-hr-saved" style="' + BTN_P + '">저장된 계정으로 가져오기</button>' +
+                         ' <span style="font-size:12px;color:#64748b">아이디·비밀번호 입력 없이 (시트 메뉴 ④에 저장된 계정)</span></div>' +
+                         '<div style="font-size:12px;color:#64748b;margin-bottom:4px">다른 계정으로 가져오기:</div>' : '') +
+            '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
               '<input id="staff-hr-id" class="fc" placeholder="아이디(이메일)" style="max-width:220px" autocomplete="off">' +
               '<input id="staff-hr-pw" class="fc" type="password" placeholder="비밀번호 (저장하지 않음)" style="max-width:200px" autocomplete="new-password">' +
-              '<button id="staff-hr-go" style="' + BTN_P + '">가져오기</button></div>'
+              '<button id="staff-hr-go" style="' + BTN + '">가져오기</button></div>'
           : '<div style="font-size:12px;color:#64748b">시트 메뉴 [보건관리 시스템 → ④ 인사 사이트(Firebase) 연결]을 먼저 설정하세요. 그동안은 ② 엑셀 붙여넣기를 사용하세요.</div>') +
         '<div style="font-size:12px;color:#64748b;margin-top:6px">가져온 내용은 미리보기 후 [직원정보 업데이트]로 반영됩니다. 비밀번호는 저장하지 않습니다.</div>' +
       '</div>' +
@@ -2171,20 +2181,27 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
         '<div style="font-weight:800;color:#1c3557;margin-bottom:4px">④ 부서 이름 점검</div>' +
         '<div style="font-size:12px;color:#64748b;margin-bottom:8px">직원목록의 부서 이름이 <b>부서인증</b>·<b>chemicals</b> 시트와 같아야 로그인·알림이 됩니다. ' +
           '이름이 다르면 시트의 <b>부서매핑</b>에 "인사 사이트 부서명 → 앱 부서명"을 적은 뒤 다시 업데이트하세요. (띄어쓰기 차이는 자동으로 같게 처리)</div>' +
-        '<div style="overflow-x:auto">' + deptCheckTable(st.deptCheck || []) + '</div>' +
+        '<div style="overflow-x:auto">' + (st.deptCheck ? deptCheckTable(st.deptCheck)
+          : '<div style="font-size:12px;color:#b91c1c">서버 코드가 이전 버전이라 점검할 수 없습니다. 최신 Code.gs로 바꾼 뒤 [배포 → 배포 관리 → 새 버전]으로 다시 배포하세요.</div>') + '</div>' +
       '</div>';
 
-    var hrGo = document.getElementById('staff-hr-go');
-    if(hrGo) hrGo.onclick = async function(){
-      var pw = document.getElementById('staff-hr-pw');
-      hrGo.disabled = true;
+    var hrFetch = async function(btn, id, pwEl){
+      if(pwEl && !pwEl.value){ say('비밀번호를 입력하세요', 'err'); return; }
+      btn.disabled = true;
+      var label = btn.textContent; btn.textContent = '가져오는 중…';
       try{
-        var r = await post('hr.fetch', { id: document.getElementById('staff-hr-id').value.trim(), password: pw.value });
-        pw.value = '';
+        var r = await post('hr.fetch', pwEl ? { id: id, password: pwEl.value } : {});
+        if(pwEl) pwEl.value = '';
         if(!r.success){ say(r.error || '가져오기 실패', 'err'); return; }
         parsed = { headers: r.headers, rows: r.rows };
         showPreview();
-      }finally{ hrGo.disabled = false; }
+      }finally{ btn.disabled = false; btn.textContent = label; }
+    };
+    var hrSaved = document.getElementById('staff-hr-saved');
+    if(hrSaved) hrSaved.onclick = function(){ hrFetch(hrSaved, '', null); };
+    var hrGo = document.getElementById('staff-hr-go');
+    if(hrGo) hrGo.onclick = function(){
+      hrFetch(hrGo, document.getElementById('staff-hr-id').value.trim(), document.getElementById('staff-hr-pw'));
     };
     document.getElementById('staff-preview').onclick = function(){
       parsed = parseSheetText(document.getElementById('staff-paste').value);
@@ -2219,7 +2236,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
   }
 
   function deptCheckTable(list){
-    if(!list.length) return '<div style="font-size:12px;color:#64748b">직원목록이 비어 있습니다.</div>';
+    if(!list.length) return '<div style="font-size:12px;color:#64748b">재직 중인 직원의 부서 정보가 없습니다.</div>';
     var td = function(v, warn){ return '<td style="padding:5px 6px;border:1px solid #e2e8f0;white-space:nowrap' + (warn ? ';color:#b91c1c;font-weight:800' : '') + '">' + v + '</td>'; };
     var th = ['부서','재직','부서 로그인','부서장 메일','사용 물질'].map(function(h){
       return '<th style="padding:5px 6px;border:1px solid #e2e8f0;background:#f8fafc;white-space:nowrap">' + h + '</th>';
@@ -2341,6 +2358,184 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     var s = BMAUTH.session();
     if(!s){ if(nh) BMAUTH.showLogin(); return; }
     if(s.role === 'dept' || nh) setTimeout(function(){ showDeptRequests(nh); }, 2500);
+  });
+})();
+
+/* ★★★ v18.2 — 📂 우리 부서 제출 현황 (부서 로그인 전용)
+   - 부서 PIN으로 로그인하면 탭이 나타나고, 그 부서의 교육일지·보호구 지급수령증·화학물질 보고서 목록을 보여줌
+   - 데이터는 서버가 자기 부서 것만 내려줌 (다른 부서 기록·PDF는 서버에서 차단) — 조회 전용(수정·삭제·결재 없음)
+   - PDF 보기는 저장소의 원본 PDF (교육일지는 결재 도장 합성 전 제출본) */
+(function(){
+  if(window.BMDEPT) return;
+  var esc = function(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+  };
+  var kstDate = function(iso){
+    if(!iso) return '';
+    if(/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+    var d = new Date(iso.replace(/^(\d{4}-\d{2}-\d{2})_.*/, '$1'));
+    if(isNaN(d.getTime())) return String(iso).slice(0, 10);
+    return new Date(d.getTime() + 9 * 3600e3).toISOString().slice(0, 10);
+  };
+  var rawUrl = function(folder, ym, file){
+    return 'https://raw.githubusercontent.com/buminhealth/health/main/' + [folder, ym, file].map(encodeURIComponent).join('/');
+  };
+  var TH = 'padding:6px 8px;border:1px solid #e2e8f0;background:#f8fafc;white-space:nowrap;font-size:12px';
+  var TD = 'padding:6px 8px;border:1px solid #e2e8f0;font-size:12px;vertical-align:top';
+  var BTN = 'padding:4px 9px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap';
+
+  async function readList(path){
+    var r = await readGitHubJSON(path);
+    var d = r.data;
+    var list = Array.isArray(d) ? d : ((d && Array.isArray(d.records)) ? d.records : []);
+    var cat = path.indexOf('edu') >= 0 ? 'edu' : (path.indexOf('ppe') >= 0 ? 'ppe' : 'chem');
+    try{ if(typeof BM !== 'undefined' && BM.filterTombstoned) list = BM.filterTombstoned(list, cat); }catch(_){}
+    return list;
+  }
+  function inRange(dateStr){
+    var sel = document.getElementById('dv-range');
+    var months = sel ? parseInt(sel.value, 10) : 3;
+    if(!months) return true;
+    var from = new Date(Date.now() + 9 * 3600e3);
+    from.setMonth(from.getMonth() - months);
+    return (dateStr || '') >= from.toISOString().slice(0, 10);
+  }
+  function table(head, rows, empty){
+    if(!rows.length) return '<div style="font-size:12px;color:#64748b;padding:8px 0">' + empty + '</div>';
+    return '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%"><tr>' +
+      head.map(function(h){ return '<th style="' + TH + '">' + h + '</th>'; }).join('') + '</tr>' + rows.join('') + '</table></div>';
+  }
+  function pdfBtn(url){ return url ? '<button style="' + BTN + '" data-pdf="' + esc(url) + '">👁 PDF</button>' : '-'; }
+
+  function eduRows(list){
+    var groups = {};
+    list.forEach(function(r){
+      var k = (r.submitted || '') + '|' + (r.dateStart || '') + '|' + (r.type || '');
+      (groups[k] = groups[k] || []).push(r);
+    });
+    return Object.keys(groups).map(function(k){ return groups[k]; })
+      .map(function(g){ return { g: g, date: g[0].dateStart || kstDate(g[0].submitted) }; })
+      .filter(function(x){ return inRange(x.date); })
+      .sort(function(a, b){ return a.date < b.date ? 1 : -1; })
+      .map(function(x){
+        var r = x.g[0];
+        var names = x.g.map(function(p){ return p.name; }).filter(Boolean);
+        var url = '';
+        if(r.pdfFileName){
+          url = r.pdfYm ? rawUrl(String(r.type || '').indexOf('보호구') >= 0 ? '보호구' : '교육일지', r.pdfYm, r.pdfFileName)
+                        : (typeof buildPdfUrl === 'function' ? buildPdfUrl(r.pdfFileName, r.type, r.dateStart) : '');
+        }
+        var approved = x.g.every(function(p){ return p.approved; });
+        return '<tr><td style="' + TD + ';white-space:nowrap">' + esc(x.date) + '</td>' +
+          '<td style="' + TD + ';white-space:nowrap">' + esc(r.type) + '</td>' +
+          '<td style="' + TD + '">' + esc(names.join(', ')) + ' <span style="color:#64748b">(' + names.length + '명)</span></td>' +
+          '<td style="' + TD + '">' + esc(String(r.chem || '').slice(0, 60)) + '</td>' +
+          '<td style="' + TD + ';white-space:nowrap;font-weight:800;color:' + (approved ? '#15803d' : '#b45309') + '">' + (approved ? '✅ 결재완료' : '⏳ 결재대기') + '</td>' +
+          '<td style="' + TD + '">' + pdfBtn(url) + '</td></tr>';
+      });
+  }
+  function ppeRows(list){
+    var groups = {};
+    list.forEach(function(r, i){ var k = r.submitted || r.recordId || ('#' + i); (groups[k] = groups[k] || []).push(r); });
+    return Object.keys(groups).map(function(k){ return groups[k]; })
+      .map(function(g){ return { g: g, date: g[0].dateStart || g[0].date || kstDate(g[0].submitted) }; })
+      .filter(function(x){ return inRange(x.date); })
+      .sort(function(a, b){ return a.date < b.date ? 1 : -1; })
+      .map(function(x){
+        var r = x.g[0];
+        var items = r.itemsStr || (Array.isArray(r.items) ? r.items.map(function(i){ return i.name + '×' + (i.qty || 1); }).join(', ') : '');
+        var url = r.pdfFileName ? (r.pdfYm ? rawUrl('보호구', r.pdfYm, r.pdfFileName)
+                                           : (typeof buildPdfUrl === 'function' ? buildPdfUrl(r.pdfFileName, '보호구지급', x.date) : '')) : '';
+        return '<tr><td style="' + TD + ';white-space:nowrap">' + esc(x.date) + '</td>' +
+          '<td style="' + TD + '">' + esc(x.g.map(function(p){ return p.name; }).filter(Boolean).join(', ')) + '</td>' +
+          '<td style="' + TD + '">' + esc(items) + '</td>' +
+          '<td style="' + TD + '">' + pdfBtn(url) + '</td></tr>';
+      });
+  }
+  function chemRows(list){
+    return list.map(function(r){ return { r: r, date: r.docDate || r.date || kstDate(r.submitted) }; })
+      .filter(function(x){ return inRange(x.date); })
+      .sort(function(a, b){ return a.date < b.date ? 1 : -1; })
+      .map(function(x){
+        var r = x.r;
+        var url = r.filename ? rawUrl('화학물질', r.pdfYm || kstDate(r.submitted).slice(0, 7), r.filename) : '';
+        return '<tr><td style="' + TD + ';white-space:nowrap">' + esc(x.date) + '</td>' +
+          '<td style="' + TD + ';white-space:nowrap">' + esc(r.tag || '') + '</td>' +
+          '<td style="' + TD + '">' + esc(r.product || r.newProduct || r.stopProduct) + '</td>' +
+          '<td style="' + TD + '">' + esc(r.name || '') + '</td>' +
+          '<td style="' + TD + '">' + pdfBtn(url) + '</td></tr>';
+      });
+  }
+
+  async function render(){
+    var body = document.getElementById('dv-body');
+    if(!body) return;
+    var s = BMAUTH.session();
+    if(!s || s.role !== 'dept'){ body.innerHTML = '<div style="color:#64748b">부서로 로그인하면 볼 수 있습니다.</div>'; return; }
+    body.innerHTML = '<div style="color:#64748b;font-size:13px">불러오는 중…</div>';
+    var res = await Promise.all(['records/edu_records.json', 'records/ppe_records.json', 'records/chem_records.json'].map(function(p){
+      return readList(p).catch(function(){ return null; });
+    }));
+    var box = function(title, inner){
+      return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:12px">' +
+        '<div style="font-weight:800;color:#1c3557;margin-bottom:8px">' + title + '</div>' + inner + '</div>';
+    };
+    var fail = '<div style="font-size:12px;color:#b91c1c">불러오지 못했습니다. 잠시 후 [새로고침]을 눌러 주세요.</div>';
+    var e = res[0] ? eduRows(res[0]) : null, p = res[1] ? ppeRows(res[1]) : null, c = res[2] ? chemRows(res[2]) : null;
+    body.innerHTML =
+      box('📝 교육일지 (특별안전보건교육 · MSDS 교육)' + (e ? ' <span style="font-weight:400;color:#64748b;font-size:12px">' + e.length + '건</span>' : ''),
+          e ? table(['교육일', '구분', '대상자', '취급물질', '결재', ''], e, '이 기간에 제출한 교육일지가 없습니다.') : fail) +
+      box('🦺 보호구 지급수령증' + (p ? ' <span style="font-weight:400;color:#64748b;font-size:12px">' + p.length + '건</span>' : ''),
+          p ? table(['지급일', '수령자', '지급물품', ''], p, '이 기간에 제출한 보호구 지급수령증이 없습니다.') : fail) +
+      box('⚗️ 화학물질 보고서 (신규사용 · 사용중단)' + (c ? ' <span style="font-weight:400;color:#64748b;font-size:12px">' + c.length + '건</span>' : ''),
+          c ? table(['작성일', '구분', '제품명', '작성자', ''], c, '이 기간에 제출한 화학물질 보고서가 없습니다.') : fail);
+    body.querySelectorAll('[data-pdf]').forEach(function(b){ b.onclick = function(){ window.open(b.getAttribute('data-pdf'), '_blank'); }; });
+  }
+
+  function ensureUi(){
+    var s = BMAUTH.session();
+    if(!s || s.role !== 'dept' || document.getElementById('tab-deptview')) return;
+    var adminTab = document.getElementById('tab-admin');
+    if(!adminTab) return;
+    var tab = document.createElement('div');
+    tab.className = 'tb';
+    tab.id = 'tab-deptview';
+    tab.textContent = '📂 ' + s.dept + ' 제출 현황';
+    tab.onclick = function(){ goTab('deptview'); };
+    adminTab.parentNode.insertBefore(tab, adminTab);
+    var pg = document.createElement('div');
+    pg.id = 'pg-deptview';
+    pg.style.cssText = 'display:none;padding:16px;max-width:1100px;margin:0 auto';
+    pg.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">' +
+        '<div><div style="font-size:17px;font-weight:800;color:#1c3557">📂 ' + esc(s.dept) + ' 제출 현황</div>' +
+        '<div style="font-size:12px;color:#64748b">우리 부서가 제출한 기록만 보입니다 (조회 전용 · 수정·삭제는 보건관리자에게 요청)</div></div>' +
+        '<div style="display:flex;gap:6px"><select id="dv-range" class="fc" style="width:auto">' +
+          '<option value="3">최근 3개월</option><option value="12">최근 1년</option><option value="0">전체</option></select>' +
+        '<button id="dv-refresh" style="' + BTN + ';padding:7px 12px;font-size:12px">새로고침</button></div>' +
+      '</div><div id="dv-body"></div>';
+    var anchor = document.getElementById('pg-admin') || document.getElementById('pg-msds');
+    anchor.parentNode.insertBefore(pg, anchor);
+    document.getElementById('dv-range').onchange = render;
+    document.getElementById('dv-refresh').onclick = render;
+  }
+
+  window.BMDEPT = { render: render };
+
+  window.addEventListener('DOMContentLoaded', function(){
+    ensureUi();
+    var orig = window.goTab;
+    if(typeof orig !== 'function') return;
+    window.goTab = function(t){
+      var r = orig.apply(this, arguments);
+      var pg = document.getElementById('pg-deptview'), tab = document.getElementById('tab-deptview');
+      if(pg) pg.style.display = t === 'deptview' ? 'block' : 'none';
+      if(tab) tab.className = 'tb' + (t === 'deptview' ? ' on' : '');
+      if(t === 'deptview') render();
+      return r;
+    };
   });
 })();
 
