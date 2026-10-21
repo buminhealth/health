@@ -296,7 +296,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('④ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v18.3'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v18.4'));
 
   // 14. 부서장: 메일 링크(?nh=) → 로그인 창 → PIN 로그인 → 확인 창 → '예' → 교육일지 대상자 자동 추가
   await page.evaluate(() => { localStorage.removeItem('bm_session'); localStorage.removeItem('bm_admin_ok'); });
@@ -351,6 +351,54 @@ function check(name, cond, extra) {
   check('저장 용량: 항목별 용량 계산', Array.isArray(topKeys) && topKeys.length > 0 && 'imgKB' in topKeys[0], topKeys.slice(0, 2));
   await page.evaluate(() => goTab('edu2'));
   check('다른 탭으로 가면 제출 현황 숨김', await page.evaluate(() => document.getElementById('pg-deptview').style.display === 'none'));
+
+  // 14-2. 서명·사진 분리 저장 (v18.4)
+  const SIG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+  // (가) 서버 보존: 관리자가 서명 빠진 기록으로 덮어써도 서버 서명 유지
+  const keep = await page.evaluate(async () => {
+    const a = await BMAUTH.post('login', { kind: 'admin', password: 'admin-pass-1' });
+    const g1 = await BMAUTH.post('fs.get', { path: 'records/edu_records.json', t: a.token });
+    const dec = b => JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b), c => c.charCodeAt(0))));
+    const enc = o => btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(o))));
+    const list = dec(g1.content);
+    list.forEach(r => { if (r.sigImg) { delete r.sigImg; r._img = 1; } });
+    const put = await BMAUTH.post('fs.put', { path: 'records/edu_records.json', sha: g1.sha, content: enc(list), t: a.token });
+    const g2 = await BMAUTH.post('fs.get', { path: 'records/edu_records.json', t: a.token });
+    const after = dec(g2.content).find(r => r.name === '최신입');
+    return { put: put.success, sig: !!(after && after.sigImg), marker: !!(after && after._img) };
+  });
+  check('서버: 서명 빠진 기록으로 저장해도 기존 서명 보존', keep.put && keep.sig && !keep.marker, keep);
+
+  // (나) PC 저장: 서버에 있는 기록만 서명을 비우고, 서버에 없는 기록은 서명 유지
+  await page.waitForFunction(() => BMIMG.enabled(), null, { timeout: 15000 });
+  check('서버 v18.4 확인 후에만 서명 비우기 활성화', true);
+  const local = await page.evaluate(async (sig) => {
+    const srv = (await readGitHubJSON('records/edu_records.json')).data.find(r => r.name === '최신입');
+    const onlyLocal = { recordId: 'L1|미업로드|0|61병동|MSDS교육|2026-10-21', name: '미업로드', dept: '61병동', type: 'MSDS교육', dateStart: '2026-10-21', sigImg: sig };
+    localStorage.setItem('bm_edu_records', JSON.stringify([srv, onlyLocal]));
+    await BMIMG.compact();
+    const raw = JSON.parse(BMIMG.rawGet('bm_edu_records'));
+    const viaGet = JSON.parse(localStorage.getItem('bm_edu_records'));
+    return {
+      srvRawHasSig: !!raw.find(r => r.name === '최신입').sigImg, srvRawMarker: raw.find(r => r.name === '최신입')._img === 1,
+      localRawHasSig: !!raw.find(r => r.name === '미업로드').sigImg,
+      srvGetHasSig: !!viaGet.find(r => r.name === '최신입').sigImg,
+      rawLen: BMIMG.rawGet('bm_edu_records').length, getLen: localStorage.getItem('bm_edu_records').length,
+    };
+  }, SIG);
+  check('PC: 서버에 있는 기록은 서명을 비워 저장 (_img 표시)', !local.srvRawHasSig && local.srvRawMarker, local);
+  check('PC: 서버에 없는 기록(업로드 전·실패)은 서명 유지', local.localRawHasSig, local);
+  check('PC: 읽을 때는 서명이 다시 붙어 기존 기능 그대로', local.srvGetHasSig, local);
+  // (다) 새로 열면(메모리 비움) 서버에서 서명을 다시 받아 둠
+  await page.reload();
+  await page.waitForFunction(() => window.BMIMG && !!JSON.parse(localStorage.getItem('bm_edu_records') || '[]').find(r => r.name === '최신입' && r.sigImg), null, { timeout: 20000 }).catch(() => {});
+  const reloaded = await page.evaluate(() => ({
+    get: !!JSON.parse(localStorage.getItem('bm_edu_records')).find(r => r.name === '최신입').sigImg,
+    raw: BMIMG.rawGet('bm_edu_records').indexOf('iVBOR') }));
+  check('새로 열어도 서버에서 서명을 받아 복원 (PC에는 미업로드 건만 이미지)', reloaded.get, reloaded);
+  // (라) 용량 표시는 실제 저장값 기준
+  const storage = await page.evaluate(() => ({ edu: apvGetStorageInfo().eduKB, raw: Math.round(BMIMG.rawGet('bm_edu_records').length * 2 / 1024) }));
+  check('저장 용량: 실제 저장된 크기로 표시', storage.edu === storage.raw, storage);
 
   // 15. 성별 삭제
   const g2 = await page.evaluate(() => ({

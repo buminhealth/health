@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v18.3 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v18.4 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -165,6 +165,7 @@ function doPost(e) {
                                    : { success: false, status: 401, error: '로그인 필요' }; break;
       case 'fs.get':    result = requireLogin_(s) || fsGet_(req, s); break;
       case 'fs.put':    result = requireLogin_(s) || fsPut_(req, s); break;
+      case 'rec.has':   result = requireLogin_(s) || recHas_(req, s); break;
       case 'emp.status': case 'emp.sync': case 'hr.fetch':
       case 'nh.list': case 'nh.answer': case 'nh.resend': case 'nh.run':
                         result = staffOp_(req, s); break;
@@ -513,6 +514,36 @@ function recordList_(data, shape) {
   if (shape === 'records') return (data && Array.isArray(data.records)) ? data.records : [];
   return Array.isArray(data) ? data : [];
 }
+// 서명·사진 필드: 브라우저는 용량 때문에 이 값을 빼고 저장할 수 있음 → 서버는 원본을 절대 잃지 않게 보존
+const IMG_FIELDS = ['sigImg', 'sigsByDay', 'photos', 'newSig', 'stopSig'];
+function hasImg_(r) {
+  return !!r && IMG_FIELDS.some(f => { const v = r[f]; return Array.isArray(v) ? v.some(Boolean) : (v && typeof v === 'object' ? Object.keys(v).length > 0 : !!v); });
+}
+function isEmptyImg_(v) {
+  return v === undefined || v === null || v === '' || (Array.isArray(v) && !v.some(Boolean)) || (typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length);
+}
+// 들어온 기록에 서명·사진이 비어 있으면 서버에 있던 값을 그대로 유지
+function preserveImages_(curList, incomingList) {
+  const byKey = {};
+  (curList || []).forEach(r => { if (r && hasImg_(r)) byKey[recordKey_(r)] = r; });
+  (incomingList || []).forEach(r => {
+    if (!r) return;
+    const old = byKey[recordKey_(r)];
+    if (old) IMG_FIELDS.forEach(f => { if (isEmptyImg_(r[f]) && !isEmptyImg_(old[f])) r[f] = old[f]; });
+    delete r._img;
+  });
+}
+// 브라우저가 보낸 기록 키 중 서버에 서명·사진이 있는 것만 돌려줌 (그 기록만 브라우저에서 이미지를 비워도 안전)
+function recHas_(req, s) {
+  const path = normPath_(req.path);
+  if (!RECORD_FILES[path]) return { success: false, error: '기록 파일이 아닙니다' };
+  const file = getFile_(path);
+  if (!file) return { success: true, keys: [] };
+  const list = recordList_(JSON.parse(file.getBlob().getDataAsString('UTF-8')), RECORD_FILES[path]);
+  const have = new Set(list.filter(r => r && hasImg_(r) && (s.role === 'admin' || sameDept_(r.dept, s.dept))).map(recordKey_));
+  return { success: true, keys: (req.keys || []).filter(k => have.has(k)) };
+}
+
 function recordKey_(r) {
   if (r.recordId) return 'id:' + r.recordId;
   return 'nk:' + [r.name, r.empNo, r.dept, r.type, String(r.dateStart || r.date || '').slice(0, 10)]
@@ -556,6 +587,7 @@ function fsPut_(req, s) {
         const curSha = file ? fileMeta_(file).sha : null;
         if (file && !req.sha) return { success: false, status: 422, error: 'sha 필요 (파일이 이미 있음)' };
         if (file && req.sha !== curSha) return { success: false, status: 409, error: 'is at ' + curSha + ' but expected ' + req.sha };
+        if (RECORD_FILES[path] && cur) preserveImages_(recordList_(cur, RECORD_FILES[path]), recordList_(incoming, RECORD_FILES[path]));
         const text = JSON.stringify(incoming);
         const w = writeFile_(path, Utilities.newBlob(text).getBytes(), 'application/json', '');
         return { success: true, status: file ? 200 : 201, sha: w.sha, path: path };
@@ -597,6 +629,7 @@ function mergeDeptWrite_(path, cur, incoming, s) {
   if (RECORD_FILES[path]) {
     const shape = RECORD_FILES[path];
     const curList = recordList_(cur, shape).slice();
+    preserveImages_(curList, recordList_(incoming, shape));
     const index = {};
     curList.forEach((r, i) => { if (r) index[recordKey_(r)] = i; });
     recordList_(incoming, shape).forEach(r => {
