@@ -21,6 +21,8 @@ class DFile {
   getDescription() { return this.desc; } setDescription(d) { this.desc = d; return this; }
   setTrashed(t) { this.trashed = t; } getSize() { return this.blob.buf.length; } getMimeType() { return this.blob.mime; }
   getLastUpdated() { return this.updated; }
+  getUrl() { return 'https://drive.google.com/file/d/' + this.id + '/view'; }
+  setSharing(a, p) { this.sharing = a + '/' + p; }
 }
 const folders = {};
 class DFolder {
@@ -74,11 +76,13 @@ function makeEnv() {
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); } }) },
     CacheService: { getScriptCache: () => ({ get: k => (k in cache ? cache[k] : null), put: (k, v) => { cache[k] = String(v); }, remove: k => { delete cache[k]; } }) },
     LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => {} }) },
-    DriveApp: { createFolder: n => root.createFolder(n), getFolderById: id => { if (!folders[id]) throw new Error('no folder'); return folders[id]; } },
+    DriveApp: { createFolder: n => root.createFolder(n), getFolderById: id => { if (!folders[id]) throw new Error('no folder'); return folders[id]; },
+                Access: { ANYONE_WITH_LINK: 'ANYONE_WITH_LINK' }, Permission: { VIEW: 'VIEW' } },
     MimeType: { PLAIN_TEXT: 'text/plain' },
     MailApp: { sent: [], sendEmail(o) { this.sent.push(o); } },
     // 가짜 Firebase: signInWithPassword + Firestore 목록 (FIREBASE.users / FIREBASE.docs 로 데이터 지정)
     FIREBASE: { users: {}, docs: [], calls: [] },
+    GEMINI: { status: 200, reply: {}, calls: [] },
     UrlFetchApp: {
       fetch(u, opt) {
         const fb = this.__fb;
@@ -91,6 +95,13 @@ function makeEnv() {
         }
         if (u === 'https://bumin-leave.web.app/__/firebase/init.json') {
           return resp(200, { apiKey: 'AIzaFromSite', projectId: 'bumin-leave', authDomain: 'bumin-leave.firebaseapp.com' });
+        }
+        // 가짜 Gemini: GEMINI.status / GEMINI.reply 로 응답 지정, 받은 요청은 GEMINI.calls
+        if (u.startsWith('https://generativelanguage.googleapis.com/v1beta/models/')) {
+          const gm = env.GEMINI;
+          gm.calls.push({ url: u, key: opt.headers && opt.headers['x-goog-api-key'], body: JSON.parse(opt.payload) });
+          if (gm.status !== 200) return resp(gm.status, { error: { message: 'quota' } });
+          return resp(200, { candidates: [{ content: { parts: [{ text: '```json\n' + JSON.stringify(gm.reply) + '\n```' }] } }] });
         }
         if (u.startsWith('https://firestore.googleapis.com/v1/projects/')) {
           if (!opt || !opt.headers || opt.headers.Authorization !== 'Bearer fb-id-token') return resp(403, {});

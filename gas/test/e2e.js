@@ -59,7 +59,7 @@ function check(name, cond, extra) {
     // 시험용 물질 2개를 잠시 추가: 관리대상 부서 / 일반 부서
     const fx = [
       { name: '시험물질A', manufacturer: '가제조', usage: '소독', targetManage: '해당', specialManage: '', departments: ['시험특별부'], components: [{ compName: '성분A', casNumber: '7722-84-1', amount: '50' }], icons: [], emergency: '[눈] 물로 씻으시오' },
-      { name: '시험물질B', manufacturer: '나제조', usage: '세척', targetManage: false, specialManage: false, departments: ['시험일반부'], components: [], icons: [], emergency: '' },
+      { name: '시험물질B', manufacturer: '나제조', usage: '세척', targetManage: false, specialManage: false, departments: ['시험일반부'], components: [{ compName: '정제수', casNumber: '7732-18-5', amount: '90', workEnv: '', healthCheck: '', memo: '26년 상반기부터 작측 제외', memo2: '혈액학' }], icons: [], emergency: '' },
     ];
     fx.forEach(c => { CHEMS.push(c); productMap[c.name] = c; });
     renderList('all');
@@ -72,15 +72,18 @@ function check(name, cond, extra) {
     const em = !!document.querySelector('.ms-et');
     showDetail('시험물질B');
     const k2 = document.querySelector('.ms-kind').textContent, b2 = document.querySelector('.ms-btn.p').getAttribute('onclick');
+    const naText = document.querySelector('.ms-ct').textContent;
     searchChem('7722-84'); const nS = document.querySelectorAll('#gridContainer .ms-li').length;
     searchChem(''); filterDept('시험일반부'); const nD = document.querySelectorAll('#gridContainer .ms-li').length;
     filterDept('all');
-    return { n, total: CHEMS.length, cnt, inList, k1, b1, h2, em, k2, b2, nS, nD };
+    return { n, total: CHEMS.length, cnt, inList, k1, b1, h2, em, k2, b2, nS, nD, naText };
   });
   check('MSDS: 전체 물질 목록과 개수', ms.n === ms.total && ms.cnt.includes(String(ms.total)), ms);
   check('MSDS: 부서 선택은 목록 안', ms.inList);
   check('MSDS: CAS 검색 · 부서 선택으로 줄어듦', ms.nS === 1 && ms.nD === 1 && ms.n >= 3, ms);
   check('MSDS: 응급처치 표', ms.em);
+  check('MSDS: 정상 CAS는 ⚠ 없음', /7732-18-5/.test(ms.naText) && !/⚠/.test(ms.naText), ms.naText);
+  check('MSDS: 특검 · 작측 빈칸은 미해당, 비고(메모1 · 메모2) 표시', /미해당/.test(ms.naText) && /비고/.test(ms.naText) && /26년 상반기부터 작측 제외/.test(ms.naText) && /혈액학/.test(ms.naText), ms.naText);
   check('MSDS: 상세 제목', ms.h2);
   check('MSDS: 관리대상 물질 부서 → 특별안전보건교육일지', ms.k1.includes('특별안전보건교육') && ms.b1.startsWith('startEdu1'), ms.k1);
   check('MSDS: 관리대상 없는 부서 → MSDS 교육일지', ms.k2.includes('MSDS 교육') && ms.b2.startsWith('startEdu2'), ms.k2);
@@ -455,7 +458,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('④ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v19.6'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v19.7'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -549,6 +552,70 @@ function check(name, cond, extra) {
   check('물질 점검: 부서 계정은 거부', !denyChem.success && denyChem.status === 403, denyChem);
   await page.evaluate(() => { admSwitchPane('chemm'); return BMCHEM.open(); });
   check('관리자 화면: 물질 마스터 점검 표시', /CAS 번호 문제/.test(await page.textContent('#chemm-body')));
+
+  // 13-5. v19.7 AI MSDS 검토 (Gemini) — 키 없음 → 직접 입력 / 키 저장 → AI 추출 · 판정 근거 · 승인 → 시트 추가
+  const gm = g.env.GEMINI;
+  const ai0 = await page.evaluate(() => BMAUTH.post('ai.status', {}));
+  check('AI: 처음엔 키 없음', ai0.success && ai0.hasKey === false && /gemini/.test(ai0.model), ai0);
+  const fakePdf = Buffer.from('%PDF-1.4 fake msds').toString('base64');
+  const noKey = await page.evaluate(c => BMAUTH.post('ai.analyze', { content: c, name: '시험.pdf' }), fakePdf);
+  check('AI: 키 없으면 직접 입력 안내 + 빈 초안', !noKey.success && noKey.noKey && noKey.draft && /MSDS원본\//.test(noKey.path), noKey);
+  await page.evaluate(() => BMAUTH.post('ai.setKey', { key: 'test-gemini-key' }));
+  gm.reply = { product: { name: 'AI시험세정제', manufacturer: 'K사', usage: '세척', signalWord: '위험', pictograms: ['부식성', '없는그림'],
+      emergency: { eye: '물로 씻으시오', skin: '비누로 씻으시오', inhalation: '신선한 공기', ingestion: '구토 금지' } },
+    components: [
+      { name: '메탄올', cas: '67-56-1', amount: '1~5', reg15: { workEnv: '작업환경측정 대상(6개월)', healthCheck: '특수건강진단 대상(12개월)', managed: '해당', special: '해당없음' } },
+      { name: '물', cas: '7732-18-5', amount: '90-95', reg15: { workEnv: '해당없음', healthCheck: '해당없음', managed: '해당없음' } },
+      { name: '오타성분', cas: '64-17-6', amount: '<1', reg15: {} },
+      { name: '날짜성분', cas: '9014-01-01', amount: '<1', reg15: {} }],
+    warnings: ['3번 성분 CAS 흐림'] };
+  const an = await page.evaluate(c => BMAUTH.post('ai.analyze', { content: c, name: '시험.pdf' }), fakePdf);
+  const d0 = an.draft || {}, cm = (d0.components || []).reduce((m, c) => (m[c.name] = c, m), {});
+  check('AI: Gemini에 PDF · 키를 서버에서 보냄', gm.calls.length === 1 && gm.calls[0].key === 'test-gemini-key' && gm.calls[0].body.contents[0].parts[0].inline_data.mime_type === 'application/pdf', gm.calls.length);
+  check('AI: 제품 · 성분 추출', an.success && d0.product.name === 'AI시험세정제' && d0.components.length === 4, an);
+  check('AI: CAS 검증 (오타 표시 · 날짜 복원)', cm['오타성분'] && !cm['오타성분'].casOk && cm['날짜성분'].cas === '9014-01-1' && cm['날짜성분'].casOk, [cm['오타성분'], cm['날짜성분']]);
+  check('AI: 판정 근거 — 법령대조표 우선, MSDS 15번 함께 표시', cm['메탄올'].hcSrc === '법령대조표' && cm['메탄올'].hc === '12개월' && /12개월/.test(cm['메탄올'].evidence.msds15.hc), cm['메탄올']);
+  check('AI: 15번 관리대상 → 제품 관리대상 체크', d0.targetManage === true && d0.specialManage === false, d0);
+  check('AI: 근거 없으면 미해당(빈칸)', cm['물'].hc === '' && cm['물'].we === '', cm['물']);
+  gm.status = 429;
+  const lim = await page.evaluate(c => BMAUTH.post('ai.analyze', { content: c, name: '시험.pdf' }), fakePdf);
+  check('AI: 무료 한도 초과 안내 + 직접 입력 초안', !lim.success && /한도/.test(lim.error) && lim.draft, lim.error);
+  gm.status = 200;
+  const badApply = await page.evaluate(d => BMAUTH.post('ai.apply', { data: d }), Object.assign({}, d0, { components: d0.components }));
+  check('승인: CAS 검증숫자 틀리면 거부', !badApply.success && /64-17-6/.test(badApply.error), badApply);
+  const okDraft = Object.assign({}, d0, { departments: ['61병동'], components: d0.components.filter(c => c.name !== '오타성분').map(c => Object.assign({}, c, c.name === '물' ? { memo: '희석용' } : {})) });
+  const chBefore = ch.rows.length;
+  const ap3 = await page.evaluate(([d, path]) => BMAUTH.post('ai.apply', { data: d, path: path }), [okDraft, an.path]);
+  const added = ch.rows.slice(chBefore);
+  const H = ch.rows[0];
+  check('승인: chemicals 시트에 새 제품 추가 (첫 줄 제품 정보 + 성분 줄)', ap3.success && added.length === 3 && added[0][H.indexOf('제품명')] === 'AI시험세정제' && added[1][H.indexOf('제품명')] === '' && added[1][H.indexOf('성분명')] === '물', { ap3, added });
+  check('승인: 특검 · 측정 · CAS 값', added[0][H.indexOf('CAS')] === '67-56-1' && added[0][H.indexOf('특수건강검진')] === '12개월' && added[2][H.indexOf('CAS')] === '9014-01-1', added[0]);
+  check('승인: 원본 PDF 링크 연결', /drive\.google\.com\/file/.test(ap3.pdfUrl || ''), ap3);
+  const dup = await page.evaluate(d => BMAUTH.post('ai.apply', { data: d }), okDraft);
+  check('승인: 같은 이름 제품은 거부 (기존 제품 안 바꿈)', !dup.success && /이미/.test(dup.error), dup);
+  // 부서가 신규사용 보고서에 첨부한 MSDS 목록 → 경로로 분석
+  await page.evaluate(() => uploadFileToGitHub('data:application/pdf;base64,' + btoa('%PDF dept msds'), 'records/chem_msds/신규_1_부서MSDS.pdf'));
+  const lst = await page.evaluate(() => BMAUTH.post('ai.list', {}));
+  check('AI: 부서 신규사용 MSDS 목록', lst.success && lst.data.some(f => f.name === '신규_1_부서MSDS.pdf'), lst.data);
+  const an2 = await page.evaluate(() => BMAUTH.post('ai.analyze', { path: 'records/chem_msds/신규_1_부서MSDS.pdf' }));
+  check('AI: 부서 MSDS 경로로 분석', an2.success && an2.path === 'records/chem_msds/신규_1_부서MSDS.pdf', an2.error);
+  const deptAi = await page.evaluate(async () => {
+    const r = await BMAUTH.post('login', { kind: 'dept', dept: '61병동', pin: '4321' });
+    return BMAUTH.post('ai.analyze', { content: 'AAAA', t: r.token });
+  });
+  check('AI: 부서 계정은 거부', !deptAi.success && deptAi.status === 403, deptAi);
+  await page.evaluate(() => { admSwitchPane('ai'); return BMAI.open(); });
+  check('관리자 화면: AI MSDS 검토 표시', /관리자가 MSDS 올리기/.test(await page.textContent('#ai-body')) && /신규_1_부서MSDS/.test(await page.textContent('#ai-body')));
+  // 메모1 · 메모2 → MSDS 목록 데이터, 부서장 시트
+  ch.rows[0][8] = '메모1'; ch.rows[0][9] = '메모2';
+  const mi = ch.rows.findIndex(r => r[0] === '메탄올A');
+  ch.rows[mi][8] = '26년 상반기부터 작측 제외'; ch.rows[mi][9] = '혈액학';
+  const gc = vm.runInContext('getChemicals()', g.ctx);
+  const ma = gc.data.find(c => c.name === '메탄올A');
+  check('MSDS 목록: 메모1 · 메모2 읽기', ma && ma.components[0].memo === '26년 상반기부터 작측 제외' && ma.components[0].memo2 === '혈액학', ma && ma.components[0]);
+  const hs = g.ctx.SpreadsheetApp.getActiveSpreadsheet().insertSheet('부서장');
+  hs.appendRow(['부서', '부서장명', '이메일']); hs.appendRow(['61병동', '박부서장', '']);
+  check('부서장: 부서장 시트 우선', vm.runInContext("deptHead_('61병동')", g.ctx) === '박부서장');
 
   // 14. 부서장: 메일 링크(?nh=) → 로그인 창 → PIN 로그인 → 확인 창 → '예' → 교육일지 대상자 자동 추가
   await page.evaluate(() => { localStorage.removeItem('bm_session'); localStorage.removeItem('bm_admin_ok'); });
