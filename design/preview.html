@@ -90,7 +90,7 @@ button{font-family:inherit;font-size:inherit;cursor:pointer}
 .chips span{background:rgba(255,255,255,.75);border:1px solid #fff;padding:4px 12px;border-radius:2px;font-size:15px;color:var(--navy-900);font-weight:700}
 
 /* 퀵메뉴 */
-.quick{margin-top:-56px;display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
+.quick{margin-top:28px;display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
 .qm{border-radius:0;padding:22px 20px;text-decoration:none;display:flex;flex-direction:column;gap:10px;min-height:178px;position:relative;color:#fff}
 .qm:hover{filter:brightness(1.06)}
 .qm .qi{width:44px;height:44px;display:grid;place-items:center;color:#fff}
@@ -101,6 +101,74 @@ button{font-family:inherit;font-size:inherit;cursor:pointer}
 .t-green{background:var(--green-600)} .t-teal{background:var(--teal-700)} .t-brown{background:var(--brown-600)}
 .t-navy{background:var(--navy-900)} .t-olive{background:var(--olive-700)} .t-blue{background:var(--blue-700)}
 .m-only{display:none!important}
+/* 공지·업데이트 */
+.nt{display:flex;gap:12px;align-items:center;padding:13px 18px;border-bottom:1px solid var(--line)}
+.nt:last-child{border-bottom:0}
+.nt .x{flex:1;min-width:0}
+.nt .x b{display:block;color:var(--ink-900);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nt .dt{font-size:15px;color:var(--ink-400);white-space:nowrap;font-variant-numeric:tabular-nums}
+.b-navy{background:#E6EEF4;color:var(--navy-900)}
+/* 하단 연락처 */
+.contact{background:var(--navy-900);color:#fff;margin-top:36px}
+.contact .wrap{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:center;padding-top:16px;padding-bottom:16px;font-size:15px}
+.contact b{font-weight:800}
+.contact .main{background:#fff;color:var(--navy-900);border-radius:4px;padding:2px 10px;font-weight:800}
+.contact span{white-space:nowrap}
+/* ═══ MSDS 관리: 왼쪽 목록 + 오른쪽 상세 (현재 앱 구조 그대로, 디자인만 통일) ═══ */
+.wrap-wide{max-width:1440px;margin:0 auto;padding:0 20px}
+.msds{display:grid;grid-template-columns:340px minmax(0,1fr);gap:0;height:calc(100vh - 52px - 73px);border-left:1px solid var(--line);border-right:1px solid var(--line);background:#fff}
+.ms-list{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:#F7F9F6}
+.ms-filter{padding:14px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--line);background:#fff}
+.ms-filter .in{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:4px;height:44px;padding:0 12px;color:var(--ink-400);background:#fff}
+.ms-filter .in input{border:0;outline:0;flex:1;font-size:16px;font-family:inherit;color:var(--ink-900);min-width:0;background:transparent}
+.ms-filter select{height:44px;border:1px solid var(--line);border-radius:4px;padding:0 12px;font-size:16px;font-family:inherit;background:#fff;color:var(--ink-900)}
+.ms-filter .n{font-size:15px;color:var(--ink-400)}
+.ms-items{overflow:auto;padding:10px;flex:1}
+.ms-it{display:block;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:4px;padding:12px 14px;margin-bottom:8px;font-family:inherit;cursor:pointer}
+.ms-it:hover{border-color:var(--green-100)}
+.ms-it b{display:block;font-size:16px;color:var(--ink-900);line-height:1.4;word-break:keep-all;overflow-wrap:anywhere}
+.ms-it .mk{display:block;font-size:15px;color:var(--ink-500)}
+.ms-it .dp{display:block;font-size:15px;color:var(--green-700);font-weight:700}
+.ms-it[aria-current]{border:2px solid var(--green-600);background:var(--green-50);padding:11px 13px}
+.ms-detail{overflow:auto;padding:26px 32px 48px;min-width:0}
+.ms-empty{height:100%;display:grid;place-items:center;color:var(--ink-400);text-align:center}
+.dh{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;padding-bottom:18px;border-bottom:3px solid var(--green-600)}
+.dh h2{margin:0;font-size:30px;font-weight:800;color:var(--ink-900);line-height:1.3;word-break:keep-all;overflow-wrap:anywhere}
+.dh .s1{margin:6px 0 0;font-size:16px;color:var(--ink-500);font-weight:600}
+.dh .s1 em{font-style:normal;color:var(--green-700);font-weight:700}
+.dh .s2{margin:2px 0 0;font-size:15px;color:var(--ink-400)}
+.dh .act{display:flex;flex-direction:column;gap:8px;min-width:200px}
+.dh .act .btn{min-height:44px;font-size:16px}
+.dh .act .ico{width:20px;height:20px}
+.nt .badge{min-width:92px;justify-content:center}
+.qm span,.qm strong{word-break:keep-all}
+.btn-dark{background:#fff;color:var(--ink-900);border-color:#9CA3AF}
+.btn-dark:hover{background:var(--muted)}
+.st{display:flex;align-items:center;gap:8px;margin:28px 0 12px;padding-left:12px;border-left:4px solid var(--green-600);font-size:19px;font-weight:800;color:var(--ink-900);line-height:1.3}
+.st.red{border-left-color:var(--red-700);color:var(--red-700)}
+.st .ico{width:22px;height:22px}
+.warn{display:flex;gap:20px;align-items:center;flex-wrap:wrap;background:#F7F9F6;border:1px solid var(--line);border-radius:4px;padding:18px}
+.picto{display:flex;gap:12px;flex-wrap:wrap}
+.picto figure{margin:0;width:92px;text-align:center}
+.picto .pb{width:84px;height:84px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:4px;display:grid;place-items:center}
+.picto svg{width:70px;height:70px}
+.picto figcaption{margin-top:6px;font-size:14px;font-weight:700;color:var(--red-700);line-height:1.3;word-break:keep-all}
+.mbs{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap;flex:none}
+.picto{flex:1;min-width:0}
+@media (min-width:1281px){.warn{flex-wrap:nowrap}}
+.mb{width:124px;min-height:84px;background:#fff;border:1px solid var(--line);border-radius:4px;padding:10px 8px;text-align:center;display:flex;flex-direction:column;justify-content:center;gap:2px}
+.mb span{font-size:14px;color:var(--ink-500);font-weight:600}
+.mb b{font-size:16px;font-weight:800;color:var(--ink-900);line-height:1.3;word-break:keep-all;overflow-wrap:anywhere}
+.mb.yes{border-color:var(--green-600);background:var(--green-50)} .mb.yes b{color:var(--green-700)}
+.mb.no b{color:var(--ink-400);font-weight:700}
+table.ct{width:100%;border-collapse:collapse;font-size:16px;border:1px solid var(--line)}
+.ct th{background:var(--green-50);color:var(--green-700);font-weight:700;padding:11px 12px;border:1px solid var(--line);font-size:15px}
+.ct td{padding:11px 12px;border:1px solid var(--line);text-align:center;color:var(--ink-700)}
+.ct td.l{text-align:left;font-weight:700;color:var(--ink-900);background:#FAFBFA}
+.ct td.am{color:var(--green-700);font-weight:800}
+.em th{width:118px;background:var(--red-50);color:var(--red-700);font-weight:800;padding:12px;border:1px solid var(--line);white-space:nowrap;font-size:16px}
+.em td{text-align:left;padding:12px 16px;line-height:1.65;color:var(--ink-900)}
+@media (max-width:1100px){ .msds{grid-template-columns:290px minmax(0,1fr)} .dh{flex-direction:column} .dh .act{flex-direction:row;flex-wrap:wrap;min-width:0} .mbs{margin-left:0} }
 #s-home.guest .u-only{display:none!important}
 #s-home:not(.guest) .g-only{display:none!important}
 .login-chip{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 18px;border-radius:999px;background:var(--green-600);color:#fff;font-weight:700;font-size:15px;white-space:nowrap;border:0}
@@ -118,6 +186,8 @@ button{font-family:inherit;font-size:inherit;cursor:pointer}
 .sec{margin-top:28px}
 .sec-head{display:flex;justify-content:space-between;align-items:end;margin-bottom:12px}
 .grid-2{display:grid;grid-template-columns:1.25fr 1fr;gap:16px}
+.grid-2>*{min-width:0}
+.sec-head{flex-wrap:wrap;gap:4px 12px}
 .todo{display:flex;gap:14px;align-items:center;padding:16px 18px;border-bottom:1px solid var(--line)}
 .todo:last-child{border-bottom:0}
 .todo .t{flex:1}
@@ -215,7 +285,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
   .search .btn .lbl{display:none}
   .todo{flex-wrap:wrap}
   .todo .t{min-width:60%}
-  .quick{grid-template-columns:repeat(3,1fr);gap:8px;margin-top:-48px}
+  .quick{grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px}
   .qm{min-height:96px;padding:14px 6px;align-items:center;text-align:center;gap:6px}
   .qm strong{font-size:15px}
   .qm span:not(.qi),.qm .lock{display:none}
@@ -233,14 +303,15 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
 <!-- 미리보기 화면 전환 -->
 <div class="pv-bar" role="tablist" aria-label="미리보기 화면 선택">
   <b>리디자인 미리보기</b>
-  <button data-s="guest" aria-pressed="false">⓪ 메인 (로그인 전)</button>
-  <button data-s="home" aria-pressed="true">① 메인 (로그인 후)</button>
-  <button data-s="mobile" aria-pressed="false">② 모바일</button>
-  <button data-s="pin" aria-pressed="false">③ 부서 PIN 로그인</button>
-  <button data-s="edu" aria-pressed="false">④ 교육일지 작성</button>
-  <button data-s="status" aria-pressed="false">⑤ 부서 제출현황</button>
-  <button data-s="admin" aria-pressed="false">⑥ 관리자</button>
-  <button data-s="tokens" aria-pressed="false">⑦ 디자인 토큰</button>
+  <button data-s="guest" aria-pressed="false">① 메인 (로그인 전)</button>
+  <button data-s="home" aria-pressed="true">② 메인 (로그인 후)</button>
+  <button data-s="msds" aria-pressed="false">③ MSDS 관리</button>
+  <button data-s="mobile" aria-pressed="false">④ 모바일</button>
+  <button data-s="pin" aria-pressed="false">⑤ 부서 PIN 로그인</button>
+  <button data-s="edu" aria-pressed="false">⑥ 교육일지 작성</button>
+  <button data-s="status" aria-pressed="false">⑦ 부서 제출현황</button>
+  <button data-s="admin" aria-pressed="false">⑧ 관리자</button>
+  <button data-s="tokens" aria-pressed="false">⑨ 디자인 토큰</button>
 </div>
 
 <!-- SVG 아이콘 (선 아이콘, 2px) -->
@@ -251,6 +322,14 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
   <symbol id="i-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1A2 2 0 1 1 4.3 17l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1A2 2 0 1 1 7 4.3l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1A2 2 0 1 1 19.7 7l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+    <symbol id="g-flame" viewBox="0 0 100 100"><path d="M50 4L96 50 50 96 4 50z" fill="#fff" stroke="#D92D20" stroke-width="7"/><path d="M50 24c5 11 15 15 15 30a15 15 0 0 1-30 0c0-9 5-11 7-17 2 5 4 7 6 7 0-7-1-13 2-20z" fill="#111"/><path d="M31 74h38" stroke="#111" stroke-width="4"/></symbol>
+  <symbol id="g-oxid" viewBox="0 0 100 100"><path d="M50 4L96 50 50 96 4 50z" fill="#fff" stroke="#D92D20" stroke-width="7"/><circle cx="50" cy="60" r="12" fill="none" stroke="#111" stroke-width="5"/><path d="M50 22c4 8 11 11 11 22a11 11 0 0 1-22 0c0-6 3-8 5-12 1 4 3 5 4 5 0-5 0-9 2-15z" fill="#111"/><path d="M31 78h38" stroke="#111" stroke-width="4"/></symbol>
+  <symbol id="g-gas" viewBox="0 0 100 100"><path d="M50 4L96 50 50 96 4 50z" fill="#fff" stroke="#D92D20" stroke-width="7"/><rect x="26" y="44" width="44" height="18" rx="9" fill="#111"/><rect x="68" y="49" width="8" height="8" fill="#111"/></symbol>
+  <symbol id="g-corr" viewBox="0 0 100 100"><path d="M50 4L96 50 50 96 4 50z" fill="#fff" stroke="#D92D20" stroke-width="7"/><path d="M28 28h14l-2 10H30zM56 28h14l-2 10H58z" fill="#111"/><path d="M35 41v8M63 41v8" stroke="#111" stroke-width="3"/><path d="M24 58h22v6H24zM56 58c5 0 11 0 15 4v4H56z" fill="#111"/><path d="M26 72h48" stroke="#111" stroke-width="4"/></symbol>
+  <symbol id="g-skull" viewBox="0 0 100 100"><path d="M50 4L96 50 50 96 4 50z" fill="#fff" stroke="#D92D20" stroke-width="7"/><path d="M50 24c-10 0-16 6-16 15 0 6 3 9 6 11v6h20v-6c3-2 6-5 6-11 0-9-6-15-16-15z" fill="#111"/><circle cx="44" cy="40" r="4" fill="#fff"/><circle cx="56" cy="40" r="4" fill="#fff"/><path d="M30 64l40 10M70 64L30 74" stroke="#111" stroke-width="5" stroke-linecap="round"/></symbol>
+  <symbol id="g-excl" viewBox="0 0 100 100"><path d="M50 4L96 50 50 96 4 50z" fill="#fff" stroke="#D92D20" stroke-width="7"/><path d="M50 26v32" stroke="#111" stroke-width="9" stroke-linecap="round"/><circle cx="50" cy="71" r="5.5" fill="#111"/></symbol>
+  <symbol id="g-health" viewBox="0 0 100 100"><path d="M50 4L96 50 50 96 4 50z" fill="#fff" stroke="#D92D20" stroke-width="7"/><circle cx="50" cy="28" r="7" fill="#111"/><path d="M36 74V48c0-7 5-11 14-11s14 4 14 11v26z" fill="#111"/><path d="M50 47l3.5 6 6.5 1-4.7 4.6 1.2 6.5L50 62l-6.5 3.1 1.2-6.5L40 54l6.5-1z" fill="#fff"/></symbol>
+  <symbol id="g-env" viewBox="0 0 100 100"><path d="M50 4L96 50 50 96 4 50z" fill="#fff" stroke="#D92D20" stroke-width="7"/><path d="M38 26v28M38 30l-8 10M38 34l8 10" stroke="#111" stroke-width="3"/><path d="M28 56h44" stroke="#111" stroke-width="3"/><path d="M52 68c6-6 14-6 20 0-6 6-14 6-20 0z" fill="#111"/><path d="M52 68l-5-4v8z" fill="#111"/></symbol>
   <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
   <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
   <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></symbol>
@@ -265,30 +344,16 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
     <div class="wrap">
       <a class="logo" href="#"><span class="logo-mark">B</span><span>MSDS 통합관리<small>부산부민병원 보건관리실</small></span></a>
       <nav aria-label="주 메뉴">
-        <a href="#" aria-current="page">홈</a><a href="#">MSDS 관리</a><a href="#">교육일지</a><a href="#">보호구 지급</a><a href="#">화학물질 보고서</a><a href="#" class="u-only">우리 부서</a>
+        <a href="#" aria-current="page">홈</a><a href="#" onclick="show('msds');return false">MSDS 관리</a><a href="#">교육일지</a><a href="#">보호구 지급</a><a href="#">화학물질 보고서</a><a href="#" class="u-only">우리 부서</a>
       </nav>
       <div class="user-chip u-only"><span class="dot"></span>61병동 로그인 <button class="btn btn-ghost btn-sm">로그아웃</button></div>
       <button class="login-chip g-only" onclick="show('pin')"><svg class="ico" style="width:20px;height:20px"><use href="#i-lock"/></svg>부서 로그인</button>
     </div>
   </header>
 
-  <div class="hero">
-    <div class="wrap">
-      <div class="eyebrow">화학물질 안전, 30초 안에 확인하세요</div>
-      <h1 class="h1"><em>MSDS</em> 통합관리</h1>
-      <p>제품명·성분명·CAS 번호로 바로 찾을 수 있습니다. 응급조치와 보호구 정보는 로그인 없이 볼 수 있습니다.</p>
-      <form class="search" role="search" onsubmit="return false">
-        <label class="sr" for="q">화학물질 검색</label>
-        <input id="q" placeholder="예) 뉴젠자임폼, 에탄올, 64-17-5">
-        <button class="btn btn-primary" aria-label="검색"><svg class="ico" style="width:22px;height:22px"><use href="#i-search"/></svg><span class="lbl">검색</span></button>
-      </form>
-      <div class="chips"><span class="g-only">자주 찾는 물질:</span><span><span class="u-only">최근: </span>뉴젠자임폼</span><span>멀티엔자임</span><span>10% 포르말린</span><span class="u-only">우리 부서 물질 32종 →</span><span class="g-only">부서별 물질 보기 →</span></div>
-    </div>
-  </div>
-
   <main class="wrap">
     <div class="quick" role="list" aria-label="빠른 메뉴">
-      <a class="qm t-green" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-flask"/></svg></span><strong>MSDS 관리</strong><span>물질 검색 · 응급조치 · 그림문자</span><span class="go">물질 찾기</span></a>
+      <a class="qm t-green" href="#" role="listitem" onclick="show('msds');return false"><span class="qi"><svg class="ico"><use href="#i-flask"/></svg></span><strong>MSDS 관리</strong><span>물질 목록 · 그림문자 · 응급조치</span><span class="go">물질 찾기</span></a>
       <a class="qm t-teal" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-book"/></svg></span><strong>교육일지 작성</strong><span>특별안전보건 · MSDS 교육</span><span class="go">🔒 부서 로그인</span></a>
       <a class="qm t-brown" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-shield"/></svg></span><strong>보호구 지급</strong><span>지급수령증 · 서명</span><span class="go">🔒 부서 로그인</span></a>
       <a class="qm t-olive" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-doc"/></svg></span><strong><span class="m-only" style="display:none">물질 보고</span><span class="pc-only">화학물질 보고서</span></strong><span>신규사용 · 사용중단</span><span class="go">🔒 부서 로그인</span></a>
@@ -296,8 +361,8 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
       <a class="qm t-blue m-only" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-list"/></svg></span><strong>제출현황</strong><span>우리 부서 제출·결재</span></a>
     </div>
 
-    <div class="sec grid-2 g-only">
-      <div>
+    <div class="sec grid-2">
+      <div class="g-only">
         <div class="sec-head"><h2 class="h2">부서 로그인하면 할 수 있는 일</h2><span class="cap">조회는 로그인 없이 가능</span></div>
         <div class="card">
           <ol class="how" style="margin:0;padding:0;list-style:none">
@@ -306,24 +371,12 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
             <li><span class="no">3</span><div><b>우리 부서 제출현황 · 결재 결과 보기</b><span class="cap">PDF 미리보기</span></div></li>
           </ol>
           <div style="padding:14px 18px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-            <span class="cap">부서 PIN 4자리 · 모르면 보건관리실 내선 0000</span>
+            <span class="cap">부서 PIN 4자리 · 모르면 보건관리실 내선 3293</span>
             <button class="btn btn-primary" onclick="show('pin')"><svg class="ico" style="width:20px;height:20px"><use href="#i-lock"/></svg>부서 로그인</button>
           </div>
         </div>
       </div>
-      <div>
-        <div class="sec-head"><h2 class="h2">최근 등록 · 변경된 물질</h2><a class="cap" href="#">MSDS 전체 →</a></div>
-        <div class="card">
-          <div class="list-row"><span><b>0.5N - Sodium Hydroxide</b> · 진단검사의학과</span><span class="badge b-green">신규</span></div>
-          <div class="list-row"><span><b>뉴젠자임폼</b> · 61병동 외 4</span><span class="badge b-blue">MSDS 갱신</span></div>
-          <div class="list-row"><span><b>10% Neutral Buffered Formalin</b> · 수술실</span><span class="badge b-blue">MSDS 갱신</span></div>
-          <div class="list-row"><span><b>7200 에나멜 프라임 반광 백색</b> · 시설관리팀</span><span class="badge b-gray">사용중단</span></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="sec grid-2 u-only">
-      <div>
+      <div class="u-only">
         <div class="sec-head"><h2 class="h2">61병동 할 일</h2><span class="cap">로그인한 부서에만 보입니다</span></div>
         <div class="card">
           <div class="todo"><span class="badge b-red">기한 D-1</span><div class="t"><b>신규 입사자 취급 확인 · 최신입</b><span class="cap">입사 10.18 · 교육 기한 10.21</span></div><button class="btn btn-primary btn-sm">확인하기</button></div>
@@ -332,25 +385,18 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
         </div>
       </div>
       <div>
-        <div class="sec-head"><h2 class="h2">최근 제출</h2><a class="cap" href="#">전체 보기 →</a></div>
+        <div class="sec-head"><h2 class="h2">공지 · 업데이트</h2><a class="cap" href="#">전체 보기 →</a></div>
         <div class="card">
-          <div class="list-row"><span><b>MSDS 교육일지</b> · 김효성</span><span class="badge b-green">결재완료</span></div>
-          <div class="list-row"><span><b>MSDS 교육일지</b> · 조나리</span><span class="badge b-green">결재완료</span></div>
-          <div class="list-row"><span><b>보호구 지급수령증</b> · 2명</span><span class="badge b-gray">제출</span></div>
-          <div class="list-row"><span><b>화학물질 보고서</b> · 신규 1건</span><span class="badge b-blue">검토중</span></div>
+          <div class="nt"><span class="badge b-gray">시스템</span><div class="x"><b>물질 마스터 점검 기능 추가 (v18.7)</b><span class="cap">CAS 확인 · 빈 검진 주기 채우기</span></div><span class="dt">10.21</span></div>
+          <div class="nt"><span class="badge b-navy">공지</span><div class="x"><b>11월 특별안전보건교육 일정 안내</b><span class="cap">보건관리실</span></div><span class="dt">10.20</span></div>
+          <div class="nt"><span class="badge b-green">신규 물질</span><div class="x"><b>0.5N - Sodium Hydroxide 등록</b><span class="cap">진단검사의학과</span></div><span class="dt">10.18</span></div>
+          <div class="nt"><span class="badge b-blue">MSDS 갱신</span><div class="x"><b>뉴젠자임폼 MSDS 개정판 반영</b><span class="cap">61병동 외 4</span></div><span class="dt">10.15</span></div>
+          <div class="nt"><span class="badge b-gray">사용중단</span><div class="x"><b>7200 에나멜 프라임 반광 백색</b><span class="cap">시설관리팀</span></div><span class="dt">10.10</span></div>
         </div>
       </div>
     </div>
-
-    <div class="sec">
-      <div class="sec-head"><h2 class="h2">응급 시 바로 보기</h2></div>
-      <div class="emerg">
-        <div class="card"><b style="color:var(--orange-700)">눈·피부에 묻었을 때</b><p class="cap" style="margin:6px 0 0">15분 이상 흐르는 물로 씻고 MSDS 4번 항목 확인</p></div>
-        <div class="card"><b style="color:var(--orange-700)">흡입했을 때</b><p class="cap" style="margin:6px 0 0">신선한 공기가 있는 곳으로 이동, 증상 시 응급실</p></div>
-        <div class="card"><b style="color:var(--orange-700)">보건관리실 연락</b><p class="cap" style="margin:6px 0 0">내선 0000 · 야간은 응급실</p></div>
-      </div>
-    </div>
   </main>
+  <div class="contact"><div class="wrap"><span><b>연락처</b></span><span class="main">보건관리실 내선 3293</span><span>응급실 내선 0000</span><span>시설관리팀 내선 0000</span><span>총무팀 내선 0000</span><span>감염관리실 내선 0000</span></div></div>
   <footer><div class="wrap">부산부민병원 보건관리실 · MSDS 통합관리 v19 (디자인 미리보기)</div></footer>
   <nav class="tabbar home-tab" aria-label="하단 탭">
     <a href="#" aria-current="page"><svg class="ico" style="width:24px;height:24px"><use href="#i-home"/></svg>홈</a>
@@ -362,6 +408,30 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
 </section>
 
 <!-- ═══════════ ② 모바일 ═══════════ -->
+<!-- ═════════ MSDS 관리 ═════════ -->
+<section class="screen" id="s-msds" aria-label="MSDS 관리">
+  <header class="gnb">
+    <div class="wrap">
+      <a class="logo" href="#" onclick="show('guest');return false"><span class="logo-mark">B</span><span>MSDS 통합관리<small>부산부민병원 보건관리실</small></span></a>
+      <nav aria-label="주 메뉴"><a href="#" onclick="show('guest');return false">홈</a><a href="#" aria-current="page">MSDS 관리</a><a href="#">교육일지</a><a href="#">보호구 지급</a><a href="#">화학물질 보고서</a></nav>
+      <button class="login-chip" onclick="show('pin')"><svg class="ico" style="width:20px;height:20px"><use href="#i-lock"/></svg>부서 로그인</button>
+    </div>
+  </header>
+  <div class="wrap-wide">
+    <div class="msds">
+      <aside class="ms-list" aria-label="물질 목록">
+        <div class="ms-filter">
+          <select id="ms-dept" aria-label="부서"><option value="">전체 부서</option></select>
+          <label class="in"><svg class="ico"><use href="#i-search"/></svg><input id="ms-q" placeholder="물질명 · 제조사 · 성분 · CAS"></label>
+          <div class="n" id="ms-n"></div>
+        </div>
+        <div class="ms-items" id="ms-items"></div>
+      </aside>
+      <article class="ms-detail" id="ms-detail"></article>
+    </div>
+  </div>
+</section>
+
 <section class="screen" id="s-mobile" aria-label="모바일 화면">
   <div class="phones">
     <div>
@@ -442,7 +512,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
         <button>7</button><button>8</button><button>9</button>
         <button class="fn">지우기</button><button>0</button><button class="fn">전체삭제</button>
       </div>
-      <p class="cap" style="text-align:center;margin:14px 0 0">4자리를 누르면 자동으로 로그인됩니다 · 12시간 유지<br>5회 틀리면 15분 잠김 · PIN 분실은 보건관리실</p>
+      <p class="cap" style="text-align:center;margin:14px 0 0">4자리를 누르면 자동으로 로그인됩니다 · 12시간 유지<br>5회 틀리면 15분 잠김 · PIN 분실은 보건관리실 내선 3293</p>
       <div style="display:flex;justify-content:space-between;margin-top:14px"><button class="btn btn-ghost btn-sm">MSDS 조회만 하기</button><button class="btn btn-ghost btn-sm">관리자 로그인 →</button></div>
     </div>
   </div>
@@ -584,6 +654,77 @@ document.getElementById('sw').innerHTML = tokens.map(function(t){
   var v = cs.getPropertyValue(t[0]).trim();
   return '<div class="sw"><div style="background:' + v + '"></div><p><b>' + v + '</b><br>' + t[1] + '</p></div>';
 }).join('');
+
+/* ═══ MSDS 관리 (현재 앱 데이터 56종 · 현재 앱 showDetail과 같은 규칙) ═══ */
+var CHEMS = [{"n":"10% Neutral Buffered Formalin","m":"강동그릅(주)","u":"조직고정용","d":["병리과"],"tm":true,"sm":true,"we":"6개월","hc":"12개월","ic":["경고","부식성","발암성"],"cp":[["포름알데히드","50-00-0","2026-03-04 00:00:00","6개월","12개월"]],"em":"[피부,눈]즉시 15분 이상 흐르는 물에 씻어내고 의사의 진료를 받으시오. \n[흡입] 신선한 공기가 있는 곳으로 이동하고 필요 시 산소를 공급하시오. \n[먹었을때] 입을 헹구어 내고 구토를 유도하지 마시오. \n의식이 없는 사람에게 입으로 아무것도 주지 마시오. 즉시 의사의 진료를 받으시오.","pdf":true},{"n":"10% Neutral Buffered Formalin(130ml)","m":"엠디포스","u":"조직고정용","d":["특수내시경실"],"tm":true,"sm":true,"we":"제외(비노출)","hc":"12개월","ic":["급성독성","부식성","발암성"],"cp":[["프롬알데히드","50-00-0","2026-09-10 00:00:00","제외(비노출)","12개월"],["메틸알코올","67-56-1","0.8~0.9","6개월","제외(함유랑1%미만)"],["제1인산나트륨(포화용액)","10049-21-5","0.4-0.6","",""],["제2인산나트륨(포화용액)","7558-79-4","0.6-1.0","",""],["D.W.(증류수)","7732-18-5","86-88","",""]],"em":"[피부,눈]즉시 15분 이상 흐르는 물에 씻어내고 의사의 진료를 받으시오. \n[흡입] 호흡정지 및 곤란 시 인공호흡을 실시하시오. 신선한 공기가 있는 곳으로 옮기시오. \n[먹었을때] 의식이 없는 사람에게 입으로 아무것도 먹이지 마시오. 구토를 하지 않도록 하고 즉시 의사의 치료를 받으시오","pdf":true},{"n":"10% Neutral Buffered Formalin(20ml)","m":"㈜ 미락스","u":"조직고정용","d":["수술실","내시경실"],"tm":true,"sm":true,"we":"6개월","hc":"12개월","ic":["호흡기과민성","부식성","발암성&급성독성"],"cp":[["프롬알데히드","50-00-0","<3.7","6개월","12개월"],["다수소 산화물","7732-18-5","95-97","",""],["selected buffers","","<1","",""]],"em":"[피부,눈]즉시 20분 이상 흐르는 물에 씻어내고 의사의 진료를 받으시오. \n[흡입] 신선한 공기가 있는 곳으로 이동하고 필요 시 산소를 공급하시오. \n[먹었을때] 입을 씻어내시오. 억지로 토하게 하지 말고 즉시 전문의의 진찰을 받으시오.","pdf":true},{"n":"10% Neutral Buffered Formalin(20ml)(덕산)","m":"덕산약품공업㈜","u":"조직고정용","d":["특수내시경실","인터벤션센터"],"tm":true,"sm":true,"we":"제외(비노출)","hc":"12개월","ic":["급성독성","부식성","발암성"],"cp":[["프롬알데히드","50-00-0","3.5 ~ 4","제외(비노출)","12개월"],["메틸알코올","67-56-1","1 ~ 1.5","6개월","12개월"],["Water (물)","7732-18-5","93.5~94.5","",""],["buffer","자료없음","1","",""]],"em":"[피부,눈]즉시 20분 이상 흐르는 물에 씻어내고 의사의 진료를 받으시오.\n[흡입] 신선한 공기가 있는 곳으로 이동하고 필요 시 산소를 공급하시오. \n[먹었을때] 억지로 토하게 하지 말고 즉시 전문의의 진찰을 받으시오.","pdf":true},{"n":"7200 에나멜 프라임 반광 백색","m":"강남제비스코㈜","u":"부분도색","d":["시설관리팀"],"tm":false,"sm":false,"we":"","hc":"","ic":["인화성액체","급성독성","발암성","경고"],"cp":[["Naphtha(petroleum), hydrodesulfurized heavy","64742-82-1","30 - 40","",""],["fatty acids, soya polymers with glycerol","66070-98-2","20-30","",""],["titanium dioxide","13463-67-7","20-30","제외(임단시작업)",""],["Talc","14807-96-6","5~10","제외(임단시작업)","24개월(광물성분진)"],["Xylene","1330-20-7","1~5","제외(임단시작업)","12개월"],["Limestone","1317-65-3","1~5","제외(임단시작업)","24개월(광물성분진)"],["Solvent naphtha","64742-96-7","0.1~1","",""],["methyl ethyl ketoxim","96-29-7","1~5","",""],["2-Ethylhexanoic acid","149-57-5","0.1~1","",""],["Cyclohexanone","108-94-1","1~5","제외(임단시작업)","12개월"],["Naphthenic acids","1338-24-5","0.1~1","",""]],"em":"[피부,눈]즉시 흐르는 물에 20분 이상 조심해서 씻으시오.\n[흡입] 신선한 공기가 있는 곳으로 옮기시고 따뜻하게 하고 안정되게 해 주시오.\n[먹었을때] 토하게 하려 하지 마시고 의식이 없는 사람에게 아무것도 먹이지 마시오.","pdf":true},{"n":"7200 에나멜 프라임 유광 회색","m":"강남제비스코㈜","u":"부분도색","d":["시설관리팀"],"tm":false,"sm":false,"we":"","hc":"","ic":["인화성액체","급성독성","발암성","경고"],"cp":[["Naphtha(petroleum), hydrodesulfurized heavy","64742-82-1","40-50","",""],["fatty acids, soya polymers with glycerol","66070-98-2","30-40","",""],["Kaolin","1332-58-7","5~10","제외(임단시작업)","12개월"],["titanium dioxide","13463-67-7","5~10","제외(임단시작업)",""],["Xylene","1330-20-7","5 미만","제외(임단시작업)","12개월"],["Dimethyl carbonate","616-38-6","1~5","",""],["Solvet naphtha, heavy aliph","64742-96-7","0.1 ~ 1","",""],["methyl ethyl ketoxim","96-29-7","0.1 ~ 1","",""],["2-Ethylhexanoic acid","149-57-5","0.1 ~ 1","",""],["Cyclohexanone","108-94-1","0.3 미만","제외(임단시작업)","12개월"]],"em":"[피부,눈] 즉시 흐르는 물에 20분 이상 조심해서 씻으시오. \n[흡입] 신선한 공기가 있는 곳으로 옮기시고 따뜻하게 하고 안정되게 해 주시오.\n[먹었을때] 토하게 하려 하지 마시고 의식이 없는 사람에게 아무것도 먹이지 마시오.","pdf":true},{"n":"95%_Ethyl_Alcohol","m":"(주)강동그룹","u":"진단용","d":["병리과"],"tm":false,"sm":false,"we":"","hc":"","ic":["인화성액체","심한눈손상"],"cp":[["에틸알코올(ETHANOL)","64-17-5","95","",""],["Water (물)","7732-18-5","5","",""]],"em":"[눈] 즉시 다량의 물로 최소 15분 이상 씻어내시오.\n[피부] 오염된 의복을 벗고 물과 비누로 세척하시오. \n[흡입] 신선한 공기를 마시게 하고 안정을 취하시오. \n[먹었을때] 입을 물로 헹구고 그 뒤에 많은 양의 물을 섭취하시오. 이후 진찰을 받으시오.","pdf":true},{"n":"99.9%_Ethyl_Alcohol","m":"(주)강동그룹","u":"진단용","d":["진단검사의학실","병리과","부인과"],"tm":false,"sm":false,"we":"","hc":"","ic":["인화성액체","심한눈손상"],"cp":[["Ethyl alcohol","64-17-5","99.9","",""],["Water (물)","732-18-5","0.1","",""]],"em":"[눈] 즉시 다량의 물로 최소 15분 이상 씻어내시오.\n[피부] 오염된 의복을 벗고 물과 비누로 세척하시오. \n[흡입] 신선한 공기를 마시게 하고 안정을 취하시오. \n[먹었을때] 입을 물로 헹구고 그 뒤에 많은 양의 물을 섭취하시오. 그 이후 의학적인 조치·조언을 구하시오.","pdf":true},{"n":"뉴젠자임폼","m":"뉴젠자이언스","u":"효소세정제","d":["병동","외래","수술실","공급실","혈관센터","응급실","중환자실","인터벤션센터"],"tm":false,"sm":false,"we":"","hc":"","ic":["급성독성물질 & 심한 눈 손상"],"cp":[["프로필렌글리콜","57-55-6","1~5","",""],["이소트리데칸올","-","<2.5","",""],["Amylase","9000-90-2","<1","",""],["Lipase","9001-62-1","<1","",""],["Protease","9014-01-01 00:00:00","<1","",""]],"em":"[피부,눈] 분진이나 액체가 닿으면 즉시 물로 충분히 씻어내십시오.\n[흡입] 신선한 공기가 있는 곳으로 이동하고 자극이 지속되면 의사의 진료를 받으시오. \n[먹었을때] 입을 헹구고 구토를 강제로 시키지 마십시오.","pdf":true},{"n":"랜드 글라스 크리너","m":"랜드마크코리아㈜","u":"유리세정제","d":["미화부"],"tm":false,"sm":false,"we":"","hc":"","ic":["심한눈손상"],"cp":[["에탄올","64-17-5","2026-03-05 00:00:00","",""],["디에틸렌글리콜모노뷰틸에테르","112-34-5","2026-03-05 00:00:00","",""],["알파-도데실-오메가-하이드록시-폴리옥시에틸렌","9002-92-0","0-2","",""],["정제수(water)","7732-18-5","90-95","",""]],"em":"[피부,눈]흐르는 물에 충분히 씻어내십시오. 자극이 지속되면 의사와 상담하십시오. \n[흡입] 즉시 신선한 공기가 있는 장소로 이동시켜 심호흡을 시키고, 이후에도 증세가 계속되면 의사의 지시를 받도록 하시오.\n[먹었을때]물이나 우유를 먹도록 하고, 의식이 없는 경우 아무것도 먹이지 마시오.","pdf":true},{"n":"맥스왁스","m":"토크플러스","u":"바닥용 광택제","d":["미화부"],"tm":false,"sm":false,"we":"","hc":"","ic":["경고&급성독성"],"cp":[["Diethylene glycol monoethylether","111-90-0","3~8","",""],["Texanol","25265-77-4","1~5","",""],["Ethene, homopolymer, oxidized","68441-17-8","5~10","",""],["Water","7732-18-5","55~65","",""],["Tri(2-butoxyethyl) phosphate","78-51-3","1~5","",""],["Alcohols, C8-14, gammaomega-perfluoro","#VALUE!","0~3","",""],["뷰틸 아크릴산-뷰틸 메타크릴산-메타크릴산","25950-40-7","30~40","",""],["Rosin, fumarated, polymer with diethylene glycol and ethylene glycol","68152-49-8","2~7","",""],["Siloxanes and Silicones","191233-73-5","0~3","",""]],"em":"[피부,눈]비누와 물로 세척하고 자극 발생 시 의사와 상담하십시오. \n[흡입]호흡하지 않는 경우 인공호흡을 실시하시오.신선한 공기가 있는 곳으로 옮기시오.\n[먹었을때] 의식이 없는 사람에게 입으로 아무것도 먹이지 마시오.","pdf":true},{"n":"미소락스","m":"경성크린텍","u":"표백제","d":["미화부"],"tm":false,"sm":false,"we":"","hc":"","ic":[],"cp":[["차아염소산 나트륨","7681-52-9","정보없음","",""]],"em":"","pdf":false},{"n":"소다라임 1.0L","m":"시오","u":"마취제","d":["회복실"],"tm":false,"sm":false,"we":"","hc":"","ic":["부식성","경고"],"cp":[["수산화 칼슘","1305-62-0","75-80","",""],["수산화 나트륨","1310-73-2","2미만","제외(임단시작업)",""],["비석","1318-02-01","2026-04-05 00:00:00","제외(임단시작업)","제외(카트리지)"],["규토","112926-00-8","","",""],["에틸 바이올렛","2390-59-2","0.1이하 zero","",""],["타이탄 옐로우","1829-00-1","","",""],["피그먼트그린","1328-53-6","","",""],["물","7732-18-5","13.5-17.5","",""]],"em":"[피부,눈]분진이나 액체가 닿으면 즉시 물로 충분히 씻어내십시오. \n[흡입] 신선한 공기가 있는 곳으로 이동하고 자극이 지속되면 의사의 진료를 받으시오. \n[먹었을때] 입을 헹구고 물을 마시게 하되 구토를 강제로 시키지 마십시오.","pdf":true},{"n":"소다라임 1.2kg","m":"새롬메디칼","u":"마취제","d":["회복실"],"tm":false,"sm":false,"we":"","hc":"","ic":["부식성"],"cp":[["calcium hydroxide","1305-62-0","50-100","",""],["sodium hydroxide","1310-73-2","<4","제외(임단시작업)",""]],"em":"[피부,눈] 분진이나 액체가 닿으면 즉시 물로 충분히 씻어내십시오. \n[흡입] 신선한 공기가 있는 곳으로 이동하고 자극이 지속되면 의사의 진료를 받으시오.\n[먹었을때] 입을 헹구고 물을 마시게 하되 구토를 강제로 시키지 마십시오.","pdf":true},{"n":"수성 우레탄 퍼티","m":"강남제비스코㈜","u":"퍼티작업","d":["시설관리팀"],"tm":false,"sm":false,"we":"제외(임단시작업)","hc":"24개월(광물성분진)","ic":["경고"],"cp":[["Limestone","1317-65-3","40-50","제외(임단시작업)","24개월(광물성분진)"],["Water (물)","7732-18-5","20-30","",""],["Styrene, n-butyl acrylate 2-ethylhexyl acrylate","72356-27-5","20-30","",""],["2-Butoxyethanol","111-76-2","1~5","제외(임단시작업)","12개월"],["titanium dioxide","13463-67-7","1~5","제외(임단시작업)",""],["Ethyl acrylate-glycidyl methacrylate-methacrylic acid polymer","28407-69-4","0.1 ~ 1","",""],["1,2-Ethanediol","107-21-1","0.1 ~ 1","제외(임단시작업)","12개월"],["Propanoic acid, 3-hydroxy-2-(hydroxymethyl)","68443-70-9","0.1 ~ 1","",""],["Hydroxyethyl cellulose ether","9004-62-0","0.1 ~ 1","",""],["1-Ethylpyrrolidin-2-one","2687-91-4","0.1 ~ 1","",""],["Silicon dioxide","7631-86-9","0.1 ~ 1","제외(임단시작업)","24개월(광물성분진)"],["Ammonia","7664-41-7","1~5","제외(임단시작업)",""]],"em":"[피부,눈] 흐르는 물로 20분 이상 화학물질이 남아 있지 않을 때까지 씻어낸 후 자극이 지속되면 의사의 처치를 받으시오.\n[흡입] 불편함을 느끼면 의학적인 조치ㆍ조언을 구하시오.\n[먹었을때] 삼켰다면 즉시 의료기관(의사)의 도움을 받으시오.","pdf":true},{"n":"슈퍼하이락스","m":"삼진그린푸드㈜","u":"바닥용 광택제","d":["미화부"],"tm":false,"sm":false,"we":"","hc":"","ic":["금속피부부식성","환경유해성","경고"],"cp":[["차아염소산 나트륨","7681-52-9",">4","",""],["물","7732-18-5","<96","",""],["Sodium lauryl ehter sulfate","9004-82-4","43.4","",""],["sodium hyeroxide","1310-73-2","0.5","제외(함유랑1%미만)",""],["sodium benzoate","532-32-1","0.1","",""],["Sodium Chloride","7647-14-5","0.3","",""],["Lemon oil","226-394-6","0.03","",""],["H20","7732-18-5","52.67","",""]],"em":"[피부,눈]비누와 물로 세척하고 자극 발생 시 의사와 상담하십시오.\n[흡입]신선한 공기가 있는 곳으로 이동하시오.  호흡하지 않을 경우 인공호흡을 하고 호흡이 곤란하면 산소를 공급하시오\n[먹었을때] 다량의 물을 마시게 하고 즉시 의료 조치를 받으십시오.","pdf":true},{"n":"아쿠아락 무광 백색","m":"강남제비스코㈜","u":"일반복재 및 \n 내부 철재 상도용","d":["시설관리팀"],"tm":true,"sm":false,"we":"제외(임단시작업)","hc":"","ic":["경고"],"cp":[["titanium dioxide","13463-67-7","10~20","제외(임단시작업)",""],["Water (물)","7732-18-5","10~20","",""],["Silica, vitreous","60676-86-0","5~10","",""],["Propylene glycol","57-55-6","1~5","",""],["Acrylamide, methacry acid, acrylic ester copolymer","30445-28-4","1~5","",""],["2-Butoxyethanol","111-76-2","0.1~1","6개월","12개월"],["Dipropylene glycol methyl ether","34590-94-8","0.1~1","",""]],"em":"[피부,눈]흐르는 물로 20분 이상 물질이 남아 있지 않을 때까지 씻어낸 후 자극이 지속되면 의사의 처치를 받으시오. \n[흡입] 불편함을 느끼면 의학적인 조치ㆍ조언을 구하시오.\n[먹었을때] 삼켰다면 즉시 의료기관(의사)의 도움을 받으시오.","pdf":true},{"n":"월드폼_G-Type","m":"㈜함일셀레나","u":"크랙충진","d":["시설관리팀"],"tm":false,"sm":false,"we":"","hc":"","ic":["인화성액체","고압가스","급성독성","발암성"],"cp":[["lscoyanic acid polymethylenepolyphenylene ester","9016-87-9","25-30","",""],["Polyxypropylene glycerol triether","25791-96-2","20-25","",""],["tris(1-chloro-2-propyl) phosphate","13674-84-5","15-20","",""],["Diphenyl methane diisocyanate","101-68-8","2026-05-10 00:00:00","제외(임단시작업)","12개월"],["butane","106-97-8","2026-05-10 00:00:00","",""],["oxybismethane","0115-10-6","2026-05-10 00:00:00","",""],["propane","74-98-6","2026-05-10 00:00:00","",""]],"em":"[눈] 몇 분간 물로 조심해서 씻으시오. 가능하면 콘택트렌즈를 제거하시오. \n[피부] 자극 또는 홍반이 나타나면 의학적인 조치/조언을 받으시오.\n[흡입] 호흡이 어려워지면 신선한 공기가 있는 곳으로 옮기고 호흡하기 쉬운 자세로 안정을 취하시오. \n[먹었을때] 물질을 먹거나 흡입하였을 경우 구강대구강법으로 인공호흡을 하지 말고 적절한 호흡의료장비를 이용하시오.","pdf":true},{"n":"지피원오렌지","m":"㈜랜드마크코리아","u":"세정 및 세척제","d":["미화부"],"tm":false,"sm":false,"we":"","hc":"","ic":["경고"],"cp":[["2-Dimethyl-1, 3-dioxolane-4-methanol","100-79-8","5~10","",""],["Potassium phosphate","7778-77-0","1~5","",""],["Pentasodium tripolyphosphate","7758-29-4","1~5","",""],["Sillicic acid, disodium salt, pentahydrate","10213-79-3","3~8","",""],["Water","7732-18-5","80-90","",""],["Bitter orange flower extract","8028-48-6","0-5","",""],["Benzidine orange","3520-72-7","0-5","",""],["Dodecyl alcohol. Ethoxylated","9002-92-0","3~8","",""]],"em":"[피부,눈]비누와 물로 세척하고 자극 발생 시 의사와 상담하십시오.\n[흡입] 신선한 공기가 잇는 곳으로 옮기고 호흡하지 않는 경우 인공호흡을 실시하시오.\n[먹었을때]의식이 없는 사람에게 입으로 아무것도 먹이지 마시오","pdf":true},{"n":"포렉스퓨어","m":"토크플러스","u":"광택제 박지 작업용","d":["미화부"],"tm":true,"sm":false,"we":"제외(임단시작업)","hc":"","ic":["부식성"],"cp":[["수산화나트륨","1310-73-2","<1","제외(임단시작업)",""],["벤질 알코올","100-51-6","<5","",""],["설폰산 나트륨 크실렌","1300-72-7","<5","",""],["에탄올","111-90-0","<10","",""],["물","7732-18-5","80~90","",""]],"em":"[피부,눈]흐르는 물에 충분히 씻어내십시오.\n자극이 지속되면 의사와 상담하십시오.\n[먹었을때] 입을 헹구고 물을 마시게 하되, 다량 섭취 시 즉시 의사의 진찰을 받으십시오.","pdf":true},{"n":"포워드(Forward)","m":"다이버시코리아㈜","u":"바닥용세정제\n (곰팡이제거)","d":["미화부"],"tm":false,"sm":false,"we":"","hc":"","ic":["피부 또는 금속 부식성"],"cp":[["Oxirane,2-methyl,polymer with oxirane,mono","166736-08-9","3-<10","",""],["삼규산이나트륨","1344-09-08","1-<3","",""],["수산화 나트륨","1310-73-2","1-<3","제외(임단시작업)",""]],"em":"[피부,눈]흐르는 물에 충분히 씻어내십시오.자극이 지속되면 의사와 상담하십시오.\n[흡입]즉시 신선한 공기가 있는 곳으로 옮기시오.\n[먹었을때] 입을 헹구고 물을 마시게 하되, 다량 섭취 시 즉시 의사의 진찰을 받으십시오.","pdf":true},{"n":"프레시락스플러스","m":"㈜하이코리아","u":"살균소독","d":["영양팀"],"tm":false,"sm":false,"we":"","hc":"","ic":["부식성","경고","환경유해성"],"cp":[["차아염소산 나트륨","7681-52-9","5~5.9","",""],["물","7732-18-5","94.1~95","",""]],"em":"[피부,눈]물질과 접촉시 즉시 20분 이상 흐르는 물에 씻어내시오. \n[흡입] 신선한 공기가 있는 곳으로 옮기시오.\n[먹었을때] 많은 양의 물을 마시게 하고 구토를 유도하지 마시오.","pdf":true},{"n":"플라즈마 과산화수소","m":"Renosem","u":"의료기구소독","d":["수술실","공급실"],"tm":true,"sm":false,"we":"제외(카트리지제품)","hc":"","ic":["발암성","산화성액체","피부부식성","경고"],"cp":[["과산화수소","7722-84-1","50","제외(카트리지제품)",""],["물","7732-18-5","50","",""]],"em":"[눈]눈을 깜빡이며 과산화수소가 완전히 남아 있지 않을 때까지 즉시 다량의 물이나 생리식염수로 씻어내시오(적어도 15~20분간),pH가 정상으로 돌아올 때까지 물이나 생리 식염수로 계속해서 세척하시오.(약 30~60분),눈을 살균된 붕대로 엎으시오. 즉시 병원으로 이송하시오.\n[피부]오염된 의복과 신을 벗기시오.접촉 부위를 비누 또는 순한 세제와 다량의 물로 과산화수소가 완전히 남아 있지 않을 때까지 씻어 내시오.(적어도 15~20분) 화상을 입은 경우 살균, 건조, 딱 붙지 않는 Gauze(붕대)로 완전히 덮으시오.환자의 상태에 알맞은 조치를 취하시오. 즉시 병원으로 이송 하시오.\n[흡입]필요한 경우 인공호흡을 실시하시오. 환자를 따뜻하고 편안하게 할 것. 환자의 상태에 알맞은 조치를 취하시오. 즉시 의사의 도움을 받으시오.산소 공급은 의사에 의해 실시 되어야 함 \n[먹었을때] 입을 헹구고 즉시 병원으로 이송하시오. 절대 구토를 유도하지 마십시오. 환자가 의식이 있고 경련이 없을 때 과산화수소를 희석 시키도록 2~4컵의 물을 주시오.","pdf":true},{"n":"피죤 핑크로즈","m":"㈜피죤","u":"섬유유연","d":["미화부"],"tm":false,"sm":false,"we":"","hc":"","ic":["급성독성 또는 부식성"],"cp":[["Ethanol","64-17-5","0.01~1","",""],["디프로필렌 글린콜","25265-71-8","0.01~1","",""],["water","7732-18-5","80~95","",""],["폴리","9002-92-0","0.01~1","",""],["Fatty acids","91995-81-2","2~8","",""]],"em":"[피부,눈]비누와 물로 세척하고 자극 발생 시 의사와 상담하십시오.\n[먹었을때]의식이 없는 사람에게 입으로 아무것도 먹이지 마시오","pdf":true},{"n":"하나로 우레탄바니시 유광 투명","m":"강남제비스코㈜","u":"목재,가구,\n 공예품,종이장판\n  상도용","d":["시설관리팀"],"tm":false,"sm":false,"we":"","hc":"","ic":["인화성액체","급성독성","발암성","경고"],"cp":[["Naphtha(petroleum), hydrodesulfurized heavy","64742-82-1","50-60","",""],["Phthalic anhydride polymer with 1,2,3-propanetriol","2015-3-7142","40-50","",""],["Isobutanol","78-83-1","0.1 - 1","제외(임단시작업)","12개월"],["Solvent naphtha","64742-96-7","0.1-1","",""],["methyl ethyl ketoxim","96-29-7","1~5","",""],["2-Ethylhexanoic acid","149-57-5","0.1-1","",""]],"em":"[피부,눈]즉시 20분 이상 흐르는 물로 조심해서 씻으시오. \n[흡입] 신선한 공기가 있는 곳으로 옮기시고 따뜻하게 하고 안정되게 해주시오. \n[먹었을때] 토하게 하려 하지 마시고 의식이 없는 사람에게 입으로 아무것도 먹이지 마시오.","pdf":true},{"n":"하이슈퍼퐁","m":"삼진그린푸드㈜","u":"세척세제","d":["영양팀"],"tm":false,"sm":false,"we":"","hc":"","ic":["경고"],"cp":[["Benzene sulfonic acid","27176-87-0","3","",""],["Sodium lauryl ehter sulfate","9004-82-4","43.4","",""],["Sodium hydroxide","1310-73-2","0.5","제외(함유랑1%미만)",""],["Sodium benzoate","532-32-1","0.1","",""],["Sodium Chloride","7647-14-5","0.3","",""],["Lemon oil","226-394-6","0.03","",""],["H20","7732-18-5","52.67","",""]],"em":"[눈]접촉시 15분 이상 많은 양의 물로 씻어내시오.\n[피부] 오염된 의류와 산빌을 벗기고 상처부위를 15분 이상 비눗물로 씻어내시오. \n[흡입] 호흡이 없을시 인공오흡을 실시하고 즉시 의사 등의 도움을 받으시오.\n[먹었을때]몸체보다 머리를 낮추며 즉시 의학적 조치를 취하시오.","pdf":true},{"n":"하이토피아 A520","m":"대성씨앤에스㈜","u":"세척제","d":["영양팀"],"tm":false,"sm":false,"we":"","hc":"","ic":["피부부식성"],"cp":[["설파민 산","5329-14-6","2026-05-15 00:00:00","",""],["구연사","77-92-9","2026-10-25 00:00:00","",""]],"em":"[눈]몇 분간 물로 조심해서 씻으시오.\n[피부]피부(또는 머리카락)에 묻으면 오염된 모든 의복은 벗거나 제거하시오.\n[흡입]신선한 공기가 잇는 곳으로 옮기시오.\n[먹었을때] 토하게 하지 마시고 삼켰다면 즉시 의료기관(의사)의 도움을 받으시오.","pdf":true},{"n":"하이토피아 D155","m":"대성씨앤에스㈜","u":"세척제","d":["영양팀"],"tm":false,"sm":false,"we":"","hc":"","ic":["경고"],"cp":[["탄산 칼륨","0584-08-07","2026-01-05 00:00:00","",""],["에틸렌디아민테트라아세트산, 테트라나트륨 염",".64-02-8","2026-01-05 00:00:00","",""]],"em":"[눈]몇 분간 물로 조심해서 씻으시오.\n[피부]피부(또는 머리카락)에 묻으면 오염된 모든 의복은 벗거나 제거하시오.\n[흡입]신선한 공기가 있는 곳으로 옮기시오.\n[먹었을때]토하게 하지마시고 삼켰다면 즉시 의료기관(의사)의 도움을 받으시오.","pdf":true},{"n":"하이토피아 M490","m":"대성씨앤에스㈜","u":"세척제","d":["영양팀"],"tm":false,"sm":false,"we":"","hc":"","ic":["피부부식성","경고"],"cp":[["디에틸렌글리콜모노뷰틸에테르","112-34-5","2026-01-05 00:00:00","",""],["로릴 에테르 황산 나트륨","68585-34-2","2026-01-05 00:00:00","",""],["도데실벤젠설폰산","68584-22-5","2026-01-05 00:00:00","",""]],"em":"[눈]몇분간 물로 조심해서 씻으시오.\n[피부] 물질과 접촉 시 즉시 20분 이상 흐르는 물에 [피부]와 [눈]을 씻어내시오. \n[흡입] 신선한 공기가 있는 곳으로 옮기시오. \n[먹었을때] 노출되거나 불편함을 느끼면 의료기관(의사)의 진찰을 받으시오.","pdf":true},{"n":"하이토피아 R230","m":"대성씨앤에스㈜","u":"헹굼,\n 세척 보조제","d":["영양팀"],"tm":false,"sm":false,"we":"","hc":"","ic":[],"cp":[["큐멘설폰산 나트륨","28348-53-0","<1","",""],["풀리에틸렌-풀리프로필렌글리콜","9003-11-06 00:00:00","<5","",""]],"em":"[피부],[눈]접촉 시 물로 충분히 씻어내고 자극이 지속되면 의사의 진료를 받으십시오.\n[흡입]신선한 공기를 마시게 하고 안정을 취하십시오.\n[먹었을때]다량의 물을 마시게 하고 이상 증상 발생 시 즉시 의료기관을 방문하십시오.","pdf":true},{"n":"하이토피아 S345","m":"대성씨앤에스㈜","u":"세척제","d":["영양팀"],"tm":false,"sm":false,"we":"","hc":"","ic":["피부부식성"],"cp":[["탄산 나트륨","497-19-8","30-40","",""],["메타큐산 나트륨","10213-79-3","30-40","",""],["삼플리인산 나트륨","7758-29-4","15-35","",""],["폴리옥시에틸렌라우릴에테르","9002-92-0","2026-05-15 00:00:00","",""]],"em":"[눈]몇 분간 물로 조심해서 씻으시오.\n[피부] 피부(또는 머리카락)에 묻으면 오염된 모든 의복은 벗거나 제거하시오.\n[흡입] 신선한 공기가 잇는 곳으로 옮기시오.\n[먹었을때] 토하게 하지 마시고 삼켰다면 즉시 의료기관(의사)의 도움을 받으시오.","pdf":true},{"n":"Acecide-Use Solution","m":"SARAYA CO., LTD.","u":"기구세척","d":["내시경실","특수내시경실"],"tm":true,"sm":false,"we":"6개월","hc":"","ic":["흡입독성","부식성","특정표적장기 독성"],"cp":[["아세트산(초산)","64-19-7","<2.0","6개월",""],["과산화수소","7722-84-1","<0.5","제외(함유랑1%미만)",""],["과산화아세트산","79-21-0","<0.5","",""],["질산칼륨","7757-79-1","<0.5","",""],["인산 트라이나트륨","7601-54-9","<0.5","",""],["테트라 나트륨","3794-83-0","<0.5","",""]],"em":"[눈] 즉시 다량의 물로 15분 이상 세척 후 안과 의사 진료를 받으시오. \n[피부] 오염된 피복을 제거하고 비눗물로 충분히 씻으시오. \n[먹었을때] 입을 헹구고 물을 마시게 하되, 의식 없는 환자에게는 아무것도 먹이지 마시오.","pdf":true},{"n":"Acetic acid","m":"덕산약품공업㈜","u":"세포 및 \n 조직 염색 시약","d":["진단검사의학실"],"tm":true,"sm":false,"we":"제외(임단시작업)","hc":"","ic":["인화성","부식성"],"cp":[["Acetic Acid(초산)","64-19-7","100","제외(임단시작업)",""]],"em":"[피부,눈]즉시 다량의 물로 20분 이상 씻어내고 전문의 진료를 받으시오. \n[흡입] 즉시 의사의 치료를 받으시오. 호흡이 불규칙하거나 멈출 경우 인공호흡을 실시하고 산소를 공급하시오. \n[먹었을때] 즉시 물로 입을 씻어내시오. 즉시 의사의 치료를 받으시오.","pdf":true},{"n":"Acetone","m":"덕산약품공업㈜","u":"진단용","d":["진단검사의학실"],"tm":true,"sm":false,"we":"제외(임단시작업)","hc":"12개월","ic":["인화성","심한눈손상","흡인 유해성 물질"],"cp":[["Acetone","67-64-1","100","제외(임단시작업)","12개월"]],"em":"[눈] 즉시 다량의 물로 15분 이상 세척하시오.\n[피부] 오염된 피복을 제거하고 물과 비누로 씻으시오.\n[흡입] 신선한 공기가 있는 곳으로 옮기고 안정을 취하시오. 인화성이 매우 높으니 화기에 주의하시오.\n[먹었을때]즉시 물로 입을 씻어내시오. 즉시 의사의 치료를 받으시오.","pdf":true},{"n":"Ammonia water","m":"덕산약품공업㈜","u":"진단용","d":["병리과"],"tm":true,"sm":false,"we":"6개월","hc":"","ic":["환경유해성","부식성","급성독성"],"cp":[["Ammonium hydroxide","1336-21-6","20-29","6개월",""],["Water (물)","7732-18-5","71-80","",""]],"em":"[피부,눈] 즉시 15분 이상 흐르는 물에 씻어내고 전문의 진료를 받으시오. \n[흡입] 다량의 증기나 미스트에 노출되었을 경우 맑은 공기가 있는 곳으로 이동하시오.\n호흡이 불규칙하거나 멈출 경우 인공호흡을 실시하고 산소를 공급하시오. \n[먹었을때]즉시 물로 입을 씻어내시오.","pdf":true},{"n":"BIOMOUNT","m":"메디랩","u":"진단용","d":["병리과"],"tm":true,"sm":false,"we":"6개월","hc":"12개월","ic":["인화성액체","급성독성","심한눈손상"],"cp":[["Xylene","1330-20-7","60~65","6개월","12개월"],["methyl methacrylate resin","9011-14-7","40-50","",""]],"em":"[피부,눈]즉시 물로 충분히 씻어내고 자극이 지속되면 의사 진료를 받으시오.\n[흡입]흡입하여 호흡이 어려워지면 신선한 공기가 있는 곳으로 옮기고 호흡하기 쉬운 자세로 안정을 취하시오.\n[먹었을때] 삼켰다면 입을 씻어내시오. 토하게 하려 하지 마시오.","pdf":true},{"n":"BOILER MATE IS-102K","m":"한국미우라공업㈜","u":"보일러\n 수처리용\n (보일러청관제)","d":["시설관리팀"],"tm":true,"sm":false,"we":"제외(임단시작업)","hc":"","ic":["부식성","표적장기독성","흡입유해성"],"cp":[["수산화 포타슘","1310-58-3","1-4.5","제외(임단시작업)",""],["inorganic acid, alkali metal salt","비공개승인","40-60","",""],["에틸렌다이아먼테트라아세트산","64-02-8.","2026-01-10 00:00:00","",""]],"em":"[눈]많은 양의 물을 사용하여 적어도 15분 동안 [눈]을 씻어내시오.\n[피부] 오염된 의복 및 신발을 벗고 즉시 적어도 15분 동안 비누와 물로 씻어내시오.\n[흡입] 다량의 증기나 미스트에 노출되었을 경우 맑은 공기가 있는 곳으로 이동하시오.\n[먹었을때] 삼켰다면 많은 양의 물을 마시도록하고 구토를 유도하지 마시오.","pdf":true},{"n":"CR-13","m":"조선선재㈜","u":"화장용접","d":["시설관리팀"],"tm":true,"sm":false,"we":"제외(임단시작업)","hc":"","ic":["흡인유해성"],"cp":[["이산화 티타늄","13463-67-7","2026-10-15 00:00:00","제외(임단시작업)",""],["장석","68476-25-5","2026-05-10 00:00:00","제외(임단시작업)","24개월(광물성분진)"],["망간","7439-96-5","2026-01-05 00:00:00","제외(임단시작업)","12개월"],["규산나트륨","1344-09-08","2026-01-05 00:00:00","",""],["석회석","1317-65-3","2026-01-05 00:00:00","제외(임단시작업)","24개월(광물성분진)"],["운모","12001-26-2","2026-01-05 00:00:00","제외(임단시작업)","24개월(광물성분진)"],["철","7439-89-6","나머지","",""]],"em":"[눈]용접 중 발생한 이물질이 [눈]에 들어갔을 때는 절대로 비비지 말고 물로 씻어내시오.\n[피부] 15분 이상 많은 양의 비눗물로 씻어 화학물질을 제거하시오.\n[흡입] 호흡하지 않는 경우 인공호흡을 실시하시오. \n[먹었을때] 물질을 먹거나 [흡입]하였을 경우 구강대구강법으로 인공호흡을 하지 말고 적절한 호흡 의료장비를 이용하시오.","pdf":true},{"n":"Diff-Quick(Fixative)","m":"시스멕스 코퍼레이션","u":"미생물염색 \n 및 배양시약","d":["진단검사의학실"],"tm":true,"sm":false,"we":"6개월","hc":"12개월","ic":["인화성","눈 손상","급성독성"],"cp":[["메틸알코올","67-56-1","99","6개월","12개월"]],"em":"[피부,눈]즉시 물로 충분히 세척하시오. \n[흡입] 환자를 신선한 공기가 있는 곳으로 옮기고 호흡을 확인하시오. \n[먹었을때] 의식이 있는 경우에만 물로 입을 헹구어 내십시오.","pdf":true},{"n":"Ethyl alcohol 99.9%","m":"덕산약품공업㈜","u":"진단용","d":["진단검사의학실"],"tm":false,"sm":false,"we":"","hc":"","ic":["경고","발암성","인화성액체"],"cp":[["Ethyl alcohol","64-17-5","99-100","",""]],"em":"[눈] 즉시 다량의 물로 최소 15분 이상 씻어내시오. [피부] 오염된 의복을 벗고 물과 비누로 세척하시오. \n[흡입] 신선한 공기를 마시게 하고 안정을 취하시오. \n[먹었을때] 다량의 물을 마시게 하고 즉시 의사에게 보이시오.","pdf":true},{"n":"Giemsa's Stain Solution","m":"아산제약","u":"미생물염색 \n 및 배양시약","d":["진단검사의학실"],"tm":true,"sm":false,"we":"제외(임단시작업)","hc":"12개월","ic":["인화성액체","급성독성","발암성"],"cp":[["메틸알코올","67-56-1","49.5","제외(임단시작업)","12개월"],["EOSIN Y","17372-87-1","0.5","",""],["AZURE B","531-55-5","0.25","",""],["글리세린","56-81-5","49.5","",""],["C.L. 염기성 청색","61-73-4","0.25","",""]],"em":"[피부,눈]즉시 다량의 물로 15분 이상 씻어내고 오염된 의복은 즉시 세탁하십시오. \n[흡입] 신선한 공기가 있는 곳으로 옮기시오.\n[먹었을때] 삼켰다면 즉시 의료기관(의사)의 진찰을 받으시오. 물질을 먹거나 흡입하였을 경우 구강대구강법으로 인공호흡을 하지 말고 적절한 호흡의료장비를 이용하시오.","pdf":true},{"n":"Gram-decolorizer","m":"영동제약㈜","u":"세포탈색","d":["진단검사의학실"],"tm":false,"sm":false,"we":"","hc":"","ic":["인화성액체","발암성","심한눈손상성"],"cp":[["Ethyl alcohol","64-17- 5","< 50","",""],["Acetone","67-64-1","< 50","제외(단시간)","12개월"]],"em":"[눈]즉시 15분 이상 세척하시오.\n[피부]물과 비누로 충분히 씻으시오.\n[먹었을때]구토를 유도하지 말고 즉시 의사의 진찰을 받으시오.","pdf":true},{"n":"Gram-Lugol","m":"영동제약㈜","u":"세포고정","d":["진단검사의학실"],"tm":false,"sm":false,"we":"","hc":"","ic":["급성독성","피부 또는 금속 부식성"],"cp":[["purified water","77732-18-5","< 99","",""],["KI","7681-11-0","< 1","제외(단시간)","제외(함유랑1%미만)"],["Iodine","7553-56-2","< 1","제외(단시간)","제외(함유랑1%미만)"]],"em":"[피부,눈]즉시 물로 충분히 씻어내고 자극이 지속되면 의사 진료를 받으시오. \n[먹었을때] 입을 헹구고 물을 마시게 하되, 억지로 구토를 유도하지 마십시오.","pdf":true},{"n":"HS-BIOs","m":"한신실리텍㈜","u":"실란트","d":["시설관리팀"],"tm":false,"sm":false,"we":"","hc":"","ic":["경고"],"cp":[["실리콘 폴리머","70131-67-8","60-70","",""],["향균제","60207-90-1","0.5-1.5","",""],["메틸 옥심 실란","22984-54-9","2026-01-05 00:00:00","",""],["수첨처리된 경질 정제유","64742-47-8","15-25","제외(임단시작업)","12개월"],["비닐 옥심 실란","2224-33-1","0.5-1.5","",""],["실리카","7631-86-9","2026-05-10 00:00:00","제외(임단시작업)","24개월(광물성분진)"],["아미노실란","1760-24-3","0.5-1","",""],["촉매제","3648-18-8","0.05-0.1","","12개월"]],"em":"[눈]즉시 다량의 물로 적어도 15분간 씻어내시오. \n[피부] 오염된 의복은 즉시 벗고 비누와 물로 씻어내시오.\n[흡입] 신선한 공기가 잇는곳으로 옮기시오.  [먹었을때] 입을 씻어내시오.\n[먹었을때]입을 씻어내시오. 즉시 의료기관(의사)의 진찰을 받으시오.","pdf":true},{"n":"Hydrochloric acid","m":"덕산약품공업㈜","u":"진단용","d":["진단검사의학실"],"tm":true,"sm":false,"we":"제외(임단시작업)","hc":"12개월","ic":["급성독성","피부부식성"],"cp":[["Hydrochloric acid","7647-01-0","35-37","제외(임단시작업)","12개월"]],"em":"[눈]다량의 물로 최소 20분 이상 세척하고 즉시 응급실로 이송하시오. \n[흡입] 신선한 공기로 이동시키고 인공호흡이 필요할 수 있습니다. \n[먹었을때] 억지로 구토시키지 말고 즉시 병원으로 이송하시오.","pdf":true},{"n":"LUCKY-SILICONELC 707 백색","m":"㈜ 바커케미칼코리아","u":"부분도색","d":["시설관리팀"],"tm":false,"sm":false,"we":"","hc":"","ic":["발암성","피부과민성"],"cp":[["메틸-0,0',0''-부탄-2-불포화(옥심)3-실레인","22984-54-9",">1-<5","",""],["뷰테인-2-온-옥심","96-29-7",">1-<2","",""],["메틸벤즈이미다졸-2-일-카바메이트","10605-21-7",">0.5-<1","",""],["3-(2-아미노에틸아미노)프로필 트라이메톡시실레인","1760-24-3",">=1-<3","",""],["프로피코나졸","60207-90-1",">0,1 – <0,5","",""],["이산화 티타늄","13463-67-7",">1,5 – <2,3","제외(임단시작업)",""],["영업비밀","영업비밀",">81.7-<91.7","",""],["비정질 흄드 실리카","112945-52-5","","제외(임단시작업)","24개월(광물성분진)"]],"em":"[눈] 즉시 흐르는 물에 15분 이상 씻으시오. \n[피부] 헝겊으로 닦아낸 후 비눗물로 씻으시오. \n[먹었을때] 즉시 의사의 진료를 받으시오. 작업 시 환기에 유의하십시오.","pdf":true},{"n":"Methyl alcohol","m":"덕산약품공업㈜","u":"진단용","d":["진단검사의학실"],"tm":true,"sm":false,"we":"6개월","hc":"12개월","ic":["발암성","인화성","급성독성"],"cp":[["Methyl Alcohol","67-56-1","100","6개월","12개월"]],"em":"[피부,눈]즉시 다량의 물로 20분 이상 세척하시오. \n[흡입] 신선한 공기가 있는 곳으로 이동하고 호흡 확인 후 즉시 전문의의 진료를 받으시오. \n[먹었을때] 절대 구토를 유도하지 말고 즉시 응급실로 이송하시오.","pdf":true},{"n":"NC-308","m":"조선선재㈜","u":"용접봉","d":["시설관리팀"],"tm":true,"sm":false,"we":"","hc":"","ic":["표적장기독성","피부 과민성"],"cp":[["철","7439-89-6","REM.(나머지)","",""],["망간","7439-96-5","1 ~5","제외(임단시작업)","12개월"],["이산화 티타늄","13463-67-7","10 ~ 19","제외(임단시작업)",""],["니켈","7440-02-0","5 ~ 12","제외(임단시작업)","12개월"],["크롬","7440-47-3","16 ~ 22","제외(임단시작업)","12개월"],["운모","12001-26-2","1 ~ 8","제외(임단시작업)",""],["규산나트륨","1344-09-08","0.5 ~ 7","",""],["석회석","1317-65-3","0.5 ~ 5","제외(임단시작업)","12개월"]],"em":"[눈]즉시 다량의 물로 적어도 15분간 씻어내시오.\n[피부]오염된 의복은 즉시 벗고 비누와 물로 씻어내시오.\n[흡입]신선한 공기가 잇는곳으로 옮기시오.\n[먹었을때] 입을 씻어내시오.","pdf":true},{"n":"PANA SPRAY PLUS","m":"㈜ 일신메디칼","u":"윤활제","d":["수술실"],"tm":false,"sm":false,"we":"","hc":"","ic":["인화성액체","심한눈손상","표적장기독성","고압가스"],"cp":[["Butane","106-97-8","25~35","",""],["Propane","74-98-6","15~25","",""],["Ethanol","64-17-5","25~35","",""],["Esster Lubricant","N/A","5~10","",""]],"em":"[피부,눈]즉시 물로 세척하시오.\n[흡입] 다량 흡입 시 노출 지역에서 대피하시오. 기침이나 다른 증상이 있을 경우 의료 조치를 취하시오.\n[먹었을때] 즉시 의료 조치를 받으시오. 적절한 호흡의료장비를 이용하시오. 화기 근처에서 사용을 금합니다.","pdf":true},{"n":"Potassium Hydroxide","m":"덕산약품공업㈜","u":"진단용","d":["진단검사의학실"],"tm":true,"sm":false,"we":"제외(임단시작업)","hc":"","ic":["급성독성","부식성"],"cp":[["Potassium Hydroxide","1310-58-3","85-95","제외(임단시작업)",""],["Water (물)","7732-18-5","5~15","",""]],"em":"[피부,눈]즉시 흐르는 물로 20분 이상 세척하시오. 세척 중 오염된 옷과 신발을 제거하시오.\n[흡입]  다량의 증기나 미스트에 노출되었을 경우 맑은 공기가 있는 곳으로 이동하시오. \n[먹었을때] 입을 헹구고 즉시 의료진의 도움을 받으시오. 지체 시 심각한 화상을 입을 수 있습니다.","pdf":true},{"n":"Rapid Cal","m":"㈜미락스","u":"진단용","d":["병리과"],"tm":true,"sm":false,"we":"제외(임단시작업)","hc":"","ic":["급성독성","부식성"],"cp":[["개미산","64-18-6","2026-03-06 00:00:00","제외(임단시작업)",""],["염화수소","7647-01-0","2026-03-06 00:00:00","제외(임단시작업)","12개월"],["물","7732-18-5",">90","",""],["Select Buffers","Trade secret","Trade secret","",""],["Select ethers","Trade secret","Trade secret","",""]],"em":"[피부,눈]즉시 물로 충분히 씻어내고 자극이 지속되면 의사 진료를 받으시오.\n[흡입] 호흡이 어려워지면 신선한 공기가 있는 곳으로 옮기고 호흡하기 쉬운 자세로 안정을 취하시오.\n[먹었을때] 삼켰다면 입을 씻어내시오.\n토하게 하려 하지 마시오.","pdf":true},{"n":"Shandon Synthetic Mount(#6769007)","m":"성곤무역㈜","u":"진단용","d":["진단검사의학실"],"tm":true,"sm":false,"we":"제외(임단시작업)","hc":"12개월","ic":["인화성액체","경고","흡인유해성","환경유해성"],"cp":[["toluene","108-88-3","58","제외(임단시작업)","12개월"],["Acrylic Resin","28262-63-7","30-35","",""],["Butyl benzyl phthalate","85-68-7","5~7","",""],["2,6-Di-tert-butyl-p-cresol","128-37-0","<1","",""],["Butyl methacrylate","97-88-1","<1","",""]],"em":"[피부,눈]15분 이상 세척하고 자극 시 전문의의 진료를 받으시오. \n[흡입] 신선한 공기로 이동하시오. 증상이 나타나면 즉시 의료기관을 방문하시오.\n[먹었을때]-구토를 유발해야 하는지에 대해서 의사의 조언을 받으시오. \n즉시 물로 입을 씻어내시오.\n만약 삼켰다면 많은 양의 물을 마시도록하고 구토를 유도하지 마시오.","pdf":true},{"n":"Sodium Hydroxide","m":"덕산약품공업㈜","u":"진단용","d":["진단검사의학실"],"tm":true,"sm":false,"we":"제외(임단시작업)","hc":"","ic":["급성독성","부식성"],"cp":[["Sodium Hydroxide","1310-73-2","100","제외(임단시작업)",""]],"em":"[피부,눈]즉시 흐르는 물로 20분 이상 세척하시오. 세척 중 오염된 옷과 신발을 제거하시오. \n[흡입] 다량의 증기나 미스트에 노출되었을 경우 맑은 공기가 있는 곳으로 이동하시오. \n호흡이 불규칙하거나 멈출 경우 인공호흡을 실시하고 산소를 공급하시오.\n[먹었을때] 입을 헹구고 즉시 의료진의 도움을 받으시오.","pdf":true},{"n":"STERI-GAS BRAND CARTRIDGES","m":"한국쓰리엠","u":"의료제품소독","d":["공급실"],"tm":true,"sm":true,"we":"6개월","hc":"12개월","ic":["인화성액체","가스실린더","피부부식성","급성독성","건강유해성"],"cp":[["ETHYLENE OXIDE","75-21-8","100","6개월","12개월"]],"em":"[피부,눈] 다량의 미온수로 15분 이상 세척하시오.\n[흡입] 즉시 노출 지역에서 대피하고 신선한 공기를 마시게 하시오. \n호흡 정지 시 인공호흡을 실시하고 즉시 병원으로 이송하시오. \n[먹었을때] 입을 씻어낼 것. 구토를 유발시키지 말 것. 즉각적인 치료를 받을 것.","pdf":true},{"n":"Wright_s Stain Solution","m":"아산제약","u":"미생물염색 \n 및 배양시약","d":["진단검사의학실"],"tm":true,"sm":false,"we":"제외(임단시작업)","hc":"12개월","ic":["인화성액체","급성독성","발암성"],"cp":[["메틸알코올","67-56-1","99","제외(임단시작업)","12개월"],["EOSIN Y","17372-87-1","0.5","",""],["C.L. 염기성 청색","61-73-4","0.25","",""]],"em":"[피부,눈]즉시 15분 이상 충분히 세척하시오. \n[흡입] 신선한 공기로 이동하고 호흡이 곤란하면 산소를 공급하시오. \n[먹었을때] 의식이 있으면 입을 헹구고 즉시 의료기관을 방문하시오.","pdf":true},{"n":"Xylenes","m":"(주)강동그룹","u":"진단용","d":["병리과"],"tm":true,"sm":false,"we":"6개월","hc":"12개월","ic":["인화성액체","피부 부식성","생식독성"],"cp":[["Xylene","1330-20-7","90","6개월","12개월"],["Ethylbenzene(에틸벤젠)","100-41-4","10","6개월","12개월"]],"em":"[피부,눈] 즉시 다량의 물로 15분 이상 씻어내고 오염된 의복을 제거하시오. \n[흡입] 신선한 공기가 있는 곳으로 이동하고 안정을 취하십시오. \n[먹었을때] 구토를 유도하지 말고 즉시 의사의 진료를 받으시오.","pdf":true}];
+function esc(v){ return String(v == null ? '' : v).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); }
+function ghsOf(l){
+  if(/산화성/.test(l)) return 'g-oxid';
+  if(/인화성/.test(l)) return 'g-flame';
+  if(/고압가스|가스실린더/.test(l)) return 'g-gas';
+  if(/발암|호흡기과민|생식|표적장기|흡인|흡입유해|건강유해/.test(l)) return 'g-health';
+  if(/급성독성|흡입독성/.test(l)) return 'g-skull';
+  if(/부식|눈 ?손상/.test(l)) return 'g-corr';
+  if(/환경/.test(l)) return 'g-env';
+  return 'g-excl';
+}
+var truthy = function(v){ if(v === true) return true; if(typeof v !== 'string') return false; return /^(해당|true|y|yes|1|o|●|○|ㅇ)$/i.test(v.trim()); };
+var fixAmount = function(v){ var s = String(v || '').trim(); var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[\sT].*)?$/); return m ? parseInt(m[2]) + '-' + parseInt(m[3]) : s; };
+var curMs = -1;
+function msList(){
+  var q = document.getElementById('ms-q').value.trim().toLowerCase(), d = document.getElementById('ms-dept').value;
+  var rows = CHEMS.map(function(c, i){ return [c, i]; }).filter(function(x){
+    var c = x[0];
+    if(d && c.d.indexOf(d) < 0) return false;
+    if(!q) return true;
+    return (c.n + ' ' + c.m + ' ' + c.cp.map(function(p){ return p[0] + ' ' + p[1]; }).join(' ')).toLowerCase().indexOf(q) >= 0;
+  });
+  document.getElementById('ms-n').textContent = (d || '전체') + ' ' + rows.length + '종';
+  document.getElementById('ms-items').innerHTML = rows.map(function(x){
+    var c = x[0];
+    return '<button class="ms-it" data-i="' + x[1] + '"' + (x[1] === curMs ? ' aria-current="true"' : '') + '><b>' + esc(c.n) + '</b><span class="mk">' + esc(c.m) + '</span><span class="dp">' + esc(c.d.join(' · ')) + '</span></button>';
+  }).join('') || '<div class="cap" style="padding:16px">검색 결과가 없습니다</div>';
+  document.querySelectorAll('#ms-items .ms-it').forEach(function(b){ b.onclick = function(){ msDetail(+b.dataset.i); }; });
+}
+function msDetail(i){
+  curMs = i;
+  document.querySelectorAll('#ms-items .ms-it').forEach(function(b){ if(+b.dataset.i === i) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current'); });
+  var p = CHEMS[i];
+  var first = function(k){ for(var j = 0; j < p.cp.length; j++){ var v = String(p.cp[j][k] || '').trim(); if(v) return v; } return ''; };
+  var we = p.we.trim() || first(3) || '-', hc = p.hc.trim() || first(4) || '-';
+  var t = truthy(p.tm), sp = truthy(p.sm);
+  var icons = p.ic.map(function(l){ return '<figure><div class="pb"><svg><use href="#' + ghsOf(l) + '"/></svg></div><figcaption>' + esc(l) + '</figcaption></figure>'; }).join('');
+  var comps = p.cp.map(function(c){ return '<tr><td class="l">' + esc(c[0] || '-') + '</td><td>' + esc(c[1] || '-') + '</td><td class="am">' + esc(fixAmount(c[2]) || '-') + '</td><td>' + esc(c[3].trim() || '-') + '</td><td>' + esc(c[4].trim() || '-') + '</td></tr>'; }).join('');
+  var em = p.em.split('\n').filter(function(l){ return l.trim(); }).map(function(line){
+    var title = '안내', desc = line;
+    if(line.indexOf(']') >= 0){ var pts = line.split(']'); title = pts[0].replace('[', '').trim(); desc = pts.slice(1).join(']'); }
+    return '<tr><th>' + esc(title) + '</th><td>' + esc(desc.trim()) + '</td></tr>';
+  }).join('');
+  document.getElementById('ms-detail').innerHTML =
+    '<div class="dh"><div><h2>' + esc(p.n) + '</h2><p class="s1">' + esc(p.m) + ' | <em>용도: ' + esc(p.u || '-') + '</em></p><p class="s2">취급부서: ' + esc(p.d.join(', ')) + '</p></div>' +
+    '<div class="act">' + (p.pdf ? '<button class="btn btn-dark"><svg class="ico"><use href="#i-doc"/></svg>PDF 원본보기</button>' : '') +
+    '<button class="btn btn-secondary" onclick="show(\'pin\')"><svg class="ico"><use href="#i-book"/></svg>특별교육일지 작성</button>' +
+    '<button class="btn btn-primary" onclick="show(\'pin\')"><svg class="ico"><use href="#i-book"/></svg>MSDS 교육일지 작성</button></div></div>' +
+    '<h3 class="st"><svg class="ico"><use href="#i-alert"/></svg>경고표지 및 관리대상</h3>' +
+    '<div class="warn"><div class="picto">' + (icons || '<span class="cap">그림문자 없음</span>') + '</div><div class="mbs">' +
+      '<div class="mb ' + (t ? 'yes' : 'no') + '"><span>관리대상물질</span><b>' + (t ? '해당' : '미해당') + '</b></div>' +
+      '<div class="mb ' + (sp ? 'yes' : 'no') + '"><span>특별관리대상</span><b>' + (sp ? '해당' : '미해당') + '</b></div>' +
+      '<div class="mb"><span>작업환경측정</span><b>' + esc(we) + '</b></div>' +
+      '<div class="mb"><span>건강진단</span><b>' + esc(hc) + '</b></div></div></div>' +
+    '<h3 class="st"><svg class="ico"><use href="#i-flask"/></svg>구성성분 및 관리정보</h3>' +
+    '<table class="ct"><thead><tr><th>성분명</th><th>CAS NO.</th><th>함량</th><th>작업측정</th><th>건강진단</th></tr></thead><tbody>' + (comps || '<tr><td colspan="5">정보 없음</td></tr>') + '</tbody></table>' +
+    (em ? '<h3 class="st red"><svg class="ico"><use href="#i-alert"/></svg>응급처치 요령</h3><table class="ct em"><tbody>' + em + '</tbody></table>' : '');
+  document.getElementById('ms-detail').scrollTop = 0;
+}
+(function(){
+  var depts = {}; CHEMS.forEach(function(c){ c.d.forEach(function(d){ depts[d] = 1; }); });
+  document.getElementById('ms-dept').innerHTML += Object.keys(depts).sort().map(function(d){ return '<option>' + esc(d) + '</option>'; }).join('');
+  document.getElementById('ms-dept').onchange = msList;
+  document.getElementById('ms-q').oninput = msList;
+  msList();
+  var pl = CHEMS.findIndex(function(c){ return /플라즈마 과산화수소/.test(c.n); });
+  msDetail(pl >= 0 ? pl : 0);
+})();
 show('guest');
 </script>
 </body>
