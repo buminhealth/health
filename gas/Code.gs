@@ -592,7 +592,7 @@ function findEmpSheet_() {
 
 // 직원목록 열 이름 (첫 번째가 새로 만들 때 쓰는 이름, 나머지는 기존 시트·엑셀 붙여넣기 호환 이름)
 const EMP_COLS = {
-  empNo:     ['사번','직원번호','사원번호','사원코드','직원코드','empNo','employeeNo','사번(직원번호)','empId','employeeId','staffNo','sabun'],
+  empNo:     ['사번','직원번호','사원번호','사원코드','직원코드','empNo','employeeNo','사번(직원번호)','empId','employeeId','staffNo','sabun','empCode','emp_code','employeeCode'],
   name:      ['이름','성명','직원이름','직원명','성함','name','성명(이름)','이름(성명)','empName','userName','fullName'],
   dept:      ['부서','부서명','소속','소속부서','팀','dept','department','부서(팀)','팀(부서)','deptName','team'],
   joinDate:  ['입사일','입사일자','입사년월일','joinDate','join','입사일(joinDate)','입사년월','hireDate','startDate','entryDate'],
@@ -973,11 +973,18 @@ function nowKst_() { return Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd'T'H
 
 // 엑셀 붙여넣기·인사 사이트 결과(헤더 + 행 배열)를 직원 객체로 변환
 function rowsToEmployees_(headers, rows) {
-  const idx = empColIndex_(headers);
-  if (idx.name < 0) throw new Error('이름(성명) 열을 찾지 못했습니다. 첫 줄에 열 제목을 포함해 주세요.');
+  // 항목마다 해당하는 열을 모두 찾고, 값이 있는 첫 열을 사용 (예: 사번이 empNo·empCode로 섞여 있어도 인식)
+  const cols = {};
+  Object.keys(EMP_COLS).forEach(f => {
+    cols[f] = EMP_COLS[f].map(k => headers.map(h => String(h).trim()).indexOf(k)).filter(i => i >= 0);
+  });
+  if (!cols.name.length) throw new Error('이름(성명) 열을 찾지 못했습니다. 첫 줄에 열 제목을 포함해 주세요.');
   return rows.map(r => {
     const e = {};
-    Object.keys(EMP_COLS).forEach(f => { e[f] = idx[f] >= 0 ? String(r[idx[f]] == null ? '' : r[idx[f]]).trim() : ''; });
+    Object.keys(EMP_COLS).forEach(f => {
+      const i = cols[f].find(c => String(r[c] == null ? '' : r[c]).trim() !== '');
+      e[f] = i === undefined ? '' : String(r[i]).trim();
+    });
     e.joinDate = normDate_(e.joinDate);
     e.leaveDate = normDate_(e.leaveDate);
     return e;
@@ -1008,28 +1015,44 @@ function syncEmployees_(incoming, fullList) {
     const data = last > 1 ? sheet.getRange(2, 1, last - 1, width).getValues() : [];
 
     const today = todayKst_();
-    const keyOf = (empNo, name, joinDate) => empNo ? 'no:' + String(empNo).trim() : 'nm:' + String(name).trim() + '|' + normDate_(fmtDate_(joinDate));
+    // 사번으로 찾고, 사번이 없으면 이름+입사일로 찾음
+    const noKey = v => String(v || '').trim() ? 'no:' + String(v).trim() : '';
+    const nmKey = (name, joinDate) => 'nm:' + String(name).trim() + '|' + normDate_(fmtDate_(joinDate));
     const pos = {};
-    data.forEach((r, i) => { pos[keyOf(r[idx.empNo], r[idx.name], r[idx.joinDate])] = i; });
+    data.forEach((r, i) => {
+      const kn = noKey(r[idx.empNo]);
+      if (kn) pos[kn] = i;
+      const km = nmKey(r[idx.name], r[idx.joinDate]);
+      if (pos[km] === undefined) pos[km] = i;
+    });
+    const rowKey = r => noKey(r[idx.empNo]) || nmKey(r[idx.name], r[idx.joinDate]);
 
     const seen = new Set();
     const summary = { added: 0, updated: 0, resigned: 0, unchanged: 0, newEmployees: [] };
     incoming.forEach(e => {
-      const k = keyOf(e.empNo, e.name, e.joinDate);
-      seen.add(k);
-      if (pos[k] === undefined) {
+      const kn = noKey(e.empNo), km = nmKey(e.name, e.joinDate);
+      let at = kn ? pos[kn] : undefined;
+      if (at === undefined && pos[km] !== undefined) {
+        // 이름+입사일이 같아도 양쪽 사번이 다르면 다른 사람
+        const other = noKey(data[pos[km]][idx.empNo]);
+        if (!kn || !other) at = pos[km];
+      }
+      if (at !== undefined) seen.add(rowKey(data[at]));
+      if (at === undefined) {
         const row = new Array(width).fill('');
         ['empNo','name','dept','joinDate','leaveDate','email','position'].forEach(f => { row[idx[f]] = e[f] || ''; });
         row[idx.status] = e.status || '재직';
         row[idx.firstSeen] = today;
         row[idx.lastSeen] = today;
-        pos[k] = data.length;
+        if (kn) pos[kn] = data.length;
+        pos[km] = data.length;
+        seen.add(rowKey(row));
         data.push(row);
         summary.added++;
         summary.newEmployees.push({ name: e.name, dept: e.dept, joinDate: e.joinDate });
         return;
       }
-      const row = data[pos[k]];
+      const row = data[at];
       let changed = false;
       ['name','dept','joinDate','status','leaveDate','email','position'].forEach(f => {
         if (!e[f]) return;
@@ -1042,8 +1065,7 @@ function syncEmployees_(incoming, fullList) {
 
     if (fullList) {
       data.forEach(row => {
-        const k = keyOf(row[idx.empNo], row[idx.name], row[idx.joinDate]);
-        if (seen.has(k) || isResigned_({ status: fmtDate_(row[idx.status]) })) return;
+        if (seen.has(rowKey(row)) || isResigned_({ status: fmtDate_(row[idx.status]) })) return;
         row[idx.status] = '퇴사(명단없음)';
         if (!fmtDate_(row[idx.leaveDate])) row[idx.leaveDate] = today;
         summary.resigned++;
@@ -1177,8 +1199,10 @@ function hrFetchEmployees_(id, password) {
     });
     return f;
   });
+  // 주민등록번호 등 민감정보 열은 가져오지 않음 (화면·시트·서버 응답 어디에도 남기지 않음)
+  const SENSITIVE = /rrn|jumin|ssn|resident|주민|생년월일|birth|phone|mobile|tel|연락처|전화|주소|address|account|계좌/i;
   const headers = [];
-  flat.forEach(f => Object.keys(f).forEach(k => { if (headers.indexOf(k) < 0) headers.push(k); }));
+  flat.forEach(f => Object.keys(f).forEach(k => { if (headers.indexOf(k) < 0 && !SENSITIVE.test(k)) headers.push(k); }));
   // 사이트 필드명 → 표준 이름 (메뉴 ④의 필드 매핑, 예: {"성명":"nm"} → nm 열을 이름으로)
   const outHeaders = headers.map(h => {
     const std = Object.keys(c.fieldMap).find(k => c.fieldMap[k] === h);
