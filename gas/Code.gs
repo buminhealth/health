@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v19.8 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v19.9 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -175,6 +175,8 @@ function doPost(e) {
                         result = chemOp_(req, s); break;
       case 'ai.status': case 'ai.setKey': case 'ai.list': case 'ai.analyze': case 'ai.judge': case 'ai.apply': case 'ai.products': case 'ai.compare':
                         result = aiOp_(req, s); break;
+      case 'edu.dupes': case 'edu.dedupe':
+                        result = eduOp_(req, s); break;
       default:          result = { success: false, error: 'unknown op: ' + req.op };
     }
   } catch (err) {
@@ -2396,6 +2398,57 @@ function aiApply_(req) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// ════════════════════════════════════════════════════════════════
+// 교육이력대장 중복 정리: 같은 사람(사번, 없으면 성명) · 교육구분 · 부서 · 시작일 · 종료일
+//  · 남길 줄: 서명완료 우선 → 먼저 제출한 줄 / 나머지는 관리자가 확인한 것만 삭제
+// ════════════════════════════════════════════════════════════════
+function eduDupes_() {
+  const sh = SS.getSheetByName('교육이력대장');
+  if (!sh || sh.getLastRow() < 3) return { groups: [], total: 0 };
+  const v = sh.getDataRange().getDisplayValues();
+  const h = v[0].map(x => String(x).trim());
+  const c = k => h.indexOf(k);
+  const C = { sub: c('제출일시'), type: c('교육구분'), dept: c('교육부서'), ds: c('교육시작일'), de: c('교육종료일'), no: c('사번'), name: c('성명'), sig: c('서명여부'), hrs: c('총교육시간') };
+  if (C.type < 0 || C.name < 0) return { groups: [], total: v.length - 1, error: '교육이력대장 제목 줄을 찾지 못했습니다' };
+  const g = {};
+  v.slice(1).forEach((r, i) => {
+    const name = String(r[C.name] || '').trim();
+    if (!name) return;
+    const no = C.no >= 0 ? String(r[C.no] || '').trim() : '';
+    const who = /^\d{6,}$/.test(no) ? 'no:' + no : 'nm:' + name;
+    const k = [who, r[C.type], r[C.dept], r[C.ds], r[C.de]].map(x => String(x).trim()).join('|');
+    (g[k] = g[k] || []).push({ row: i + 2, sub: String(r[C.sub] || ''), signed: /서명완료/.test(String(r[C.sig] || '')),
+      name: name, no: no, type: r[C.type], dept: r[C.dept], ds: r[C.ds], de: r[C.de], hrs: C.hrs >= 0 ? r[C.hrs] : '' });
+  });
+  const groups = Object.keys(g).filter(k => g[k].length > 1).map(k => {
+    const rows = g[k].slice().sort((a, b) => (b.signed - a.signed) || a.sub.localeCompare(b.sub));
+    return { key: k, keep: rows[0], remove: rows.slice(1) };
+  }).sort((a, b) => a.keep.row - b.keep.row);
+  return { groups: groups, total: v.length - 1, removeCount: groups.reduce((n, x) => n + x.remove.length, 0) };
+}
+function eduOp_(req, s) {
+  const deny = requireAdmin_(s);
+  if (deny) return deny;
+  if (req.op === 'edu.dupes') return Object.assign({ success: true }, eduDupes_());
+  if (req.op === 'edu.dedupe') {
+    const lock = LockService.getScriptLock();
+    if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
+    try {
+      // 지금 다시 계산한 '지울 줄' 중에서 관리자가 고른 것만 (그 사이 시트가 바뀌어도 안전)
+      const allowed = {};
+      eduDupes_().groups.forEach(gp => gp.remove.forEach(r => { allowed[r.row] = r.sub + '|' + r.name; }));
+      const want = (req.rows || []).filter(x => allowed[x.row] && allowed[x.row] === x.sub + '|' + x.name).map(x => x.row);
+      const sh = SS.getSheetByName('교육이력대장');
+      const uniq = [...new Set(want)].sort((a, b) => b - a);   // 아래 줄부터 지워야 행 번호가 안 밀림
+      uniq.forEach(r => sh.deleteRow(r));
+      return { success: true, deleted: uniq.length, skipped: (req.rows || []).length - uniq.length };
+    } finally {
+      lock.releaseLock();
+    }
+  }
+  return { success: false, error: 'unknown op: ' + req.op };
 }
 
 function chemOp_(req, s) {

@@ -10,8 +10,11 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v19.8 (2026-10-21)
+  부민병원 MSDS 통합시스템 v19.9 (2026-10-21)
 
+  ★★★ v19.9 (2026-10-21) — 교육 보완 ④ 교육이력대장 중복 정리 (서버 v19.9):
+    - 관리자 > 교육 현황 [🧹 교육이력대장 중복 정리]: 같은 사람(사번, 없으면 이름) · 교육구분 · 부서 · 교육 기간 묶음
+    - 서명완료 · 먼저 제출한 줄을 남기고, 관리자가 체크한 줄만 삭제 (서버가 다시 계산해 확인)
   ★★★ v19.8 (2026-10-21) — 개정 MSDS 기존 제품 비교 (서버 v19.8):
     - AI MSDS 검토에서 [기존 제품과 비교]: 성분을 CAS(없으면 이름)로 짝지어 추가 · 삭제 · 변경(함유량 · 특검 · 작측 · CAS) · 같음 표시, 제조사 · 용도 · 그림문자 비교
     - 새 MSDS에서 비어 있는 특검 · 작측 · 메모1 · 메모2 · 사용부서 · 응급조치 · PDF 링크는 기존 값 유지
@@ -1997,6 +2000,7 @@ b.hm-f{font-weight:700}
           <div class="adm-card">
             <div class="adm-card-header">
               <h2 class="adm-card-title">📚 교육 현황</h2>
+              <button type="button" onclick="BMEDU.dupes()" style="padding:7px 12px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;font-weight:700;cursor:pointer">🧹 교육이력대장 중복 정리</button>
               <span id="adm-stat" class="adm-card-stat"></span>
             </div>
             <div class="adm-card-body">
@@ -3639,6 +3643,57 @@ b.hm-f{font-weight:700}
     };
   }
   window.BMCHEM = { open: open };
+})();
+
+/* ★★★ v19.9 — 교육이력대장 중복 정리 (관리자 > 교육 현황)
+   같은 사람(사번, 없으면 이름) · 교육구분 · 부서 · 교육 기간이 같은 줄을 묶어 보여주고,
+   서명완료 · 먼저 제출한 줄은 남기고 관리자가 체크한 나머지만 시트에서 삭제 */
+(function(){
+  if(window.BMEDU) return;
+  var esc = function(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
+  var say = function(m, t){ try{ toast(m, t || 'info'); }catch(_){ alert(m); } };
+  var data = null;
+  async function dupes(){
+    var host = document.getElementById('edu-dup-box');
+    if(!host){
+      host = document.createElement('div'); host.id = 'edu-dup-box';
+      host.style.cssText = 'border:1px solid #DDDBD5;border-radius:8px;padding:16px;margin:0 0 14px;background:#fff';
+      var body = document.querySelector('#adm-pane-edu .adm-card-body');
+      body.insertBefore(host, body.firstChild);
+    }
+    host.innerHTML = '<div style="color:#5A5650">교육이력대장 확인 중…</div>';
+    var r = await BMAUTH.post('edu.dupes', {});
+    if(!r.success){ host.innerHTML = '<div style="color:#A3302A">' + esc(r.error || '실패') + (/unknown op/.test(r.error || '') ? ' — 서버(Code.gs)를 v19.9 이상으로 배포하세요.' : '') + '</div>'; return; }
+    data = r;
+    var td = 'padding:6px 8px;border-bottom:1px solid #ECEBE7;font-size:13px;vertical-align:top';
+    var line = function(x, keep, gi, ri){
+      return '<tr style="' + (keep ? 'background:#F2F8EC' : '') + '"><td style="' + td + '">' + (keep ? '<span class="apv-st ok">남김</span>' : '<input type="checkbox" data-g="' + gi + '" data-r="' + ri + '" checked aria-label="삭제">') + '</td>' +
+        '<td style="' + td + '">' + x.row + '행</td><td style="' + td + '"><b>' + esc(x.name) + '</b> ' + esc(x.no) + '</td><td style="' + td + '">' + esc(x.type) + '</td><td style="' + td + '">' + esc(x.dept) + '</td>' +
+        '<td style="' + td + ';white-space:nowrap">' + esc(x.ds) + (x.de && x.de !== x.ds ? '~' + esc(x.de) : '') + '</td><td style="' + td + '">' + esc(x.hrs) + '</td>' +
+        '<td style="' + td + '">' + (x.signed ? '서명완료' : '<span style="color:#A3302A">미서명</span>') + '</td><td style="' + td + ';white-space:nowrap">' + esc(String(x.sub).slice(0, 16).replace('T', ' ')) + '</td></tr>';
+    };
+    host.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">' +
+        '<b style="font-size:16px">교육이력대장 중복 ' + r.groups.length + '묶음 · 지울 줄 ' + r.removeCount + '개 <span style="font-weight:400;font-size:13px;color:#5A5650">(전체 ' + r.total + '줄)</span></b>' +
+        '<span style="display:flex;gap:6px"><button id="edu-dup-del" style="padding:8px 14px;border:0;border-radius:4px;background:#C23B32;color:#fff;font:inherit;font-weight:700;cursor:pointer">체크한 줄 삭제</button>' +
+        '<button id="edu-dup-x" style="padding:8px 14px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-weight:700;cursor:pointer">닫기</button></span></div>' +
+      '<div style="font-size:13px;color:#5A5650;margin-bottom:8px">같은 사람(사번, 없으면 이름) · 교육구분 · 부서 · 교육 기간이 같은 줄입니다. <b>서명완료 · 먼저 제출한 줄</b>을 남기고 나머지를 지웁니다. 남겨야 할 줄은 체크를 푸세요. (교육일지 PDF · 결재 기록은 그대로)</div>' +
+      (r.groups.length ? '<div style="overflow:auto;max-height:420px"><table style="border-collapse:collapse;width:100%"><tr>' +
+        ['', '행', '이름 · 사번', '구분', '부서', '교육일', '시간', '서명', '제출'].map(function(h){ return '<th style="text-align:left;padding:6px 8px;background:#E2F0D5;color:#2D581B;font-size:13px;position:sticky;top:0">' + h + '</th>'; }).join('') + '</tr>' +
+        r.groups.map(function(gp, gi){ return line(gp.keep, true) + gp.remove.map(function(x, ri){ return line(x, false, gi, ri); }).join(''); }).join('') +
+        '</table></div>' : '<div style="color:#3B7322;font-weight:700">중복 없음</div>');
+    document.getElementById('edu-dup-x').onclick = function(){ host.remove(); };
+    document.getElementById('edu-dup-del').onclick = async function(){
+      var rows = [].slice.call(host.querySelectorAll('[data-g]:checked')).map(function(c){
+        var x = data.groups[+c.getAttribute('data-g')].remove[+c.getAttribute('data-r')]; return { row: x.row, sub: x.sub, name: x.name }; });
+      if(!rows.length){ say('지울 줄을 체크하세요', 'err'); return; }
+      if(!confirm('교육이력대장에서 ' + rows.length + '줄을 지웁니다. 되돌릴 수 없습니다 (시트의 [버전 기록]으로만 복원).')) return;
+      var x = await BMAUTH.post('edu.dedupe', { rows: rows });
+      say(x.success ? x.deleted + '줄을 지웠습니다' + (x.skipped ? ' (그 사이 바뀐 ' + x.skipped + '줄은 건너뜀)' : '') : (x.error || '실패'), x.success ? 'ok' : 'err');
+      dupes();
+    };
+  }
+  window.BMEDU = { dupes: dupes };
 })();
 
 /* ★★★ v19.7 — 🤖 AI MSDS 검토 (3단계, Gemini)
