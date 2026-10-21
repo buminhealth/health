@@ -66,6 +66,7 @@ function setupSystem() {
     const depts = getEmployeeDepts_();
     depts.forEach(d => sheet.appendRow([d, '', '', 'N', '', 'PIN 입력 후 사용을 Y로 변경']));
   }
+  deptMapSheet_();
   if (!PROPS.getProperty('ADMIN_PW_HASH')) changeAdminPassword();
   // 신규입사 알림 기본값 (관리자설정 시트에서 수정 가능)
   const cfg = getAdminCfg().data || {};
@@ -249,6 +250,49 @@ function verifyToken_(t) {
   return null;
 }
 
+// ════════════════════════════════════════════════════════════════
+// 부서 이름 맞추기
+//  · 띄어쓰기·전각 괄호 차이는 같은 부서로 봄 (예: "61 병동" = "61병동")
+//  · 인사 사이트 이름이 앱 이름과 다르면 '부서매핑' 시트에 한 번 적어 두면 동기화 때 앱 이름으로 저장
+//  · chemicals 시트의 '병동'은 앱 화면과 같은 세부 병동 목록에 적용
+// ════════════════════════════════════════════════════════════════
+const DEPT_MAP_SHEET = '부서매핑';
+const WARDS = ['51병동','61병동','71병동','6병동','7병동','8병동','9병동','응급실','중환자실','인공신장실'];   // HTML의 WARD_EXPAND와 같게 유지
+
+function normDept_(v) {
+  return String(v == null ? '' : v).replace(/\s+/g, '').replace(/（/g, '(').replace(/）/g, ')');
+}
+function sameDept_(a, b) { return normDept_(a) !== '' && normDept_(a) === normDept_(b); }
+
+function deptMapSheet_() {
+  let sh = SS.getSheetByName(DEPT_MAP_SHEET);
+  if (!sh) {
+    sh = SS.insertSheet(DEPT_MAP_SHEET);
+    sh.appendRow(['인사 사이트 부서명', '앱 부서명', '비고']);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+// { 정규화된 인사 부서명: 앱 부서명('' = 그대로 사용) }
+function readDeptMap_() {
+  const sh = SS.getSheetByName(DEPT_MAP_SHEET);
+  const map = {};
+  if (!sh || sh.getLastRow() < 2) return map;
+  sh.getRange(2, 1, sh.getLastRow() - 1, 2).getDisplayValues().forEach(r => {
+    const raw = normDept_(r[0]);
+    if (raw) map[raw] = String(r[1] || '').trim();
+  });
+  return map;
+}
+// 앱에서 쓰는 부서 이름들 (부서인증 + chemicals + 세부 병동)
+function knownAppDepts_() {
+  const set = {};
+  readAuthRows_().forEach(r => { set[normDept_(r.dept)] = r.dept; });
+  (getChemicals().data || []).forEach(c => (c.departments || []).forEach(d => { if (d !== '병동') set[normDept_(d)] = d; }));
+  WARDS.forEach(d => { set[normDept_(d)] = d; });
+  return set;
+}
+
 function readAuthRows_() {
   const sheet = SS.getSheetByName(AUTH_SHEET);
   if (!sheet || sheet.getLastRow() < 2) return [];
@@ -257,8 +301,7 @@ function readAuthRows_() {
     .filter(r => r.dept);
 }
 function findDeptAuth_(dept) {
-  const d = String(dept || '').trim();
-  return readAuthRows_().find(r => r.active && r.dept === d) || null;
+  return readAuthRows_().find(r => r.active && sameDept_(r.dept, dept)) || null;
 }
 function listActiveDepts_() {
   return readAuthRows_().filter(r => r.active && r.pin).map(r => r.dept);
@@ -428,7 +471,7 @@ function jsonFileResult_(path, text, sha) {
 function deptView_(path, data, s) {
   const mine = id => typeof id === 'string' && id.indexOf('|' + s.dept + '|') >= 0;
   if (RECORD_FILES[path]) {
-    const list = recordList_(data, RECORD_FILES[path]).filter(r => r && r.dept === s.dept);
+    const list = recordList_(data, RECORD_FILES[path]).filter(r => r && sameDept_(r.dept, s.dept));
     return RECORD_FILES[path] === 'records' ? Object.assign({}, data, { records: list }) : list;
   }
   if (path === 'records/admin_cfg.json') {
@@ -538,10 +581,10 @@ function mergeDeptWrite_(path, cur, incoming, s) {
     const index = {};
     curList.forEach((r, i) => { if (r) index[recordKey_(r)] = i; });
     recordList_(incoming, shape).forEach(r => {
-      if (!r || r.dept !== s.dept) return;
+      if (!r || !sameDept_(r.dept, s.dept)) return;
       const k = recordKey_(r);
       if (index[k] !== undefined) {
-        if (curList[index[k]].dept === s.dept) curList[index[k]] = r;
+        if (sameDept_(curList[index[k]].dept, s.dept)) curList[index[k]] = r;
       } else {
         index[k] = curList.length;
         curList.push(r);
@@ -652,7 +695,7 @@ function getEmployees(s) {
   if (list === null) return { success: false, error: '직원목록 시트가 없습니다. 시트명을 "직원목록"으로 해주세요.' };
   const pick = e => ({ name: e.name, dept: e.dept, empNo: e.empNo, joinDate: e.joinDate, status: e.status });
   const data = s && s.role === 'dept'
-    ? list.filter(e => e.dept === s.dept && !isResigned_(e)).map(pick)
+    ? list.filter(e => sameDept_(e.dept, s.dept) && !isResigned_(e)).map(pick)
     : list.map(pick);
   return { success: true, data: data };
 }
@@ -764,7 +807,7 @@ function getEduTemplate() {
 // 기록 저장 (교육 + 보호구) — 부서 토큰은 자기 부서로만 저장
 // ════════════════════════════════════════════════════════════════
 function saveRecord(p, s) {
-  if (s.role === 'dept' && String(p.dept || '').trim() !== s.dept) {
+  if (s.role === 'dept' && !sameDept_(p.dept, s.dept)) {
     return { success: false, status: 403, error: '다른 부서 기록은 저장할 수 없습니다' };
   }
   const type = p.type || '교육';
@@ -1038,8 +1081,26 @@ function syncEmployees_(incoming, fullList) {
     });
     const rowKey = r => noKey(r[idx.empNo]) || nmKey(r[idx.name], r[idx.joinDate]);
 
+    // 부서 이름: 매핑 시트 적용 → 앱에 없는 이름은 매핑 시트에 '확인 필요'로 추가
+    const dmap = readDeptMap_();
+    const known = knownAppDepts_();
+    const unknown = {};
+    incoming.forEach(e => {
+      const raw = String(e.dept || '').trim();
+      const n = normDept_(raw);
+      if (!n) return;
+      if (dmap[n]) { e.dept = dmap[n]; return; }
+      if (known[n]) { e.dept = known[n]; return; }   // 띄어쓰기만 다른 경우 앱 이름으로 통일
+      if (!(n in dmap)) unknown[n] = raw;
+    });
+    const unknownNames = Object.keys(unknown).map(k => unknown[k]).sort();
+    if (unknownNames.length) {
+      const msh = deptMapSheet_();
+      unknownNames.forEach(raw => msh.appendRow([safeCell_(raw), '', '확인 필요: 부서인증·chemicals에 없는 이름 (같은 부서면 앱 부서명 입력, 새 부서면 비워 두기)']));
+    }
+
     const seen = new Set();
-    const summary = { added: 0, updated: 0, resigned: 0, unchanged: 0, newEmployees: [] };
+    const summary = { added: 0, updated: 0, resigned: 0, unchanged: 0, newEmployees: [], unknownDepts: unknownNames };
     incoming.forEach(e => {
       const kn = noKey(e.empNo), km = nmKey(e.name, e.joinDate);
       let at = kn ? pos[kn] : undefined;
@@ -1106,7 +1167,26 @@ function empStatus_() {
     hrConnector: hrConnectorReady_(),
     dailyOn: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'dailyCheck'),
     hrLastError: cfg.hr_last_error || '',
+    deptCheck: deptCheck_(list),
   };
+}
+
+// 재직 중인 직원이 있는 부서별: 로그인 가능 · 부서장 메일 · 사용 물질 수
+function deptCheck_(list) {
+  const auth = readAuthRows_();
+  const chemMap = handlingDepts_();
+  const counts = {};
+  list.filter(e => !isResigned_(e) && e.dept).forEach(e => {
+    const k = normDept_(e.dept);
+    (counts[k] = counts[k] || { dept: e.dept, staff: 0 }).staff++;
+  });
+  return Object.keys(counts).sort().map(k => {
+    const c = counts[k];
+    const a = auth.find(r => sameDept_(r.dept, c.dept));
+    const chems = chemsForDept_(chemMap, c.dept);
+    return { dept: c.dept, staff: c.staff, login: !!(a && a.active && a.pin), email: !!deptEmail_(c.dept),
+             chems: chems ? chems.length : 0 };
+  });
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1346,10 +1426,13 @@ function handlingDepts_() {
   });
   return map;
 }
+// 그 부서 전용 물질 + (병동이면) chemicals 시트 '병동' 공통 물질. 없으면 null
 function chemsForDept_(map, dept) {
-  if (map[dept]) return map[dept];
-  if (/병동$/.test(dept) && map['병동']) return map['병동'];   // 시트의 '병동'은 모든 세부 병동
-  return null;
+  const key = Object.keys(map).find(k => k !== '병동' && sameDept_(k, dept));
+  // 시트의 '병동'은 앱 화면과 같은 세부 병동 목록(+ 이름이 '병동'으로 끝나는 부서)에 적용
+  const isWard = WARDS.some(w => sameDept_(w, dept)) || /병동(\(.*\))?$/.test(normDept_(dept));
+  const list = (key ? map[key] : []).concat(isWard && map['병동'] ? map['병동'] : []);
+  return list.length ? list.filter((n, i) => list.indexOf(n) === i) : null;
 }
 
 function deptEmail_(dept) {
@@ -1359,7 +1442,7 @@ function deptEmail_(dept) {
   const ci = headers.indexOf('부서장 이메일');
   if (ci < 0) return '';
   const row = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getDisplayValues()
-    .find(r => String(r[0]).trim() === dept);
+    .find(r => sameDept_(r[0], dept));
   return row ? String(row[ci]).trim() : '';
 }
 
@@ -1442,13 +1525,13 @@ function sendReminders_() {
 function nhList_(s) {
   const rows = nhRows_().map(o => { const c = Object.assign({}, o); delete c._row; return c; });
   if (s.role === 'admin') return { success: true, data: rows };
-  return { success: true, data: rows.filter(o => o['부서'] === s.dept && (o['상태'] === '회신대기' || o['상태'] === '이메일없음' || o['상태'] === '취급-교육대기')) };
+  return { success: true, data: rows.filter(o => sameDept_(o['부서'], s.dept) && (o['상태'] === '회신대기' || o['상태'] === '이메일없음' || o['상태'] === '취급-교육대기')) };
 }
 
 function nhAnswer_(req, s) {
   const o = nhRows_().find(x => x['알림ID'] === req.id);
   if (!o) return { success: false, status: 404, error: '알림을 찾을 수 없습니다' };
-  if (s.role !== 'admin' && o['부서'] !== s.dept) return { success: false, status: 403, error: '다른 부서 알림입니다' };
+  if (s.role !== 'admin' && !sameDept_(o['부서'], s.dept)) return { success: false, status: 403, error: '다른 부서 알림입니다' };
   const handles = req.handles === true;
   o['회신일시'] = nowKst_();
   o['취급여부'] = handles ? '예' : '아니오';
@@ -1472,7 +1555,7 @@ function nhMarkEducated_(dept, names) {
   if (!SS.getSheetByName(NH_SHEET)) return;
   const set = new Set(names.map(n => String(n).trim()));
   nhRows_().forEach(o => {
-    if (o['부서'] !== dept || !set.has(o['이름']) || o['교육일지제출일']) return;
+    if (!sameDept_(o['부서'], dept) || !set.has(o['이름']) || o['교육일지제출일']) return;
     o['교육일지제출일'] = todayKst_();
     if (o['상태'] === '취급-교육대기') o['상태'] = '취급-교육완료';   // 회신 전 제출이면 회신 '예' 때 완료 처리
     nhWrite_(o);

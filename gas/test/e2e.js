@@ -269,6 +269,32 @@ function check(name, cond, extra) {
   check('잘못된 데이터 위치 → 403 사유 안내', !r403.success && /wrong_name/.test(r403.error) && /권한/.test(r403.error), r403.error);
   g.props.FB_PATH = 'employees'; fb.collections = null; fb.denied = null;
 
+  // 13-2. 부서 이름 맞추기
+  g.sheets['chemicals'].appendRow(['병동공용소독제', 'B사', '병동', '이소프로판올', '67-63-0', '70']);
+  const syncDept = rows => page.evaluate(rs => BMAUTH.post('emp.sync', {
+    headers: ['사번', '이름', '부서', '입사일', '재직상태'], rows: rs, fullList: false }), rows);
+  const ds1 = await syncDept([
+    ['126200001', '띄어쓰기', '61 병동', '2026-01-01', '재직'],
+    ['126200002', '매핑대상', '간호부 71병동', '2026-01-01', '재직'],
+    ['126200003', '신장실', '인공신장실', '2026-01-01', '재직'],
+  ]);
+  const empDept = n => { const rr = g.sheets['직원목록'].rows; const h = rr[0]; const r = rr.find(x => x[h.indexOf('이름')] === n); return r && r[h.indexOf('부서')]; };
+  check('부서: 띄어쓰기 차이는 앱 이름으로 통일 ("61 병동" → 61병동)', empDept('띄어쓰기') === '61병동', empDept('띄어쓰기'));
+  check('부서: 처음 보는 이름은 부서매핑 시트에 추가', ds1.unknownDepts && ds1.unknownDepts.indexOf('간호부 71병동') >= 0 &&
+        g.sheets['부서매핑'].rows.some(r => r[0] === '간호부 71병동'), ds1.unknownDepts);
+  g.sheets['부서매핑'].rows.find(r => r[0] === '간호부 71병동')[1] = '71병동';
+  const ds2 = await syncDept([['126200002', '매핑대상', '간호부 71병동', '2026-01-01', '재직']]);
+  check('부서: 매핑 적용 ("간호부 71병동" → 71병동)', empDept('매핑대상') === '71병동' && ds2.unknownDepts.length === 0, empDept('매핑대상'));
+  const stx = await page.evaluate(() => BMAUTH.post('emp.status', {}));
+  const dc = n => (stx.deptCheck || []).find(d => d.dept === n) || {};
+  check("부서 점검: 인공신장실도 chemicals '병동' 물질 적용", dc('인공신장실').chems >= 1, dc('인공신장실'));
+  check('부서 점검: 61병동 로그인 ✓ · 메일 ✓', dc('61병동').login && dc('61병동').email, dc('61병동'));
+  check("부서 점검: 61병동 물질 = 전용 1 + '병동' 공통 1", dc('61병동').chems === 2, dc('61병동'));
+  check('부서 점검: 인공신장실 로그인 ✕ (PIN 없음)', dc('인공신장실').login === false);
+  await page.evaluate(() => BMSTAFF.open());
+  await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('④ 부서 이름 점검'), null, { timeout: 15000 });
+  check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
+
   // 14. 부서장: 메일 링크(?nh=) → 로그인 창 → PIN 로그인 → 확인 창 → '예' → 교육일지 대상자 자동 추가
   await page.evaluate(() => { localStorage.removeItem('bm_session'); localStorage.removeItem('bm_admin_ok'); });
   await page.goto(`http://localhost:${PORT}/index.html?nh=${nh0['알림ID']}`);

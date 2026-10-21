@@ -2166,6 +2166,12 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
         '</div>' +
         '<div style="font-size:12px;color:#64748b;margin-bottom:8px">알림 메일은 <b>인사 사이트 자동 로그인</b>(매일 아침 7시 · 지금 자동 확인)일 때만 발송됩니다. 교육 기한: 입사일로부터 3일.</div>' +
         '<div id="staff-nh-out" style="overflow-x:auto"></div>' +
+      '</div>' +
+      '<div style="' + BOX + '">' +
+        '<div style="font-weight:800;color:#1c3557;margin-bottom:4px">④ 부서 이름 점검</div>' +
+        '<div style="font-size:12px;color:#64748b;margin-bottom:8px">직원목록의 부서 이름이 <b>부서인증</b>·<b>chemicals</b> 시트와 같아야 로그인·알림이 됩니다. ' +
+          '이름이 다르면 시트의 <b>부서매핑</b>에 "인사 사이트 부서명 → 앱 부서명"을 적은 뒤 다시 업데이트하세요. (띄어쓰기 차이는 자동으로 같게 처리)</div>' +
+        '<div style="overflow-x:auto">' + deptCheckTable(st.deptCheck || []) + '</div>' +
       '</div>';
 
     var hrGo = document.getElementById('staff-hr-go');
@@ -2194,6 +2200,10 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
       btn.disabled = false;
       if(!r.success){ say(r.error || '업데이트 실패', 'err'); return; }
       say('✅ 추가 ' + r.added + ' · 변경 ' + r.updated + ' · 퇴사표시 ' + r.resigned, 'ok');
+      if(r.unknownDepts && r.unknownDepts.length){
+        alert('처음 보는 부서 이름 ' + r.unknownDepts.length + '개를 시트의 [부서매핑]에 추가했습니다:\n\n' + r.unknownDepts.join(', ') +
+              '\n\n앱의 기존 부서와 같은 부서면 "앱 부서명" 칸에 기존 이름을 적고 다시 업데이트하세요.\n새 부서면 부서인증 시트에 PIN을 추가하세요.');
+      }
       parsed = null;
       try{ if(typeof loadEmps === 'function') loadEmps(); }catch(_){}
       open();
@@ -2206,6 +2216,20 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
       renderNh();
     };
     renderNh();
+  }
+
+  function deptCheckTable(list){
+    if(!list.length) return '<div style="font-size:12px;color:#64748b">직원목록이 비어 있습니다.</div>';
+    var td = function(v, warn){ return '<td style="padding:5px 6px;border:1px solid #e2e8f0;white-space:nowrap' + (warn ? ';color:#b91c1c;font-weight:800' : '') + '">' + v + '</td>'; };
+    var th = ['부서','재직','부서 로그인','부서장 메일','사용 물질'].map(function(h){
+      return '<th style="padding:5px 6px;border:1px solid #e2e8f0;background:#f8fafc;white-space:nowrap">' + h + '</th>';
+    }).join('');
+    return '<table style="border-collapse:collapse;font-size:12px"><tr>' + th + '</tr>' + list.map(function(d){
+      return '<tr>' + td(esc(d.dept)) + td(d.staff + '명') +
+        td(d.login ? '✓' : '✕ PIN 없음', !d.login) +
+        td(d.email ? '✓' : (d.chems ? '✕ 없음' : '-'), !d.email && d.chems > 0) +
+        td(d.chems ? d.chems + '종' : '-') + '</tr>';
+    }).join('') + '</table>';
   }
 
   function showPreview(){
@@ -2491,7 +2515,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 });
 
 /* 병동 → 세부 병동 매핑 */
-const WARD_EXPAND = ['51병동','61병동','71병동','6병동','7병동','8병동','9병동','응급실','중환자실','인공신장실'];
+const WARD_EXPAND = ['51병동','61병동','71병동','6병동','7병동','8병동','9병동','응급실','중환자실','인공신장실'];   // ★ gas/Code.gs의 WARDS와 같게 유지 (신규입사 알림 대상 판정)
 
 function buildDeptSelects(){
   const depts=[...new Set(CHEMS.flatMap(c=>c.departments))].sort();
