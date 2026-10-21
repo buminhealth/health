@@ -10,7 +10,14 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v18.2 (2026-10-21)
+  부민병원 MSDS 통합시스템 v18.3 (2026-10-21)
+
+  ★★★ v18.3 (2026-10-21) — 부서 제출 현황 미리보기·목록, 서버 버전 표시, 저장 용량 항목별 표시:
+    - 부서 제출 현황: 교육일지를 사람 단위(구분-대상자-입사일-교육일-취급물질-결재-미리보기)로,
+      미리보기는 관리자 모드와 같은 방식(기록으로 일지를 그림, 옛 일지는 원본 PDF 찾기)
+    - 직원정보관리: 서버 버전 표시(이전 버전이면 재배포 안내), 알림 목록 동시 조회로 대기 단축
+    - 저장 용량 창: 많이 차지하는 항목과 그중 서명·사진 용량 표시
+    - 서버: 드라이브에 같은 이름 폴더가 여러 개여도 모두 찾음, 부서 점검 시트 읽기 1회로
 
   ★★★ v18.2 (2026-10-21) — 부서 제출 현황 + 저장된 계정으로 인사정보 가져오기:
     - 부서 로그인 시 '📂 ○○ 제출 현황' 탭: 자기 부서 교육일지(결재 상태)·보호구 지급수령증·화학물질 보고서 목록과
@@ -2117,6 +2124,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
   var BOX = 'border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:12px;background:#fff';
   var NH_COLORS = { '회신대기':'#b45309', '이메일없음':'#b91c1c', '취급-교육대기':'#1d4ed8', '취급-교육완료':'#15803d', '미취급':'#64748b' };
   var parsed = null;
+  var nhPromise = null;
 
   function parseSheetText(text){
     var lines = String(text || '').replace(/\r/g, '').split('\n').filter(function(l){ return l.trim(); });
@@ -2130,12 +2138,17 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     var body = document.getElementById('staff-body');
     if(!body) return;
     body.innerHTML = '<div style="color:#64748b;font-size:13px">불러오는 중…</div>';
+    nhPromise = post('nh.list', {});   // 상태 조회와 동시에 요청 (대기 시간 단축)
     var st = await post('emp.status', {});
     if(!st.success){ body.innerHTML = '<div style="color:#b91c1c">' + esc(st.error || '조회 실패') + '</div>'; return; }
     var stat = document.getElementById('staff-stat');
     if(stat) stat.textContent = '재직 ' + st.active + ' · 휴직 ' + st.leave + ' · 퇴사 ' + st.resigned;
     body.innerHTML =
+      (st.serverVersion ? '' : '<div style="' + BOX + 'border-color:#fca5a5;background:#fef2f2;color:#b91c1c;font-size:13px">' +
+        '⚠ <b>서버(Apps Script)가 이전 버전입니다.</b> 최신 Code.gs로 바꾼 뒤 <b>배포 → 배포 관리 → 기존 웹 앱 ✏ → 버전: 새 버전 → 배포</b>를 해야 ' +
+        '[저장된 계정으로 가져오기]·부서 이름 점검이 동작합니다. (코드 저장만으로는 반영되지 않습니다)</div>') +
       '<div style="' + BOX + 'font-size:13px;color:#334155">' +
+        '<b>서버 버전:</b> ' + esc(st.serverVersion || '이전 버전') + '<br>' +
         '<b>마지막 업데이트:</b> ' + esc(st.lastSync || '없음') + '<br>' +
         '<b>매일 아침 자동 확인:</b> ' + (st.dailyOn ? '켜짐' : '꺼짐') + ' · ' +
         '<b>인사 사이트 자동 로그인:</b> ' + (st.hrAuto ? '사용 가능' : (st.hrConnector ? '로그인 정보 미저장 (시트 메뉴 ④)' : '연결 준비 중')) +
@@ -2263,7 +2276,8 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
   async function renderNh(){
     var out = document.getElementById('staff-nh-out');
     if(!out) return;
-    var r = await post('nh.list', {});
+    var r = await (nhPromise || post('nh.list', {}));
+    nhPromise = null;
     if(!r.success){ out.innerHTML = '<div style="color:#b91c1c">' + esc(r.error) + '</div>'; return; }
     var f = document.getElementById('staff-nh-filter').value;
     var list = r.data.filter(function(o){ return !f || o['상태'] === f; }).reverse();
@@ -2379,9 +2393,6 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     if(isNaN(d.getTime())) return String(iso).slice(0, 10);
     return new Date(d.getTime() + 9 * 3600e3).toISOString().slice(0, 10);
   };
-  var rawUrl = function(folder, ym, file){
-    return 'https://raw.githubusercontent.com/buminhealth/health/main/' + [folder, ym, file].map(encodeURIComponent).join('/');
-  };
   var TH = 'padding:6px 8px;border:1px solid #e2e8f0;background:#f8fafc;white-space:nowrap;font-size:12px';
   var TD = 'padding:6px 8px;border:1px solid #e2e8f0;font-size:12px;vertical-align:top';
   var BTN = 'padding:4px 9px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap';
@@ -2407,36 +2418,51 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     return '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%"><tr>' +
       head.map(function(h){ return '<th style="' + TH + '">' + h + '</th>'; }).join('') + '</tr>' + rows.join('') + '</table></div>';
   }
-  function pdfBtn(url){ return url ? '<button style="' + BTN + '" data-pdf="' + esc(url) + '">👁 PDF</button>' : '-'; }
 
+  // 교육일지: 사람 1명 = 1줄 (구분-대상자-입사일-교육일-취급물질-결재-미리보기)
+  var eduGroups = {};
   function eduRows(list){
-    var groups = {};
+    eduGroups = {};
     list.forEach(function(r){
       var k = (r.submitted || '') + '|' + (r.dateStart || '') + '|' + (r.type || '');
-      (groups[k] = groups[k] || []).push(r);
+      (eduGroups[k] = eduGroups[k] || []).push(r);
     });
-    return Object.keys(groups).map(function(k){ return groups[k]; })
-      .map(function(g){ return { g: g, date: g[0].dateStart || kstDate(g[0].submitted) }; })
+    return list.map(function(r){ return { r: r, date: r.dateStart || kstDate(r.submitted) }; })
       .filter(function(x){ return inRange(x.date); })
-      .sort(function(a, b){ return a.date < b.date ? 1 : -1; })
+      .sort(function(a, b){ return a.date < b.date ? 1 : (a.date > b.date ? -1 : String(a.r.name).localeCompare(String(b.r.name), 'ko')); })
       .map(function(x){
-        var r = x.g[0];
-        var names = x.g.map(function(p){ return p.name; }).filter(Boolean);
-        var url = '';
-        if(r.pdfFileName){
-          url = r.pdfYm ? rawUrl(String(r.type || '').indexOf('보호구') >= 0 ? '보호구' : '교육일지', r.pdfYm, r.pdfFileName)
-                        : (typeof buildPdfUrl === 'function' ? buildPdfUrl(r.pdfFileName, r.type, r.dateStart) : '');
-        }
-        var approved = x.g.every(function(p){ return p.approved; });
-        return '<tr><td style="' + TD + ';white-space:nowrap">' + esc(x.date) + '</td>' +
-          '<td style="' + TD + ';white-space:nowrap">' + esc(r.type) + '</td>' +
-          '<td style="' + TD + '">' + esc(names.join(', ')) + ' <span style="color:#64748b">(' + names.length + '명)</span></td>' +
+        var r = x.r;
+        var k = (r.submitted || '') + '|' + (r.dateStart || '') + '|' + (r.type || '');
+        return '<tr><td style="' + TD + ';white-space:nowrap">' + esc(r.type) + '</td>' +
+          '<td style="' + TD + ';white-space:nowrap;font-weight:700">' + esc(r.name) + '</td>' +
+          '<td style="' + TD + ';white-space:nowrap">' + esc(r.joinDate || '') + '</td>' +
+          '<td style="' + TD + ';white-space:nowrap">' + esc(x.date) + '</td>' +
           '<td style="' + TD + '">' + esc(String(r.chem || '').slice(0, 60)) + '</td>' +
-          '<td style="' + TD + ';white-space:nowrap;font-weight:800;color:' + (approved ? '#15803d' : '#b45309') + '">' + (approved ? '✅ 결재완료' : '⏳ 결재대기') + '</td>' +
-          '<td style="' + TD + '">' + pdfBtn(url) + '</td></tr>';
+          '<td style="' + TD + ';white-space:nowrap;font-weight:800;color:' + (r.approved ? '#15803d' : '#b45309') + '">' + (r.approved ? '✅ 결재완료' : '⏳ 결재대기') + '</td>' +
+          '<td style="' + TD + '"><button style="' + BTN + '" data-edu="' + esc(k) + '">👁 미리보기</button></td></tr>';
       });
   }
+  // 관리자 모드와 같은 미리보기: 저장된 기록(서명·사진 포함)으로 일지를 그림, 옛 일지는 원본 PDF
+  async function previewEdu(k){
+    var members = eduGroups[k] || [];
+    var r = members[0];
+    if(!r) return;
+    var group = { type: r.type, dept: r.dept, chem: r.chem, dateStart: r.dateStart, dateEnd: r.dateEnd, members: members,
+                  approved: members.every(function(m){ return m.approved; }), approverName: r.approverName, approvedAt: r.approvedAt,
+                  pdfFileName: r.pdfFileName, pdfYm: r.pdfYm, submitted: r.submitted };
+    var hasData = members.some(function(m){ return m.sigImg; }) || (r.photos && r.photos.length);
+    if(hasData && typeof buildEduPreviewHTML === 'function'){
+      _showDataModal('👁 ' + (String(r.type).indexOf('MSDS') >= 0 ? 'MSDS교육' : '특별안전보건교육') + ' 일지 - ' + r.dept + ' (' + r.dateStart + ')', buildEduPreviewHTML(group, r.recordId));
+      return;
+    }
+    try{ toast('🔍 원본 PDF 불러오는 중…', 'info'); }catch(_){}
+    var bytes = r.pdfFileName && typeof apvResolvePdfBytes === 'function' ? await apvResolvePdfBytes(group) : null;
+    if(bytes) showPdfModal(new Blob([bytes], { type: 'application/pdf' }), r.pdfFileName);
+    else try{ toast('⚠ 이 일지의 원본 PDF를 찾지 못했습니다 (보건관리자에게 문의)', 'err'); }catch(_){}
+  }
+  var ppeShown = [], chemShown = [];
   function ppeRows(list){
+    ppeShown = [];
     var groups = {};
     list.forEach(function(r, i){ var k = r.submitted || r.recordId || ('#' + i); (groups[k] = groups[k] || []).push(r); });
     return Object.keys(groups).map(function(k){ return groups[k]; })
@@ -2446,26 +2472,26 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
       .map(function(x){
         var r = x.g[0];
         var items = r.itemsStr || (Array.isArray(r.items) ? r.items.map(function(i){ return i.name + '×' + (i.qty || 1); }).join(', ') : '');
-        var url = r.pdfFileName ? (r.pdfYm ? rawUrl('보호구', r.pdfYm, r.pdfFileName)
-                                           : (typeof buildPdfUrl === 'function' ? buildPdfUrl(r.pdfFileName, '보호구지급', x.date) : '')) : '';
+        ppeShown.push(r);
         return '<tr><td style="' + TD + ';white-space:nowrap">' + esc(x.date) + '</td>' +
           '<td style="' + TD + '">' + esc(x.g.map(function(p){ return p.name; }).filter(Boolean).join(', ')) + '</td>' +
           '<td style="' + TD + '">' + esc(items) + '</td>' +
-          '<td style="' + TD + '">' + pdfBtn(url) + '</td></tr>';
+          '<td style="' + TD + '"><button style="' + BTN + '" data-ppe="' + (ppeShown.length - 1) + '">👁 미리보기</button></td></tr>';
       });
   }
   function chemRows(list){
+    chemShown = [];
     return list.map(function(r){ return { r: r, date: r.docDate || r.date || kstDate(r.submitted) }; })
       .filter(function(x){ return inRange(x.date); })
       .sort(function(a, b){ return a.date < b.date ? 1 : -1; })
       .map(function(x){
         var r = x.r;
-        var url = r.filename ? rawUrl('화학물질', r.pdfYm || kstDate(r.submitted).slice(0, 7), r.filename) : '';
+        chemShown.push(r);
         return '<tr><td style="' + TD + ';white-space:nowrap">' + esc(x.date) + '</td>' +
           '<td style="' + TD + ';white-space:nowrap">' + esc(r.tag || '') + '</td>' +
           '<td style="' + TD + '">' + esc(r.product || r.newProduct || r.stopProduct) + '</td>' +
           '<td style="' + TD + '">' + esc(r.name || '') + '</td>' +
-          '<td style="' + TD + '">' + pdfBtn(url) + '</td></tr>';
+          '<td style="' + TD + '"><button style="' + BTN + '" data-chem="' + (chemShown.length - 1) + '">👁 미리보기</button></td></tr>';
       });
   }
 
@@ -2485,13 +2511,18 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     var fail = '<div style="font-size:12px;color:#b91c1c">불러오지 못했습니다. 잠시 후 [새로고침]을 눌러 주세요.</div>';
     var e = res[0] ? eduRows(res[0]) : null, p = res[1] ? ppeRows(res[1]) : null, c = res[2] ? chemRows(res[2]) : null;
     body.innerHTML =
-      box('📝 교육일지 (특별안전보건교육 · MSDS 교육)' + (e ? ' <span style="font-weight:400;color:#64748b;font-size:12px">' + e.length + '건</span>' : ''),
-          e ? table(['교육일', '구분', '대상자', '취급물질', '결재', ''], e, '이 기간에 제출한 교육일지가 없습니다.') : fail) +
+      box('📝 교육일지 (특별안전보건교육 · MSDS 교육)' + (e ? ' <span style="font-weight:400;color:#64748b;font-size:12px">' + e.length + '명</span>' : ''),
+          e ? table(['구분', '대상자', '입사일', '교육일', '취급물질', '결재', '미리보기'], e, '이 기간에 제출한 교육일지가 없습니다.') : fail) +
       box('🦺 보호구 지급수령증' + (p ? ' <span style="font-weight:400;color:#64748b;font-size:12px">' + p.length + '건</span>' : ''),
-          p ? table(['지급일', '수령자', '지급물품', ''], p, '이 기간에 제출한 보호구 지급수령증이 없습니다.') : fail) +
+          p ? table(['지급일', '수령자', '지급물품', '미리보기'], p, '이 기간에 제출한 보호구 지급수령증이 없습니다.') : fail) +
       box('⚗️ 화학물질 보고서 (신규사용 · 사용중단)' + (c ? ' <span style="font-weight:400;color:#64748b;font-size:12px">' + c.length + '건</span>' : ''),
-          c ? table(['작성일', '구분', '제품명', '작성자', ''], c, '이 기간에 제출한 화학물질 보고서가 없습니다.') : fail);
-    body.querySelectorAll('[data-pdf]').forEach(function(b){ b.onclick = function(){ window.open(b.getAttribute('data-pdf'), '_blank'); }; });
+          c ? table(['작성일', '구분', '제품명', '작성자', '미리보기'], c, '이 기간에 제출한 화학물질 보고서가 없습니다.') : fail);
+    body.querySelectorAll('[data-edu]').forEach(function(b){ b.onclick = function(){ previewEdu(b.getAttribute('data-edu')); }; });
+    // 보호구·화학물질: 관리자 모드의 미리보기 함수를 그대로 사용 (그 함수가 읽는 '화면 목록'에 이 기록만 넣어 호출)
+    body.querySelectorAll('[data-ppe]').forEach(function(b){ b.onclick = function(){
+      window._ppeCurrentFiltered = [ppeShown[+b.getAttribute('data-ppe')]]; viewPpeRecord(0); }; });
+    body.querySelectorAll('[data-chem]').forEach(function(b){ b.onclick = function(){
+      window._chemCurrentFiltered = [chemShown[+b.getAttribute('data-chem')]]; viewChemRecord(0); }; });
   }
 
   function ensureUi(){
@@ -6000,8 +6031,27 @@ function apvGetStorageInfo(){
   return {
     totalKB, limitKB, percent, level, icon, color, bg, border,
     recordCount, yearsUsed: yearsUsed.toFixed(1), yearsLeft: yearsLeft.toFixed(1),
-    eduKB: Math.round(eduBytes/1024)
+    eduKB: Math.round(eduBytes/1024),
+    topKeys: _lsTopKeys()
   };
+}
+// ★ v18.3: 용량을 많이 차지하는 항목 (어떤 데이터가 늘었는지 바로 확인)
+function _lsTopKeys(){
+  const LABEL = { bm_edu_records:'교육 기록', bm_ppe_records:'보호구 기록', bm_chem_records:'화학물질 보고서',
+                  bm_chems_cache:'MSDS 목록 캐시', bm_audit_log:'수정 이력', bm_edu_deleted_ids:'교육 삭제표시',
+                  bm_edu_deleted_nk:'교육 삭제표시(NK)', bm_ppe_deleted_ids:'보호구 삭제표시' };
+  const out = [];
+  try{
+    for(let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      const v = localStorage.getItem(k) || '';
+      let images = 0;
+      const m = v.match(/data:image\/[a-z]+;base64,[A-Za-z0-9+\/=]+/g);
+      if(m) images = m.reduce((a, x) => a + x.length, 0);
+      out.push({ key: k, label: LABEL[k] || k, kb: Math.round((k.length + v.length) * 2 / 1024), imgKB: Math.round(images * 2 / 1024) });
+    }
+  }catch(e){}
+  return out.sort((a, b) => b.kb - a.kb).slice(0, 6);
 }
 
 /* ── 결재탭 헤더 용량 배지 갱신 + 위험 시 알람 ── */
@@ -6072,6 +6122,12 @@ function apvShowStorageGuide(){
             <div><span style="color:#64748b">💾 records 용량</span><br><b style="color:#1c3557;font-size:14px">${info.eduKB}KB</b></div>
             <div><span style="color:#64748b">⏳ 추정 남은 기간</span><br><b style="color:${info.level==='safe'?'#15803d':info.color};font-size:14px">${info.yearsLeft}년</b></div>
           </div>
+        </div>
+
+        <!-- ★ v18.3: 항목별 용량 -->
+        <div style="font-size:11.5px;color:#475569;margin-bottom:8px;font-weight:700">📦 많이 차지하는 항목</div>
+        <div style="font-size:11.5px;line-height:1.7;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;margin-bottom:14px">
+          ${(info.topKeys||[]).map(t => `<div style="display:flex;justify-content:space-between;gap:8px"><span>${t.label}</span><span><b>${t.kb.toLocaleString()}KB</b>${t.imgKB ? ` <span style="color:#b45309">(서명·사진 ${t.imgKB.toLocaleString()}KB)</span>` : ''}</span></div>`).join('')}
         </div>
 
         <!-- 임계값 단계 안내 -->

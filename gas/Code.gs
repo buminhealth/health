@@ -13,6 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
+const SERVER_VERSION = 'v18.3 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -160,7 +161,7 @@ function doPost(e) {
     switch (req.op) {
       case 'depts':     result = { success: true, data: listActiveDepts_() }; break;
       case 'login':     result = login_(req); break;
-      case 'whoami':    result = s ? { success: true, role: s.role, dept: s.dept || '', exp: s.exp }
+      case 'whoami':    result = s ? { success: true, role: s.role, dept: s.dept || '', exp: s.exp, serverVersion: SERVER_VERSION }
                                    : { success: false, status: 401, error: '로그인 필요' }; break;
       case 'fs.get':    result = requireLogin_(s) || fsGet_(req, s); break;
       case 'fs.put':    result = requireLogin_(s) || fsPut_(req, s); break;
@@ -347,16 +348,27 @@ function getFolder_(segments, create) {
   }
   return folder;
 }
+// 같은 이름 폴더가 여러 개여도(드라이브에 폴더를 두 번 올린 경우) 모두 찾음
+function getFolders_(segments) {
+  let level = [rootFolder_()];
+  for (const seg of segments) {
+    const next = [];
+    level.forEach(f => { const it = f.getFoldersByName(seg); while (it.hasNext()) next.push(it.next()); });
+    if (!next.length) return [];
+    level = next;
+  }
+  return level;
+}
 function getFile_(path) {
   const segs = path.split('/');
-  const folder = getFolder_(segs.slice(0, -1), false);
-  if (!folder) return null;
-  const it = folder.getFilesByName(segs[segs.length - 1]);
   let newest = null;
-  while (it.hasNext()) {
-    const f = it.next();
-    if (!newest || f.getLastUpdated() > newest.getLastUpdated()) newest = f;
-  }
+  getFolders_(segs.slice(0, -1)).forEach(folder => {
+    const it = folder.getFilesByName(segs[segs.length - 1]);
+    while (it.hasNext()) {
+      const f = it.next();
+      if (!newest || f.getLastUpdated() > newest.getLastUpdated()) newest = f;
+    }
+  });
   return newest;
 }
 function fileMeta_(file) {
@@ -406,26 +418,33 @@ function fsGet_(req, s) {
   const isAdmin = s.role === 'admin';
 
   // 폴더 목록
-  const folder = getFolder_(path.split('/'), false);
-  if (folder) {
+  const folders = getFolders_(path.split('/'));
+  if (folders.length) {
     if (!isAdmin && !DEPT_FILE_PREFIXES.some(pre => (path + '/').indexOf(pre) === 0)) {
       return { success: false, status: 403, error: '권한 없음' };
     }
     const entries = [];
-    const fit = folder.getFiles();
-    while (fit.hasNext()) {
-      const f = fit.next();
-      let meta = {};
-      try { meta = JSON.parse(f.getDescription() || '{}'); } catch (_) {}
-      const p = path + '/' + f.getName();
-      if (!isAdmin && !deptCanAccessFile_(s, p, meta)) continue;
-      entries.push({ type: 'file', name: f.getName(), path: p, sha: meta.sha || '', size: f.getSize() });
-    }
-    const dit = folder.getFolders();
-    while (dit.hasNext()) {
-      const d = dit.next();
-      entries.push({ type: 'dir', name: d.getName(), path: path + '/' + d.getName(), sha: '', size: 0 });
-    }
+    const seenNames = {};
+    folders.forEach(folder => {
+      const fit = folder.getFiles();
+      while (fit.hasNext()) {
+        const f = fit.next();
+        if (seenNames['f:' + f.getName()]) continue;
+        let meta = {};
+        try { meta = JSON.parse(f.getDescription() || '{}'); } catch (_) {}
+        const p = path + '/' + f.getName();
+        if (!isAdmin && !deptCanAccessFile_(s, p, meta)) continue;
+        seenNames['f:' + f.getName()] = true;
+        entries.push({ type: 'file', name: f.getName(), path: p, sha: meta.sha || '', size: f.getSize() });
+      }
+      const dit = folder.getFolders();
+      while (dit.hasNext()) {
+        const d = dit.next();
+        if (seenNames['d:' + d.getName()]) continue;
+        seenNames['d:' + d.getName()] = true;
+        entries.push({ type: 'dir', name: d.getName(), path: path + '/' + d.getName(), sha: '', size: 0 });
+      }
+    });
     return { success: true, status: 200, type: 'dir', entries: entries };
   }
 
@@ -1168,12 +1187,14 @@ function empStatus_() {
     dailyOn: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'dailyCheck'),
     hrLastError: cfg.hr_last_error || '',
     deptCheck: deptCheck_(list),
+    serverVersion: SERVER_VERSION,
   };
 }
 
 // 재직 중인 직원이 있는 부서별: 로그인 가능 · 부서장 메일 · 사용 물질 수
 function deptCheck_(list) {
   const auth = readAuthRows_();
+  const emails = deptEmails_();
   const chemMap = handlingDepts_();
   const counts = {};
   list.filter(e => !isResigned_(e) && e.dept).forEach(e => {
@@ -1184,7 +1205,8 @@ function deptCheck_(list) {
     const c = counts[k];
     const a = auth.find(r => sameDept_(r.dept, c.dept));
     const chems = chemsForDept_(chemMap, c.dept);
-    return { dept: c.dept, staff: c.staff, login: !!(a && a.active && a.pin), email: !!deptEmail_(c.dept),
+    const em = Object.keys(emails).find(k => sameDept_(k, c.dept));
+    return { dept: c.dept, staff: c.staff, login: !!(a && a.active && a.pin), email: !!(em && emails[em]),
              chems: chems ? chems.length : 0 };
   });
 }
@@ -1433,6 +1455,19 @@ function chemsForDept_(map, dept) {
   const isWard = WARDS.some(w => sameDept_(w, dept)) || /병동(\(.*\))?$/.test(normDept_(dept));
   const list = (key ? map[key] : []).concat(isWard && map['병동'] ? map['병동'] : []);
   return list.length ? list.filter((n, i) => list.indexOf(n) === i) : null;
+}
+
+// { 부서: 부서장 이메일 } — 부서인증 시트 1회 읽기
+function deptEmails_() {
+  const sheet = SS.getSheetByName(AUTH_SHEET);
+  const out = {};
+  if (!sheet || sheet.getLastRow() < 2) return out;
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
+  const ci = headers.indexOf('부서장 이메일');
+  if (ci < 0) return out;
+  sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getDisplayValues()
+    .forEach(r => { if (String(r[0]).trim()) out[String(r[0]).trim()] = String(r[ci]).trim(); });
+  return out;
 }
 
 function deptEmail_(dept) {

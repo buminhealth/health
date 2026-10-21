@@ -296,6 +296,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('④ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v18.3'));
 
   // 14. 부서장: 메일 링크(?nh=) → 로그인 창 → PIN 로그인 → 확인 창 → '예' → 교육일지 대상자 자동 추가
   await page.evaluate(() => { localStorage.removeItem('bm_session'); localStorage.removeItem('bm_admin_ok'); });
@@ -327,9 +328,27 @@ function check(name, cond, extra) {
   await page.selectOption('#dv-range', '0');
   await page.waitForFunction(() => document.getElementById('dv-body').textContent.includes('김가나'), null, { timeout: 15000 });
   const dvText = await page.textContent('#dv-body');
+  const dvHead = await page.$$eval('#dv-body table', ts => [...ts[0].querySelectorAll('th')].map(t => t.textContent));
+  check('교육일지 열 순서: 구분-대상자-입사일-교육일-취급물질-결재-미리보기', dvHead.join(',') === '구분,대상자,입사일,교육일,취급물질,결재,미리보기', dvHead);
   check('부서 제출 현황: 자기 부서 교육일지 표시', dvText.includes('김가나') && dvText.includes('결재대기'), dvText.slice(0, 150));
   check('부서 제출 현황: 다른 부서(71병동) 기록 없음', !dvText.includes('이다라'));
   check('부서 제출 현황: 다른 화면은 숨김', await page.evaluate(() => document.getElementById('pg-edu2').style.display === 'none' && document.getElementById('pg-deptview').style.display === 'block'));
+  // 서명이 있는 기록 → 관리자 모드와 같은 데이터 미리보기
+  await page.evaluate(async () => {
+    const cur = await readGitHubJSON('records/edu_records.json');
+    await writeGitHubJSON('records/edu_records.json', cur.data.concat([{ recordId: 'r9|최신입|126101801|61병동|MSDS교육|2026-10-20', submitted: '2026-10-20T01:00:00Z',
+      name: '최신입', dept: '61병동', type: 'MSDS교육', dateStart: '2026-10-20', joinDate: '2026-10-18', chem: '테스트소독제',
+      sigImg: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' }]), cur.sha, 'test');
+  });
+  await page.click('#dv-refresh');
+  await page.waitForSelector('#dv-body [data-edu]');
+  const btnCount = await page.$$eval('#dv-body [data-edu]', bs => bs.length);
+  await page.evaluate(() => [...document.querySelectorAll('#dv-body tr')].find(tr => tr.textContent.includes('최신입')).querySelector('[data-edu]').click());
+  await page.waitForSelector('#data-view-modal', { timeout: 15000 });
+  check('미리보기: 관리자 모드와 같은 일지 화면(서명 포함 기록)', (await page.textContent('#data-view-modal')).includes('최신입'), btnCount);
+  await page.evaluate(() => document.getElementById('data-view-modal').remove());
+  const topKeys = await page.evaluate(() => _lsTopKeys());
+  check('저장 용량: 항목별 용량 계산', Array.isArray(topKeys) && topKeys.length > 0 && 'imgKB' in topKeys[0], topKeys.slice(0, 2));
   await page.evaluate(() => goTab('edu2'));
   check('다른 탭으로 가면 제출 현황 숨김', await page.evaluate(() => document.getElementById('pg-deptview').style.display === 'none'));
 
