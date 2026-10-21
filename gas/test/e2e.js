@@ -458,7 +458,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('④ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v20.0'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v20.1'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -689,7 +689,7 @@ function check(name, cond, extra) {
   led.rows = [LH,
     ['1', '2026-08-01T01:00Z', '특별안전보건교육', '61병동', '포름알데히드', '2026-08-01', '2026-08-02', '2', '8시간', '126000001', '교육가', '', '✓ 서명완료'],
     ['2', '2026-08-01T01:00Z', '특별안전보건교육', '61병동', '포름알데히드', '2026-08-01', '2026-08-01', '1', '4시간', '126000002', '교육나', '', '✓ 서명완료']];
-  const est = await page.evaluate(() => BMAUTH.post('edu.status', {}));
+  const est = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
   const P = n => (est.people || []).find(p => p.name === n) || {};
   check('교육 현황: 61병동은 관리대상 물질 → 특별교육 대상', P('교육가').need === '특별', P('교육가'));
   check('교육 현황: 현장 8 + 온라인 8 = 16시간 → 이수', P('교육가').status === '이수' && P('교육가').hours === 16, P('교육가'));
@@ -699,22 +699,22 @@ function check(name, cond, extra) {
   check('교육 현황: 부서 요약', d61.total >= 3 && d61.done >= 1 && d61.progress >= 1 && d61.missing >= 1, d61);
   const ex1 = await page.evaluate(() => BMAUTH.post('edu.exclude', { no: '126000003', name: '교육다', dept: '61병동', reason: '행정 업무만' }));
   const ex0 = await page.evaluate(() => BMAUTH.post('edu.exclude', { no: '126000003', name: '교육다', dept: '61병동', reason: '' }));
-  const est2 = await page.evaluate(() => BMAUTH.post('edu.status', {}));
+  const est2 = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
   const Q = (st, n) => (st.people || []).find(p => p.name === n) || {};
   check('교육 제외: 사유 없으면 거부', !ex0.success, ex0);
   check('교육 제외: 관리자 확인 → 제외 (사유 · 확인자 기록)', ex1.success && Q(est2, '교육다').status === '제외' && Q(est2, '교육다').excluded.by === '보건관리자' && g.sheets['교육제외'].rows[1][3] === '행정 업무만', Q(est2, '교육다'));
   const exA = await page.evaluate(() => BMAUTH.post('edu.exclude', { no: '126000001', name: '교육가', dept: '61병동', reason: '시험' }));
-  const est3 = await page.evaluate(() => BMAUTH.post('edu.status', {}));
+  const est3 = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
   check('교육 제외: 일지를 쓴 사람은 제외해도 대상', exA.success && Q(est3, '교육가').status === '이수', Q(est3, '교육가'));
   const un = await page.evaluate(() => BMAUTH.post('edu.exclude', { no: '126000003', name: '교육다', dept: '61병동', undo: true }));
-  const est4 = await page.evaluate(() => BMAUTH.post('edu.status', {}));
+  const est4 = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
   check('교육 제외: 해제 → 다시 대상', un.success && Q(est4, '교육다').status === '미이수', Q(est4, '교육다'));
   const nc = await page.evaluate(() => BMAUTH.post('edu.newChem', { chem: '신물질X', depts: ['61병동'] }));
-  const est5 = await page.evaluate(() => BMAUTH.post('edu.status', {}));
+  const est5 = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
   const ncA = (Q(est5, '교육가').newChem || []).find(n => n.chem === '신물질X') || {};
   check('새 물질 교육: 등록 → 부서 직원 대상 (기한 14일)', nc.success && ncA.done === false && ncA.due > ncA.date, ncA);
   led.rows.push(['3', '2026-10-21T01:00Z', 'MSDS교육', '61병동', '신물질X, 기타', est5.today, est5.today, '1', '1시간', '126000001', '교육가', '', '✓ 서명완료']);
-  const est6 = await page.evaluate(() => BMAUTH.post('edu.status', {}));
+  const est6 = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
   check('새 물질 교육: 그 물질이 든 일지를 쓰면 완료', ((Q(est6, '교육가').newChem || []).find(n => n.chem === '신물질X') || {}).done === true, Q(est6, '교육가').newChem);
   check('새 물질 교육: AI 승인 때 사용 부서에 자동 등록', ap3.eduAdded === 1 && g.sheets['새물질교육'].rows.some(r => r[1] === 'AI시험세정제' && r[2] === '61병동'), ap3.eduAdded);
   const deptEx = await page.evaluate(async () => {
@@ -728,6 +728,25 @@ function check(name, cond, extra) {
   g.env.MailApp.sent.length = 0;
   const am = await page.evaluate(() => BMAUTH.post('edu.askMail', { depts: ['61병동'] }));
   check('확인 요청 메일: 61병동 부서장에게 미이수 명단 + 링크', am.success && am.sent === 1 && /head61@/.test(g.env.MailApp.sent[0].to) && /교육나/.test(g.env.MailApp.sent[0].htmlBody) && /dv=edu/.test(g.env.MailApp.sent[0].htmlBody), am);
+  // v20.1: 직원목록의 인사 사이트 부서명도 부서매핑대로 (동기화 전 직원 포함) · 교육 현황 캐시
+  const dm = g.sheets['부서매핑'] || g.ctx.SpreadsheetApp.getActiveSpreadsheet().insertSheet('부서매핑');
+  if (!dm.rows.length) dm.appendRow(['인사 사이트 부서명', '앱 부서명', '비고']);
+  dm.appendRow(['진검실', '61병동', '']);
+  empSh.appendRow(['126000009', '별칭가', '진검실', '2020-01-01', '여']);
+  const alias = await page.evaluate(async () => {
+    const st = await BMAUTH.post('edu.status', { fresh: true });
+    const p = st.people.find(x => x.name === '별칭가');
+    return { dept: p && p.dept };
+  });
+  alias.inEmp = (vm.runInContext("getEmployees({ role: 'dept', dept: '61병동' })", g.ctx).data || []).some(e => e.name === '별칭가');
+  check('부서매핑: 직원목록의 옛 부서명도 앱 부서로 (교육 대상 · 부서 직원 명단)', alias.dept === '61병동' && alias.inEmp, alias);
+  const cache = await page.evaluate(async () => {
+    const a = await BMAUTH.post('edu.status', {});
+    await BMAUTH.post('edu.exclude', { no: '126000009', name: '별칭가', dept: '61병동', reason: '시험' });
+    const b = await BMAUTH.post('edu.status', {});
+    return [a.people.find(x => x.name === '별칭가').status, b.people.find(x => x.name === '별칭가').status];
+  });
+  check('교육 현황 캐시: 제외하면 바로 반영', cache[0] === '미이수' && cache[1] === '제외', cache);
   await page.evaluate(() => { admSwitchPane('edu'); return BMEDU.board(); });
   check('관리자 화면: 교육 이수 현황판', /교육 이수 현황/.test(await page.textContent('#edu-board')) && /61병동/.test(await page.textContent('#edu-board')));
   led.rows = ledBak;
