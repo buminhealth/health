@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v18.4 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v18.5 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -1217,6 +1217,7 @@ function empStatus_() {
     lastSync: cfg.emp_last_sync || '',
     hrAuto: hrAutoReady_(),
     hrConnector: hrConnectorReady_(),
+    hrSite: PROPS.getProperty('FB_SITE_URL') || '',
     dailyOn: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'dailyCheck'),
     hrLastError: cfg.hr_last_error || '',
     deptCheck: deptCheck_(list),
@@ -1390,6 +1391,24 @@ function hrFetchEmployees_(id, password) {
   return { headers: outHeaders, rows: flat.map(f => headers.map(h => f[h] === undefined ? '' : String(f[h]))) };
 }
 
+// 메뉴 ④ 1/5 입력 → 연결 정보. 사이트 주소(https://○○.web.app)면 Firebase 호스팅의
+// /__/firebase/init.json 에서 자동으로 읽고, 아니면 붙여넣은 firebaseConfig에서 찾음
+function fbConfigFromInput_(text) {
+  const t = String(text || '').trim();
+  if (/^https?:\/\//i.test(t)) {
+    const base = t.replace(/[?#].*$/, '').replace(/\/+$/, '');
+    const res = UrlFetchApp.fetch(base + '/__/firebase/init.json', { muteHttpExceptions: true });
+    let j = null;
+    try { j = JSON.parse(res.getContentText() || 'null'); } catch (_) {}
+    if (res.getResponseCode() !== 200 || !j || !j.apiKey) {
+      throw new Error('사이트 주소에서 연결 정보를 읽지 못했습니다 (HTTP ' + res.getResponseCode() + '). 페이지 소스의 firebaseConfig를 붙여넣어 주세요.');
+    }
+    return { apiKey: j.apiKey, projectId: j.projectId || '', databaseURL: j.databaseURL || '', site: base };
+  }
+  const pick = k => { const m = t.match(new RegExp(k + '\\s*["\']?\\s*:\\s*["\']([^"\']+)["\']')); return m ? m[1] : ''; };
+  return { apiKey: pick('apiKey'), projectId: pick('projectId'), databaseURL: pick('databaseURL'), site: '' };
+}
+
 function saveHrCredentials() {
   const ui = SpreadsheetApp.getUi();
   const ask = (title, msg, def) => {
@@ -1399,15 +1418,17 @@ function saveHrCredentials() {
   };
   try {
     const c = fbCfg_();
-    const cfgText = ask('인사 사이트(Firebase) 연결 1/5', '휴직자관리 페이지의 firebaseConfig 내용을 그대로 붙여넣으세요\n(apiKey, projectId, databaseURL이 들어 있는 부분)', c.apiKey ? '저장됨' : '');
+    const cfgText = ask('인사 사이트(Firebase) 연결 1/5', '휴직자관리 사이트 주소를 넣으세요 (예: https://bumin-leave.web.app)\n또는 페이지 소스의 firebaseConfig 내용을 붙여넣어도 됩니다', c.apiKey ? '저장됨' : '');
     if (cfgText && cfgText !== '저장됨') {
-      const pick = k => { const m = cfgText.match(new RegExp(k + '\\s*["\']?\\s*:\\s*["\']([^"\']+)["\']')); return m ? m[1] : ''; };
-      if (pick('apiKey')) PROPS.setProperty('FB_API_KEY', pick('apiKey'));
-      if (pick('projectId')) PROPS.setProperty('FB_PROJECT_ID', pick('projectId'));
-      if (pick('databaseURL')) PROPS.setProperty('FB_DB_URL', pick('databaseURL'));
+      const fc = fbConfigFromInput_(cfgText);
+      if (!fc.apiKey) throw new Error('apiKey를 찾지 못했습니다');
+      PROPS.setProperty('FB_API_KEY', fc.apiKey);
+      if (fc.projectId) PROPS.setProperty('FB_PROJECT_ID', fc.projectId);
+      if (fc.databaseURL) PROPS.setProperty('FB_DB_URL', fc.databaseURL);
+      if (fc.site) PROPS.setProperty('FB_SITE_URL', fc.site);
     }
     PROPS.setProperty('FB_MODE', /^r/i.test(ask('인사 사이트(Firebase) 연결 2/5', '데이터 종류: firestore 또는 rtdb', c.mode)) ? 'rtdb' : 'firestore');
-    PROPS.setProperty('FB_PATH', ask('인사 사이트(Firebase) 연결 3/5', '직원 데이터 위치 (Firestore 컬렉션 이름 또는 RTDB 경로, 예: employees)', c.path));
+    PROPS.setProperty('FB_PATH', ask('인사 사이트(Firebase) 연결 3/5', '직원 데이터 위치 (휴직자관리 사이트는 employees_public)', c.path || 'employees_public'));
     PROPS.setProperty('HR_ID', ask('인사 사이트(Firebase) 연결 4/5', '자동 로그인 아이디(이메일)', PROPS.getProperty('HR_ID') || ''));
     const pw = ui.prompt('인사 사이트(Firebase) 연결 5/5', '자동 로그인 비밀번호 (스크립트 속성에만 저장, 코드·시트에 남지 않음)\n비우면 기존 값 유지', ui.ButtonSet.OK_CANCEL);
     if (pw.getSelectedButton() !== ui.Button.OK) throw new Error('취소');

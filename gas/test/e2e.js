@@ -244,6 +244,15 @@ function check(name, cond, extra) {
   const tableText = await page.textContent('#staff-nh-out');
   check('관리자 화면: 회신대기 + 교육기한 표시', tableText.includes('회신대기') && tableText.includes(kstDay(2)));
 
+  // 13-0. 메뉴 ④: 사이트 주소만 넣으면 연결 정보 자동
+  const fc1 = g.api.fbConfigFromInput_('https://bumin-leave.web.app/');
+  check('메뉴 ④: 사이트 주소 → 연결 정보 자동 (init.json)', fc1.apiKey === 'AIzaFromSite' && fc1.projectId === 'bumin-leave' && fc1.site === 'https://bumin-leave.web.app', fc1);
+  const fc2 = g.api.fbConfigFromInput_('const firebaseConfig = {\n apiKey: "AIzaPaste",\n projectId: "bumin-leave",\n};');
+  check('메뉴 ④: firebaseConfig 붙여넣기도 그대로 지원', fc2.apiKey === 'AIzaPaste' && fc2.projectId === 'bumin-leave', fc2);
+  let fc3err = '';
+  try { g.api.fbConfigFromInput_('https://unknown.example.com'); } catch (e) { fc3err = e.message; }
+  check('메뉴 ④: 연결 정보가 없는 주소는 안내', /firebaseConfig를 붙여넣어/.test(fc3err), fc3err);
+
   // 13-1. 휴직자관리 실제 구조: employees_public(문서 ID=사번, quitDate) + leaves(현재 휴직)
   g.props.FB_PATH = 'employees_public';
   const D2 = (id, f) => ({ name: 'projects/bumin-leave/databases/(default)/documents/employees_public/' + id, fields: f });
@@ -296,7 +305,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('④ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v18.4'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v18.5'));
 
   // 14. 부서장: 메일 링크(?nh=) → 로그인 창 → PIN 로그인 → 확인 창 → '예' → 교육일지 대상자 자동 추가
   await page.evaluate(() => { localStorage.removeItem('bm_session'); localStorage.removeItem('bm_admin_ok'); });
