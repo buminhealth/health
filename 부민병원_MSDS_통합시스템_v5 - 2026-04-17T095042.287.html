@@ -10,8 +10,15 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v19.1 (2026-10-21)
+  부민병원 MSDS 통합시스템 v19.2 (2026-10-21)
 
+  ★★★ v19.2 (2026-10-21) — 리디자인 3단계 홈 · 부서 로그인 창 (최종 시안 C):
+    - 처음 화면을 홈으로: 큰 초록 타일 5개 + 할 일 + 공지 · 업데이트, 위쪽 메뉴 맨 앞에 '홈'
+    - 로그인 전 타일 버튼 '부서 로그인', 로그인 후 '작성하기 · 보고하기'
+    - 부서 할 일: 신규 입사자 취급 확인 · 교육일지 작성 필요 · 교육일지 결재 대기
+    - 교육일지 타일은 부서 물질로 특별안전보건교육일지 / MSDS 교육일지 자동 선택
+    - 부서 로그인 창 새 모양 (부서 → PIN, 작성할 것 표시, PIN 분실 3293), 로그인 후 가려던 화면으로 이동
+    - PIN은 지금 쓰는 번호 그대로 (자릿수 제한 없음), 휴대폰 아래 탭에서 관리자는 홈 타일로
   ★★★ v19.1 (2026-10-21) — 리디자인 2단계 MSDS 관리 화면 (최종 시안 C):
     - 목록: 부서 선택(위쪽 메뉴에서 이동) · 검색(물질명 · 제조사 · CAS) · 개수, 줄 목록 + 선택 표시
     - 상세: 큰 제목, PDF 원본보기 · 교육일지 작성 버튼 하나로 통합
@@ -712,6 +719,77 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
   .ms-mbs{margin-left:0;width:100%;display:grid;grid-template-columns:1fr 1fr}
   .ms-mb{width:auto;min-height:72px}
 }
+/* v19.2 — 홈 · 부서 로그인 창 (최종 시안 C) */
+#pg-home{min-height:calc(100vh - var(--bm-top) - var(--bm-bot));background:#fff}
+.hm-wrap{max-width:1240px;margin:0 auto;padding:32px 24px 8px}
+.hm-tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.hm-tile{display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:22px 20px;min-height:170px;color:#fff;border:0;border-radius:2px;text-align:left;font:inherit;cursor:pointer;box-sizing:border-box}
+.hm-tile:hover{filter:brightness(1.08)}
+.hm-tile:focus-visible{outline:3px solid #A3D07C;outline-offset:2px}
+.hm-ic{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.hm-tile strong{font-size:21px;font-weight:800}
+.hm-tile span{font-size:15px;line-height:1.45}
+.hm-tile em{margin-top:auto;align-self:stretch;font-style:normal;font-weight:700;font-size:15px;border:1px solid rgba(255,255,255,.85);padding:6px 0;text-align:center;border-radius:2px}
+.hm-cols{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:20px;margin-top:32px}
+.hm-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px}
+.hm-h h2{margin:0;font-size:22px;font-weight:800;color:var(--bm-ink);display:flex;align-items:center;gap:10px}
+.hm-h h2 i{width:10px;height:10px;background:var(--bm-g5)}.hm-h h2 i.gd{background:#85714D}
+.hm-h>span{font-size:14px;color:#5A5650}
+.hm-box{border:1px solid var(--bm-line);border-radius:8px;overflow:hidden}
+.hm-row{display:flex;gap:14px;align-items:center;padding:14px 18px;border-top:1px solid var(--bm-line)}
+.hm-row:first-child{border-top:0}
+.hm-row.hm-end{justify-content:space-between}
+.hm-f{flex:1;min-width:0;color:var(--bm-ink)}
+.hm-f b{display:block;color:var(--bm-ink);font-weight:700}
+.hm-f span{font-size:14px;color:#5A5650}
+b.hm-f{font-weight:700}
+.hm-d{font-size:14px;color:#5A5650;white-space:nowrap}
+.hm-no{flex:none;width:30px;height:30px;border-radius:50%;background:#E2F0D5;color:var(--bm-g8);font-weight:800;display:grid;place-items:center}
+.hm-tg{flex:none;min-width:88px;text-align:center;padding:4px 8px;border-radius:2px;font-size:13px;font-weight:800;background:#ECEBE7;color:#45423D;box-sizing:border-box}
+.hm-tg.bad{background:#FBE5E2;color:#A3302A}.hm-tg.warn{background:#FFF1D6;color:#6E4A00}
+.hm-tg.wait{background:#E4ECF5;color:#2B4C7E}.hm-tg.ok{background:#E2F0D5;color:var(--bm-g8)}
+.hm-btn{flex:none;min-height:40px;padding:0 16px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:15px;font-weight:700;color:var(--bm-ink);cursor:pointer}
+.hm-btn:hover{background:#FAFAF8}
+.hm-btn.p{background:var(--bm-g6);border-color:var(--bm-g6);color:#fff}.hm-btn.p:hover{background:var(--bm-g7)}
+#pg-home .bm-foot{margin:48px 0 0}
+.bm-lg{position:fixed;inset:0;background:rgba(30,30,28,.5);z-index:99999;align-items:flex-start;justify-content:center;padding:80px 16px 16px;overflow-y:auto}
+.bm-lg-box{width:100%;max-width:440px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.25);font-family:'Pretendard','Malgun Gothic',sans-serif}
+.bm-lg-hd{background:var(--bm-g8);color:#fff;padding:16px 20px}
+.bm-lg-hd h2{margin:0;font-size:19px;font-weight:800}
+.bm-lg-hd p{margin:2px 0 0;font-size:14px;color:#E2F0D5}
+.bm-lg-bd{padding:18px 20px 16px;display:flex;flex-direction:column;gap:6px}
+.bm-lg-what{background:var(--bm-g50);border-radius:4px;padding:10px 12px;font-size:15px;color:#333;margin-bottom:6px}.bm-lg-what b{color:var(--bm-g8)}
+.bm-lg-bd label{font-size:15px;font-weight:700;color:var(--bm-ink);margin-top:4px}
+.bm-lg-bd select,.bm-lg-bd input{width:100%;min-height:48px;border:1px solid #C6C3BB;border-radius:4px;padding:0 12px;font:inherit;font-size:16px;font-weight:700;color:var(--bm-ink);background:#fff;box-sizing:border-box}
+.bm-lg-bd input:not(:placeholder-shown){letter-spacing:6px}
+.bm-lg-bd select:focus,.bm-lg-bd input:focus{border-color:var(--bm-g6);outline:2px solid var(--bm-g50)}
+#bm-login-err{min-height:20px;font-size:14px;color:#A3302A;font-weight:700}
+#bm-login-go{min-height:50px;border:0;border-radius:4px;background:var(--bm-g6);color:#fff;font:inherit;font-size:16px;font-weight:800;cursor:pointer}
+#bm-login-go:hover{background:var(--bm-g7)}#bm-login-go:disabled{opacity:.6}
+.bm-lg-note{margin:6px 0 0;text-align:center;font-size:14px;color:#5A5650}
+.bm-lg-ft{display:flex;justify-content:space-between;gap:10px;padding:12px 20px;border-top:1px solid #ECEBE7;font-size:14px;color:var(--bm-ink2)}
+.bm-lg-ft a{font-weight:700;color:var(--bm-ink)}.bm-lg-ft b{color:var(--bm-g8)}
+.bm-lg-ad{padding:0 20px 14px;text-align:right;font-size:14px}.bm-lg-ad a{color:#5A5650}
+@media(max-width:1180px){
+  .hm-tiles{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .hm-wrap{padding:24px 16px 8px}
+}
+@media(max-width:900px){.hm-cols{grid-template-columns:1fr}}
+@media(max-width:760px){
+  .hm-wrap{padding:16px 12px 8px}
+  .hm-tiles{grid-template-columns:1fr 1fr;gap:8px}
+  .hm-tile{min-height:130px;padding:16px 14px;gap:6px}
+  .hm-tile:first-child{grid-column:1/-1;min-height:110px}
+  .hm-tile strong{font-size:18px}
+  .hm-tile span{font-size:14px}
+  .hm-cols{margin-top:20px;gap:20px}
+  .hm-h h2{font-size:19px}
+  .hm-h>span{display:none}
+  .hm-row{padding:12px 14px;gap:10px;flex-wrap:wrap}
+  .hm-tg{min-width:0}
+  #tab-admin{display:none}
+  .bm-lg{padding-top:24px}
+}
 @media(max-width:1600px){
   #sync-info,#slbl{display:none}
   .bm-hdr{gap:14px}
@@ -834,9 +912,10 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
 
 <!-- HEADER (v19.0: 로고 + 위쪽 메뉴 한 줄, 휴대폰은 메뉴가 아래 탭으로 자동 전환) -->
 <header class="bm-hdr" id="bm-hdr">
-  <a class="bm-logo" href="#" onclick="goTab('msds');return false"><i><svg class="tbi" viewBox="0 0 24 24" style="width:20px;height:20px;stroke-width:3.5" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></i><span><b>MSDS 통합관리</b><small>부산부민병원 보건관리실</small></span></a>
+  <a class="bm-logo" href="#" onclick="goTab('home');return false"><i><svg class="tbi" viewBox="0 0 24 24" style="width:20px;height:20px;stroke-width:3.5" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></i><span><b>MSDS 통합관리</b><small>부산부민병원 보건관리실</small></span></a>
   <nav class="tab-bar" aria-label="주 메뉴">
-  <div class="tb on" id="tab-msds" onclick="goTab('msds')"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2h12.4a1.5 1.5 0 0 0 1.3-2L14 9V3"/><path d="M7 15h10"/></svg><span class="tbl">MSDS 관리</span><span class="tbs">MSDS</span></div>
+  <div class="tb on" id="tab-home" onclick="goTab('home')"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg><span class="tbl">홈</span><span class="tbs">홈</span></div>
+  <div class="tb" id="tab-msds" onclick="goTab('msds')"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2h12.4a1.5 1.5 0 0 0 1.3-2L14 9V3"/><path d="M7 15h10"/></svg><span class="tbl">MSDS 관리</span><span class="tbs">MSDS</span></div>
   <div class="tb" id="tab-edu1" onclick="goTab('edu1')"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M12 7.5l1.2 2.4 2.6.4-1.9 1.8.5 2.6-2.4-1.3-2.4 1.3.5-2.6-1.9-1.8 2.6-.4z"/></svg><span class="tbl">특별안전보건교육일지</span><span class="tbs">특별교육</span></div>
   <div class="tb" id="tab-edu2" onclick="goTab('edu2')"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M9 8h6M9 12h6"/></svg><span class="tbl">MSDS 교육일지</span><span class="tbs">MSDS교육</span></div>
   <div class="tb" id="tab-ppe" onclick="goTab('ppe')"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><span class="tbl">보호구 지급</span><span class="tbs">보호구</span></div>
@@ -863,7 +942,16 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
 </script>
 
 <!-- ══ MSDS ══ -->
-<div id="pg-msds">
+<!-- ══ 홈 (v19.2) ══ -->
+<div id="pg-home"><div class="hm-wrap">
+  <div class="hm-tiles" id="hm-tiles"></div>
+  <div class="hm-cols">
+    <section><div class="hm-h"><h2><i></i><span id="hm-todo-t">부서 로그인하면 할 수 있는 일</span></h2><span id="hm-todo-s">조회는 로그인 없이 가능</span></div><div class="hm-box" id="hm-todo"></div></section>
+    <section><div class="hm-h"><h2><i class="gd"></i>공지 · 업데이트</h2></div><div class="hm-box" id="hm-news"></div></section>
+  </div>
+</div></div>
+
+<div id="pg-msds" style="display:none">
   <aside id="productList" aria-label="물질 목록">
     <div class="ms-head">
       <label class="ms-lbl" for="deptSelect">부서</label>
@@ -2138,27 +2226,36 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
       return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
     });
   }
-  function showLogin(){
+  var LOGIN_WHAT = { edu1: '특별안전보건교육일지', edu2: 'MSDS 교육일지', ppe: '보호구 지급수령증', chem: '화학물질 보고서' };
+  function setLoginWhat(t){
+    var w = document.getElementById('bm-login-what');
+    if(!w) return;
+    w.style.display = LOGIN_WHAT[t] ? 'block' : 'none';
+    w.innerHTML = LOGIN_WHAT[t] ? '작성할 것 · <b>' + LOGIN_WHAT[t] + '</b>' : '';
+  }
+  function showLogin(t){
     var ov = document.getElementById('bm-login');
-    if(ov){ ov.style.display = 'flex'; return; }
+    if(ov){ ov.style.display = 'flex'; setLoginWhat(t); return; }
     ov = document.createElement('div');
     ov.id = 'bm-login';
-    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.className = 'bm-lg';
+    ov.style.display = 'flex';
     ov.innerHTML =
-      '<div style="background:#fff;border-radius:14px;max-width:360px;width:100%;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,.25);font-family:\'Nanum Gothic\',sans-serif">' +
-        '<div style="font-size:17px;font-weight:800;color:#1c3557;margin-bottom:4px">🔐 부서 로그인</div>' +
-        '<div style="font-size:12px;color:#64748b;margin-bottom:14px">교육일지·보호구·화학물질 보고서 작성은 부서 로그인이 필요합니다.</div>' +
-        '<label style="font-size:12px;font-weight:700;color:#334155">부서</label>' +
-        '<select id="bm-login-dept" style="width:100%;margin:4px 0 10px;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px"><option value="">불러오는 중…</option></select>' +
-        '<label style="font-size:12px;font-weight:700;color:#334155">PIN</label>' +
-        '<input id="bm-login-pin" type="password" inputmode="numeric" autocomplete="off" maxlength="12" style="width:100%;margin:4px 0 6px;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px;letter-spacing:4px">' +
-        '<div id="bm-login-err" style="min-height:16px;font-size:12px;color:#dc2626;margin-bottom:8px"></div>' +
-        '<button id="bm-login-go" style="width:100%;padding:11px;border:0;border-radius:8px;background:#1c3557;color:#fff;font-weight:800;font-size:14px;cursor:pointer">로그인</button>' +
-        '<div style="display:flex;justify-content:space-between;margin-top:12px;font-size:12px">' +
-          '<a href="#" id="bm-login-view" style="color:#475569">MSDS 조회만 하기</a>' +
-          '<a href="#" id="bm-login-admin" style="color:#475569">관리자 로그인 →</a>' +
+      '<section class="bm-lg-box" role="dialog" aria-modal="true" aria-labelledby="bm-lg-t">' +
+        '<div class="bm-lg-hd"><h2 id="bm-lg-t">부서 로그인</h2><p>교육일지 · 보호구 · 화학물질 보고서 작성은 부서 PIN이 필요합니다</p></div>' +
+        '<div class="bm-lg-bd">' +
+          '<div class="bm-lg-what" id="bm-login-what" style="display:none"></div>' +
+          '<label for="bm-login-dept">① 부서 선택</label>' +
+          '<select id="bm-login-dept"><option value="">불러오는 중…</option></select>' +
+          '<label for="bm-login-pin">② 부서 PIN</label>' +
+          '<input id="bm-login-pin" type="password" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="PIN 입력">' +
+          '<div id="bm-login-err" role="alert"></div>' +
+          '<button id="bm-login-go" type="button">로그인</button>' +
+          '<p class="bm-lg-note">로그인은 12시간 유지 · 5회 틀리면 15분 잠김</p>' +
         '</div>' +
-      '</div>';
+        '<div class="bm-lg-ft"><a href="#" id="bm-login-view">취소 (MSDS 조회만)</a><span>PIN 분실: 보건관리실 <b>3293</b></span></div>' +
+        '<div class="bm-lg-ad"><a href="#" id="bm-login-admin">관리자 로그인 →</a></div>' +
+      '</section>';
     document.body.appendChild(ov);
     var sel = ov.querySelector('#bm-login-dept');
     var pin = ov.querySelector('#bm-login-pin');
@@ -2189,7 +2286,8 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     }
     go.onclick = doLogin;
     pin.onkeydown = function(e){ if(e.key === 'Enter') doLogin(); };
-    ov.querySelector('#bm-login-view').onclick = function(e){ e.preventDefault(); ov.style.display = 'none'; };
+    setLoginWhat(t);
+    ov.querySelector('#bm-login-view').onclick = function(e){ e.preventDefault(); ov.style.display = 'none'; try{ sessionStorage.removeItem('bm_next'); }catch(_){} };
     ov.querySelector('#bm-login-admin').onclick = function(e){
       e.preventDefault(); ov.style.display = 'none';
       try{ goTab('admin'); }catch(_){}
@@ -2315,7 +2413,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     if(typeof origGoTab === 'function'){
       window.goTab = function(t){
         var r = origGoTab.apply(this, arguments);
-        if(!session && ['edu1', 'edu2', 'ppe', 'chem'].indexOf(t) >= 0) showLogin();
+        if(!session && ['edu1', 'edu2', 'ppe', 'chem'].indexOf(t) >= 0){ try{ sessionStorage.setItem('bm_next', t); }catch(_){} showLogin(t); }
         try{ lockDeptSelects(); }catch(_){}
         return r;
       };
@@ -2939,7 +3037,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
   function addFooters(){
     var html = '<b>연락처</b>' + BM_CONTACTS.map(function(c){
       return c[2] ? '<span class="m">' + c[0] + ' 내선 ' + c[1] + '</span>' : '<span>' + c[0] + ' 내선 ' + c[1] + '</span>'; }).join('');
-    ['detailView', 'pg-edu1', 'pg-edu2', 'pg-ppe', 'pg-chem', 'pg-deptview'].forEach(function(id){
+    ['pg-home', 'detailView', 'pg-edu1', 'pg-edu2', 'pg-ppe', 'pg-chem', 'pg-deptview'].forEach(function(id){
       var host = document.getElementById(id);
       if(!host || host.querySelector(':scope > .bm-foot')) return;
       var f = document.createElement('footer');
@@ -2963,6 +3061,134 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
       if(pg && !pg.querySelector(':scope > .bm-foot')) addFooters();
       return r;
     };
+  });
+})();
+
+/* ★★★ v19.2 — 홈 (최종 시안 C)
+   - 큰 초록 타일 5개: MSDS 관리 · 교육일지 작성 · 보호구 지급 · 화학물질 보고서 · 관리자 모드
+   - 로그인 전: 타일 버튼 '부서 로그인' / 아래 '로그인하면 할 수 있는 일'
+   - 부서 로그인 후: 타일 버튼 '작성하기 · 보고하기' / 아래 '○○ 할 일'(신규입사 확인 · 교육일지 작성 · 결재 대기)
+   - 교육일지 타일은 부서 물질로 종류 자동 선택 (관리대상 · 특별관리 물질이 있으면 특별안전보건교육일지) */
+(function(){
+  if(window.BMHOME) return;
+  var esc = function(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
+  var IC = {
+    msds: '<path d="M9 3h6M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2h12.4a1.5 1.5 0 0 0 1.3-2L14 9V3"/><path d="M7 15h10"/>',
+    edu: '<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M9 8h6M9 12h6"/>',
+    ppe: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
+    chem: '<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M9 13h6M9 17h4"/>',
+    admin: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>'
+  };
+  // 공지 · 업데이트 (보건관리실이 알릴 것이 생기면 맨 위에 한 줄 추가: [구분, 내용, 날짜])
+  var NEWS = [
+    ['시스템', '홈 화면 · 부서 로그인 창 새 모양', '10.21'],
+    ['시스템', 'MSDS 관리 화면 새 모양 · CAS 번호 검색', '10.21'],
+    ['시스템', '화면 색 · 메뉴 새 디자인, 휴대폰 화면 자동 전환', '10.21'],
+    ['시스템', '물질 마스터 점검 기능 추가 (관리자)', '10.21'],
+    ['시스템', '부서현황: 우리 부서 제출 기록 · PDF 보기', '10.21']
+  ];
+  function sess(){ try{ return BMAUTH.session(); }catch(_){ return null; } }
+  function eduTab(){
+    var s = sess();
+    if(s && s.role === 'dept' && typeof bmDeptNeedsSpecial === 'function') return bmDeptNeedsSpecial(s.dept) ? 'edu1' : 'edu2';
+    return 'edu2';
+  }
+  function eduName(){ return eduTab() === 'edu1' ? '특별안전보건교육일지' : 'MSDS 교육일지'; }
+  function tiles(){
+    var s = sess(), dept = s && s.role === 'dept';
+    var list = [
+      ['msds', '#4A8F2C', 'MSDS 관리', '물질 목록 · 그림문자 · 응급조치', '물질 찾기', 'msds'],
+      ['edu', '#2D581B', '교육일지 작성', dept ? esc(s.dept) + ' · ' + eduName() : '부서 물질에 맞게 종류 자동 선택', s ? '작성하기' : '부서 로그인', 'edu'],
+      ['ppe', '#85714D', '보호구 지급', '지급수령증 · 서명', s ? '작성하기' : '부서 로그인', 'ppe'],
+      ['chem', '#6E6259', '화학물질 보고서', '신규사용 · 사용중단', s ? '보고하기' : '부서 로그인', 'chem'],
+      ['admin', '#333333', '관리자 모드', '결재 · 현황 · 직원정보', '관리자', 'admin']
+    ];
+    document.getElementById('hm-tiles').innerHTML = list.map(function(x){
+      return '<button type="button" class="hm-tile" data-go="' + x[5] + '" style="background:' + x[1] + '">' +
+        '<svg class="hm-ic" viewBox="0 0 24 24" aria-hidden="true">' + IC[x[0]] + '</svg>' +
+        '<strong>' + x[2] + '</strong><span>' + x[3] + '</span><em>' + x[4] + '</em></button>';
+    }).join('');
+    document.querySelectorAll('#hm-tiles [data-go]').forEach(function(b){
+      b.onclick = function(){ var g = b.getAttribute('data-go'); goTab(g === 'edu' ? eduTab() : g); };
+    });
+  }
+  function news(){
+    document.getElementById('hm-news').innerHTML = NEWS.map(function(n){
+      return '<div class="hm-row"><span class="hm-tg">' + esc(n[0]) + '</span><b class="hm-f">' + esc(n[1]) + '</b><span class="hm-d">' + esc(n[2]) + '</span></div>';
+    }).join('');
+  }
+  function row(tag, cls, title, sub, btn, act){
+    return '<div class="hm-row"><span class="hm-tg ' + cls + '">' + tag + '</span><div class="hm-f"><b>' + title + '</b><span>' + sub + '</span></div>' +
+      (btn ? '<button type="button" class="hm-btn" data-act="' + esc(act) + '">' + btn + '</button>' : '') + '</div>';
+  }
+  var todoSeq = 0;
+  async function todo(){
+    var s = sess(), box = document.getElementById('hm-todo');
+    var t = document.getElementById('hm-todo-t'), sub = document.getElementById('hm-todo-s');
+    if(!s){
+      t.textContent = '부서 로그인하면 할 수 있는 일'; sub.textContent = '조회는 로그인 없이 가능';
+      box.innerHTML =
+        '<div class="hm-row"><span class="hm-no">1</span><div class="hm-f"><b>부서 할 일 확인</b><span>신규 입사자 취급 확인 · 교육 기한 알림</span></div></div>' +
+        '<div class="hm-row"><span class="hm-no">2</span><div class="hm-f"><b>교육일지 · 보호구 · 보고서 작성</b><span>서명까지 화면에서 바로</span></div></div>' +
+        '<div class="hm-row"><span class="hm-no">3</span><div class="hm-f"><b>부서현황 · 결재 결과 보기</b><span>제출한 기록과 PDF 보기</span></div></div>' +
+        '<div class="hm-row hm-end"><span class="hm-d">PIN을 모르면 보건관리실 내선 3293</span><button type="button" class="hm-btn p" id="hm-login">부서 로그인</button></div>';
+      document.getElementById('hm-login').onclick = function(){ try{ BMAUTH.showLogin(); }catch(_){} };
+      return;
+    }
+    if(s.role === 'admin'){
+      t.textContent = '관리자'; sub.textContent = '';
+      box.innerHTML = row('관리자', 'ok', '결재 · 교육 현황 · 직원정보', '관리자 모드에서 확인합니다', '열기', 'admin');
+      bind(box, {});
+      return;
+    }
+    t.textContent = s.dept + ' 할 일'; sub.textContent = '급한 것부터';
+    box.innerHTML = '<div class="hm-row"><span class="hm-d">불러오는 중…</span></div>';
+    var my = ++todoSeq, rows = [], nh = {};
+    try{
+      var r = await BMAUTH.post('nh.list', {});
+      ((r && r.success && r.data) || []).forEach(function(o){
+        nh[o['알림ID']] = o;
+        var due = o['교육기한'] ? ' · 교육 기한 ' + esc(o['교육기한']) : '';
+        if(o['상태'] === '취급-교육대기') rows.push(row('작성 필요', 'warn', eduName() + ' · ' + esc(o['이름']), '입사 ' + esc(o['입사일']) + due, '작성', 'nh:' + o['알림ID']));
+        else rows.push(row('확인 필요', 'bad', '신규 입사자 취급 확인 · ' + esc(o['이름']), '입사 ' + esc(o['입사일']) + due, '확인하기', 'nh:' + o['알림ID']));
+      });
+    }catch(_){}
+    try{
+      var d = await readGitHubJSON('records/edu_records.json');
+      var list = Array.isArray(d.data) ? d.data : ((d.data && d.data.records) || []);
+      try{ if(typeof BM !== 'undefined' && BM.filterTombstoned) list = BM.filterTombstoned(list, 'edu'); }catch(_){}
+      var wait = list.filter(function(x){ return !x.approved && (!x.dept || x.dept === s.dept); }).length;
+      if(wait) rows.push(row('결재 대기', 'wait', '교육일지 ' + wait + '명', '보건관리자 결재 중', '보기', 'deptview'));
+    }catch(_){}
+    if(my !== todoSeq) return;
+    box.innerHTML = rows.length ? rows.join('') : '<div class="hm-row"><span class="hm-tg ok">완료</span><div class="hm-f"><b>지금 처리할 일이 없습니다</b><span>새 입사자 확인 요청이 오면 여기에 나타납니다</span></div></div>';
+    bind(box, nh);
+  }
+  function bind(box, nh){
+    box.querySelectorAll('[data-act]').forEach(function(b){
+      b.onclick = function(){
+        var a = b.getAttribute('data-act');
+        if(a.indexOf('nh:') === 0){ try{ BMSTAFF.showDeptRequests(a.slice(3)); }catch(_){} }
+        else goTab(a);
+      };
+    });
+  }
+  function render(){ tiles(); news(); todo(); }
+
+  window.BMHOME = { render: render };
+  window.addEventListener('DOMContentLoaded', function(){
+    var orig = window.goTab;
+    if(typeof orig === 'function'){
+      window.goTab = function(t){
+        var r = orig.apply(this, arguments);
+        if(t === 'home') render();
+        return r;
+      };
+    }
+    var next = '';
+    try{ next = sessionStorage.getItem('bm_next') || ''; sessionStorage.removeItem('bm_next'); }catch(_){}
+    if(next && sess()) goTab(next === 'edu1' || next === 'edu2' ? eduTab() : next);
+    else goTab('home');
   });
 })();
 
@@ -3350,9 +3576,10 @@ function goTab(t){
   // ★ v15.43: 결재 탭 제거 — 관리자 모드 > 결재 관리 sub-tab으로 통합
 
   document.getElementById('pg-msds').style.display=t==='msds'?'flex':'none';
+  const homeEl=document.getElementById('pg-home');if(homeEl)homeEl.style.display=t==='home'?'block':'none';
   ['edu1','edu2'].forEach(p=>document.getElementById('pg-'+p).style.display=t===p?'block':'none');
   const adm=document.getElementById('pg-admin');if(adm)adm.style.display=t==='admin'?'block':'none';
-  ['msds','edu1','edu2','admin'].forEach(p=>{const el=document.getElementById('tab-'+p);if(el)el.className='tb'+(p===t?' on':'');});
+  ['home','msds','edu1','edu2','admin'].forEach(p=>{const el=document.getElementById('tab-'+p);if(el)el.className='tb'+(p===t?' on':'');});
   if(t==='admin') initAdmin();
   if(t==='ppe'){ ppeReset(); initPpeSig(); if(typeof ppeBuildPreview==='function') ppeBuildPreview(); loadPpeData(); }
   if(t==='edu1') e1Reset();
