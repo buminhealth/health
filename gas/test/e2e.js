@@ -227,6 +227,8 @@ function check(name, cond, extra) {
 
   // 13. 자동 로그인 저장 후 [지금 자동 확인] → 이때만 신규입사 메일
   Object.assign(g.props, { HR_ID: 'clover8477@bumin.co.kr', HR_PW: 'hr-pass' });
+  const savedFetch = await page.evaluate(() => BMAUTH.post('hr.fetch', {}));
+  check('저장된 계정으로 가져오기 (비밀번호 입력 없이)', savedFetch.success && savedFetch.rows.length === 3, savedFetch.error);
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForSelector('#staff-nh-run:not([disabled])');
   await page.click('#staff-nh-run');
@@ -317,6 +319,19 @@ function check(name, cond, extra) {
   check("'예' → 주소의 ?nh 제거", !(await page.evaluate(() => location.search)).includes('nh='));
   check("'예' → 상태 취급-교육대기", g.api.nhRows_()[0]['상태'] === '취급-교육대기', g.api.nhRows_()[0]['상태']);
   check('보건관리자에게 회신 알림 메일', mail.sent.some(m => m.to === 'admin@bumin.co.kr' && /최신입/.test(m.subject)));
+
+  // 14-1. 부서 제출 현황 탭
+  check('부서 제출 현황 탭 표시', (await page.textContent('#tab-deptview')).includes('61병동'));
+  await page.evaluate(() => goTab('deptview'));
+  await page.waitForFunction(() => document.getElementById('dv-body').textContent.includes('교육일지'), null, { timeout: 15000 });
+  await page.selectOption('#dv-range', '0');
+  await page.waitForFunction(() => document.getElementById('dv-body').textContent.includes('김가나'), null, { timeout: 15000 });
+  const dvText = await page.textContent('#dv-body');
+  check('부서 제출 현황: 자기 부서 교육일지 표시', dvText.includes('김가나') && dvText.includes('결재대기'), dvText.slice(0, 150));
+  check('부서 제출 현황: 다른 부서(71병동) 기록 없음', !dvText.includes('이다라'));
+  check('부서 제출 현황: 다른 화면은 숨김', await page.evaluate(() => document.getElementById('pg-edu2').style.display === 'none' && document.getElementById('pg-deptview').style.display === 'block'));
+  await page.evaluate(() => goTab('edu2'));
+  check('다른 탭으로 가면 제출 현황 숨김', await page.evaluate(() => document.getElementById('pg-deptview').style.display === 'none'));
 
   // 15. 성별 삭제
   const g2 = await page.evaluate(() => ({
