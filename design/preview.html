@@ -3,578 +3,548 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MSDS 통합관리 리디자인 미리보기</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<title>MSDS 통합시스템 리디자인 미리보기</title>
 <style>
-/* ═══ 디자인 토큰 — 부산부민병원 홈페이지 색 (공식 CI 확정 시 여기만 수정) ═══ */
+/* ═══ 디자인 토큰 (이 값만 바꾸면 전체 색이 바뀜 — 공식 CI 확정 시 여기만 수정) ═══ */
 :root{
-  --brand-green:#68AF3E; --brand-teal:#03B9B7; --brand-sky:#C5E6FB; --brand-navy:#044B75;
-  --green-900:#1F4716; --green-800:#2B5D1F; --green-700:#3B7322; --green-600:#43812A;
-  --green-100:#D5EBC6; --green-50:#EEF7E8;
-  --teal-700:#007C7A; --teal-50:#E3F4F3;
+  /* 부산부민병원 홈페이지 색 (캡처에서 추출) — 브랜드 색은 면·장식, 진한 색은 글자·버튼 (명도 대비 4.5:1 이상) */
+  --brand-green:#68AF3E; --brand-teal:#03B9B7; --brand-sky:#C5E6FB; --brand-blue:#01A1FF;
+  --green-700:#3B7322; --green-600:#43812A; --green-500:#68AF3E; --green-100:#AED39C; --green-50:#E1F6D5;
+  --teal-700:#007C7A; --teal-50:#DEEEEB;
   --brown-600:#7C6B55; --olive-700:#66715F;
-  --navy-900:#044B75; --navy-50:#E8F1F7;
-  --blue-700:#0067A8; --blue-50:#E6F3FB;
+  --navy-900:#044B75; --blue-700:#0067A8;
+  /* 역할 이름 (컴포넌트는 이 이름만 사용) */
+  --primary-900:var(--navy-900); --primary-700:var(--green-700); --primary-600:var(--green-600);
+  --primary-100:var(--green-100); --primary-50:var(--green-50);
   --orange-700:#B45309; --orange-500:#F28C28; --orange-50:#FFF4E5;
   --red-700:#B42318; --red-50:#FEF2F2;
-  --ink-900:#111827; --ink-700:#1F2937; --ink-500:#4B5563; --ink-400:#5F6673;
-  --line:#E2E5EA; --line-2:#EEF0F3; --bg:#F5F7F6; --surface:#FFFFFF; --muted:#F1F3F5;
-  --r:6px; --r-sm:4px;
-  --shadow:0 1px 2px rgba(16,24,40,.05);
-  --font:"Pretendard Variable","Pretendard","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
-  --top:56px; --side:236px;
+  --ink-900:#111111; --ink-700:#1F2937; --ink-500:#4B5563; --ink-400:#6B7280;
+  --line:#DADDE3; --bg:#FFFFFF; --surface:#FFFFFF; --muted:#F0EFF2;
+  --radius-lg:4px; --radius-md:4px; --radius-sm:3px;
+  --shadow-1:none;
+  --shadow-2:0 6px 18px rgba(4,75,117,.10);
+  --font:"Pretendard","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif;
 }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%}
-body{font-family:var(--font);font-size:15px;line-height:1.55;color:var(--ink-700);background:var(--bg);-webkit-font-smoothing:antialiased}
-button,input,select{font-family:inherit;font-size:inherit;color:inherit}
-button{cursor:pointer}
-a{color:inherit;text-decoration:none}
-:focus-visible{outline:3px solid var(--orange-500);outline-offset:2px}
-.ico{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+html,body{margin:0}
+body{font-family:var(--font);font-size:17px;line-height:1.6;color:var(--ink-700);background:var(--bg);-webkit-font-smoothing:antialiased}
+a{color:inherit}
+button{font-family:inherit;font-size:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--orange-500);outline-offset:2px;border-radius:6px}
 
-/* ═══ 미리보기 전용 바 (실제 앱에는 없음) ═══ */
-.pv{position:sticky;top:0;z-index:100;background:#0F172A;color:#E2E8F0;padding:8px 14px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:14px}
-.pv b{color:#fff;margin-right:6px}
-.pv button{background:#1E293B;color:#CBD5E1;border:1px solid #334155;border-radius:999px;padding:4px 12px;font-size:14px}
-.pv button[aria-pressed="true"]{background:#fff;color:#0F172A;font-weight:700}
+/* ═══ 미리보기 전용 상단 바 (실제 앱에는 없음) ═══ */
+.pv-bar{position:sticky;top:0;z-index:50;background:#0F172A;color:#E2E8F0;padding:10px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:14px}
+.pv-bar b{color:#fff;margin-right:8px}
+.pv-bar button{background:#1E293B;color:#CBD5E1;border:1px solid #334155;border-radius:999px;padding:6px 14px;font-size:14px}
+.pv-bar button[aria-pressed="true"]{background:#fff;color:#0F172A;border-color:#fff;font-weight:700}
+.screen{display:none}
+.screen.on{display:block}
 
-/* ═══ 앱 골격: 상단 바 + 왼쪽 메뉴 + 내용 ═══ */
-.app{display:grid;grid-template-columns:var(--side) 1fr;grid-template-rows:var(--top) 1fr;min-height:calc(100vh - 38px)}
-.top{grid-column:1/-1;background:var(--green-800);color:#fff;display:flex;align-items:center;gap:14px;padding:0 18px}
-.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;white-space:nowrap}
-.mark{width:30px;height:30px;border-radius:6px;background:#fff;color:var(--green-700);display:grid;place-items:center;font-weight:900;font-size:16px}
-.ver{font-size:14px;font-weight:600;color:#CFE3C4}
-.pill{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:6px;font-size:14px;font-weight:700;white-space:nowrap}
-.pill-ok{background:var(--green-50);color:var(--green-700)}
-.pill-ok i{width:8px;height:8px;border-radius:50%;background:var(--brand-green)}
-.pill-dark{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25)}
-.top .sp{flex:1}
-.gsearch{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:6px;height:34px;padding:0 10px;width:320px;color:#E4EFDD}
-.gsearch input{background:transparent;border:0;outline:0;flex:1;color:#fff;font-size:14px}
-.gsearch input::placeholder{color:#C9DDBE}
-.gsearch kbd{font-family:inherit;font-size:14px;border:1px solid rgba(255,255,255,.35);border-radius:4px;padding:0 6px;color:#DCEBD3}
-.who{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;white-space:nowrap}
-.who .dept{background:#fff;color:var(--green-800);border-radius:6px;padding:4px 10px}
-.who button{background:transparent;border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:4px 10px;font-size:14px}
-
-.side{background:#fff;border-right:1px solid var(--line);overflow:auto;padding-bottom:20px}
-.side .fold{display:block;text-align:right;font-size:14px;color:var(--ink-400);padding:8px 14px 4px}
-.side .sbox{margin:4px 12px 10px;display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:6px;padding:0 10px;height:38px;color:var(--ink-400)}
-.side .sbox input{border:0;outline:0;flex:1;font-size:14px;background:transparent;min-width:0}
-.grp{border-top:1px solid var(--line-2);padding:6px 0}
-.grp h4{margin:8px 16px 4px;font-size:14px;font-weight:800;color:var(--ink-900);display:flex;align-items:center;gap:6px}
-.nav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:1px 8px;padding:8px 12px;border-radius:6px;font-size:15px;color:var(--ink-500);font-weight:600;cursor:pointer;position:relative}
-.nav:hover{background:var(--muted);color:var(--ink-900)}
-.nav[aria-current]{background:var(--green-50);color:var(--green-700);font-weight:800}
-.nav[aria-current]::before{content:"";position:absolute;left:-8px;top:6px;bottom:6px;width:4px;border-radius:0 3px 3px 0;background:var(--green-600)}
-.cnt{min-width:22px;height:22px;padding:0 7px;border-radius:999px;background:var(--red-700);color:#fff;font-size:14px;font-weight:800;display:inline-grid;place-items:center;line-height:1}
-.cnt.o{background:var(--orange-700)}
-.lockt{font-size:14px;color:var(--ink-400);font-weight:600}
-
-.main{padding:20px 28px 40px;min-width:0;overflow:auto}
-.crumb{font-size:14px;color:var(--ink-400);margin-bottom:4px}
-.ph{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
-.ph h1{margin:0;font-size:22px;font-weight:800;color:var(--ink-900);padding-left:12px;border-left:5px solid var(--green-600);line-height:1.3}
-.ph .act{display:flex;gap:8px}
-.sec-t{display:flex;align-items:center;gap:8px;margin:22px 0 10px;font-size:16px;font-weight:800;color:var(--ink-900)}
-.sec-t .tg{width:20px;height:20px;border-radius:4px;background:var(--ink-500);color:#fff;display:grid;place-items:center;font-size:14px}
-.sec-t .r{margin-left:auto;font-size:14px;font-weight:600;color:var(--ink-400)}
-
-/* 공통 컴포넌트 */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:38px;padding:0 14px;border-radius:var(--r-sm);border:1px solid transparent;font-weight:700;font-size:15px;white-space:nowrap;background:#fff}
-.btn-p{background:var(--green-600);color:#fff}
-.btn-p:hover{background:var(--green-700)}
-.btn-s{border-color:var(--green-600);color:var(--green-700)}
-.btn-s:hover{background:var(--green-50)}
-.btn-g{border-color:var(--line);color:var(--ink-700)}
-.btn-g:hover{background:var(--muted)}
-.btn-sm{height:32px;padding:0 10px;font-size:14px}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
-.badge{display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:4px;font-size:14px;font-weight:700;white-space:nowrap}
+/* ═══ 공통 컴포넌트 ═══ */
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;flex:none;min-height:48px;padding:0 20px;border-radius:var(--radius-md);border:1px solid transparent;font-weight:700;font-size:17px;transition:background .15s,box-shadow .15s}
+.btn-primary{background:var(--primary-600);color:#fff}
+.btn-primary:hover{background:var(--primary-700)}
+.btn-secondary{background:#fff;color:var(--primary-700);border-color:var(--primary-100)}
+.btn-secondary:hover{background:var(--primary-50)}
+.btn-ghost{background:transparent;color:var(--ink-500)}
+.btn-danger{background:#fff;color:var(--red-700);border-color:#F4C7C3}
+.btn-sm{min-height:40px;padding:0 14px;font-size:15px;border-radius:var(--radius-sm)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow-1)}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:999px;font-size:15px;font-weight:700;line-height:1.6}
+.b-blue{background:#E6F3FB;color:var(--blue-700)}
 .b-green{background:var(--green-50);color:var(--green-700)}
-.b-blue{background:var(--blue-50);color:var(--blue-700)}
 .b-orange{background:var(--orange-50);color:var(--orange-700)}
 .b-red{background:var(--red-50);color:var(--red-700)}
 .b-gray{background:var(--muted);color:var(--ink-500)}
-.b-navy{background:var(--navy-50);color:var(--navy-900)}
-.b-teal{background:var(--teal-50);color:#006A68}
+.h1{font-size:28px;line-height:1.35;font-weight:800;color:var(--ink-900);margin:0}
+.h2{font-size:22px;line-height:1.4;font-weight:800;color:var(--ink-900);margin:0}
+.h3{font-size:19px;font-weight:700;color:var(--ink-900);margin:0}
+.cap{font-size:15px;color:var(--ink-400)}
+.ico{width:28px;height:28px;flex:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 
-.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
-.kpi{padding:14px 16px;display:flex;flex-direction:column;gap:2px;border-top:3px solid var(--line)}
-.kpi .l{font-size:14px;color:var(--ink-500);font-weight:600}
-.kpi .n{font-size:28px;font-weight:800;color:var(--ink-900);line-height:1.25}
-.kpi .n small{font-size:15px;color:var(--ink-500);font-weight:600;margin-left:2px}
-.kpi .s{font-size:14px;color:var(--ink-400)}
-.kpi.k-green{border-top-color:var(--green-600)} .kpi.k-orange{border-top-color:var(--orange-500)}
-.kpi.k-red{border-top-color:var(--red-700)} .kpi.k-navy{border-top-color:var(--navy-900)} .kpi.k-teal{border-top-color:var(--teal-700)}
-.kpi.sel{background:var(--green-50);border-color:var(--green-600)}
+/* GNB */
+.gnb{background:#fff;border-bottom:1px solid var(--line)}
+.gnb .wrap{display:flex;align-items:center;gap:28px;height:72px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px;color:#333;text-decoration:none;white-space:nowrap}
+.logo-mark{width:34px;height:34px;border-radius:2px;background:var(--green-600);display:grid;place-items:center;color:#fff;font-weight:900}
+.logo small{display:block;font-size:14px;font-weight:600;color:var(--ink-400);letter-spacing:.2px}
+.gnb nav{display:flex;gap:4px;flex:1}
+.gnb nav a{padding:10px 14px;border-radius:10px;text-decoration:none;font-weight:700;color:var(--ink-500);font-size:16px}
+.gnb nav a{color:#222}
+.gnb nav a:hover,.gnb nav a[aria-current]{background:transparent;color:var(--green-700);box-shadow:inset 0 -3px 0 var(--brand-green);border-radius:0}
+.user-chip{display:flex;align-items:center;gap:10px;padding:6px 6px 6px 14px;border:1px solid var(--line);border-radius:999px;font-weight:700;font-size:15px;white-space:nowrap}
+.user-chip .dot{width:10px;height:10px;border-radius:50%;background:var(--green-500)}
 
-.filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
-.inp{height:38px;border:1px solid var(--line);border-radius:var(--r-sm);padding:0 12px;background:#fff;font-size:15px;min-width:0}
-.inp:focus{outline:0;border-color:var(--green-600);box-shadow:0 0 0 3px var(--green-100)}
-.inp-ico{display:flex;align-items:center;gap:8px;padding-left:10px;color:var(--ink-400)}
-.inp-ico input{border:0;outline:0;flex:1;height:36px;font-size:15px;color:var(--ink-900);min-width:0}
+/* Hero */
+.hero{background:linear-gradient(120deg,#DCEFFC 0%,var(--brand-sky) 60%,#B7DDF7 100%);color:var(--navy-900);padding:40px 0 92px}
+.hero .h1{color:var(--navy-900);font-size:34px;font-weight:900;letter-spacing:-.5px}
+.hero .h1 em{font-style:normal;color:var(--blue-700)}
+.hero .eyebrow{font-weight:800;color:var(--navy-900);font-size:16px}
+.hero p{margin:8px 0 22px;color:#3A5568;font-size:17px}
+.search{display:flex;gap:10px;background:#fff;border-radius:4px;padding:8px;box-shadow:var(--shadow-2);max-width:760px;border:1px solid #fff}
+.search input{flex:1;border:0;font-size:18px;padding:0 14px;min-height:52px;font-family:inherit;color:var(--ink-900);border-radius:10px}
+.search input:focus{outline:none}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.chips span{background:rgba(255,255,255,.75);border:1px solid #fff;padding:4px 12px;border-radius:2px;font-size:15px;color:var(--navy-900);font-weight:700}
 
-.tw{overflow:auto}
-table.t{width:100%;border-collapse:collapse;font-size:15px}
-.t th{background:#F7F8F9;color:var(--ink-500);font-weight:700;text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap;font-size:14px;position:sticky;top:0}
-.t th .so{color:var(--ink-400);margin-left:2px}
-.t td{padding:11px 14px;border-bottom:1px solid var(--line-2);white-space:nowrap;vertical-align:middle}
-.t tr:last-child td{border-bottom:0}
-.t tbody tr:hover td{background:#FAFBFA}
-.t tr.on td{background:var(--green-50)}
-.t td.num{font-variant-numeric:tabular-nums;color:var(--ink-500)}
-.t td b{color:var(--ink-900)}
-.t .chk{width:36px}
-.t input[type=checkbox]{width:17px;height:17px;accent-color:var(--green-600)}
-.tfoot{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-top:1px solid var(--line);font-size:14px;color:var(--ink-400)}
-.pg{display:flex;gap:4px}
-.pg span{min-width:30px;height:30px;display:grid;place-items:center;border-radius:4px;border:1px solid var(--line);color:var(--ink-500)}
-.pg span.on{background:var(--green-600);border-color:var(--green-600);color:#fff;font-weight:700}
+/* 퀵메뉴 */
+.quick{margin-top:-56px;display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
+.qm{border-radius:0;padding:22px 20px;text-decoration:none;display:flex;flex-direction:column;gap:10px;min-height:178px;position:relative;color:#fff}
+.qm:hover{filter:brightness(1.06)}
+.qm .qi{width:44px;height:44px;display:grid;place-items:center;color:#fff}
+.qm strong{font-size:21px;font-weight:800;color:#fff}
+.qm span{font-size:15px;color:#fff;line-height:1.45;opacity:.95}
+.qm strong span{font-size:inherit;line-height:inherit;opacity:1}
+.qm .go{margin-top:auto;border:1px solid rgba(255,255,255,.85);padding:6px 0;text-align:center;font-weight:700;font-size:15px}
+.t-green{background:var(--green-600)} .t-teal{background:var(--teal-700)} .t-brown{background:var(--brown-600)}
+.t-navy{background:var(--navy-900)} .t-olive{background:var(--olive-700)} .t-blue{background:var(--blue-700)}
+.m-only{display:none!important}
+@media (max-width:640px){.pc-only{display:none}}
+.tabbar.home-tab{position:fixed;display:none;z-index:40}
+.qm .lock{position:absolute;top:14px;right:14px}
 
-.two{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px}
-.split{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;align-items:start}
-.panel-h{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);font-weight:800;color:var(--ink-900)}
-.pad{padding:14px 16px}
-.emerg{border-left:4px solid var(--orange-500);background:#FFFCF7;padding:12px 14px;border-radius:0 6px 6px 0;margin-bottom:8px}
-.emerg b{color:var(--orange-700);display:block}
-.emerg span{font-size:14px;color:var(--ink-500)}
-.kv{display:grid;grid-template-columns:96px 1fr;gap:6px 10px;font-size:15px}
-.kv dt{color:var(--ink-400);font-weight:600}
-.kv dd{margin:0;color:var(--ink-900)}
-.chips{display:flex;gap:6px;flex-wrap:wrap}
+/* 섹션 */
+.sec{margin-top:28px}
+.sec-head{display:flex;justify-content:space-between;align-items:end;margin-bottom:12px}
+.grid-2{display:grid;grid-template-columns:1.25fr 1fr;gap:16px}
+.todo{display:flex;gap:14px;align-items:center;padding:16px 18px;border-bottom:1px solid var(--line)}
+.todo:last-child{border-bottom:0}
+.todo .t{flex:1}
+.todo .t b{display:block;color:var(--ink-900)}
+.list-row{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--line);gap:12px}
+.list-row:last-child{border-bottom:0}
+.emerg{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.emerg .card{padding:16px;border-left:5px solid var(--orange-500);background:#FFFCF7}
+footer{margin-top:36px;padding:26px 0;border-top:1px solid var(--line);color:var(--ink-400);font-size:15px;background:#fff}
 
-/* 단계 */
-.steps{display:flex;align-items:center;gap:0;margin-bottom:16px;background:#fff;border:1px solid var(--line);border-radius:6px;overflow:hidden}
-.step{flex:1;display:flex;align-items:center;gap:10px;padding:12px 16px;font-weight:700;color:var(--ink-500);border-right:1px solid var(--line);font-size:15px}
-.step:last-child{border-right:0}
-.step i{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--muted);color:var(--ink-500);font-style:normal;font-size:14px;font-weight:800}
-.step.done{color:var(--green-700)} .step.done i{background:var(--green-50);color:var(--green-700)}
-.step.on{background:var(--green-50);color:var(--green-700);box-shadow:inset 0 -3px 0 var(--green-600)} .step.on i{background:var(--green-600);color:#fff}
-.form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 18px}
-.f{display:flex;flex-direction:column;gap:6px}
-.f label{font-size:14px;font-weight:700;color:var(--ink-700)}
-.f .inp{height:40px}
-.f .h{font-size:14px;color:var(--ink-400)}
-.f.full{grid-column:1/-1}
-.bar{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);margin:16px -28px -40px;padding:12px 28px;display:flex;justify-content:space-between;align-items:center}
-.bar .note{font-size:14px;color:var(--ink-400)}
-.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:14px}
-.tabs a{padding:10px 16px;font-weight:700;color:var(--ink-500);border-bottom:3px solid transparent;margin-bottom:-1px}
-.tabs a[aria-current]{color:var(--green-700);border-bottom-color:var(--green-600)}
-.tabs a span{margin-left:6px;font-size:14px;color:var(--ink-400)}
+/* 모바일 프레임 */
+.phones{display:flex;gap:28px;flex-wrap:wrap;justify-content:center;padding:28px 16px}
+.phone{width:390px;height:800px;border-radius:44px;background:#0F172A;padding:12px;box-shadow:0 30px 60px rgba(15,23,42,.25);flex:none}
+.phone .scr{width:100%;height:100%;border-radius:34px;overflow:hidden;background:var(--bg);display:flex;flex-direction:column;position:relative}
+.phone .cap-title{text-align:center;color:var(--ink-500);font-weight:700;margin-top:10px;font-size:15px}
+.m-top{background:var(--brand-sky);color:var(--navy-900);padding:18px 18px 20px}
+.m-top .row{display:flex;justify-content:space-between;align-items:center;font-size:15px;color:var(--navy-900)}
+.m-body{flex:1;overflow:auto;padding:0 14px 90px}
+.m-quick{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+.m-quick a{background:#fff;border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow-1);padding:14px 8px;text-align:center;text-decoration:none;font-size:15px;font-weight:700;color:var(--ink-900);display:flex;flex-direction:column;align-items:center;gap:8px;min-height:96px}
+.tabbar{position:absolute;bottom:0;left:0;right:0;height:72px;background:#fff;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr)}
+.tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:14px;font-weight:700;color:var(--ink-500);text-decoration:none}
+.tabbar a[aria-current]{color:var(--primary-600)}
 
-/* PIN 모달 */
-.dim{position:fixed;inset:0;background:rgba(17,24,39,.45);display:none;place-items:center;z-index:60;padding:16px}
-.dim.on{display:grid}
-.modal{width:100%;max-width:440px;background:#fff;border-radius:8px;box-shadow:0 20px 50px rgba(0,0,0,.25);overflow:hidden}
-.modal-h{background:var(--green-800);color:#fff;padding:14px 18px;display:flex;align-items:center;gap:10px;font-weight:800}
-.modal-h small{font-weight:500;color:#CFE3C4;margin-left:auto;font-size:14px}
-.modal-b{padding:16px 18px 18px}
-.dpick{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0 8px}
-.dpick button{height:40px;border:1px solid var(--line);border-radius:4px;background:#fff;font-weight:700;font-size:14px}
-.dpick button[aria-pressed="true"]{border:2px solid var(--green-600);background:var(--green-50);color:var(--green-700)}
-.dots{display:flex;justify-content:center;gap:12px;margin:14px 0}
-.dots i{width:14px;height:14px;border-radius:50%;border:2px solid var(--green-600)}
-.dots i.f{background:var(--green-600)}
-.keys{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.keys button{height:52px;border:1px solid var(--line);border-radius:4px;background:#fff;font-size:20px;font-weight:700;color:var(--ink-900)}
-.keys button:hover{background:var(--green-50)}
-.keys .fn{font-size:14px;color:var(--ink-500)}
-.modal-f{display:flex;justify-content:space-between;padding:10px 18px;border-top:1px solid var(--line);font-size:14px;color:var(--ink-500)}
-.modal-f a{font-weight:700;color:var(--green-700)}
+/* PIN */
+.pin-wrap{min-height:calc(100vh - 52px);display:grid;place-items:center;padding:28px 16px;background:linear-gradient(180deg,var(--brand-sky),#EEF7FD 55%,#fff)}
+.pin-card{width:100%;max-width:420px;padding:28px 24px}
+.dept-pick{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:12px 0 18px}
+.dept-pick button{min-height:52px;border-radius:4px;border:1px solid var(--line);background:#fff;font-weight:700;font-size:16px;color:var(--ink-700)}
+.dept-pick button[aria-pressed="true"]{border:2px solid var(--primary-600);background:var(--primary-50);color:var(--primary-700)}
+.dots{display:flex;justify-content:center;gap:14px;margin:8px 0 18px}
+.dots i{width:18px;height:18px;border-radius:50%;border:2px solid var(--primary-600)}
+.dots i.f{background:var(--primary-600)}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.pad button{min-height:64px;border-radius:4px;border:1px solid var(--line);background:#fff;font-size:24px;font-weight:700;color:var(--ink-900)}
+.pad button:active{background:var(--primary-50)}
+.pad .fn{font-size:16px;color:var(--ink-500)}
 
-/* 모바일 미리보기 */
-.phones{display:flex;gap:28px;flex-wrap:wrap;justify-content:center;padding:28px 16px;background:var(--bg)}
-.phone{width:375px;height:760px;border-radius:40px;background:#111827;padding:11px;box-shadow:0 24px 50px rgba(15,23,42,.25);flex:none}
-.scr{width:100%;height:100%;border-radius:30px;overflow:hidden;background:var(--bg);display:flex;flex-direction:column;position:relative}
-.m-top{background:var(--green-800);color:#fff;padding:14px 16px 16px}
-.m-top .row{display:flex;justify-content:space-between;align-items:center;font-weight:800}
-.m-top .row span{font-size:14px;background:#fff;color:var(--green-800);padding:2px 8px;border-radius:4px}
-.m-search{margin-top:12px;background:#fff;border-radius:6px;height:44px;display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--ink-400);font-size:15px}
-.m-body{flex:1;overflow:auto;padding:12px 12px 84px}
-.m-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.m-grid a{background:#fff;border:1px solid var(--line);border-radius:6px;padding:12px 4px;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:15px;font-weight:700;color:var(--ink-900)}
-.m-grid .ico{width:24px;height:24px}
-.m-h{font-weight:800;color:var(--ink-900);margin:16px 2px 8px;display:flex;align-items:center;gap:6px}
-.m-item{background:#fff;border:1px solid var(--line);border-radius:6px;padding:12px;display:flex;align-items:center;gap:10px;margin-bottom:8px}
-.m-item .x{flex:1;min-width:0}
-.m-item b{display:block;color:var(--ink-900);font-size:15px}
-.m-item span{font-size:14px;color:var(--ink-400)}
-.tabbar{position:absolute;bottom:0;left:0;right:0;height:66px;background:#fff;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr)}
-.tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:14px;font-weight:700;color:var(--ink-500)}
-.tabbar a[aria-current]{color:var(--green-700)}
-.tabbar .ico{width:22px;height:22px}
-.cap-t{text-align:center;color:var(--ink-500);font-weight:700;margin-top:10px;font-size:15px}
+/* 폼/단계 */
+.steps{display:flex;gap:8px;margin:16px 0 20px;flex-wrap:wrap}
+.step{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:2px;background:var(--muted);color:var(--ink-500);font-weight:700;font-size:15px}
+.step.on{background:var(--primary-600);color:#fff}
+.step.done{background:var(--green-50);color:var(--green-700)}
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.field label{font-weight:700;font-size:16px;color:var(--ink-900)}
+.field input,.field select{min-height:52px;border:1px solid var(--line);border-radius:4px;padding:0 14px;font-size:17px;font-family:inherit;color:var(--ink-900);background:#fff}
+.field input:focus,.field select:focus{border-color:var(--primary-600);box-shadow:0 0 0 4px var(--primary-100);outline:none}
+.field .hint{font-size:15px;color:var(--ink-400)}
+table.tbl{width:100%;border-collapse:collapse;font-size:16px}
+.tbl th{background:var(--green-50);color:var(--green-700)!important;color:var(--ink-500);font-weight:700;text-align:left;padding:12px 14px;font-size:15px}
+.tbl td{padding:14px;border-top:1px solid var(--line);vertical-align:middle}
+.tbl tr:hover td{background:#FAFBFE}
 
-/* 토큰 */
-.sw{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
-.sw div{border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#fff}
-.sw i{display:block;height:54px}
-.sw p{margin:0;padding:8px 10px;font-size:14px}
+/* 관리자 */
+.admin{display:grid;grid-template-columns:240px 1fr;min-height:calc(100vh - 52px)}
+.side{background:var(--primary-900);color:#C9D8F5;padding:20px 12px}
+.side a{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:10px;text-decoration:none;font-weight:700;font-size:16px;margin-bottom:4px}
+.side a[aria-current]{background:rgba(255,255,255,.12);color:#fff}
+.side .cnt{background:var(--orange-700);color:#fff;border-radius:999px;font-size:14px;padding:0 8px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.kpi{padding:18px}
+.kpi .n{font-size:32px;font-weight:800;color:var(--ink-900);line-height:1.2}
 
-.pane{display:none}
-.pane.on{display:block}
+/* 모달 */
+.modal-bg{position:fixed;inset:52px 0 0 0;background:rgba(15,23,42,.45);display:grid;place-items:center;padding:16px}
+.modal{width:100%;max-width:520px;padding:24px}
 
-/* 화면 폭 대응: PC 1280~1920 최적 / 1100 미만 메뉴 아이콘만 */
-@media (min-width:1600px){ :root{--side:256px} .main{padding:24px 36px 40px} .bar{margin:16px -36px -40px;padding:12px 36px} }
-@media (max-width:1100px){
-  :root{--side:64px}
-  .side .fold,.side .sbox,.grp h4 .tx,.nav .tx,.nav .cnt,.lockt{display:none}
-  .nav{justify-content:center;padding:10px 0}
-  .gsearch{width:220px}
-  .split,.two{grid-template-columns:1fr}
-  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .form{grid-template-columns:repeat(2,minmax(0,1fr))}
+/* 토큰 화면 */
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.sw{border-radius:12px;overflow:hidden;border:1px solid var(--line);background:#fff}
+.sw div{height:64px}
+.sw p{margin:0;padding:8px 10px;font-size:15px}
+
+/* 반응형 */
+@media (max-width:960px){
+  .gnb nav{display:none}
+  .quick{grid-template-columns:repeat(2,1fr)}
+  .grid-2,.emerg{grid-template-columns:1fr}
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .admin{grid-template-columns:1fr}
+  .side{display:none}
+}
+@media (max-width:640px){
+  body{font-size:16px}
+  .wrap{padding:0 16px}
+  .gnb .wrap{height:64px;gap:10px}
+  .logo{font-size:17px}
+  .logo small{display:none}
+  .user-chip{margin-left:auto;padding:6px 12px;font-size:15px}
+  .user-chip .btn{display:none}
+  .h1{font-size:24px}
+  .hero{padding:26px 0 76px}
+  .search input{min-width:0;font-size:16px;padding:0 8px}
+  .search .btn{padding:0 14px}
+  .search .btn .lbl{display:none}
+  .todo{flex-wrap:wrap}
+  .todo .t{min-width:60%}
+  .quick{grid-template-columns:repeat(3,1fr);gap:8px;margin-top:-48px}
+  .qm{min-height:96px;padding:14px 6px;align-items:center;text-align:center;gap:6px}
+  .qm strong{font-size:15px}
+  .qm span:not(.qi),.qm .lock{display:none}
+  .qm .qi{width:32px;height:32px}
+  .m-only{display:flex!important}
+  .tabbar.home-tab{display:grid}
+  #s-home{padding-bottom:72px}
+  .tbl{font-size:15px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
 
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></symbol>
-  <symbol id="i-flask" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2h12.4a1.5 1.5 0 0 0 1.3-2L14 9V3"/><path d="M7 15h10"/></symbol>
-  <symbol id="i-book" viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M9 8h6M9 12h6"/></symbol>
-  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
-  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M9 13h6M9 17h4"/></symbol>
-  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></symbol>
-  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
-  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
-  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/></symbol>
-  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
-  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></symbol>
-  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/></symbol>
-  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
-  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/></symbol>
-  <symbol id="i-test" viewBox="0 0 24 24"><path d="M9 3v13a3 3 0 0 0 6 0V3M8 3h8M9 10h6"/></symbol>
-  <symbol id="i-pdf" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/><path d="M12 11v6M9.5 14.5L12 17l2.5-2.5"/></symbol>
-</svg>
-
-<div class="pv" role="tablist" aria-label="미리보기 화면 선택">
-  <b>리디자인 미리보기 (PC 프로그램형)</b>
-  <button data-s="home" aria-pressed="true">① 오늘 할 일</button>
-  <button data-s="msds" aria-pressed="false">② MSDS 물질 검색</button>
+<!-- 미리보기 화면 전환 -->
+<div class="pv-bar" role="tablist" aria-label="미리보기 화면 선택">
+  <b>리디자인 미리보기</b>
+  <button data-s="home" aria-pressed="true">① 메인(PC)</button>
+  <button data-s="mobile" aria-pressed="false">② 모바일</button>
   <button data-s="pin" aria-pressed="false">③ 부서 PIN 로그인</button>
   <button data-s="edu" aria-pressed="false">④ 교육일지 작성</button>
   <button data-s="status" aria-pressed="false">⑤ 부서 제출현황</button>
-  <button data-s="approve" aria-pressed="false">⑥ 관리자 결재</button>
-  <button data-s="mobile" aria-pressed="false">⑦ 휴대폰</button>
-  <button data-s="tokens" aria-pressed="false">⑧ 디자인 토큰</button>
+  <button data-s="admin" aria-pressed="false">⑥ 관리자</button>
+  <button data-s="tokens" aria-pressed="false">⑦ 디자인 토큰</button>
 </div>
 
-<div class="app" id="app">
-  <header class="top">
-    <div class="brand"><span class="mark">B</span>MSDS 통합관리 시스템</div>
-    <span class="ver">v19.0</span>
-    <span class="pill pill-ok"><i></i>서버 연결됨</span>
-    <span class="sp"></span>
-    <label class="gsearch"><svg class="ico"><use href="#i-search"/></svg><input placeholder="물질명 · 성분 · CAS 검색"><kbd>/</kbd></label>
-    <div class="who"><span class="dept" id="who-dept">61병동</span><button>로그아웃</button></div>
+<!-- SVG 아이콘 (선 아이콘, 2px) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-flask" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6L4.5 18.5A2 2 0 0 0 6.2 21h11.6a2 2 0 0 0 1.7-2.5L14 9V3"/><path d="M7 15h10"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6.5A2.5 2.5 0 0 0 4 21.5v-2z"/><path d="M8 7h7M8 11h7"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1A2 2 0 1 1 4.3 17l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1A2 2 0 1 1 7 4.3l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1A2 2 0 1 1 19.7 7l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9.5 17h-19z"/><path d="M12 10v4M12 17.5v.5"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+</svg>
+
+<!-- ═══════════ ① 메인(PC) ═══════════ -->
+<section class="screen on" id="s-home" aria-label="메인 화면">
+  <header class="gnb">
+    <div class="wrap">
+      <a class="logo" href="#"><span class="logo-mark">B</span><span>MSDS 통합관리<small>부산부민병원 보건관리실</small></span></a>
+      <nav aria-label="주 메뉴">
+        <a href="#" aria-current="page">홈</a><a href="#">MSDS 관리</a><a href="#">교육일지</a><a href="#">보호구 지급</a><a href="#">화학물질 보고서</a><a href="#">우리 부서</a>
+      </nav>
+      <div class="user-chip"><span class="dot"></span>61병동 로그인 <button class="btn btn-ghost btn-sm">로그아웃</button></div>
+    </div>
   </header>
 
-  <nav class="side" aria-label="메뉴">
-    <a class="fold" href="#">‹ 메뉴 접기</a>
-    <label class="sbox"><svg class="ico"><use href="#i-search"/></svg><input placeholder="메뉴 검색"></label>
-    <div class="grp"><h4><span class="tx">업무</span></h4>
-      <a class="nav" data-k="home"><span style="display:flex;gap:10px;align-items:center"><svg class="ico"><use href="#i-home"/></svg><span class="tx">오늘 할 일</span></span><span class="cnt">3</span></a>
-      <a class="nav" data-k="status"><span style="display:flex;gap:10px;align-items:center"><svg class="ico"><use href="#i-list"/></svg><span class="tx">우리 부서 제출현황</span></span></a>
+  <div class="hero">
+    <div class="wrap">
+      <div class="eyebrow">화학물질 안전, 30초 안에 확인하세요</div>
+      <h1 class="h1"><em>MSDS</em> 통합관리</h1>
+      <p>제품명·성분명·CAS 번호로 바로 찾을 수 있습니다. 응급조치와 보호구 정보는 로그인 없이 볼 수 있습니다.</p>
+      <form class="search" role="search" onsubmit="return false">
+        <label class="sr" for="q">화학물질 검색</label>
+        <input id="q" placeholder="예) 뉴젠자임폼, 에탄올, 64-17-5">
+        <button class="btn btn-primary" aria-label="검색"><svg class="ico" style="width:22px;height:22px"><use href="#i-search"/></svg><span class="lbl">검색</span></button>
+      </form>
+      <div class="chips"><span>최근: 뉴젠자임폼</span><span>멀티엔자임</span><span>10% 포르말린</span><span>우리 부서 물질 32종 →</span></div>
     </div>
-    <div class="grp"><h4><span class="tx">MSDS</span></h4>
-      <a class="nav" data-k="msds"><span style="display:flex;gap:10px;align-items:center"><svg class="ico"><use href="#i-flask"/></svg><span class="tx">물질 검색</span></span></a>
-      <a class="nav"><span style="display:flex;gap:10px;align-items:center"><svg class="ico"><use href="#i-alert"/></svg><span class="tx">응급조치 모음</span></span></a>
-    </div>
-    <div class="grp"><h4><span class="tx">작성</span></h4>
-      <a class="nav" data-k="edu"><span style="display:flex;gap:10px;align-items:center"><svg class="ico"><use href="#i-book"/></svg><span class="tx">교육일지</span></span></a>
-      <a class="nav"><span style="display:flex;gap:10px;align-items:center"><svg class="ico"><use href="#i-shield"/></svg><span class="tx">보호구 지급수령증</span></span></a>
-      <a class="nav"><span style="display:flex;gap:10px;align-items:center"><svg class="ico"><use href="#i-doc"/></svg><span class="tx">화학물질 보고서</span></span></a>
-    </div>
-    <div class="grp"><h4><span class="tx">관리자</span> <span class="lockt" id="adm-lock">🔒 관리자 로그인</span></h4>
-      <a class="nav" data-k="approve"><span style="display:flex;gap:10px;align-items:center"><svg class="ico"><use href="#i-check"/></svg><span class="tx">결재 관리</span></span><span class="cnt o">4</span></a>
-      <a class="nav"><span style="display:flex;gap:10px;align-items:center"><svg class="ico"><use href="#i-book"/></svg><span class="tx">교육 현황</span></span></a>
-      <a class="nav"><span style="display:flex;gap:10px;align-items:center"><svg class="ico"><use href="#i-test"/></svg><span class="tx">물질 마스터 점검</span></span></a>
-      <a class="nav"><span style="display:flex;gap:10px;align-items:center"><svg class="ico"><use href="#i-users"/></svg><span class="tx">직원정보관리</span></span></a>
-      <a class="nav"><span style="display:flex;gap:10px;align-items:center"><svg class="ico"><use href="#i-bell"/></svg><span class="tx">신규입사 알림</span></span><span class="cnt o">2</span></a>
-      <a class="nav"><span style="display:flex;gap:10px;align-items:center"><svg class="ico"><use href="#i-gear"/></svg><span class="tx">설정</span></span></a>
-    </div>
-  </nav>
+  </div>
 
-  <main class="main">
-    <!-- ① 오늘 할 일 -->
-    <section class="pane on" id="p-home">
-      <div class="crumb">업무 › 오늘 할 일</div>
-      <div class="ph"><h1>61병동 오늘 할 일</h1><div class="act"><button class="btn btn-g">새로고침</button><button class="btn btn-p"><svg class="ico"><use href="#i-book"/></svg>교육일지 작성</button></div></div>
-      <div class="kpis">
-        <div class="card kpi k-red sel"><span class="l">신규입사 취급 확인</span><span class="n">1<small>명</small></span><span class="s">기한 D-1 · 최신입</span></div>
-        <div class="card kpi k-orange"><span class="l">작성 필요</span><span class="n">2<small>건</small></span><span class="s">교육일지 1 · 보호구 1</span></div>
-        <div class="card kpi k-navy"><span class="l">결재 대기</span><span class="n">2<small>건</small></span><span class="s">보건관리자 검토 중</span></div>
-        <div class="card kpi k-green"><span class="l">우리 부서 사용 물질</span><span class="n">32<small>종</small></span><span class="s">특수검진 대상 6종</span></div>
-      </div>
-      <div class="two" style="margin-top:4px">
-        <div>
-          <div class="sec-t"><span class="tg">▾</span>할 일 (기한 순)</div>
-          <div class="card tw"><table class="t">
-            <thead><tr><th>구분</th><th>내용</th><th>대상</th><th>기한</th><th>상태</th><th></th></tr></thead>
-            <tbody>
-              <tr><td><span class="badge b-navy">신규입사</span></td><td><b>취급 물질 확인</b></td><td>최신입</td><td class="num">10.21 (D-1)</td><td><span class="badge b-red">기한 임박</span></td><td><button class="btn btn-p btn-sm">확인하기</button></td></tr>
-              <tr><td><span class="badge b-teal">교육일지</span></td><td><b>MSDS 교육일지</b></td><td>최신입</td><td class="num">10.21</td><td><span class="badge b-orange">작성 필요</span></td><td><button class="btn btn-s btn-sm">작성</button></td></tr>
-              <tr><td><span class="badge b-gray">보호구</span></td><td><b>지급수령증</b></td><td>2명</td><td class="num">10.25</td><td><span class="badge b-orange">작성 필요</span></td><td><button class="btn btn-s btn-sm">작성</button></td></tr>
-              <tr><td><span class="badge b-teal">교육일지</span></td><td><b>MSDS 교육일지</b></td><td>2명</td><td class="num">—</td><td><span class="badge b-blue">결재 대기</span></td><td><button class="btn btn-g btn-sm">보기</button></td></tr>
-            </tbody></table></div>
-          <div class="sec-t"><span class="tg">▾</span>최근 제출<span class="r">전체 보기 →</span></div>
-          <div class="card tw"><table class="t">
-            <thead><tr><th>제출일</th><th>종류</th><th>대상</th><th>상태</th></tr></thead>
-            <tbody>
-              <tr><td class="num">2026-10-20</td><td>MSDS 교육일지</td><td>김효성</td><td><span class="badge b-green">결재완료</span></td></tr>
-              <tr><td class="num">2026-10-18</td><td>MSDS 교육일지</td><td>조나리</td><td><span class="badge b-green">결재완료</span></td></tr>
-              <tr><td class="num">2026-10-15</td><td>화학물질 보고서 (신규)</td><td>뉴젠자임폼</td><td><span class="badge b-blue">검토중</span></td></tr>
-            </tbody></table></div>
-        </div>
-        <div>
-          <div class="sec-t"><span class="tg">▾</span>응급 시 바로 보기</div>
-          <div class="card pad">
-            <label class="inp inp-ico" style="margin-bottom:12px"><svg class="ico"><use href="#i-search"/></svg><input placeholder="노출된 물질 이름 · CAS"></label>
-            <div class="emerg"><b>눈·피부에 묻었을 때</b><span>15분 이상 흐르는 물로 씻고 MSDS 4번 항목 확인</span></div>
-            <div class="emerg"><b>흡입했을 때</b><span>신선한 공기가 있는 곳으로 이동, 증상 시 응급실</span></div>
-            <div class="emerg" style="margin-bottom:0"><b>보건관리실 연락</b><span>내선 0000 · 야간은 응급실</span></div>
-          </div>
-          <div class="sec-t"><span class="tg">▾</span>공지</div>
-          <div class="card pad" style="font-size:15px">
-            <div style="display:flex;justify-content:space-between;gap:8px"><span>11월 특별안전보건교육 일정 안내</span><span class="num" style="color:var(--ink-400);font-size:14px">10.20</span></div>
-            <div style="display:flex;justify-content:space-between;gap:8px;margin-top:8px"><span>소독제 신규 제품 MSDS 등록</span><span style="color:var(--ink-400);font-size:14px">10.17</span></div>
-          </div>
+  <main class="wrap">
+    <div class="quick" role="list" aria-label="빠른 메뉴">
+      <a class="qm t-green" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-flask"/></svg></span><strong>MSDS 관리</strong><span>물질 검색 · 응급조치 · 그림문자</span><span class="go">물질 찾기</span></a>
+      <a class="qm t-teal" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-book"/></svg></span><strong>교육일지 작성</strong><span>특별안전보건 · MSDS 교육</span><span class="go">🔒 부서 로그인</span></a>
+      <a class="qm t-brown" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-shield"/></svg></span><strong>보호구 지급</strong><span>지급수령증 · 서명</span><span class="go">🔒 부서 로그인</span></a>
+      <a class="qm t-olive" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-doc"/></svg></span><strong><span class="m-only" style="display:none">물질 보고</span><span class="pc-only">화학물질 보고서</span></strong><span>신규사용 · 사용중단</span><span class="go">🔒 부서 로그인</span></a>
+      <a class="qm t-navy" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-gear"/></svg></span><strong><span class="m-only" style="display:none">관리자</span><span class="pc-only">관리자 모드</span></strong><span>결재 · 현황 · 직원정보</span><span class="go">🔒 관리자</span></a>
+      <a class="qm t-blue m-only" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-list"/></svg></span><strong>제출현황</strong><span>우리 부서 제출·결재</span></a>
+    </div>
+
+    <div class="sec grid-2">
+      <div>
+        <div class="sec-head"><h2 class="h2">61병동 할 일</h2><span class="cap">로그인한 부서에만 보입니다</span></div>
+        <div class="card">
+          <div class="todo"><span class="badge b-red">기한 D-1</span><div class="t"><b>신규 입사자 취급 확인 · 최신입</b><span class="cap">입사 10.18 · 교육 기한 10.21</span></div><button class="btn btn-primary btn-sm">확인하기</button></div>
+          <div class="todo"><span class="badge b-orange">작성 필요</span><div class="t"><b>MSDS 교육일지 · 최신입</b><span class="cap">취급 확인 완료 → 교육 후 작성</span></div><button class="btn btn-secondary btn-sm">작성</button></div>
+          <div class="todo"><span class="badge b-blue">결재 대기</span><div class="t"><b>MSDS 교육일지 2건</b><span class="cap">보건관리자 결재 중</span></div><button class="btn btn-ghost btn-sm">보기</button></div>
         </div>
       </div>
-    </section>
-
-    <!-- ② MSDS 물질 검색 -->
-    <section class="pane" id="p-msds">
-      <div class="crumb">MSDS › 물질 검색</div>
-      <div class="ph"><h1>MSDS 물질 검색</h1><div class="act"><button class="btn btn-g">엑셀 내려받기</button></div></div>
-      <div class="filters">
-        <label class="inp inp-ico" style="flex:1;max-width:420px"><svg class="ico"><use href="#i-search"/></svg><input value="자임"></label>
-        <select class="inp"><option>부서 전체</option><option>61병동</option></select>
-        <select class="inp"><option>구분 전체</option><option>특수건강진단 대상</option><option>관리대상 유해물질</option></select>
-        <button class="btn btn-p">조회</button>
-        <span style="margin-left:auto;font-size:14px;color:var(--ink-400)">검색 결과 <b style="color:var(--ink-900)">4</b>건 / 전체 186종</span>
-      </div>
-      <div class="split">
-        <div class="card tw"><table class="t">
-          <thead><tr><th>제품명<span class="so">▾</span></th><th>제조사</th><th>주요 성분</th><th>CAS</th><th>특수검진</th><th>사용 부서</th></tr></thead>
-          <tbody>
-            <tr class="on"><td><b>뉴젠자임폼</b></td><td>C사</td><td>효소혼합물</td><td class="num">9014-01-1</td><td><span class="badge b-navy">12개월</span></td><td>61병동 외 4</td></tr>
-            <tr><td><b>멀티엔자임</b></td><td>D사</td><td>프로테아제</td><td class="num">9014-01-1</td><td><span class="badge b-navy">12개월</span></td><td>중앙공급실</td></tr>
-            <tr><td><b>엔자임클린</b></td><td>E사</td><td>계면활성제</td><td class="num">68439-46-3</td><td><span class="badge b-gray">해당 없음</span></td><td>내시경실</td></tr>
-            <tr><td><b>자임워시 플러스</b></td><td>F사</td><td>프로테아제</td><td class="num">9014-01-1</td><td><span class="badge b-navy">12개월</span></td><td>수술실</td></tr>
-          </tbody></table>
-          <div class="tfoot"><span>1–4 / 4</span><div class="pg"><span class="on">1</span></div></div>
-        </div>
-        <aside class="card">
-          <div class="panel-h">뉴젠자임폼<span class="badge b-orange">관리대상</span></div>
-          <div class="pad">
-            <div style="font-weight:800;color:var(--orange-700);margin-bottom:6px;display:flex;gap:6px;align-items:center"><svg class="ico"><use href="#i-alert"/></svg>응급조치</div>
-            <dl class="kv" style="margin:0 0 14px"><dt>눈·피부</dt><dd>15분 이상 물로 씻기</dd><dt>흡입</dt><dd>신선한 공기로 이동</dd><dt>삼켰을 때</dt><dd>입 헹구고 진료</dd></dl>
-            <div style="font-weight:800;color:var(--ink-900);margin-bottom:6px">보호구</div>
-            <div class="chips" style="margin-bottom:14px"><span class="badge b-green">니트릴 장갑</span><span class="badge b-green">보안경</span><span class="badge b-green">마스크</span></div>
-            <div style="font-weight:800;color:var(--ink-900);margin-bottom:6px">구성성분</div>
-            <table class="t" style="border:1px solid var(--line);margin-bottom:14px"><thead><tr><th>성분</th><th>CAS</th><th>함량</th></tr></thead>
-              <tbody><tr><td>효소혼합물</td><td class="num">9014-01-1</td><td>1~5%</td></tr><tr><td>정제수</td><td class="num">7732-18-5</td><td>80~90%</td></tr></tbody></table>
-            <button class="btn btn-p" style="width:100%"><svg class="ico"><use href="#i-pdf"/></svg>MSDS 원문 PDF 보기</button>
-          </div>
-        </aside>
-      </div>
-    </section>
-
-    <!-- ④ 교육일지 작성 -->
-    <section class="pane" id="p-edu">
-      <div class="crumb">작성 › 교육일지 › MSDS 교육일지</div>
-      <div class="ph"><h1>MSDS 교육일지 작성</h1><div class="act"><span class="badge b-gray">자동 저장됨 14:32</span></div></div>
-      <div class="steps">
-        <div class="step done"><i>✓</i>대상자</div>
-        <div class="step on"><i>2</i>교육 내용</div>
-        <div class="step"><i>3</i>서명</div>
-        <div class="step"><i>4</i>확인 · 제출</div>
-      </div>
-      <div class="card pad">
-        <div class="form">
-          <div class="f"><label>교육 부서</label><input class="inp" value="61병동" disabled style="background:var(--muted)"><span class="h">로그인한 부서로 고정</span></div>
-          <div class="f"><label>교육일</label><input class="inp" type="date" value="2026-10-21"></div>
-          <div class="f"><label>교육 시간</label><select class="inp"><option>1시간</option><option>2시간</option></select></div>
-          <div class="f full"><label>취급 물질 <span class="badge b-blue" style="margin-left:4px">3종 선택</span></label>
-            <div class="chips"><span class="badge b-green">뉴젠자임폼 ✕</span><span class="badge b-green">멀티엔자임 ✕</span><span class="badge b-green">에탄올 ✕</span><button class="btn btn-s btn-sm">+ 물질 추가</button></div></div>
+      <div>
+        <div class="sec-head"><h2 class="h2">최근 제출</h2><a class="cap" href="#">전체 보기 →</a></div>
+        <div class="card">
+          <div class="list-row"><span><b>MSDS 교육일지</b> · 김효성</span><span class="badge b-green">결재완료</span></div>
+          <div class="list-row"><span><b>MSDS 교육일지</b> · 조나리</span><span class="badge b-green">결재완료</span></div>
+          <div class="list-row"><span><b>보호구 지급수령증</b> · 2명</span><span class="badge b-gray">제출</span></div>
+          <div class="list-row"><span><b>화학물질 보고서</b> · 신규 1건</span><span class="badge b-blue">검토중</span></div>
         </div>
       </div>
-      <div class="sec-t"><span class="tg">▾</span>대상자 (1명)<span class="r">직원 명단에서 자동</span></div>
-      <div class="card tw"><table class="t">
-        <thead><tr><th class="chk"><input type="checkbox" checked></th><th>사번</th><th>성명</th><th>부서</th><th>입사일</th><th>구분</th></tr></thead>
-        <tbody><tr><td class="chk"><input type="checkbox" checked></td><td class="num">126101801</td><td><b>최신입</b></td><td>61병동</td><td class="num">2026-10-18</td><td><span class="badge b-red">신규 (3일 이내)</span></td></tr></tbody></table></div>
-      <div class="bar"><span class="note">작성 중인 내용은 자동 저장됩니다. 창을 닫아도 이어서 작성할 수 있습니다.</span><div style="display:flex;gap:8px"><button class="btn btn-g">이전</button><button class="btn btn-p">다음: 서명 받기</button></div></div>
-    </section>
+    </div>
 
-    <!-- ⑤ 부서 제출현황 -->
-    <section class="pane" id="p-status">
-      <div class="crumb">업무 › 우리 부서 제출현황</div>
-      <div class="ph"><h1>61병동 제출현황</h1></div>
-      <div class="tabs"><a aria-current="page">교육일지<span>12</span></a><a>보호구 지급<span>4</span></a><a>화학물질 보고서<span>2</span></a></div>
-      <div class="filters">
-        <select class="inp"><option>최근 3개월</option><option>올해</option></select>
-        <select class="inp"><option>상태 전체</option><option>결재 대기</option><option>결재완료</option></select>
-        <label class="inp inp-ico" style="width:260px"><svg class="ico"><use href="#i-search"/></svg><input placeholder="이름 · 사번"></label>
-        <button class="btn btn-p">조회</button>
+    <div class="sec">
+      <div class="sec-head"><h2 class="h2">응급 시 바로 보기</h2></div>
+      <div class="emerg">
+        <div class="card"><b style="color:var(--orange-700)">눈·피부에 묻었을 때</b><p class="cap" style="margin:6px 0 0">15분 이상 흐르는 물로 씻고 MSDS 4번 항목 확인</p></div>
+        <div class="card"><b style="color:var(--orange-700)">흡입했을 때</b><p class="cap" style="margin:6px 0 0">신선한 공기가 있는 곳으로 이동, 증상 시 응급실</p></div>
+        <div class="card"><b style="color:var(--orange-700)">보건관리실 연락</b><p class="cap" style="margin:6px 0 0">내선 0000 · 야간은 응급실</p></div>
       </div>
-      <div class="card tw"><table class="t">
-        <thead><tr><th>제출일<span class="so">▾</span></th><th>종류</th><th>교육일</th><th>대상자</th><th>물질</th><th>상태</th><th>결재일</th><th></th></tr></thead>
-        <tbody>
-          <tr><td class="num">2026-10-21</td><td>MSDS 교육일지</td><td class="num">2026-10-21</td><td><b>박간호</b> 외 1</td><td>3종</td><td><span class="badge b-blue">결재 대기</span></td><td class="num">—</td><td><button class="btn btn-g btn-sm">미리보기</button></td></tr>
-          <tr><td class="num">2026-10-20</td><td>MSDS 교육일지</td><td class="num">2026-10-20</td><td><b>김효성</b></td><td>3종</td><td><span class="badge b-green">결재완료</span></td><td class="num">2026-10-20</td><td><button class="btn btn-g btn-sm">미리보기</button></td></tr>
-          <tr><td class="num">2026-10-18</td><td>MSDS 교육일지</td><td class="num">2026-10-18</td><td><b>조나리</b></td><td>3종</td><td><span class="badge b-green">결재완료</span></td><td class="num">2026-10-19</td><td><button class="btn btn-g btn-sm">미리보기</button></td></tr>
-          <tr><td class="num">2026-09-30</td><td>특별안전보건교육</td><td class="num">2026-09-30</td><td><b>이다라</b> 외 5</td><td>5종</td><td><span class="badge b-green">결재완료</span></td><td class="num">2026-10-02</td><td><button class="btn btn-g btn-sm">미리보기</button></td></tr>
-        </tbody></table>
-        <div class="tfoot"><span>1–4 / 12</span><div class="pg"><span class="on">1</span><span>2</span><span>3</span></div></div>
-      </div>
-    </section>
-
-    <!-- ⑥ 관리자 결재 -->
-    <section class="pane" id="p-approve">
-      <div class="crumb">관리자 › 결재 관리</div>
-      <div class="ph"><h1>결재 관리</h1><div class="act"><span class="badge b-gray">서버 v18.7 · 인사 사이트 06:58 동기화</span></div></div>
-      <div class="kpis">
-        <div class="card kpi k-navy sel"><span class="l">결재 대기</span><span class="n">4<small>건</small></span><span class="s">오늘 2건 추가</span></div>
-        <div class="card kpi k-red"><span class="l">교육 기한 초과</span><span class="n" style="color:var(--red-700)">1<small>명</small></span><span class="s">71병동</span></div>
-        <div class="card kpi k-orange"><span class="l">신규입사 회신 대기</span><span class="n">2<small>명</small></span><span class="s">내일 재알림</span></div>
-        <div class="card kpi k-teal"><span class="l">재직 / 휴직</span><span class="n">752<small>/ 42</small></span><span class="s">물질 점검: 빈 특수검진 187</span></div>
-      </div>
-      <div class="sec-t"><span class="tg">▾</span>결재 대기 목록</div>
-      <div class="filters">
-        <select class="inp"><option>종류 전체</option><option>교육일지</option><option>보호구</option><option>화학물질 보고서</option></select>
-        <select class="inp"><option>부서 전체</option></select>
-        <span style="margin-left:auto;display:flex;gap:8px"><button class="btn btn-g">선택 반려</button><button class="btn btn-p"><svg class="ico"><use href="#i-check"/></svg>선택 결재 (2)</button></span>
-      </div>
-      <div class="card tw"><table class="t">
-        <thead><tr><th class="chk"><input type="checkbox"></th><th>제출일</th><th>부서</th><th>종류</th><th>대상</th><th>서명</th><th>상태</th><th></th></tr></thead>
-        <tbody>
-          <tr class="on"><td class="chk"><input type="checkbox" checked></td><td class="num">2026-10-21</td><td><b>61병동</b></td><td>MSDS 교육일지</td><td>박간호 외 1</td><td><span class="badge b-green">2/2</span></td><td><span class="badge b-blue">결재 대기</span></td><td><button class="btn btn-g btn-sm">보기</button></td></tr>
-          <tr class="on"><td class="chk"><input type="checkbox" checked></td><td class="num">2026-10-21</td><td><b>51병동</b></td><td>특별안전보건교육</td><td>3명</td><td><span class="badge b-green">3/3</span></td><td><span class="badge b-blue">결재 대기</span></td><td><button class="btn btn-g btn-sm">보기</button></td></tr>
-          <tr><td class="chk"><input type="checkbox"></td><td class="num">2026-10-20</td><td><b>시설관리팀</b></td><td>보호구 지급수령증</td><td>4명</td><td><span class="badge b-orange">3/4</span></td><td><span class="badge b-blue">결재 대기</span></td><td><button class="btn btn-g btn-sm">보기</button></td></tr>
-          <tr><td class="chk"><input type="checkbox"></td><td class="num">2026-10-19</td><td><b>중앙공급실</b></td><td>화학물질 보고서 (신규)</td><td>뉴젠자임폼</td><td><span class="badge b-gray">—</span></td><td><span class="badge b-blue">검토중</span></td><td><button class="btn btn-g btn-sm">보기</button></td></tr>
-        </tbody></table></div>
-      <div class="sec-t"><span class="tg">▾</span>주의 필요</div>
-      <div class="card tw"><table class="t"><tbody>
-        <tr><td style="width:120px"><span class="badge b-red">기한초과</span></td><td>71병동 한새봄 (입사 10.15) — MSDS 교육 미실시</td><td style="text-align:right"><button class="btn btn-s btn-sm">재알림</button></td></tr>
-        <tr><td><span class="badge b-orange">PIN 없음</span></td><td>인공신장실 — 부서인증 시트에 PIN 없음</td><td style="text-align:right"><button class="btn btn-s btn-sm">설정</button></td></tr>
-        <tr><td><span class="badge b-orange">물질 점검</span></td><td>CAS 오류 2건 · 빈 특수검진 187칸</td><td style="text-align:right"><button class="btn btn-s btn-sm">점검</button></td></tr>
-      </tbody></table></div>
-    </section>
-
-    <!-- ⑧ 토큰 -->
-    <section class="pane" id="p-tokens">
-      <div class="crumb">디자인 › 토큰</div>
-      <div class="ph"><h1>디자인 토큰 (부민병원 홈페이지 색)</h1></div>
-      <div class="sw" id="sw"></div>
-      <div class="sec-t">글자</div>
-      <div class="card pad">
-        <div style="font-size:22px;font-weight:800;color:var(--ink-900)">화면 제목 22 / 800</div>
-        <div style="font-size:16px;font-weight:800;color:var(--ink-900);margin-top:6px">구역 제목 16 / 800</div>
-        <div style="margin-top:6px">본문·표 15 / 400 — PC 업무 화면은 한 화면에 많이 보이도록 15px</div>
-        <div style="font-size:14px;color:var(--ink-400);margin-top:4px">보조·표 머리 14 — 14px 미만은 쓰지 않음</div>
-      </div>
-      <div class="sec-t">버튼 · 배지</div>
-      <div class="card pad" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <button class="btn btn-p">주요 버튼</button><button class="btn btn-s">보조 버튼</button><button class="btn btn-g">일반 버튼</button>
-        <span class="badge b-green">결재완료</span><span class="badge b-blue">결재 대기</span><span class="badge b-orange">작성 필요</span><span class="badge b-red">기한초과</span><span class="badge b-gray">제출</span><span class="badge b-navy">12개월</span><span class="badge b-teal">교육일지</span>
-      </div>
-    </section>
+    </div>
   </main>
-</div>
+  <footer><div class="wrap">부산부민병원 보건관리실 · MSDS 통합관리 v19 (디자인 미리보기)</div></footer>
+  <nav class="tabbar home-tab" aria-label="하단 탭">
+    <a href="#" aria-current="page"><svg class="ico" style="width:24px;height:24px"><use href="#i-home"/></svg>홈</a>
+    <a href="#"><svg class="ico" style="width:24px;height:24px"><use href="#i-flask"/></svg>MSDS</a>
+    <a href="#"><svg class="ico" style="width:24px;height:24px"><use href="#i-book"/></svg>교육일지</a>
+    <a href="#"><svg class="ico" style="width:24px;height:24px"><use href="#i-list"/></svg>현황</a>
+    <a href="#"><svg class="ico" style="width:24px;height:24px"><use href="#i-user"/></svg>내 부서</a>
+  </nav>
+</section>
 
-<!-- ③ PIN 로그인 (모달) -->
-<div class="dim" id="pin" role="dialog" aria-modal="true" aria-label="부서 로그인">
-  <div class="modal">
-    <div class="modal-h"><span class="mark" style="width:26px;height:26px;font-size:14px">B</span>부서 로그인<small>작성 메뉴는 로그인이 필요합니다</small></div>
-    <div class="modal-b">
-      <div style="font-weight:700;font-size:14px;color:var(--ink-700)">부서 선택 <span style="color:var(--ink-400);font-weight:500">· 최근 사용</span></div>
-      <div class="dpick"><button aria-pressed="true">61병동</button><button>71병동</button><button>51병동</button><button>수술실</button></div>
-      <select class="inp" style="width:100%"><option>다른 부서 찾기…</option></select>
-      <div style="text-align:center;font-weight:700;margin-top:14px;font-size:15px">PIN 4자리</div>
-      <div class="dots"><i class="f"></i><i class="f"></i><i></i><i></i></div>
-      <div class="keys"><button>1</button><button>2</button><button>3</button><button>4</button><button>5</button><button>6</button><button>7</button><button>8</button><button>9</button><button class="fn">지우기</button><button>0</button><button class="fn">전체삭제</button></div>
-      <div style="text-align:center;font-size:14px;color:var(--ink-400);margin-top:10px">4자리를 누르면 자동 로그인 · 12시간 유지 · 5회 틀리면 15분 잠금</div>
-    </div>
-    <div class="modal-f"><a href="#">MSDS 조회만 하기</a><a href="#">관리자 로그인 →</a></div>
-  </div>
-</div>
-
-<!-- ⑦ 휴대폰 -->
-<div class="phones" id="phones" style="display:none">
-  <div>
-    <div class="phone"><div class="scr">
-      <div class="m-top"><div class="row">MSDS 통합관리<span>61병동</span></div>
-        <div class="m-search"><svg class="ico"><use href="#i-search"/></svg>제품명 · 성분 · CAS</div></div>
-      <div class="m-body">
-        <div class="m-grid">
-          <a><svg class="ico" style="color:var(--green-600)"><use href="#i-flask"/></svg>MSDS</a>
-          <a><svg class="ico" style="color:var(--teal-700)"><use href="#i-book"/></svg>교육일지</a>
-          <a><svg class="ico" style="color:var(--brown-600)"><use href="#i-shield"/></svg>보호구</a>
-          <a><svg class="ico" style="color:var(--olive-700)"><use href="#i-doc"/></svg>물질 보고</a>
-          <a><svg class="ico" style="color:var(--blue-700)"><use href="#i-list"/></svg>제출현황</a>
-          <a><svg class="ico" style="color:var(--navy-900)"><use href="#i-alert"/></svg>응급조치</a>
+<!-- ═══════════ ② 모바일 ═══════════ -->
+<section class="screen" id="s-mobile" aria-label="모바일 화면">
+  <div class="phones">
+    <div>
+      <div class="phone"><div class="scr">
+        <div class="m-top">
+          <div class="row"><span><b style="color:var(--navy-900);font-size:16px">MSDS 통합관리 <span style="display:inline-block;width:10px;height:10px;background:var(--brand-green)"></span></b></span><span>61병동 ●</span></div>
+          <div style="margin-top:16px;font-size:22px;font-weight:800">어떤 물질을 찾으세요?</div>
+          <div style="margin-top:12px;background:#fff;border-radius:12px;display:flex;align-items:center;padding:0 12px;min-height:50px;color:var(--ink-400)"><svg class="ico" style="width:20px;height:20px;margin-right:8px"><use href="#i-search"/></svg>제품명 · 성분 · CAS</div>
         </div>
-        <div class="m-h">할 일 <span class="cnt">3</span></div>
-        <div class="m-item"><span class="badge b-red">D-1</span><div class="x"><b>신규입사 취급 확인</b><span>최신입 · 기한 10.21</span></div><button class="btn btn-p btn-sm">확인</button></div>
-        <div class="m-item"><span class="badge b-orange">작성</span><div class="x"><b>MSDS 교육일지</b><span>최신입</span></div><button class="btn btn-s btn-sm">작성</button></div>
-        <div class="m-item"><span class="badge b-blue">대기</span><div class="x"><b>MSDS 교육일지 2건</b><span>보건관리자 결재 중</span></div></div>
-      </div>
-      <nav class="tabbar"><a aria-current="page"><svg class="ico"><use href="#i-home"/></svg>홈</a><a><svg class="ico"><use href="#i-flask"/></svg>MSDS</a><a><svg class="ico"><use href="#i-book"/></svg>교육일지</a><a><svg class="ico"><use href="#i-list"/></svg>현황</a><a><svg class="ico"><use href="#i-user"/></svg>내 부서</a></nav>
-    </div></div>
-    <div class="cap-t">홈 — 검색 · 할 일</div>
+        <div class="m-body">
+          <div class="m-quick">
+            <a href="#"><svg class="ico" style="color:var(--green-600)"><use href="#i-flask"/></svg>MSDS</a>
+            <a href="#"><svg class="ico" style="color:var(--teal-700)"><use href="#i-book"/></svg>교육일지</a>
+            <a href="#"><svg class="ico" style="color:var(--brown-600)"><use href="#i-shield"/></svg>보호구</a>
+            <a href="#"><svg class="ico" style="color:var(--olive-700)"><use href="#i-doc"/></svg>물질 보고</a>
+            <a href="#"><svg class="ico" style="color:var(--blue-700)"><use href="#i-list"/></svg>제출현황</a>
+            <a href="#"><svg class="ico" style="color:var(--navy-900)"><use href="#i-gear"/></svg>관리자</a>
+          </div>
+          <h3 class="h3" style="margin:20px 4px 8px">할 일 <span class="badge b-red">2</span></h3>
+          <div class="card">
+            <div class="todo" style="padding:14px"><div class="t"><b>신규 입사자 확인 · 최신입</b><span class="cap">교육 기한 10.21 (D-1)</span></div><button class="btn btn-primary btn-sm">확인</button></div>
+            <div class="todo" style="padding:14px"><div class="t"><b>MSDS 교육일지 작성</b><span class="cap">최신입</span></div><button class="btn btn-secondary btn-sm">작성</button></div>
+          </div>
+          <h3 class="h3" style="margin:20px 4px 8px">응급 시</h3>
+          <div class="card" style="padding:14px;border-left:5px solid var(--orange-500)"><b style="color:var(--orange-700)">눈·피부 노출</b><div class="cap">15분 이상 흐르는 물로 세척</div></div>
+        </div>
+        <nav class="tabbar" aria-label="하단 탭">
+          <a href="#" aria-current="page"><svg class="ico" style="width:24px;height:24px"><use href="#i-home"/></svg>홈</a>
+          <a href="#"><svg class="ico" style="width:24px;height:24px"><use href="#i-flask"/></svg>MSDS</a>
+          <a href="#"><svg class="ico" style="width:24px;height:24px"><use href="#i-book"/></svg>교육일지</a>
+          <a href="#"><svg class="ico" style="width:24px;height:24px"><use href="#i-list"/></svg>현황</a>
+          <a href="#"><svg class="ico" style="width:24px;height:24px"><use href="#i-user"/></svg>내 부서</a>
+        </nav>
+      </div></div>
+      <div class="cap-title">홈 — 검색 우선, 할 일 카드</div>
+    </div>
+    <div>
+      <div class="phone"><div class="scr">
+        <div style="background:#fff;border-bottom:1px solid var(--line);padding:16px 18px;font-weight:800;font-size:18px;color:var(--ink-900)">← 뉴젠자임폼</div>
+        <div class="m-body" style="padding-top:14px">
+          <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="badge b-orange">관리대상</span><span class="badge b-blue">특수검진 12개월</span><span class="badge b-gray">61병동 외 4</span></div>
+          <div class="card" style="margin-top:12px;padding:14px">
+            <div class="h3" style="font-size:17px">응급조치</div>
+            <div style="margin-top:8px;font-size:16px"><b>눈·피부</b> 15분 이상 물로 씻기<br><b>흡입</b> 신선한 공기로 이동<br><b>삼켰을 때</b> 입 헹구고 진료</div>
+          </div>
+          <div class="card" style="margin-top:10px;padding:14px">
+            <div class="h3" style="font-size:17px">보호구</div>
+            <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><span class="badge b-green">니트릴 장갑</span><span class="badge b-green">보안경</span><span class="badge b-green">마스크</span></div>
+          </div>
+          <div class="card" style="margin-top:10px;padding:14px">
+            <div class="h3" style="font-size:17px">구성성분</div>
+            <table class="tbl" style="font-size:15px;margin-top:6px"><tr><th>성분</th><th>CAS</th><th>함량</th></tr><tr><td>효소혼합물</td><td>9014-01-1</td><td>1~5%</td></tr></table>
+          </div>
+          <button class="btn btn-primary" style="width:100%;margin-top:14px">MSDS 원문 PDF 보기</button>
+        </div>
+      </div></div>
+      <div class="cap-title">물질 상세 — 응급조치를 가장 위에</div>
+    </div>
   </div>
-  <div>
-    <div class="phone"><div class="scr">
-      <div class="m-top"><div class="row">← 뉴젠자임폼<span>관리대상</span></div></div>
-      <div class="m-body">
-        <div class="m-h" style="color:var(--orange-700);margin-top:4px"><svg class="ico"><use href="#i-alert"/></svg>응급조치</div>
-        <div class="m-item" style="display:block"><dl class="kv" style="margin:0;grid-template-columns:76px 1fr"><dt>눈·피부</dt><dd>15분 이상 물로 씻기</dd><dt>흡입</dt><dd>신선한 공기로 이동</dd><dt>삼켰을 때</dt><dd>입 헹구고 진료</dd></dl></div>
-        <div class="m-h">보호구</div>
-        <div class="chips" style="margin-bottom:8px"><span class="badge b-green">니트릴 장갑</span><span class="badge b-green">보안경</span><span class="badge b-green">마스크</span></div>
-        <div class="m-h">구성성분</div>
-        <div class="card"><table class="t"><thead><tr><th>성분</th><th>CAS</th><th>함량</th></tr></thead><tbody><tr><td>효소혼합물</td><td class="num">9014-01-1</td><td>1~5%</td></tr></tbody></table></div>
-        <button class="btn btn-p" style="width:100%;margin-top:12px;height:46px">MSDS 원문 PDF 보기</button>
+</section>
+
+<!-- ═══════════ ③ 부서 PIN 로그인 ═══════════ -->
+<section class="screen" id="s-pin" aria-label="부서 PIN 로그인">
+  <div class="pin-wrap">
+    <div class="card pin-card">
+      <div style="display:flex;align-items:center;gap:10px"><span class="logo-mark">B</span><div><div class="h2">부서 로그인</div><div class="cap">교육일지·보호구·보고서 작성은 로그인이 필요합니다</div></div></div>
+      <div style="margin-top:18px;font-weight:700">부서 선택 <span class="cap">· 최근 사용 부서가 먼저 보입니다</span></div>
+      <div class="dept-pick">
+        <button aria-pressed="true">61병동</button><button aria-pressed="false">71병동</button>
+        <button aria-pressed="false">51병동</button><button aria-pressed="false">수술실</button>
       </div>
-      <nav class="tabbar"><a><svg class="ico"><use href="#i-home"/></svg>홈</a><a aria-current="page"><svg class="ico"><use href="#i-flask"/></svg>MSDS</a><a><svg class="ico"><use href="#i-book"/></svg>교육일지</a><a><svg class="ico"><use href="#i-list"/></svg>현황</a><a><svg class="ico"><use href="#i-user"/></svg>내 부서</a></nav>
-    </div></div>
-    <div class="cap-t">물질 상세 — 응급조치가 맨 위</div>
+      <div class="field" style="margin-top:-6px"><select aria-label="다른 부서"><option>다른 부서 찾기…</option></select></div>
+      <div style="text-align:center;font-weight:700">PIN 4자리</div>
+      <div class="dots" aria-label="입력한 자릿수 2/4"><i class="f"></i><i class="f"></i><i></i><i></i></div>
+      <div class="pad">
+        <button>1</button><button>2</button><button>3</button>
+        <button>4</button><button>5</button><button>6</button>
+        <button>7</button><button>8</button><button>9</button>
+        <button class="fn">지우기</button><button>0</button><button class="fn">전체삭제</button>
+      </div>
+      <p class="cap" style="text-align:center;margin:14px 0 0">4자리를 누르면 자동으로 로그인됩니다 · 12시간 유지<br>5회 틀리면 15분 잠김 · PIN 분실은 보건관리실</p>
+      <div style="display:flex;justify-content:space-between;margin-top:14px"><button class="btn btn-ghost btn-sm">MSDS 조회만 하기</button><button class="btn btn-ghost btn-sm">관리자 로그인 →</button></div>
+    </div>
   </div>
-</div>
+</section>
+
+<!-- ═══════════ ④ 교육일지 작성 ═══════════ -->
+<section class="screen" id="s-edu" aria-label="교육일지 작성">
+  <header class="gnb"><div class="wrap"><a class="logo" href="#"><span class="logo-mark">B</span><span>MSDS 통합관리<small>부산부민병원 보건관리실</small></span></a><nav><a href="#">홈</a><a href="#">MSDS 관리</a><a href="#" aria-current="page">교육일지</a><a href="#">보호구 지급</a><a href="#">화학물질 보고서</a></nav><div class="user-chip"><span class="dot"></span>61병동</div></div></header>
+  <main class="wrap" style="padding-top:24px;max-width:860px">
+    <div class="cap">교육일지 › MSDS 교육일지</div>
+    <h1 class="h1" style="margin-top:4px">MSDS 교육일지 작성</h1>
+    <div class="steps" aria-label="진행 단계">
+      <span class="step done">1 대상자 ✓</span><span class="step on">2 교육 내용</span><span class="step">3 서명</span><span class="step">4 확인·제출</span>
+    </div>
+    <div class="card" style="padding:22px">
+      <div class="field"><label>교육 부서</label><input value="61병동" disabled style="background:var(--muted)"><span class="hint">로그인한 부서로 고정됩니다</span></div>
+      <div class="field"><label>취급 물질 <span class="badge b-blue">3종 선택</span></label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="badge b-blue">뉴젠자임폼 ✕</span><span class="badge b-blue">멀티엔자임 ✕</span><span class="badge b-blue">에탄올 ✕</span><button class="btn btn-secondary btn-sm">+ 물질 추가</button></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field"><label>교육일</label><input type="date" value="2026-10-21"></div>
+        <div class="field"><label>교육 시간</label><select><option>1시간</option><option>2시간</option></select></div>
+      </div>
+      <div class="field"><label>대상자 (1명)</label>
+        <table class="tbl"><tr><th>이름</th><th>사번</th><th>입사일</th><th></th></tr><tr><td><b>최신입</b></td><td>126101801</td><td>2026-10-18 <span class="badge b-red">신규</span></td><td><button class="btn btn-ghost btn-sm">빼기</button></td></tr></table>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:8px"><button class="btn btn-secondary">이전</button><button class="btn btn-primary">다음: 서명 받기</button></div>
+    </div>
+    <p class="cap" style="margin-top:14px">작성 중인 내용은 자동 저장됩니다. 창을 닫아도 이어서 작성할 수 있습니다.</p>
+  </main>
+</section>
+
+<!-- ═══════════ ⑤ 부서 제출현황 ═══════════ -->
+<section class="screen" id="s-status" aria-label="부서 제출현황">
+  <header class="gnb"><div class="wrap"><a class="logo" href="#"><span class="logo-mark">B</span><span>MSDS 통합관리<small>부산부민병원 보건관리실</small></span></a><nav><a href="#">홈</a><a href="#">MSDS 관리</a><a href="#">교육일지</a><a href="#">보호구 지급</a><a href="#">화학물질 보고서</a><a href="#" aria-current="page">우리 부서</a></nav><div class="user-chip"><span class="dot"></span>61병동</div></div></header>
+  <main class="wrap" style="padding-top:24px">
+    <div style="display:flex;justify-content:space-between;align-items:end;flex-wrap:wrap;gap:10px">
+      <div><h1 class="h1">61병동 제출현황</h1><div class="cap">우리 부서가 제출한 기록 · 조회 전용</div></div>
+      <div style="display:flex;gap:8px"><select class="btn btn-secondary btn-sm" style="font-weight:700"><option>최근 3개월</option></select><button class="btn btn-secondary btn-sm">새로고침</button></div>
+    </div>
+    <div style="display:flex;gap:8px;margin:18px 0 12px" role="tablist">
+      <button class="btn btn-primary btn-sm" aria-pressed="true">교육일지 19</button><button class="btn btn-secondary btn-sm">보호구 3</button><button class="btn btn-secondary btn-sm">화학물질 보고서 1</button>
+    </div>
+    <div class="card" style="overflow:auto">
+      <table class="tbl">
+        <tr><th>구분</th><th>대상자</th><th>입사일</th><th>교육일</th><th>취급물질</th><th>결재</th><th>미리보기</th></tr>
+        <tr><td>MSDS교육</td><td><b>최신입</b></td><td>2026-10-18</td><td>2026-10-21</td><td>뉴젠자임폼 외 2</td><td><span class="badge b-orange">결재대기</span></td><td><button class="btn btn-secondary btn-sm"><svg class="ico" style="width:18px;height:18px"><use href="#i-eye"/></svg>보기</button></td></tr>
+        <tr><td>MSDS교육</td><td><b>김효성</b></td><td>2025-03-02</td><td>2026-09-17</td><td>뉴젠자임폼</td><td><span class="badge b-green">결재완료</span></td><td><button class="btn btn-secondary btn-sm"><svg class="ico" style="width:18px;height:18px"><use href="#i-eye"/></svg>보기</button></td></tr>
+        <tr><td>특별안전보건</td><td><b>조나리</b></td><td>2026-07-01</td><td>2026-07-13</td><td>뉴젠자임폼</td><td><span class="badge b-green">결재완료</span></td><td><button class="btn btn-secondary btn-sm"><svg class="ico" style="width:18px;height:18px"><use href="#i-eye"/></svg>보기</button></td></tr>
+      </table>
+    </div>
+  </main>
+</section>
+
+<!-- ═══════════ ⑥ 관리자 ═══════════ -->
+<section class="screen" id="s-admin" aria-label="관리자 대시보드">
+  <div class="admin">
+    <aside class="side" aria-label="관리자 메뉴">
+      <div style="color:#fff;font-weight:800;font-size:18px;padding:6px 14px 18px">관리자 콘솔</div>
+      <a href="#" aria-current="page">대시보드</a>
+      <a href="#">결재 관리 <span class="cnt">4</span></a>
+      <a href="#">교육 현황</a>
+      <a href="#">보호구 지급</a>
+      <a href="#">화학물질 보고서 <span class="cnt">1</span></a>
+      <a href="#">물질 마스터 점검 <span class="cnt">2</span></a>
+      <a href="#">직원정보관리</a>
+      <a href="#">신규입사 알림 <span class="cnt">2</span></a>
+      <a href="#">설정</a>
+    </aside>
+    <main style="padding:24px">
+      <h1 class="h1">대시보드</h1>
+      <div class="cap">2026-10-21 기준 · 서버 v18.7</div>
+      <div class="kpis" style="margin-top:16px">
+        <div class="card kpi"><div class="cap">결재 대기</div><div class="n">4<span class="cap"> 건</span></div><span class="badge b-orange">오늘 2건 추가</span></div>
+        <div class="card kpi"><div class="cap">교육 기한 초과</div><div class="n" style="color:var(--red-700)">1<span class="cap"> 명</span></div><span class="badge b-red">71병동</span></div>
+        <div class="card kpi"><div class="cap">신규입사 회신 대기</div><div class="n">2<span class="cap"> 명</span></div><span class="badge b-blue">재알림 예정</span></div>
+        <div class="card kpi"><div class="cap">재직 / 휴직</div><div class="n">752<span class="cap"> / 42</span></div><span class="badge b-gray">인사 사이트 06:58 동기화</span></div>
+      </div>
+      <div class="grid-2 sec">
+        <div class="card"><div style="padding:16px 18px;border-bottom:1px solid var(--line)" class="h3">결재 대기</div>
+          <div class="list-row"><span><b>61병동</b> MSDS 교육일지 · 최신입</span><button class="btn btn-primary btn-sm">결재</button></div>
+          <div class="list-row"><span><b>51병동</b> 특별안전보건 · 3명</span><button class="btn btn-primary btn-sm">결재</button></div>
+          <div class="list-row"><span><b>시설관리팀</b> 보호구 지급수령증</span><button class="btn btn-secondary btn-sm">확인</button></div>
+        </div>
+        <div class="card"><div style="padding:16px 18px;border-bottom:1px solid var(--line)" class="h3">주의 필요</div>
+          <div class="list-row"><span><span class="badge b-red">기한초과</span> 71병동 한새봄 (입사 10.15)</span><button class="btn btn-secondary btn-sm">재알림</button></div>
+          <div class="list-row"><span><span class="badge b-orange">PIN 없음</span> 인공신장실</span><button class="btn btn-secondary btn-sm">설정</button></div>
+          <div class="list-row"><span><span class="badge b-orange">물질 점검</span> CAS 오류 2 · 빈 특수검진 187</span><button class="btn btn-secondary btn-sm">점검</button></div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <!-- 모달 예시 -->
+  <div class="modal-bg" id="demo-modal" style="display:none">
+    <div class="card modal" role="dialog" aria-modal="true" aria-labelledby="mt">
+      <h2 class="h2" id="mt">결재할까요?</h2>
+      <p style="margin:8px 0 18px;color:var(--ink-500)">61병동 MSDS 교육일지(최신입)에 보건관리자 도장이 찍힙니다. 결재 후에는 부서 화면에 '결재완료'로 표시됩니다.</p>
+      <div style="display:flex;justify-content:flex-end;gap:8px"><button class="btn btn-secondary" onclick="this.closest('.modal-bg').style.display='none'">취소</button><button class="btn btn-primary" onclick="this.closest('.modal-bg').style.display='none'">결재하기</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ ⑦ 디자인 토큰 ═══════════ -->
+<section class="screen" id="s-tokens" aria-label="디자인 토큰">
+  <main class="wrap" style="padding:24px 20px 40px">
+    <h1 class="h1">디자인 토큰</h1>
+    <p class="cap">공식 CI 색상이 확정되면 :root의 값만 바꾸면 전체에 반영됩니다.</p>
+    <h2 class="h2" style="margin:20px 0 10px">색상</h2>
+    <div class="swatches" id="sw"></div>
+    <h2 class="h2" style="margin:24px 0 10px">글자</h2>
+    <div class="card" style="padding:18px">
+      <div class="h1">제목 28 / 800</div><div class="h2">부제목 22 / 800</div><div class="h3">소제목 19 / 700</div>
+      <p style="margin:6px 0">본문 17 / 400 — 고령층을 고려해 기본 17px, 줄간격 1.6</p><div class="cap">보조 15 — 15px 미만은 쓰지 않음</div>
+    </div>
+    <h2 class="h2" style="margin:24px 0 10px">버튼 · 배지</h2>
+    <div class="card" style="padding:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-primary">주요 버튼</button><button class="btn btn-secondary">보조 버튼</button><button class="btn btn-ghost">텍스트 버튼</button><button class="btn btn-danger">삭제</button>
+      <button class="btn btn-primary" onclick="document.getElementById('demo-modal').style.display='grid';show('admin')">모달 예시 열기</button>
+      <span class="badge b-green">결재완료</span><span class="badge b-orange">결재대기</span><span class="badge b-red">기한초과</span><span class="badge b-blue">검토중</span><span class="badge b-gray">제출</span>
+    </div>
+  </main>
+</section>
 
 <script>
-var NAV = { home: 'home', msds: 'msds', pin: 'home', edu: 'edu', status: 'status', approve: 'approve', tokens: null };
 function show(id){
-  document.querySelectorAll('.pv button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.s === id)); });
-  var mobile = id === 'mobile';
-  document.getElementById('app').style.display = mobile ? 'none' : '';
-  document.getElementById('phones').style.display = mobile ? 'flex' : 'none';
-  document.getElementById('pin').classList.toggle('on', id === 'pin');
-  var pane = id === 'pin' ? 'home' : id;
-  document.querySelectorAll('.pane').forEach(function(p){ p.classList.toggle('on', p.id === 'p-' + pane); });
-  document.querySelectorAll('.nav').forEach(function(n){ if(n.dataset.k === NAV[id]) n.setAttribute('aria-current', 'page'); else n.removeAttribute('aria-current'); });
-  var admin = id === 'approve';
-  document.getElementById('who-dept').textContent = admin ? '보건관리자' : '61병동';
-  document.getElementById('adm-lock').style.display = admin ? 'none' : '';
+  document.querySelectorAll('.screen').forEach(function(s){ s.classList.toggle('on', s.id === 's-' + id); });
+  document.querySelectorAll('.pv-bar button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.s === id)); });
   window.scrollTo(0, 0);
 }
-document.querySelectorAll('.pv button').forEach(function(b){ b.onclick = function(){ show(b.dataset.s); }; });
-document.querySelectorAll('.nav[data-k]').forEach(function(n){ n.onclick = function(){ show(n.dataset.k); }; });
-document.getElementById('pin').onclick = function(e){ if(e.target === this) show('home'); };
-var tokens = [['--green-800','상단 바 · 모달 머리'],['--green-600','주요 버튼 (흰 글자 4.8)'],['--green-700','선택 메뉴 · 완료 글자'],['--green-50','선택 배경'],['--brand-green','로고 · 장식'],
-  ['--teal-700','교육일지 구분'],['--navy-900','결재 · 판정 배지'],['--blue-700','결재 대기 · 링크'],['--brown-600','보호구 (휴대폰 아이콘)'],['--olive-700','보고서 (휴대폰 아이콘)'],
-  ['--orange-500','응급 · 초점 테두리'],['--orange-700','작성 필요 글자'],['--red-700','기한초과 · 알림 숫자'],['--bg','화면 바탕'],['--line','선']];
+document.querySelectorAll('.pv-bar button').forEach(function(b){ b.onclick = function(){ show(b.dataset.s); }; });
+var tokens = [['--brand-green','브랜드 그린 · 로고·장식 면'],['--brand-teal','브랜드 청록 · 장식'],['--brand-sky','브랜드 하늘 · 히어로 배경'],['--brand-blue','브랜드 파랑 · 큰 제목 강조'],
+  ['--green-600','그린 600 · 주요 버튼(흰 글자 4.8)'],['--green-700','그린 700 · 완료 글자'],['--green-50','그린 50 · 표 머리·선택'],['--teal-700','청록 700 · 타일(흰 글자 5.0)'],
+  ['--brown-600','브라운 · 타일(흰 글자 5.1)'],['--olive-700','올리브 · 타일·어두운 배지'],['--navy-900','남색 · 제목·관리자 사이드바'],['--blue-700','파랑 700 · 링크'],
+  ['--orange-500','오렌지 · 응급 강조·초점'],['--orange-700','오렌지 700 · 대기 글자'],['--red-700','빨강 · 기한초과'],['--muted','회색 · 보조 버튼 배경']];
 var cs = getComputedStyle(document.documentElement);
 document.getElementById('sw').innerHTML = tokens.map(function(t){
   var v = cs.getPropertyValue(t[0]).trim();
-  return '<div><i style="background:' + v + '"></i><p><b>' + v + '</b><br>' + t[1] + '</p></div>';
+  return '<div class="sw"><div style="background:' + v + '"></div><p><b>' + v + '</b><br>' + t[1] + '</p></div>';
 }).join('');
-show('home');
 </script>
 </body>
 </html>
