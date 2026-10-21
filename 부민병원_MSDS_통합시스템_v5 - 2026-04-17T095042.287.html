@@ -10,7 +10,13 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v18.6 (2026-10-21)
+  부민병원 MSDS 통합시스템 v18.7 (2026-10-21)
+
+  ★★★ v18.7 (2026-10-21) — 🧪 물질 마스터 점검 (AI 판정 2단계: 기준 데이터 정비):
+    - 관리자 > 물질 마스터 점검: CAS 형식·검증숫자 오류, 구글시트가 날짜로 바꾼 CAS 복원 제안
+    - 같은 CAS인데 특수검진 판정이 다른 제품 표시, 빈 특수검진·작업환경측정 수
+    - 시트 [법령대조표](CAS 기준) 신설 — 기존 판정으로 시작값 생성(고시 확인 필요 표시)
+    - 빈칸 채우기 '제안' → 관리자가 체크한 것만, 빈 칸에만 반영 (서버 Code.gs v18.7 필요)
 
   ★★★ v18.5~18.6 (2026-10-21) — 인사 사이트 연결 안전장치:
     - 메뉴 ④: 사이트 주소(https://bumin-leave.web.app)만 넣으면 연결 정보 자동 (Firebase /__/firebase/init.json)
@@ -1390,6 +1396,10 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
           <span class="adm-nav-label">화학물질 보고서</span>
           <span class="adm-nav-badge" id="adm-nav-chem-badge"></span>
         </div>
+        <div class="adm-nav-item" data-pane="chemm" onclick="admSwitchPane('chemm'); BMCHEM.open();">
+          <span class="adm-nav-icon">🧪</span>
+          <span class="adm-nav-label">물질 마스터 점검</span>
+        </div>
         <div class="adm-nav-item" data-pane="staff" onclick="admSwitchPane('staff'); BMSTAFF.open();">
           <span class="adm-nav-icon">👥</span>
           <span class="adm-nav-label">직원정보관리</span>
@@ -1647,6 +1657,17 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
                 </table>
               </div>
             </div>
+          </div>
+        </section>
+
+        <!-- ── 📌 물질 마스터 점검 pane (v18.7) — 내용은 BMCHEM.open()이 그림 ── -->
+        <section class="adm-pane" id="adm-pane-chemm">
+          <div class="adm-card">
+            <div class="adm-card-header">
+              <h2 class="adm-card-title">🧪 물질 마스터 점검</h2>
+              <span id="chemm-stat" class="adm-card-stat"></span>
+            </div>
+            <div class="adm-card-body" id="chemm-body"></div>
           </div>
         </section>
 
@@ -2740,6 +2761,109 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
       return r;
     };
   });
+})();
+
+/* ★★★ v18.7 — 🧪 물질 마스터 점검 (관리자) — 2단계: AI 판정의 기준 데이터 정비
+   - CAS 형식·검증숫자 오류, 날짜로 바뀐 CAS 복원 제안, 같은 CAS 판정 불일치, 빈칸 수
+   - 법령대조표(CAS 기준 검진·측정 주기) 시작값 만들기, 빈 특수검진·작업환경측정 칸 채우기 '제안'
+   - 반영은 관리자가 체크한 것만, 빈 칸에만 (서버가 다시 확인) */
+(function(){
+  if(window.BMCHEM) return;
+  var esc = function(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
+  var say = function(m, t){ try{ toast(m, t || 'info'); }catch(_){ alert(m); } };
+  var BOX = 'border:1px solid #e2e8f0;border-radius:4px;padding:14px;margin-bottom:12px;background:#fff';
+  var BTN = 'padding:7px 12px;border-radius:4px;border:1px solid #cbd5e1;background:#fff;font-weight:700;font-size:12px;cursor:pointer';
+  var BTN_P = 'padding:7px 12px;border-radius:4px;border:0;background:#43812A;color:#fff;font-weight:700;font-size:12px;cursor:pointer';
+  var TH = 'padding:5px 6px;border:1px solid #e2e8f0;background:#E1F6D5;color:#3B7322;white-space:nowrap;font-size:12px';
+  var TD = 'padding:5px 6px;border:1px solid #e2e8f0;font-size:12px;vertical-align:top';
+  var data = null;
+  var FIELD = { hc: '특수건강진단', we: '작업환경측정' };
+
+  function table(head, rows){
+    return '<div style="overflow-x:auto;max-height:420px;overflow-y:auto"><table style="border-collapse:collapse;width:100%"><tr>' +
+      head.map(function(h){ return '<th style="' + TH + '">' + h + '</th>'; }).join('') + '</tr>' + rows.join('') + '</table></div>';
+  }
+  function stat(label, value, warn){
+    return '<div style="border:1px solid #e2e8f0;border-radius:4px;padding:10px 12px;min-width:120px"><div style="font-size:12px;color:#64748b">' + label +
+      '</div><div style="font-size:20px;font-weight:800;color:' + (warn ? '#B42318' : '#111') + '">' + value + '</div></div>';
+  }
+
+  async function open(){
+    var body = document.getElementById('chemm-body');
+    if(!body) return;
+    body.innerHTML = '<div style="color:#64748b;font-size:13px">점검 중…</div>';
+    var r = await BMAUTH.post('chem.audit', {});
+    if(!r.success){
+      body.innerHTML = '<div style="color:#B42318;font-size:13px">' + esc(r.error || '점검 실패') +
+        (/unknown op/.test(r.error || '') ? ' — 서버(Code.gs)를 v18.7 이상으로 배포하세요.' : '') + '</div>';
+      return;
+    }
+    data = r;
+    var st = document.getElementById('chemm-stat');
+    if(st) st.textContent = '빈 특수검진 ' + r.blankHc + ' · CAS 문제 ' + r.casIssues.length;
+    var casRows = r.casIssues.map(function(x, i){
+      return '<tr><td style="' + TD + '">' + (x.fix ? '<input type="checkbox" data-cas="' + i + '" checked>' : '') + '</td>' +
+        '<td style="' + TD + '">' + esc(x.product) + '</td><td style="' + TD + '">' + esc(x.comp) + '</td>' +
+        '<td style="' + TD + ';color:#B42318;font-weight:700">' + esc(x.raw) + '</td>' +
+        '<td style="' + TD + ';color:#3B7322;font-weight:700">' + esc(x.fix || '직접 확인 필요') + '</td><td style="' + TD + '">' + esc(x.why) + '</td></tr>';
+    });
+    var conf = r.conflicts.map(function(x){
+      return '<tr><td style="' + TD + '">' + esc(x.cas) + '</td><td style="' + TD + '">' + esc(x.comp) + '</td>' +
+        '<td style="' + TD + ';font-weight:700">' + esc(x.values.join(' / ')) + '</td><td style="' + TD + '">' + esc(x.rows.join(', ')) + '</td></tr>';
+    });
+    var sug = r.suggestions.map(function(x, i){
+      return '<tr><td style="' + TD + '"><input type="checkbox" data-sug="' + i + '"></td>' +
+        '<td style="' + TD + '">' + esc(x.product) + '</td><td style="' + TD + '">' + esc(x.comp) + '</td><td style="' + TD + '">' + esc(x.cas) + '</td>' +
+        '<td style="' + TD + '">' + esc(x.amount) + '</td><td style="' + TD + '">' + FIELD[x.field] + '</td>' +
+        '<td style="' + TD + ';font-weight:800;color:#3B7322">' + esc(x.value) + '</td><td style="' + TD + '">' + esc(x.src) + '</td></tr>';
+    });
+    body.innerHTML =
+      '<div style="' + BOX + '"><div style="display:flex;gap:8px;flex-wrap:wrap">' +
+        stat('제품', r.products) + stat('성분 행', r.total) + stat('정상 CAS 종류', r.uniqueCas) +
+        stat('빈 특수검진', r.blankHc + ' / ' + r.total, r.blankHc > 0) + stat('빈 작업환경측정', r.blankWe + ' / ' + r.total, r.blankWe > 0) +
+        stat('법령대조표', r.lawCount + '종') + stat('대조표에 없는 CAS', r.unknownCas, r.unknownCas > 0) +
+      '</div><div style="font-size:12px;color:#64748b;margin-top:8px">AI가 MSDS를 읽어 판정하려면 이 기준 데이터가 정확해야 합니다. ' +
+      '판정은 산업안전보건법 시행규칙 별표 기준을 보건관리자가 최종 확인하세요.</div></div>' +
+
+      '<div style="' + BOX + '"><div style="font-weight:800;color:#044B75;margin-bottom:6px">① CAS 번호 문제 ' + r.casIssues.length + '건</div>' +
+      '<div style="font-size:12px;color:#64748b;margin-bottom:8px">구글시트가 CAS를 날짜로 바꾼 경우(예: 9014-01-1 → 9014-01-01) 검증숫자로 원래 값을 찾아 제안합니다. 반영하면 CAS 열을 텍스트 형식으로 고정해 다시 바뀌지 않습니다.</div>' +
+      (casRows.length ? table(['반영', '제품', '성분', '지금 값', '제안', '사유'], casRows) : '<div style="font-size:12px;color:#15803d">문제 없음</div>') + '</div>' +
+
+      '<div style="' + BOX + '"><div style="font-weight:800;color:#044B75;margin-bottom:6px">② 같은 CAS인데 판정이 다름 ' + r.conflicts.length + '건</div>' +
+      '<div style="font-size:12px;color:#64748b;margin-bottom:8px">함량 차이로 다를 수 있습니다. 확인 후 시트에서 직접 맞춰 주세요.</div>' +
+      (conf.length ? table(['CAS', '성분', '판정', '제품(현재 값)'], conf) : '<div style="font-size:12px;color:#15803d">없음</div>') + '</div>' +
+
+      '<div style="' + BOX + '"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px">' +
+        '<div style="font-weight:800;color:#044B75">③ 빈칸 채우기 제안 ' + r.suggestions.length + '건</div>' +
+        '<div style="display:flex;gap:6px"><button id="chemm-seed" style="' + BTN + '">기존 판정으로 법령대조표 만들기</button>' +
+        '<button id="chemm-all" style="' + BTN + '">모두 선택</button></div></div>' +
+      '<div style="font-size:12px;color:#64748b;margin-bottom:8px">법령대조표, 또는 같은 CAS의 다른 제품 판정을 근거로 제안합니다. <b>함량</b>을 보고 대상 여부를 판단한 뒤 체크하세요. 빈 칸에만 기록되고 기존 값은 바뀌지 않습니다.</div>' +
+      (sug.length ? table(['반영', '제품', '성분', 'CAS', '함량', '항목', '제안 값', '근거'], sug)
+                  : '<div style="font-size:12px;color:#64748b">제안 없음 — 법령대조표가 비어 있으면 위 [기존 판정으로 법령대조표 만들기]를 누르거나, 시트 [법령대조표]에 고시 목록(CAS·주기)을 붙여넣으세요.</div>') + '</div>' +
+
+      '<div style="text-align:right"><button id="chemm-apply" style="' + BTN_P + ';padding:10px 18px;font-size:14px">선택한 항목 시트에 반영</button></div>';
+
+    document.getElementById('chemm-seed').onclick = async function(){
+      var x = await BMAUTH.post('chem.seedLaw', {});
+      say(x.success ? '법령대조표에 ' + x.added + '종 추가 (출처: 기존 시트 판정 · 고시 확인 필요)' : (x.error || '실패'), x.success ? 'ok' : 'err');
+      open();
+    };
+    document.getElementById('chemm-all').onclick = function(){
+      body.querySelectorAll('[data-sug]').forEach(function(c){ c.checked = true; });
+    };
+    document.getElementById('chemm-apply').onclick = async function(){
+      var fills = [].slice.call(body.querySelectorAll('[data-sug]:checked')).map(function(c){
+        var x = data.suggestions[+c.getAttribute('data-sug')]; return { row: x.row, field: x.field, value: x.value }; });
+      var casFixes = [].slice.call(body.querySelectorAll('[data-cas]:checked')).map(function(c){
+        var x = data.casIssues[+c.getAttribute('data-cas')]; return { row: x.row, fix: x.fix }; });
+      if(!fills.length && !casFixes.length){ say('반영할 항목을 체크하세요', 'err'); return; }
+      if(!confirm('빈칸 ' + fills.length + '개, CAS ' + casFixes.length + '개를 chemicals 시트에 반영합니다.')) return;
+      var x = await BMAUTH.post('chem.apply', { fills: fills, casFixes: casFixes });
+      say(x.success ? '반영 완료: 빈칸 ' + x.filled + ' · CAS ' + x.fixed + (x.skipped ? ' (건너뜀 ' + x.skipped + ')' : '') : (x.error || '실패'), x.success ? 'ok' : 'err');
+      open();
+    };
+  }
+  window.BMCHEM = { open: open };
 })();
 
 /* ★★★ v17.19 (2026-07-27) — raw.githubusercontent.com CDN 캐시 무력화 (병합 다운로드 404 해결):

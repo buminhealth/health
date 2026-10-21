@@ -3,12 +3,17 @@ const { chromium } = require('playwright');
 const { start } = require('./server');
 
 const path = require('path');
+const vm = require('vm');
 const CODE = path.join(__dirname, '..', 'Code.gs');
 const HTML = path.join(__dirname, '..', '..', '부민병원_MSDS_통합시스템_v5 - 2026-04-17T095042.287.html');
 const PORT = 8787;
 const MOCK = `http://localhost:${PORT}/script.google.com/macros/s/x/exec`;
 
 let failures = 0;
+function g_lawHas(g, cas) {
+  const sh = g.sheets['법령대조표'];
+  return !!sh && sh.rows.some(r => String(r[0]) === cas);
+}
 function check(name, cond, extra) {
   console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra !== undefined ? '  → ' + JSON.stringify(extra) : ''));
   if (!cond) failures++;
@@ -305,7 +310,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('④ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v18.6'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v18.7'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -342,6 +347,42 @@ function check(name, cond, extra) {
   const noFalse2 = await page.evaluate(() => BMAUTH.post('nh.run', {}));
   check('오탐 방지: 원래 입사일 75%가 빈 데이터도 정상 반영 (첫 실행·다음 실행 모두)', !noFalse1.error && !noFalse2.error, [noFalse1.error, noFalse2.error]);
   fb.collections = null; g.props.FB_PATH = 'employees';
+
+  // 13-4. 물질 마스터 점검 (v18.7): CAS 복원·검증, 빈칸 제안, 법령대조표, 빈 칸에만 반영
+  const ch = g.sheets['chemicals'];
+  ch.rows[0] = ['제품명', '제조사', '부서', '성분명', 'CAS', '함유량', '특수건강검진', '작업환경측정'];
+  ch.appendRow(['효소세정제', 'C사', '중앙공급실', 'Protease', vm.runInContext('new Date(9014, 0, 1)', g.ctx), '1', '', '']);
+  ch.appendRow(['메탄올A', 'D사', '병리과', '메탄올', '67-56-1', '99', '12개월', '6개월']);
+  ch.appendRow(['메탄올B', 'D사', '병리과', '메탄올', '67-56-1', '50', '', '']);
+  ch.appendRow(['정제수제품', 'E사', '약제과', '정제수', '732-18-5', '90', '', '']);
+  ch.appendRow(['EDTA용액', 'F사', '진단검사의학과', 'EDTA', '64-02-8.', '5', '', '']);
+  const au = await page.evaluate(() => BMAUTH.post('chem.audit', {}));
+  const iss = (au.casIssues || []).reduce((m, x) => (m[x.comp] = x, m), {});
+  check('물질 점검: 날짜로 바뀐 CAS → 9014-01-1 복원 제안', iss.Protease && iss.Protease.fix === '9014-01-1', iss.Protease);
+  check('물질 점검: 끝의 점 → 64-02-8', iss.EDTA && iss.EDTA.fix === '64-02-8', iss.EDTA);
+  check('물질 점검: 검증숫자 오류(732-18-5) 표시', iss['정제수'] && !iss['정제수'].fix && /검증숫자/.test(iss['정제수'].why), iss['정제수']);
+  const sugB = (au.suggestions || []).filter(x => x.product === '메탄올B');
+  check('물질 점검: 같은 CAS 다른 제품 판정으로 빈칸 제안 (특수검진·측정)', sugB.length === 2 && sugB.some(x => x.field === 'hc' && x.value === '12개월'), sugB);
+  const seed = await page.evaluate(() => BMAUTH.post('chem.seedLaw', {}));
+  check('법령대조표: 기존 판정으로 시작값 생성', seed.success && seed.added >= 1 && g_lawHas(g, '67-56-1'), seed);
+  const seed2 = await page.evaluate(() => BMAUTH.post('chem.seedLaw', {}));
+  check('법령대조표: 다시 눌러도 중복 추가 없음', seed2.success && seed2.added === 0, seed2);
+  const au2 = await page.evaluate(() => BMAUTH.post('chem.audit', {}));
+  check('물질 점검: 법령대조표 근거로 제안', au2.lawCount >= 1 && au2.suggestions.some(x => x.product === '메탄올B' && /법령대조표/.test(x.src)), au2.suggestions);
+  const rowB = ch.rows.findIndex(r => r[0] === '메탄올B') + 1, rowA = ch.rows.findIndex(r => r[0] === '메탄올A') + 1;
+  const rowP = ch.rows.findIndex(r => r[0] === '효소세정제') + 1;
+  const ap = await page.evaluate(a => BMAUTH.post('chem.apply', a), {
+    fills: [{ row: rowB, field: 'hc', value: '12개월' }, { row: rowA, field: 'hc', value: '6개월' }],
+    casFixes: [{ row: rowP, fix: '9014-01-1' }] });
+  check('반영: 빈 칸만 채움 · 기존 값은 그대로', ap.success && ap.filled === 1 && ap.skipped === 1 && ch.rows[rowB - 1][6] === '12개월' && ch.rows[rowA - 1][6] === '12개월', ap);
+  check('반영: CAS 원래 값으로 복원', ap.fixed === 1 && ch.rows[rowP - 1][4] === '9014-01-1', ch.rows[rowP - 1][4]);
+  const denyChem = await page.evaluate(async () => {
+    const r = await BMAUTH.post('login', { kind: 'dept', dept: '61병동', pin: '4321' });
+    return BMAUTH.post('chem.audit', { t: r.token });
+  });
+  check('물질 점검: 부서 계정은 거부', !denyChem.success && denyChem.status === 403, denyChem);
+  await page.evaluate(() => { admSwitchPane('chemm'); return BMCHEM.open(); });
+  check('관리자 화면: 물질 마스터 점검 표시', /CAS 번호 문제/.test(await page.textContent('#chemm-body')));
 
   // 14. 부서장: 메일 링크(?nh=) → 로그인 창 → PIN 로그인 → 확인 창 → '예' → 교육일지 대상자 자동 추가
   await page.evaluate(() => { localStorage.removeItem('bm_session'); localStorage.removeItem('bm_admin_ok'); });
