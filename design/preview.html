@@ -12,7 +12,7 @@
   --green-700:#3B7322; --green-600:#43812A; --green-500:#68AF3E; --green-100:#AED39C; --green-50:#E1F6D5;
   --teal-700:#007C7A; --teal-50:#DEEEEB;
   --brown-600:#7C6B55; --olive-700:#66715F;
-  --navy-900:#044B75; --blue-700:#0077C2;
+  --navy-900:#044B75; --blue-700:#0067A8;
   /* 역할 이름 (컴포넌트는 이 이름만 사용) */
   --primary-900:var(--navy-900); --primary-700:var(--green-700); --primary-600:var(--green-600);
   --primary-100:var(--green-100); --primary-50:var(--green-50);
@@ -51,7 +51,7 @@ button{font-family:inherit;font-size:inherit;cursor:pointer}
 .btn-danger{background:#fff;color:var(--red-700);border-color:#F4C7C3}
 .btn-sm{min-height:40px;padding:0 14px;font-size:15px;border-radius:var(--radius-sm)}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow-1)}
-.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:999px;font-size:14px;font-weight:700;line-height:1.7}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:999px;font-size:15px;font-weight:700;line-height:1.6}
 .b-blue{background:#E6F3FB;color:var(--blue-700)}
 .b-green{background:var(--green-50);color:var(--green-700)}
 .b-orange{background:var(--orange-50);color:var(--orange-700)}
@@ -68,8 +68,8 @@ button{font-family:inherit;font-size:inherit;cursor:pointer}
 .gnb{background:#fff;border-bottom:1px solid var(--line)}
 .gnb .wrap{display:flex;align-items:center;gap:28px;height:72px}
 .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px;color:#333;text-decoration:none;white-space:nowrap}
-.logo-mark{width:34px;height:34px;border-radius:2px;background:var(--brand-green);display:grid;place-items:center;color:#fff;font-weight:900}
-.logo small{display:block;font-size:12px;font-weight:600;color:var(--ink-400);letter-spacing:.2px}
+.logo-mark{width:34px;height:34px;border-radius:2px;background:var(--green-600);display:grid;place-items:center;color:#fff;font-weight:900}
+.logo small{display:block;font-size:14px;font-weight:600;color:var(--ink-400);letter-spacing:.2px}
 .gnb nav{display:flex;gap:4px;flex:1}
 .gnb nav a{padding:10px 14px;border-radius:10px;text-decoration:none;font-weight:700;color:var(--ink-500);font-size:16px}
 .gnb nav a{color:#222}
@@ -87,7 +87,7 @@ button{font-family:inherit;font-size:inherit;cursor:pointer}
 .search input{flex:1;border:0;font-size:18px;padding:0 14px;min-height:52px;font-family:inherit;color:var(--ink-900);border-radius:10px}
 .search input:focus{outline:none}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
-.chips span{background:rgba(255,255,255,.75);border:1px solid #fff;padding:4px 12px;border-radius:2px;font-size:14px;color:var(--navy-900);font-weight:700}
+.chips span{background:rgba(255,255,255,.75);border:1px solid #fff;padding:4px 12px;border-radius:2px;font-size:15px;color:var(--navy-900);font-weight:700}
 
 /* 퀵메뉴 */
 .quick{margin-top:-56px;display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
@@ -98,7 +98,10 @@ button{font-family:inherit;font-size:inherit;cursor:pointer}
 .qm span{font-size:15px;color:#fff;line-height:1.45;opacity:.95}
 .qm .go{margin-top:auto;border:1px solid rgba(255,255,255,.85);padding:6px 0;text-align:center;font-weight:700;font-size:15px}
 .t-green{background:var(--green-600)} .t-teal{background:var(--teal-700)} .t-brown{background:var(--brown-600)}
-.t-navy{background:var(--navy-900)} .t-olive{background:var(--olive-700)}
+.t-navy{background:var(--navy-900)} .t-olive{background:var(--olive-700)} .t-blue{background:var(--blue-700)}
+.m-only{display:none!important}
+@media (max-width:640px){.pc-only{display:none}}
+.tabbar.home-tab{position:fixed;display:none;z-index:40}
 .qm .lock{position:absolute;top:14px;right:14px}
 
 /* 섹션 */
@@ -113,20 +116,20 @@ button{font-family:inherit;font-size:inherit;cursor:pointer}
 .list-row:last-child{border-bottom:0}
 .emerg{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .emerg .card{padding:16px;border-left:5px solid var(--orange-500);background:#FFFCF7}
-footer{margin-top:36px;padding:26px 0;border-top:1px solid var(--line);color:var(--ink-400);font-size:14px;background:#fff}
+footer{margin-top:36px;padding:26px 0;border-top:1px solid var(--line);color:var(--ink-400);font-size:15px;background:#fff}
 
 /* 모바일 프레임 */
 .phones{display:flex;gap:28px;flex-wrap:wrap;justify-content:center;padding:28px 16px}
 .phone{width:390px;height:800px;border-radius:44px;background:#0F172A;padding:12px;box-shadow:0 30px 60px rgba(15,23,42,.25);flex:none}
 .phone .scr{width:100%;height:100%;border-radius:34px;overflow:hidden;background:var(--bg);display:flex;flex-direction:column;position:relative}
 .phone .cap-title{text-align:center;color:var(--ink-500);font-weight:700;margin-top:10px;font-size:15px}
-.m-top{background:var(--brand-sky);color:var(--navy-900);padding:18px 18px 52px}
-.m-top .row{display:flex;justify-content:space-between;align-items:center;font-size:14px;color:var(--navy-900)}
+.m-top{background:var(--brand-sky);color:var(--navy-900);padding:18px 18px 20px}
+.m-top .row{display:flex;justify-content:space-between;align-items:center;font-size:15px;color:var(--navy-900)}
 .m-body{flex:1;overflow:auto;padding:0 14px 90px}
-.m-quick{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:-40px}
+.m-quick{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
 .m-quick a{background:#fff;border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow-1);padding:14px 8px;text-align:center;text-decoration:none;font-size:15px;font-weight:700;color:var(--ink-900);display:flex;flex-direction:column;align-items:center;gap:8px;min-height:96px}
 .tabbar{position:absolute;bottom:0;left:0;right:0;height:72px;background:#fff;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr)}
-.tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:12px;font-weight:700;color:var(--ink-400);text-decoration:none}
+.tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:14px;font-weight:700;color:var(--ink-500);text-decoration:none}
 .tabbar a[aria-current]{color:var(--primary-600)}
 
 /* PIN */
@@ -145,14 +148,14 @@ footer{margin-top:36px;padding:26px 0;border-top:1px solid var(--line);color:var
 
 /* 폼/단계 */
 .steps{display:flex;gap:8px;margin:16px 0 20px;flex-wrap:wrap}
-.step{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:2px;background:var(--muted);color:var(--ink-400);font-weight:700;font-size:15px}
+.step{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:2px;background:var(--muted);color:var(--ink-500);font-weight:700;font-size:15px}
 .step.on{background:var(--primary-600);color:#fff}
 .step.done{background:var(--green-50);color:var(--green-700)}
 .field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
 .field label{font-weight:700;font-size:16px;color:var(--ink-900)}
 .field input,.field select{min-height:52px;border:1px solid var(--line);border-radius:4px;padding:0 14px;font-size:17px;font-family:inherit;color:var(--ink-900);background:#fff}
 .field input:focus,.field select:focus{border-color:var(--primary-600);box-shadow:0 0 0 4px var(--primary-100);outline:none}
-.field .hint{font-size:14px;color:var(--ink-400)}
+.field .hint{font-size:15px;color:var(--ink-400)}
 table.tbl{width:100%;border-collapse:collapse;font-size:16px}
 .tbl th{background:var(--green-50);color:var(--green-700)!important;color:var(--ink-500);font-weight:700;text-align:left;padding:12px 14px;font-size:15px}
 .tbl td{padding:14px;border-top:1px solid var(--line);vertical-align:middle}
@@ -163,7 +166,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
 .side{background:var(--primary-900);color:#C9D8F5;padding:20px 12px}
 .side a{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:10px;text-decoration:none;font-weight:700;font-size:16px;margin-bottom:4px}
 .side a[aria-current]{background:rgba(255,255,255,.12);color:#fff}
-.side .cnt{background:var(--orange-500);color:#fff;border-radius:999px;font-size:13px;padding:0 8px}
+.side .cnt{background:var(--orange-700);color:#fff;border-radius:999px;font-size:14px;padding:0 8px}
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
 .kpi{padding:18px}
 .kpi .n{font-size:32px;font-weight:800;color:var(--ink-900);line-height:1.2}
@@ -176,7 +179,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
 .swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
 .sw{border-radius:12px;overflow:hidden;border:1px solid var(--line);background:#fff}
 .sw div{height:64px}
-.sw p{margin:0;padding:8px 10px;font-size:13px}
+.sw p{margin:0;padding:8px 10px;font-size:15px}
 
 /* 반응형 */
 @media (max-width:960px){
@@ -193,7 +196,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
   .gnb .wrap{height:64px;gap:10px}
   .logo{font-size:17px}
   .logo small{display:none}
-  .user-chip{margin-left:auto;padding:6px 12px;font-size:14px}
+  .user-chip{margin-left:auto;padding:6px 12px;font-size:15px}
   .user-chip .btn{display:none}
   .h1{font-size:24px}
   .hero{padding:26px 0 76px}
@@ -202,7 +205,14 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
   .search .btn .lbl{display:none}
   .todo{flex-wrap:wrap}
   .todo .t{min-width:60%}
-  .qm{min-height:132px;padding:16px 14px}
+  .quick{grid-template-columns:repeat(3,1fr);gap:8px;margin-top:-48px}
+  .qm{min-height:96px;padding:14px 6px;align-items:center;text-align:center;gap:6px}
+  .qm strong{font-size:15px}
+  .qm span:not(.qi),.qm .lock{display:none}
+  .qm .qi{width:32px;height:32px}
+  .m-only{display:flex!important}
+  .tabbar.home-tab{display:grid}
+  #s-home{padding-bottom:72px}
   .tbl{font-size:15px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -269,8 +279,9 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
       <a class="qm t-green" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-flask"/></svg></span><strong>MSDS 관리</strong><span>물질 검색 · 응급조치 · 그림문자</span><span class="go">물질 찾기</span></a>
       <a class="qm t-teal" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-book"/></svg></span><strong>교육일지 작성</strong><span>특별안전보건 · MSDS 교육</span><span class="go">🔒 부서 로그인</span></a>
       <a class="qm t-brown" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-shield"/></svg></span><strong>보호구 지급</strong><span>지급수령증 · 서명</span><span class="go">🔒 부서 로그인</span></a>
-      <a class="qm t-olive" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-doc"/></svg></span><strong>화학물질 보고서</strong><span>신규사용 · 사용중단</span><span class="go">🔒 부서 로그인</span></a>
-      <a class="qm t-navy" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-gear"/></svg></span><strong>관리자 모드</strong><span>결재 · 현황 · 직원정보</span><span class="go">🔒 관리자</span></a>
+      <a class="qm t-olive" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-doc"/></svg></span><strong><span class="m-only" style="display:none">물질 보고</span><span class="pc-only">화학물질 보고서</span></strong><span>신규사용 · 사용중단</span><span class="go">🔒 부서 로그인</span></a>
+      <a class="qm t-navy" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-gear"/></svg></span><strong><span class="m-only" style="display:none">관리자</span><span class="pc-only">관리자 모드</span></strong><span>결재 · 현황 · 직원정보</span><span class="go">🔒 관리자</span></a>
+      <a class="qm t-blue m-only" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-list"/></svg></span><strong>제출현황</strong><span>우리 부서 제출·결재</span></a>
     </div>
 
     <div class="sec grid-2">
@@ -303,6 +314,13 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
     </div>
   </main>
   <footer><div class="wrap">부산부민병원 보건관리실 · MSDS 통합관리 v19 (디자인 미리보기)</div></footer>
+  <nav class="tabbar home-tab" aria-label="하단 탭">
+    <a href="#" aria-current="page"><svg class="ico" style="width:24px;height:24px"><use href="#i-home"/></svg>홈</a>
+    <a href="#"><svg class="ico" style="width:24px;height:24px"><use href="#i-flask"/></svg>MSDS</a>
+    <a href="#"><svg class="ico" style="width:24px;height:24px"><use href="#i-book"/></svg>교육일지</a>
+    <a href="#"><svg class="ico" style="width:24px;height:24px"><use href="#i-list"/></svg>현황</a>
+    <a href="#"><svg class="ico" style="width:24px;height:24px"><use href="#i-user"/></svg>내 부서</a>
+  </nav>
 </section>
 
 <!-- ═══════════ ② 모바일 ═══════════ -->
@@ -317,12 +335,12 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
         </div>
         <div class="m-body">
           <div class="m-quick">
-            <a href="#"><svg class="ico" style="color:var(--primary-600)"><use href="#i-flask"/></svg>MSDS</a>
-            <a href="#"><svg class="ico" style="color:var(--green-600)"><use href="#i-book"/></svg>교육일지</a>
-            <a href="#"><svg class="ico" style="color:#534AB7"><use href="#i-shield"/></svg>보호구</a>
-            <a href="#"><svg class="ico" style="color:var(--orange-700)"><use href="#i-doc"/></svg>물질 보고</a>
-            <a href="#"><svg class="ico" style="color:var(--ink-700)"><use href="#i-list"/></svg>제출현황</a>
-            <a href="#"><svg class="ico" style="color:var(--ink-700)"><use href="#i-gear"/></svg>관리자</a>
+            <a href="#"><svg class="ico" style="color:var(--green-600)"><use href="#i-flask"/></svg>MSDS</a>
+            <a href="#"><svg class="ico" style="color:var(--teal-700)"><use href="#i-book"/></svg>교육일지</a>
+            <a href="#"><svg class="ico" style="color:var(--brown-600)"><use href="#i-shield"/></svg>보호구</a>
+            <a href="#"><svg class="ico" style="color:var(--olive-700)"><use href="#i-doc"/></svg>물질 보고</a>
+            <a href="#"><svg class="ico" style="color:var(--blue-700)"><use href="#i-list"/></svg>제출현황</a>
+            <a href="#"><svg class="ico" style="color:var(--navy-900)"><use href="#i-gear"/></svg>관리자</a>
           </div>
           <h3 class="h3" style="margin:20px 4px 8px">할 일 <span class="badge b-red">2</span></h3>
           <div class="card">
@@ -335,7 +353,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
         <nav class="tabbar" aria-label="하단 탭">
           <a href="#" aria-current="page"><svg class="ico" style="width:24px;height:24px"><use href="#i-home"/></svg>홈</a>
           <a href="#"><svg class="ico" style="width:24px;height:24px"><use href="#i-flask"/></svg>MSDS</a>
-          <a href="#"><svg class="ico" style="width:24px;height:24px"><use href="#i-book"/></svg>작성</a>
+          <a href="#"><svg class="ico" style="width:24px;height:24px"><use href="#i-book"/></svg>교육일지</a>
           <a href="#"><svg class="ico" style="width:24px;height:24px"><use href="#i-list"/></svg>현황</a>
           <a href="#"><svg class="ico" style="width:24px;height:24px"><use href="#i-user"/></svg>내 부서</a>
         </nav>
@@ -451,13 +469,14 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
       <a href="#">교육 현황</a>
       <a href="#">보호구 지급</a>
       <a href="#">화학물질 보고서 <span class="cnt">1</span></a>
+      <a href="#">물질 마스터 점검 <span class="cnt">2</span></a>
       <a href="#">직원정보관리</a>
       <a href="#">신규입사 알림 <span class="cnt">2</span></a>
       <a href="#">설정</a>
     </aside>
     <main style="padding:24px">
       <h1 class="h1">대시보드</h1>
-      <div class="cap">2026-10-21 기준 · 서버 v18.6</div>
+      <div class="cap">2026-10-21 기준 · 서버 v18.7</div>
       <div class="kpis" style="margin-top:16px">
         <div class="card kpi"><div class="cap">결재 대기</div><div class="n">4<span class="cap"> 건</span></div><span class="badge b-orange">오늘 2건 추가</span></div>
         <div class="card kpi"><div class="cap">교육 기한 초과</div><div class="n" style="color:var(--red-700)">1<span class="cap"> 명</span></div><span class="badge b-red">71병동</span></div>
@@ -473,6 +492,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
         <div class="card"><div style="padding:16px 18px;border-bottom:1px solid var(--line)" class="h3">주의 필요</div>
           <div class="list-row"><span><span class="badge b-red">기한초과</span> 71병동 한새봄 (입사 10.15)</span><button class="btn btn-secondary btn-sm">재알림</button></div>
           <div class="list-row"><span><span class="badge b-orange">PIN 없음</span> 인공신장실</span><button class="btn btn-secondary btn-sm">설정</button></div>
+          <div class="list-row"><span><span class="badge b-orange">물질 점검</span> CAS 오류 2 · 빈 특수검진 187</span><button class="btn btn-secondary btn-sm">점검</button></div>
         </div>
       </div>
     </main>
