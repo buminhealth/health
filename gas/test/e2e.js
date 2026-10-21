@@ -455,7 +455,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('④ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v19.5'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v19.6'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -501,11 +501,19 @@ function check(name, cond, extra) {
   ch.appendRow(['메탄올B', 'D사', '병리과', '메탄올', '67-56-1', '50', '', '']);
   ch.appendRow(['정제수제품', 'E사', '약제과', '정제수', '732-18-5', '90', '', '']);
   ch.appendRow(['EDTA용액', 'F사', '진단검사의학과', 'EDTA', '64-02-8.', '5', '', '']);
+  ch.appendRow(['정제수B', 'G사', '약제과', '물', '7732-18-5', '95', '', '']);
+  ch.appendRow(['그람탈색액', 'H사', '진단검사의학과', '에틸알코올', '64-17- 5', '2026-09-10 00:00:00', '', '']);
+  ch.appendRow(['세정제K', 'I사', '영양팀', '탄산 칼륨', '0584-08-07', vm.runInContext('new Date(2026, 0, 5)', g.ctx), '', '']);
+  ch.appendRow(['광택제L', 'J사', '미화부', 'Lemon oil', '226-394-6', '1', '', '']);
   const au = await page.evaluate(() => BMAUTH.post('chem.audit', {}));
   const iss = (au.casIssues || []).reduce((m, x) => (m[x.comp] = x, m), {});
   check('물질 점검: 날짜로 바뀐 CAS → 9014-01-1 복원 제안', iss.Protease && iss.Protease.fix === '9014-01-1', iss.Protease);
   check('물질 점검: 끝의 점 → 64-02-8', iss.EDTA && iss.EDTA.fix === '64-02-8', iss.EDTA);
-  check('물질 점검: 검증숫자 오류(732-18-5) 표시', iss['정제수'] && !iss['정제수'].fix && /검증숫자/.test(iss['정제수'].why), iss['정제수']);
+  check('물질 점검: 검증숫자 오류(732-18-5) → 같은 시트의 7732-18-5로 추정', iss['정제수'] && iss['정제수'].fix === '7732-18-5' && iss['정제수'].guess && /검증숫자/.test(iss['정제수'].why), iss['정제수']);
+  check('물질 점검: 띄어쓰기 · 앞자리 0 복원 (64-17-5, 584-08-7)', iss['에틸알코올'] && iss['에틸알코올'].fix === '64-17-5' && iss['탄산 칼륨'] && iss['탄산 칼륨'].fix === '584-08-7', [iss['에틸알코올'], iss['탄산 칼륨']]);
+  check('물질 점검: EC 번호 구분 (CAS 아님)', iss['Lemon oil'] && !iss['Lemon oil'].fix && /EC 번호/.test(iss['Lemon oil'].why), iss['Lemon oil']);
+  const amt = (au.amountIssues || []).reduce((m, x) => (m[x.comp] = x.fix, m), {});
+  check('물질 점검: 함유량이 날짜로 바뀜 → 9-10, 1-5 복원 제안', amt['에틸알코올'] === '9-10' && amt['탄산 칼륨'] === '1-5', au.amountIssues);
   const sugB = (au.suggestions || []).filter(x => x.product === '메탄올B');
   check('물질 점검: 같은 CAS 다른 제품 판정으로 빈칸 제안 (특수검진·측정)', sugB.length === 2 && sugB.some(x => x.field === 'hc' && x.value === '12개월'), sugB);
   const seed = await page.evaluate(() => BMAUTH.post('chem.seedLaw', {}));
@@ -521,6 +529,19 @@ function check(name, cond, extra) {
     casFixes: [{ row: rowP, fix: '9014-01-1' }] });
   check('반영: 빈 칸만 채움 · 기존 값은 그대로', ap.success && ap.filled === 1 && ap.skipped === 1 && ch.rows[rowB - 1][6] === '12개월' && ch.rows[rowA - 1][6] === '12개월', ap);
   check('반영: CAS 원래 값으로 복원', ap.fixed === 1 && ch.rows[rowP - 1][4] === '9014-01-1', ch.rows[rowP - 1][4]);
+  const chRow = n => ch.rows.findIndex(r => r[0] === n) + 1;
+  const ap2 = await page.evaluate(a => BMAUTH.post('chem.apply', a), {
+    casFixes: [{ row: chRow('광택제L'), fix: '8008-56-8', raw: '226-394-6' }, { row: chRow('정제수B'), fix: '7732-18-5' }, { row: chRow('메탄올B'), fix: '64-17-5' }, { row: chRow('정제수제품'), fix: '7732-18-4' }],
+    amountFixes: [{ row: chRow('그람탈색액'), fix: '9-10' }, { row: chRow('세정제K'), fix: '1-5' }] });
+  check('반영: 관리자가 입력한 CAS (검증숫자 맞을 때만, 정상 CAS는 안 바꿈)', ap2.fixed === 1 && ch.rows[chRow('광택제L') - 1][4] === '8008-56-8' && ch.rows[chRow('메탄올B') - 1][4] === '67-56-1' && ap2.skipped === 3, ap2);
+  check('반영: 함유량 원래 값으로 복원', ap2.amounts === 2 && ch.rows[chRow('그람탈색액') - 1][5] === '9-10' && ch.rows[chRow('세정제K') - 1][5] === '1-5', ap2);
+  const imp = await page.evaluate(() => BMAUTH.post('chem.lawImport', { kind: 'hc', value: '12개월', src: '시행규칙 별표22',
+    text: '1\t메틸알코올(Methanol; 67-56-1)\n2\t에틸렌글리콜(Ethylene glycol; 107-21-1)\n3\t잘못된 번호 50-00-1\n제목 줄' }));
+  check('법령대조표 붙여넣기: 새 CAS 추가 · 같은 값은 그대로 · 검증숫자 오류 건너뜀', imp.success && imp.added === 1 && imp.same === 1 && imp.invalid === 1 && g_lawHas(g, '107-21-1'), imp);
+  const imp2 = await page.evaluate(() => BMAUTH.post('chem.lawImport', { kind: 'hc', value: '6개월', text: '메틸알코올 67-56-1' }));
+  check('법령대조표 붙여넣기: 기존 값과 다르면 바꾸지 않고 알림', imp2.success && imp2.differCount === 1 && imp2.updated === 0, imp2);
+  const imp3 = await page.evaluate(() => BMAUTH.post('chem.lawImport', { kind: 'target', text: '메틸알코올 67-56-1' }));
+  check('법령대조표 붙여넣기: 관리대상 칸 채우기', imp3.success && imp3.updated === 1, imp3);
   const denyChem = await page.evaluate(async () => {
     const r = await BMAUTH.post('login', { kind: 'dept', dept: '61병동', pin: '4321' });
     return BMAUTH.post('chem.audit', { t: r.token });

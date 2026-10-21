@@ -10,8 +10,13 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v19.5 (2026-10-21)
+  부민병원 MSDS 통합시스템 v19.6 (2026-10-21)
 
+  ★★★ v19.6 (2026-10-21) — AI 판정 2단계 마무리: 물질 마스터 점검 보완 (서버 v19.6):
+    - CAS: 앞의 점 · 중간 띄어쓰기 · 앞자리 0 자동 복원, EC 번호 구분, 한 자리 오타 '추정'(같은 시트의 CAS), 맞는 CAS 직접 입력(검증숫자 확인)
+    - 함유량이 날짜로 바뀐 칸(예: 9-10 → 2026-09-10) 점검 · 원래 값 복원 (열을 텍스트 형식으로 고정)
+    - 같은 CAS 주기 불일치: 작업환경측정도 비교 ('제외(사유)'는 제품별 판단이라 제외)
+    - 법령대조표: 별표 표를 붙여넣으면 줄마다 CAS를 찾아 특수건강진단 · 작업환경측정 · 관리대상 · 특별관리 칸에 기록
   ★★★ v19.5 (2026-10-21) — 리디자인 6단계 관리자 (최종 시안 A-8) + 반려:
     - 진한 초록 왼쪽 메뉴, 결재 요약 4칸(결재 대기 · 반려 · 이번 달 결재 · 전체), 상태 표시(결재대기 · 반려 · 결재완료)
     - 줄을 누르면 오른쪽에 저장된 PDF 원본 (새 창으로 열기 · 내려받기 · 인쇄 · 반려 · 이 문서 결재)
@@ -3466,6 +3471,14 @@ b.hm-f{font-weight:700}
       '</div><div style="font-size:20px;font-weight:800;color:' + (warn ? '#B42318' : '#111') + '">' + value + '</div></div>';
   }
 
+  // CAS 검증숫자 (서버 casCheck_와 같음)
+  function casOk(cas){
+    var m = String(cas || '').trim().match(/^(\d{2,7})-(\d{2})-(\d)$/);
+    if(!m) return false;
+    var d = (m[1] + m[2]).split('').reverse(), sum = 0;
+    d.forEach(function(x, i){ sum += (i + 1) * +x; });
+    return sum % 10 === +m[3];
+  }
   async function open(){
     var body = document.getElementById('chemm-body');
     if(!body) return;
@@ -3473,20 +3486,29 @@ b.hm-f{font-weight:700}
     var r = await BMAUTH.post('chem.audit', {});
     if(!r.success){
       body.innerHTML = '<div style="color:#B42318;font-size:13px">' + esc(r.error || '점검 실패') +
-        (/unknown op/.test(r.error || '') ? ' — 서버(Code.gs)를 v18.7 이상으로 배포하세요.' : '') + '</div>';
+        (/unknown op/.test(r.error || '') ? ' — 서버(Code.gs)를 v19.6 이상으로 배포하세요.' : '') + '</div>';
       return;
     }
     data = r;
+    r.amountIssues = r.amountIssues || [];
     var st = document.getElementById('chemm-stat');
     if(st) st.textContent = '빈 특수검진 ' + r.blankHc + ' · CAS 문제 ' + r.casIssues.length;
+    // v19.6: 자동 복원은 미리 체크, '추정'은 확인 후 체크, 제안이 없으면 맞는 CAS 직접 입력
     var casRows = r.casIssues.map(function(x, i){
-      return '<tr><td style="' + TD + '">' + (x.fix ? '<input type="checkbox" data-cas="' + i + '" checked>' : '') + '</td>' +
+      return '<tr><td style="' + TD + '">' + (x.fix ? '<input type="checkbox" data-cas="' + i + '"' + (x.guess ? '' : ' checked') + '>' : '') + '</td>' +
         '<td style="' + TD + '">' + esc(x.product) + '</td><td style="' + TD + '">' + esc(x.comp) + '</td>' +
         '<td style="' + TD + ';color:#B42318;font-weight:700">' + esc(x.raw) + '</td>' +
-        '<td style="' + TD + ';color:#3B7322;font-weight:700">' + esc(x.fix || '직접 확인 필요') + '</td><td style="' + TD + '">' + esc(x.why) + '</td></tr>';
+        '<td style="' + TD + ';color:#3B7322;font-weight:700">' + (x.fix ? esc(x.fix) + (x.guess ? ' <span style="color:#6E4A00;font-weight:600">(추정)</span>' : '')
+          : '<input data-casin="' + i + '" placeholder="맞는 CAS 입력" style="width:130px;padding:4px 6px;border:1px solid #C6C3BB;border-radius:4px;font:inherit">') + '</td>' +
+        '<td style="' + TD + '">' + esc(x.why) + '</td></tr>';
+    });
+    var amt = r.amountIssues.map(function(x, i){
+      return '<tr><td style="' + TD + '"><input type="checkbox" data-amt="' + i + '" checked></td>' +
+        '<td style="' + TD + '">' + esc(x.product) + '</td><td style="' + TD + '">' + esc(x.comp) + '</td>' +
+        '<td style="' + TD + ';color:#B42318;font-weight:700">' + esc(x.raw) + '</td><td style="' + TD + ';color:#3B7322;font-weight:700">' + esc(x.fix) + '</td></tr>';
     });
     var conf = r.conflicts.map(function(x){
-      return '<tr><td style="' + TD + '">' + esc(x.cas) + '</td><td style="' + TD + '">' + esc(x.comp) + '</td>' +
+      return '<tr><td style="' + TD + '">' + esc(x.cas) + '</td><td style="' + TD + '">' + esc(x.comp) + '</td><td style="' + TD + '">' + (FIELD[x.field] || FIELD.hc) + '</td>' +
         '<td style="' + TD + ';font-weight:700">' + esc(x.values.join(' / ')) + '</td><td style="' + TD + '">' + esc(x.rows.join(', ')) + '</td></tr>';
     });
     var sug = r.suggestions.map(function(x, i){
@@ -3499,27 +3521,60 @@ b.hm-f{font-weight:700}
       '<div style="' + BOX + '"><div style="display:flex;gap:8px;flex-wrap:wrap">' +
         stat('제품', r.products) + stat('성분 행', r.total) + stat('정상 CAS 종류', r.uniqueCas) +
         stat('빈 특수검진', r.blankHc + ' / ' + r.total, r.blankHc > 0) + stat('빈 작업환경측정', r.blankWe + ' / ' + r.total, r.blankWe > 0) +
+        stat('함유량 날짜', r.amountIssues.length, r.amountIssues.length > 0) +
         stat('법령대조표', r.lawCount + '종') + stat('대조표에 없는 CAS', r.unknownCas, r.unknownCas > 0) +
       '</div><div style="font-size:12px;color:#64748b;margin-top:8px">AI가 MSDS를 읽어 판정하려면 이 기준 데이터가 정확해야 합니다. ' +
       '판정은 산업안전보건법 시행규칙 별표 기준을 보건관리자가 최종 확인하세요.</div></div>' +
 
       '<div style="' + BOX + '"><div style="font-weight:800;color:#044B75;margin-bottom:6px">① CAS 번호 문제 ' + r.casIssues.length + '건</div>' +
-      '<div style="font-size:12px;color:#64748b;margin-bottom:8px">구글시트가 CAS를 날짜로 바꾼 경우(예: 9014-01-1 → 9014-01-01) 검증숫자로 원래 값을 찾아 제안합니다. 반영하면 CAS 열을 텍스트 형식으로 고정해 다시 바뀌지 않습니다.</div>' +
-      (casRows.length ? table(['반영', '제품', '성분', '지금 값', '제안', '사유'], casRows) : '<div style="font-size:12px;color:#15803d">문제 없음</div>') + '</div>' +
+      '<div style="font-size:12px;color:#64748b;margin-bottom:8px">구글시트가 CAS를 날짜로 바꾼 경우(예: 9014-01-1 → 9014-01-01) 검증숫자로 원래 값을 찾아 제안합니다. ' +
+        '<b>(추정)</b>은 같은 시트의 CAS와 한 자리 차이인 오타 후보라 MSDS를 보고 맞으면 체크하세요. 제안이 없으면 MSDS의 CAS를 직접 입력하세요(검증숫자가 맞아야 반영). 반영하면 CAS 열을 텍스트 형식으로 고정합니다.</div>' +
+      (casRows.length ? table(['반영', '제품', '성분', '지금 값', '제안 · 직접 입력', '사유'], casRows) : '<div style="font-size:12px;color:#15803d">문제 없음</div>') + '</div>' +
 
-      '<div style="' + BOX + '"><div style="font-weight:800;color:#044B75;margin-bottom:6px">② 같은 CAS인데 판정이 다름 ' + r.conflicts.length + '건</div>' +
-      '<div style="font-size:12px;color:#64748b;margin-bottom:8px">함량 차이로 다를 수 있습니다. 확인 후 시트에서 직접 맞춰 주세요.</div>' +
-      (conf.length ? table(['CAS', '성분', '판정', '제품(현재 값)'], conf) : '<div style="font-size:12px;color:#15803d">없음</div>') + '</div>' +
+      '<div style="' + BOX + '"><div style="font-weight:800;color:#044B75;margin-bottom:6px">② 함유량이 날짜로 바뀜 ' + r.amountIssues.length + '건</div>' +
+      '<div style="font-size:12px;color:#64748b;margin-bottom:8px">구글시트가 함유량 범위(예: 9-10)를 날짜(2026-09-10)로 바꾼 칸입니다. AI가 함량 1% 기준을 판단하려면 원래 값이어야 합니다. 반영하면 함유량 열도 텍스트 형식으로 고정합니다.</div>' +
+      (amt.length ? table(['반영', '제품', '성분', '지금 값', '원래 값'], amt) : '<div style="font-size:12px;color:#15803d">문제 없음</div>') + '</div>' +
+
+      '<div style="' + BOX + '"><div style="font-weight:800;color:#044B75;margin-bottom:6px">③ 같은 CAS인데 주기가 다름 ' + r.conflicts.length + '건</div>' +
+      '<div style="font-size:12px;color:#64748b;margin-bottom:8px">\'제외(사유)\'는 제품별 판단이라 빼고, 주기(개월)가 서로 다른 것만 보여줍니다. 확인 후 시트에서 직접 맞춰 주세요.</div>' +
+      (conf.length ? table(['CAS', '성분', '항목', '주기', '제품(현재 값)'], conf) : '<div style="font-size:12px;color:#15803d">없음</div>') + '</div>' +
 
       '<div style="' + BOX + '"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px">' +
-        '<div style="font-weight:800;color:#044B75">③ 빈칸 채우기 제안 ' + r.suggestions.length + '건</div>' +
+        '<div style="font-weight:800;color:#044B75">④ 빈칸 채우기 제안 ' + r.suggestions.length + '건</div>' +
         '<div style="display:flex;gap:6px"><button id="chemm-seed" style="' + BTN + '">기존 판정으로 법령대조표 만들기</button>' +
         '<button id="chemm-all" style="' + BTN + '">모두 선택</button></div></div>' +
       '<div style="font-size:12px;color:#64748b;margin-bottom:8px">법령대조표, 또는 같은 CAS의 다른 제품 판정을 근거로 제안합니다. <b>함량</b>을 보고 대상 여부를 판단한 뒤 체크하세요. 빈 칸에만 기록되고 기존 값은 바뀌지 않습니다.</div>' +
       (sug.length ? table(['반영', '제품', '성분', 'CAS', '함량', '항목', '제안 값', '근거'], sug)
                   : '<div style="font-size:12px;color:#64748b">제안 없음 — 법령대조표가 비어 있으면 위 [기존 판정으로 법령대조표 만들기]를 누르거나, 시트 [법령대조표]에 고시 목록(CAS·주기)을 붙여넣으세요.</div>') + '</div>' +
 
-      '<div style="text-align:right"><button id="chemm-apply" style="' + BTN_P + ';padding:10px 18px;font-size:14px">선택한 항목 시트에 반영</button></div>';
+      '<div style="text-align:right;margin-bottom:12px"><button id="chemm-apply" style="' + BTN_P + ';padding:10px 18px;font-size:14px">선택한 항목 시트에 반영</button></div>' +
+
+      '<div style="' + BOX + '"><div style="font-weight:800;color:#044B75;margin-bottom:6px">⑤ 법령대조표에 고시 목록 붙여넣기</div>' +
+      '<div style="font-size:12px;color:#64748b;margin-bottom:8px">국가법령정보센터의 별표(특수건강진단 대상 유해인자 별표22 · 주기 별표23, 작업환경측정 대상 별표21, 관리대상 유해물질 별표12)를 표째 복사해 붙여넣으세요. ' +
+        '줄마다 CAS 번호를 찾아 고른 항목에 기록합니다. <b>주기가 다른 묶음(예: 6개월 · 24개월)은 따로</b> 붙여넣으세요. 이미 값이 있는 칸은 바꾸지 않고 다르면 알려 드립니다.</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">' +
+        '<select id="chemm-kind" style="padding:6px 8px;border:1px solid #C6C3BB;border-radius:4px;font:inherit"><option value="hc">특수건강진단 (주기)</option><option value="we">작업환경측정 (주기)</option><option value="target">관리대상 유해물질</option><option value="special">특별관리물질</option></select>' +
+        '<input id="chemm-val" value="12개월" placeholder="주기 (예: 12개월)" style="width:130px;padding:6px 8px;border:1px solid #C6C3BB;border-radius:4px;font:inherit">' +
+        '<input id="chemm-src" value="시행규칙 별표22·23" placeholder="출처" style="flex:1;min-width:180px;padding:6px 8px;border:1px solid #C6C3BB;border-radius:4px;font:inherit"></div>' +
+      '<textarea id="chemm-paste" rows="6" placeholder="여기에 별표 표를 붙여넣기 (CAS 번호가 들어 있는 줄만 읽음)" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #C6C3BB;border-radius:4px;font:inherit;font-size:13px"></textarea>' +
+      '<div style="text-align:right;margin-top:8px"><button id="chemm-import" style="' + BTN_P + '">법령대조표에 넣기</button></div>' +
+      '<div id="chemm-import-msg" style="font-size:12px;margin-top:6px"></div></div>';
+    var DEF = { hc: ['12개월', '시행규칙 별표22·23'], we: ['6개월', '시행규칙 별표21'], target: ['해당', '안전보건규칙 별표12'], special: ['해당', '안전보건규칙 별표12 (특별관리)'] };
+    document.getElementById('chemm-kind').onchange = function(){
+      var d = DEF[this.value]; document.getElementById('chemm-val').value = d[0]; document.getElementById('chemm-src').value = d[1];
+    };
+    document.getElementById('chemm-import').onclick = async function(){
+      var text = document.getElementById('chemm-paste').value;
+      if(!/\d{2,7}-\d{2}-\d/.test(text)){ say('붙여넣은 내용에 CAS 번호가 없습니다', 'err'); return; }
+      var x = await BMAUTH.post('chem.lawImport', { kind: document.getElementById('chemm-kind').value, value: document.getElementById('chemm-val').value,
+        src: document.getElementById('chemm-src').value, text: text });
+      if(!x.success){ say(x.error || '실패', 'err'); return; }
+      say('법령대조표: 새로 ' + x.added + ' · 빈칸 채움 ' + x.updated + ' · 같음 ' + x.same + (x.invalid ? ' · CAS 오류 ' + x.invalid : ''), 'ok');
+      document.getElementById('chemm-paste').value = '';
+      await open();
+      var m = document.getElementById('chemm-import-msg');
+      if(m && x.differCount) m.innerHTML = '<b style="color:#A3302A">기존 값과 다름 ' + x.differCount + '건 (바꾸지 않음):</b> ' + esc(x.differ.join(', '));
+    };
 
     document.getElementById('chemm-seed').onclick = async function(){
       var x = await BMAUTH.post('chem.seedLaw', {});
@@ -3533,11 +3588,21 @@ b.hm-f{font-weight:700}
       var fills = [].slice.call(body.querySelectorAll('[data-sug]:checked')).map(function(c){
         var x = data.suggestions[+c.getAttribute('data-sug')]; return { row: x.row, field: x.field, value: x.value }; });
       var casFixes = [].slice.call(body.querySelectorAll('[data-cas]:checked')).map(function(c){
-        var x = data.casIssues[+c.getAttribute('data-cas')]; return { row: x.row, fix: x.fix }; });
-      if(!fills.length && !casFixes.length){ say('반영할 항목을 체크하세요', 'err'); return; }
-      if(!confirm('빈칸 ' + fills.length + '개, CAS ' + casFixes.length + '개를 chemicals 시트에 반영합니다.')) return;
-      var x = await BMAUTH.post('chem.apply', { fills: fills, casFixes: casFixes });
-      say(x.success ? '반영 완료: 빈칸 ' + x.filled + ' · CAS ' + x.fixed + (x.skipped ? ' (건너뜀 ' + x.skipped + ')' : '') : (x.error || '실패'), x.success ? 'ok' : 'err');
+        var x = data.casIssues[+c.getAttribute('data-cas')]; return { row: x.row, fix: x.fix, raw: x.raw }; });
+      var badIn = [];
+      [].slice.call(body.querySelectorAll('[data-casin]')).forEach(function(inp){
+        var v = inp.value.trim(); if(!v) return;
+        var x = data.casIssues[+inp.getAttribute('data-casin')];
+        if(!casOk(v)){ badIn.push(v); inp.style.borderColor = '#C23B32'; return; }
+        casFixes.push({ row: x.row, fix: v, raw: x.raw });
+      });
+      if(badIn.length){ say('CAS 검증숫자가 맞지 않습니다: ' + badIn.join(', '), 'err'); return; }
+      var amountFixes = [].slice.call(body.querySelectorAll('[data-amt]:checked')).map(function(c){
+        var x = data.amountIssues[+c.getAttribute('data-amt')]; return { row: x.row, fix: x.fix }; });
+      if(!fills.length && !casFixes.length && !amountFixes.length){ say('반영할 항목을 체크하세요', 'err'); return; }
+      if(!confirm('빈칸 ' + fills.length + '개, CAS ' + casFixes.length + '개, 함유량 ' + amountFixes.length + '개를 chemicals 시트에 반영합니다.')) return;
+      var x = await BMAUTH.post('chem.apply', { fills: fills, casFixes: casFixes, amountFixes: amountFixes });
+      say(x.success ? '반영 완료: 빈칸 ' + x.filled + ' · CAS ' + x.fixed + ' · 함유량 ' + (x.amounts || 0) + (x.skipped ? ' (건너뜀 ' + x.skipped + ')' : '') : (x.error || '실패'), x.success ? 'ok' : 'err');
       open();
     };
   }

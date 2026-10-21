@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v19.5 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v19.6 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -169,7 +169,7 @@ function doPost(e) {
       case 'emp.status': case 'emp.sync': case 'hr.fetch':
       case 'nh.list': case 'nh.answer': case 'nh.resend': case 'nh.run':
                         result = staffOp_(req, s); break;
-      case 'chem.audit': case 'chem.seedLaw': case 'chem.apply':
+      case 'chem.audit': case 'chem.seedLaw': case 'chem.apply': case 'chem.lawImport':
                         result = chemOp_(req, s); break;
       default:          result = { success: false, error: 'unknown op: ' + req.op };
     }
@@ -1849,12 +1849,28 @@ function casFromCell_(v) {
   const raw = String(v == null ? '' : v).trim();
   let m = raw.match(/^(\d{2,7})-(\d{1,2})-(\d{1,2})(?:\s+00:00:00)?$/);   // 날짜 문자열로 바뀐 경우 (9014-01-01)
   if (m && raw.length >= 10 && !casCheck_(raw)) {
-    const guess = m[1] + '-' + ('0' + Number(m[2])).slice(-2) + '-' + Number(m[3]);
+    const guess = m[1].replace(/^0+(?=\d{2})/, '') + '-' + ('0' + Number(m[2])).slice(-2) + '-' + Number(m[3]);
     if (Number(m[3]) < 10 && casCheck_(guess)) return { raw: raw, fixed: guess, why: '날짜로 바뀐 CAS' };
   }
   const trimmed = raw.replace(/[.\s]+$/, '');
   if (trimmed !== raw && casCheck_(trimmed)) return { raw: raw, fixed: trimmed, why: '끝에 불필요한 문자' };
+  // v19.6: 앞의 점 · 중간 띄어쓰기 · 앞자리 0 (예: .64-02-8, 64-17- 5, 0584-08-07)
+  const squeezed = raw.replace(/\s+/g, '').replace(/^[^0-9]+/, '').replace(/[^0-9]+$/, '');
+  if (squeezed !== raw && casCheck_(squeezed)) return { raw: raw, fixed: squeezed, why: '불필요한 문자 · 띄어쓰기' };
+  m = squeezed.match(/^0*(\d{2,7})-(\d{1,2})-(\d{1,2})$/);
+  if (m) {
+    const guess = m[1] + '-' + ('0' + Number(m[2])).slice(-2) + '-' + Number(m[3]);
+    if (guess !== raw && Number(m[3]) < 10 && casCheck_(guess)) return { raw: raw, fixed: guess, why: '날짜로 바뀐 CAS' };
+  }
+  if (/^\d{3}-\d{3}-\d$/.test(raw)) return { raw: raw, fixed: '', why: 'EC 번호 (CAS 아님) — MSDS에서 CAS 확인' };
   return { raw: raw, fixed: '', why: '' };
+}
+// 함유량 칸이 날짜로 바뀐 경우 (예: 9-10 → 2026-09-10) → 원래 '월-일' 범위로 복원
+function amountFromCell_(v) {
+  if (v instanceof Date) return { raw: Utilities.formatDate(v, TZ, 'yyyy-MM-dd'), fixed: (v.getMonth() + 1) + '-' + v.getDate() };
+  const raw = String(v == null ? '' : v).trim();
+  const m = raw.match(/^\d{4}-(\d{1,2})-(\d{1,2})(?:[\sT]00:00(?::00)?(?:\.000Z?)?)?$/);
+  return m ? { raw: raw, fixed: Number(m[1]) + '-' + Number(m[2]) } : { raw: raw, fixed: '' };
 }
 
 // chemicals 시트를 성분 행 단위로 (시트 행 번호 포함)
@@ -1881,8 +1897,9 @@ function chemRows_() {
     const casCell = c.cas >= 0 ? r[c.cas] : '';
     if (!product || (!comp && (casCell === '' || casCell === null))) return;
     const ci = casFromCell_(casCell);
+    const ai = c.amount >= 0 ? amountFromCell_(r[c.amount]) : { raw: '', fixed: '' };
     out.push({ row: i + 2, product: product, dept: dept, comp: comp, cas: ci.fixed || ci.raw, casRaw: ci.raw, casFix: ci.fixed, casWhy: ci.why,
-               amount: c.amount >= 0 ? String(r[c.amount] instanceof Date ? fmtDate_(r[c.amount]) : (r[c.amount] || '')).trim() : '',
+               amount: ai.fixed || ai.raw, amountRaw: ai.raw, amountFix: ai.fixed,
                hc: c.hc >= 0 ? String(r[c.hc] || '').trim() : '', we: c.we >= 0 ? String(r[c.we] || '').trim() : '' });
   });
   return { sheet: sheet, rows: out, col: c };
@@ -1917,11 +1934,28 @@ function chemAudit_() {
   const byCas = {};
   rows.forEach(r => { if (casCheck_(r.cas)) (byCas[r.cas] = byCas[r.cas] || []).push(r); });
   const casIssues = rows.filter(r => r.casRaw && !/영업비밀|trade secret|비공개|자료없음|^-$/i.test(r.casRaw) && (r.casFix || !casCheck_(r.casRaw)))
-    .map(r => ({ row: r.row, product: r.product, comp: r.comp, raw: r.casRaw, fix: r.casFix, why: r.casFix ? r.casWhy : (casCheck_(r.casRaw) === false ? '검증숫자 틀림' : '형식 아님') }));
-  const conflicts = Object.keys(byCas).map(cas => {
-    const hcs = [...new Set(byCas[cas].map(r => r.hc).filter(isCycle_))];
-    return hcs.length > 1 ? { cas: cas, comp: byCas[cas][0].comp, values: hcs, rows: byCas[cas].map(r => r.product + ' (' + (r.hc || '빈칸') + ')') } : null;
-  }).filter(Boolean);
+    .map(r => {
+      const o = { row: r.row, product: r.product, comp: r.comp, raw: r.casRaw, fix: r.casFix, why: r.casFix ? r.casWhy : (r.casWhy || (casCheck_(r.casRaw) === false ? '검증숫자 틀림' : '형식 아님')) };
+      if (!o.fix) {   // v19.6: 오타 추정 — 같은 시트에 있는 CAS 중 앞자리 하나 더하기/빼기로 맞는 것 (관리자가 확인 후 체크)
+        const t = String(r.casRaw).replace(/\s+/g, '');
+        const cands = [];
+        if (/^\d{2,7}-\d{2}-\d$/.test(t)) {
+          for (let d = 1; d <= 9; d++) cands.push(d + t);
+          if (/^\d{3,}/.test(t)) cands.push(t.slice(1));
+        }
+        const hit = cands.filter(x => byCas[x]);
+        if (hit.length === 1) { o.fix = hit[0]; o.guess = true; o.why = o.why + ' → 같은 시트의 ' + hit[0] + '(' + byCas[hit[0]][0].comp + ')로 추정'; }
+      }
+      return o;
+    });
+  const conflicts = [];
+  Object.keys(byCas).forEach(cas => {
+    ['hc', 'we'].forEach(f => {
+      const vals = [...new Set(byCas[cas].map(r => r[f]).filter(isCycle_))];
+      if (vals.length > 1) conflicts.push({ cas: cas, comp: byCas[cas][0].comp, field: f, values: vals, rows: byCas[cas].map(r => r.product + ' (' + (r[f] || '빈칸') + ')') });
+    });
+  });
+  const amountIssues = rows.filter(r => r.amountFix).map(r => ({ row: r.row, product: r.product, comp: r.comp, raw: r.amountRaw, fix: r.amountFix }));
   // 빈칸 제안: 법령대조표 → 없으면 같은 CAS의 다른 행 판정(값이 하나로 일치할 때만)
   const suggestions = [];
   rows.forEach(r => {
@@ -1940,7 +1974,7 @@ function chemAudit_() {
   const blankHc = rows.filter(r => !r.hc).length, blankWe = rows.filter(r => !r.we).length;
   return { success: true, total: rows.length, products: new Set(rows.map(r => r.product)).size, uniqueCas: Object.keys(byCas).length,
            blankHc: blankHc, blankWe: blankWe, lawCount: Object.keys(law).length,
-           casIssues: casIssues, conflicts: conflicts, suggestions: suggestions,
+           casIssues: casIssues, conflicts: conflicts, suggestions: suggestions, amountIssues: amountIssues,
            unknownCas: Object.keys(byCas).filter(cas => !law[cas]).length };
 }
 
@@ -1972,7 +2006,7 @@ function chemApply_(req) {
   rows.forEach(r => { byRow[r.row] = r; });
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
-  let filled = 0, fixed = 0, skipped = 0;
+  let filled = 0, fixed = 0, amounts = 0, skipped = 0;
   try {
     (req.fills || []).forEach(f => {
       const r = byRow[f.row];
@@ -1984,14 +2018,72 @@ function chemApply_(req) {
     if (col.cas >= 0) sheet.getRange(2, col.cas + 1, Math.max(sheet.getLastRow() - 1, 1), 1).setNumberFormat('@');   // 재발 방지
     (req.casFixes || []).forEach(f => {
       const r = byRow[f.row];
-      if (!r || !r.casFix || r.casFix !== f.fix || col.cas < 0) { skipped++; return; }
-      sheet.getRange(f.row, col.cas + 1).setValue(f.fix);
+      const fix = String(f.fix || '').trim();
+      // 자동 복원값이거나, 문제 있는 칸을 관리자가 검증숫자가 맞는 CAS로 고친 경우만 (정상 CAS는 바꾸지 않음)
+      const isIssue = r && (r.casFix || !casCheck_(r.casRaw));
+      if (!r || col.cas < 0 || !isIssue || !casCheck_(fix) || (f.raw !== undefined && String(f.raw) !== r.casRaw)) { skipped++; return; }
+      sheet.getRange(f.row, col.cas + 1).setValue(fix);
       fixed++;
     });
+    if ((req.amountFixes || []).length && col.amount >= 0) {
+      sheet.getRange(2, col.amount + 1, Math.max(sheet.getLastRow() - 1, 1), 1).setNumberFormat('@');   // 다시 날짜로 바뀌지 않게
+      req.amountFixes.forEach(f => {
+        const r = byRow[f.row];
+        if (!r || !r.amountFix || r.amountFix !== f.fix) { skipped++; return; }
+        sheet.getRange(f.row, col.amount + 1).setValue(f.fix);
+        amounts++;
+      });
+    }
   } finally {
     lock.releaseLock();
   }
-  return { success: true, filled: filled, fixed: fixed, skipped: skipped };
+  return { success: true, filled: filled, fixed: fixed, amounts: amounts, skipped: skipped };
+}
+
+// 법령대조표: 고시 목록 붙여넣기 (별표 표를 복사해 붙이면 줄마다 CAS를 찾아 해당 항목에 기록)
+//  kind: hc 특수건강진단 · we 작업환경측정 · target 관리대상 · special 특별관리 / value: 주기 또는 '해당'
+//  이미 값이 있는 칸은 덮어쓰지 않음 (다르면 '다름'으로 알려줌)
+function chemLawImport_(req) {
+  const KIND = { hc: 2, we: 3, target: 4, special: 5 };
+  const ci = KIND[req.kind];
+  if (ci === undefined) return { success: false, error: '항목을 고르세요' };
+  const value = String(req.value || '').trim() || (req.kind === 'hc' || req.kind === 'we' ? '' : '해당');
+  if (!value) return { success: false, error: '주기(예: 12개월)를 입력하세요' };
+  const src = String(req.src || '').trim().slice(0, 80) || '고시 목록 붙여넣기';
+  const lines = String(req.text || '').split(/\r?\n/).slice(0, 3000);
+  const sh = lawSheet_();
+  const today = todayKst_();
+  const last = sh.getLastRow();
+  const cur = last >= 2 ? sh.getRange(2, 1, last - 1, LAW_HEADER.length).getDisplayValues() : [];
+  const at = {};
+  cur.forEach((r, i) => { if (String(r[0]).trim()) at[String(r[0]).trim()] = i; });
+  let added = 0, updated = 0, same = 0, invalid = 0;
+  const differ = [], seen = {};
+  lines.forEach(line => {
+    const found = String(line).match(/\b\d{2,7}-\d{2}-\d\b/g) || [];
+    found.forEach(cas => {
+      if (seen[cas]) return;
+      seen[cas] = 1;
+      if (!casCheck_(cas)) { invalid++; return; }
+      const name = String(line).replace(/\b\d{2,7}-\d{2}-\d\b/g, '').replace(/[\t;|]+/g, ' ').replace(/^[\s\d.)]+/, '').replace(/\s{2,}/g, ' ').trim().slice(0, 80);
+      if (at[cas] === undefined) {
+        const row = [cas, name, '', '', '', '', src, today, '고시 붙여넣기'];
+        row[ci] = value;
+        cur.push(row); at[cas] = cur.length - 1; added++;
+      } else {
+        const row = cur[at[cas]];
+        const old = String(row[ci] || '').trim();
+        if (!old) { row[ci] = value; row[6] = String(row[6] || '').indexOf(src) >= 0 ? row[6] : (row[6] ? row[6] + ' · ' : '') + src; row[7] = today; if (!row[1]) row[1] = name; updated++; }
+        else if (old === value) same++;
+        else differ.push(cas + ' (지금 ' + old + ' / 붙여넣기 ' + value + ')');
+      }
+    });
+  });
+  if (cur.length) {
+    sh.getRange('A:A').setNumberFormat('@');
+    sh.getRange(2, 1, cur.length, LAW_HEADER.length).setValues(cur.map(r => r.map(safeCell_)));
+  }
+  return { success: true, added: added, updated: updated, same: same, invalid: invalid, differ: differ.slice(0, 50), differCount: differ.length };
 }
 
 function chemOp_(req, s) {
@@ -2001,6 +2093,7 @@ function chemOp_(req, s) {
     case 'chem.audit': return chemAudit_();
     case 'chem.seedLaw': return chemSeedLaw_();
     case 'chem.apply': return chemApply_(req);
+    case 'chem.lawImport': return chemLawImport_(req);
   }
   return { success: false, error: 'unknown op: ' + req.op };
 }
