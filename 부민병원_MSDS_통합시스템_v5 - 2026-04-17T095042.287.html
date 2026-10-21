@@ -2315,6 +2315,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
         '<b>마지막 업데이트:</b> ' + esc(st.lastSync || '없음') + '<br>' +
         '<b>매일 아침 자동 확인:</b> ' + (st.dailyOn ? '켜짐' : '꺼짐') + ' · ' +
         '<b>인사 사이트 자동 로그인:</b> ' + (st.hrAuto ? '사용 가능' : (st.hrConnector ? '로그인 정보 미저장 (시트 메뉴 ④)' : '연결 준비 중')) +
+        (st.hrSite ? ' · <a href="' + esc(st.hrSite) + '" target="_blank" rel="noopener">' + esc(st.hrSite.replace(/^https?:\/\//, '')) + '</a>' : '') +
         (st.hrLastError ? '<br><span style="color:#b91c1c">최근 자동 확인 오류: ' + esc(st.hrLastError) + '</span>' : '') +
         '<div style="margin-top:6px;color:#64748b;font-size:12px">퇴사자는 목록에서 지우지 않고 "퇴사"로만 표시합니다. 교육·보호구 기록은 그대로 보존됩니다.</div>' +
       '</div>' +

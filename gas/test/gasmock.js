@@ -89,6 +89,9 @@ function makeEnv() {
           if (fb.users[b.email] !== b.password) return resp(400, { error: { message: 'INVALID_LOGIN_CREDENTIALS' } });
           return resp(200, { idToken: 'fb-id-token' });
         }
+        if (u === 'https://bumin-leave.web.app/__/firebase/init.json') {
+          return resp(200, { apiKey: 'AIzaFromSite', projectId: 'bumin-leave', authDomain: 'bumin-leave.firebaseapp.com' });
+        }
         if (u.startsWith('https://firestore.googleapis.com/v1/projects/')) {
           if (!opt || !opt.headers || opt.headers.Authorization !== 'Bearer fb-id-token') return resp(403, {});
           const coll = decodeURIComponent(u.split('/documents/')[1].split('?')[0]);
@@ -127,7 +130,7 @@ function makeEnv() {
 function load(codePath) {
   const m = makeEnv();
   const ctx = vm.createContext(m.env);
-  vm.runInContext(fs.readFileSync(codePath, 'utf8') + '\n;this.__api={doGet,doPost,sha256Hex_,sendReminders_,nhRows_,nhWrite_,dailyCheck};', ctx);
+  vm.runInContext(fs.readFileSync(codePath, 'utf8') + '\n;this.__api={doGet,doPost,sha256Hex_,sendReminders_,nhRows_,nhWrite_,dailyCheck,fbConfigFromInput_};', ctx);
   return Object.assign(m, { ctx, api: ctx.__api });
 }
 module.exports = { load };
