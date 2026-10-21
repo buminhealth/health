@@ -10,6 +10,17 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
+  부민병원 MSDS 통합시스템 v19.0 (2026-10-21)
+
+  ★★★ v19.0 (2026-10-21) — 리디자인 1단계 (최종 시안 확정: 색 · 위쪽 메뉴 · 연락처 · 휴대폰 자동 전환):
+    - 부민병원 HI 그린(#4A8F2C 등)으로 색 통일 — CSS + Tailwind emerald 계열 재지정, 글꼴 Pretendard
+    - 머리줄: 로고(MSDS 통합관리 / 부산부민병원 보건관리실) + 메뉴 한 줄 + 부서 선택 · 동기화 · 설정 · 로그인 칩
+      (오른쪽 아래 떠 있던 로그인 배지를 머리줄로 이동, 메뉴 이모지 → 선 아이콘)
+    - 부서 로그인 시 '제출 현황' 탭 이름 → '부서현황'
+    - 화면 맨 아래 연락처 띠 (보건관리실 내선 3293)
+    - 화면 폭 자동 전환: 1180px 이하 메뉴 2줄, 760px 이하(휴대폰) 메뉴가 아래 탭으로
+    - 기능 · 저장 방식 변경 없음 (화면 id · 함수 그대로)
+
   부민병원 MSDS 통합시스템 v18.7 (2026-10-21)
 
   ★★★ v18.7 (2026-10-21) — 🧪 물질 마스터 점검 (AI 판정 2단계: 기준 데이터 정비):
@@ -332,17 +343,23 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>부민병원 MSDS · 안전보건교육 통합시스템</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<script>
+/* v19.0 — 부민병원 HI 색: Tailwind emerald 계열을 병원 그린으로 바꿔 전 화면 통일 */
+if (window.tailwind) tailwind.config = { theme: { extend: { colors: { emerald: {
+  50:'#F2F8EC',100:'#E2F0D5',200:'#C5E2AB',300:'#A3D07C',400:'#84C058',
+  500:'#4A8F2C',600:'#43812A',700:'#3B7423',800:'#2D581B',900:'#1F3D13' } } } } };
+</script>
 <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
-body{font-family:'Nanum Gothic','나눔고딕','Malgun Gothic','맑은 고딕',sans-serif;background:#f1f5f9;color:#111827;margin:0;padding:0;font-size:14px}
+body{font-family:'Pretendard','Nanum Gothic','나눔고딕','Malgun Gothic','맑은 고딕',sans-serif;background:#F5F5F2;color:#111827;margin:0;padding:0;font-size:14px}
 header{position:sticky;top:0;z-index:50}
 .tab-bar{background:#fff;border-bottom:1px solid #e2e8f0;display:flex;overflow-x:auto;flex-shrink:0}
 .tab-bar::-webkit-scrollbar{display:none}
 .tb{padding:10px 16px;font-size:15px;font-weight:700;color:#64748b;cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;transition:all .2s}
-.tb.on{color:#10b981;border-bottom-color:#10b981}
+.tb.on{color:#4A8F2C;border-bottom-color:#4A8F2C}
 /* MSDS */
 #pg-msds{display:flex;flex-direction:column;height:calc(100vh - 100px)}
 @media(min-width:768px){#pg-msds{flex-direction:row}}
@@ -350,17 +367,17 @@ header{position:sticky;top:0;z-index:50}
 @media(min-width:768px){#productList{width:25%;height:100%;border-bottom:none;border-right:1px solid #e2e8f0}}
 #detailView{flex:1;overflow-y:auto;background:#fff;padding:15px}
 @media(min-width:768px){#detailView{padding:28px 36px}}
-.detail-header{display:flex;flex-direction:column;gap:10px;border-bottom:4px solid #10b981;padding-bottom:14px;margin-bottom:18px}
+.detail-header{display:flex;flex-direction:column;gap:10px;border-bottom:4px solid #4A8F2C;padding-bottom:14px;margin-bottom:18px}
 @media(min-width:768px){.detail-header{flex-direction:row;justify-content:space-between;align-items:flex-start}}
 .list-title{font-weight:700;font-size:15px;color:#111827;word-break:break-all;text-align:left}
 .list-sub{font-weight:500;font-size:15px;color:#64748b;text-align:left}
-.list-dept{font-size:14px;color:#10b981;font-weight:600;text-align:left;margin-top:1px}
+.list-dept{font-size:14px;color:#4A8F2C;font-weight:600;text-align:left;margin-top:1px}
 /* ★ v17.4 FIX: 부서 필터 버튼 (productList 하단) */
 .db{padding:4px 9px;background:#fff;color:#475569;border:1px solid #cbd5e1;border-radius:14px;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;line-height:1.4}
-.db:hover{background:#f0fdf4;border-color:#10b981;color:#059669}
-.db.on{background:#10b981;color:#fff;border-color:#10b981;box-shadow:0 1px 3px rgba(16,185,129,0.3)}
-.active-card{border:2px solid #10b981 !important;background:#f0fdf4 !important}
-.sec-ttl{font-size:15px;font-weight:800;color:#64748b;border-left:4px solid #10b981;padding-left:9px;margin-bottom:7px;margin-top:18px}
+.db:hover{background:#F2F8EC;border-color:#4A8F2C;color:#3B7423}
+.db.on{background:#4A8F2C;color:#fff;border-color:#4A8F2C;box-shadow:0 1px 3px rgba(74,143,44,0.3)}
+.active-card{border:2px solid #4A8F2C !important;background:#F2F8EC !important}
+.sec-ttl{font-size:15px;font-weight:800;color:#64748b;border-left:4px solid #4A8F2C;padding-left:9px;margin-bottom:7px;margin-top:18px}
 .table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:12px}
 .ctbl{width:100%;min-width:480px;border-collapse:collapse;border:1px solid #cbd5e1}
 .ctbl th{background:#f8fafc;font-weight:800;color:#475569;border:1px solid #cbd5e1;padding:8px 5px;font-size:15px;text-align:center}
@@ -379,18 +396,18 @@ header{position:sticky;top:0;z-index:50}
 .stepbar::-webkit-scrollbar{display:none}
 .si{display:flex;align-items:center;gap:5px;flex-shrink:0}
 .sn{width:23px;height:23px;border-radius:50%;background:#e2e8f0;color:#64748b;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;transition:all .3s;flex-shrink:0}
-.sn.act{background:#10b981;color:#fff}
-.sn.dn{background:#059669;color:#fff}
+.sn.act{background:#4A8F2C;color:#fff}
+.sn.dn{background:#3B7423;color:#fff}
 .st{font-size:15px;font-weight:600;color:#94a3b8;white-space:nowrap}
 .st.act{color:#111827;font-weight:800}
 .sl{flex:1;height:2px;background:#e2e8f0;margin:0 4px;min-width:8px;transition:background .3s}
-.sl.dn{background:#10b981}
+.sl.dn{background:#4A8F2C}
 /* card */
 .card{background:#fff;border-radius:10px;padding:14px 16px;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:12px}
 .card-ttl{font-size:15px;font-weight:800;color:#111827;margin-bottom:11px;padding-bottom:8px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:6px}
 .fl{display:block;font-size:15px;font-weight:700;color:#374151;margin-bottom:3px}
 .fc{width:100%;padding:7px 10px;border:1px solid #e2e8f0;border-radius:7px;font-size:14px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;outline:none;transition:border .2s;background:#fff}
-.fc:focus{border-color:#10b981}
+.fc:focus{border-color:#4A8F2C}
 .fc[readonly]{background:#f8fafc;color:#555}
 textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
 .fg{margin-bottom:9px}
@@ -403,57 +420,57 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
 .nsw{position:relative}
 .nsres{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e2e8f0;border-radius:7px;box-shadow:0 8px 20px rgba(0,0,0,.12);z-index:200;max-height:180px;overflow-y:auto;display:none}
 .nr{padding:8px 12px;cursor:pointer;font-size:14px;font-weight:600;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between}
-.nr:hover{background:#f0fdf4}
+.nr:hover{background:#F2F8EC}
 .nr small{font-size:14px;color:#94a3b8}
 /* 취급물질 멀티선택 */
 .chem-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;margin-top:6px}
 .chem-chip{display:flex;align-items:center;gap:6px;padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:7px;cursor:pointer;font-size:14px;font-weight:600;color:#374151;background:#fff;transition:all .15s;user-select:none}
-.chem-chip:hover{border-color:#10b981;background:#f0fdf4}
-.chem-chip.sel{border-color:#10b981;background:#f0fdf4;color:#065f46}
-.chem-chip input[type=checkbox]{accent-color:#10b981;width:14px;height:14px;cursor:pointer;flex-shrink:0}
-.chem-chip-all{background:#f0fdf4;border-color:#10b981;color:#065f46;font-weight:700}
+.chem-chip:hover{border-color:#4A8F2C;background:#F2F8EC}
+.chem-chip.sel{border-color:#4A8F2C;background:#F2F8EC;color:#2D581B}
+.chem-chip input[type=checkbox]{accent-color:#4A8F2C;width:14px;height:14px;cursor:pointer;flex-shrink:0}
+.chem-chip-all{background:#F2F8EC;border-color:#4A8F2C;color:#2D581B;font-weight:700}
 /* participants */
 .ptbl{width:100%;border-collapse:collapse;font-size:14px}
-.ptbl th{background:#f0fdf4;padding:7px 6px;border:1px solid #d1fae5;font-size:15px;font-weight:700;text-align:center;color:#065f46}
+.ptbl th{background:#F2F8EC;padding:7px 6px;border:1px solid #E2F0D5;font-size:15px;font-weight:700;text-align:center;color:#2D581B}
 .ptbl td{padding:4px 5px;border:1px solid #e2e8f0}
 .pi{width:100%;border:none;background:transparent;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;font-size:14px;text-align:center;outline:none;padding:2px}
 /* signature */
-.sigw{border:1px solid #d1fae5;border-radius:6px;overflow:hidden;background:#fafffe}
-.sigc{display:block;width:100%;height:120px;cursor:crosshair;touch-action:none;background:#fafffe}
-.sigctrl{display:flex;padding:3px 6px;background:#f0fdf4;border-top:1px solid #d1fae5}
+.sigw{border:1px solid #E2F0D5;border-radius:6px;overflow:hidden;background:#FAFAF8}
+.sigc{display:block;width:100%;height:120px;cursor:crosshair;touch-action:none;background:#FAFAF8}
+.sigctrl{display:flex;padding:3px 6px;background:#F2F8EC;border-top:1px solid #E2F0D5}
 /* date-sign block */
 .dsb{border:1px solid #e2e8f0;border-radius:9px;overflow:hidden;margin-bottom:10px}
-.dsb-hd{background:#f0fdf4;padding:6px 12px;font-size:14px;font-weight:700;color:#065f46;border-bottom:1px solid #d1fae5;display:flex;align-items:center;gap:5px}
+.dsb-hd{background:#F2F8EC;padding:6px 12px;font-size:14px;font-weight:700;color:#2D581B;border-bottom:1px solid #E2F0D5;display:flex;align-items:center;gap:5px}
 .dsb-body{padding:10px 12px}
 /* photo */
 .pgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 @media(max-width:480px){.pgrid{grid-template-columns:1fr 1fr}}
-.pslot{border:2px dashed #d1fae5;border-radius:8px;aspect-ratio:4/3;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;position:relative;transition:all .2s}
-.pslot:hover,.pslot:active{border-color:#10b981;background:#f0fdf4}
+.pslot{border:2px dashed #E2F0D5;border-radius:8px;aspect-ratio:4/3;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;position:relative;transition:all .2s}
+.pslot:hover,.pslot:active{border-color:#4A8F2C;background:#F2F8EC}
 .pslot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .pdel{position:absolute;top:3px;right:3px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:14px;cursor:pointer;display:none;align-items:center;justify-content:center;z-index:2}
 .pslot:hover .pdel{display:flex}
 /* buttons */
 .brow{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 .btn{padding:8px 18px;border-radius:7px;font-size:14px;font-weight:700;cursor:pointer;border:none;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;transition:all .2s}
-.btn-p{background:#10b981;color:#fff}.btn-p:hover{background:#059669}
+.btn-p{background:#4A8F2C;color:#fff}.btn-p:hover{background:#3B7423}
 .btn-s{background:#f1f5f9;color:#111827}.btn-s:hover{background:#e2e8f0}
-.btn-o{background:#fff;color:#10b981;border:1.5px solid #10b981}.btn-o:hover{background:#f0fdf4}
-.btn-sm{padding:3px 7px;border-radius:4px;font-size:14px;cursor:pointer;border:none;background:#d1fae5;color:#065f46;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;font-weight:700}
+.btn-o{background:#fff;color:#4A8F2C;border:1.5px solid #4A8F2C}.btn-o:hover{background:#F2F8EC}
+.btn-sm{padding:3px 7px;border-radius:4px;font-size:14px;cursor:pointer;border:none;background:#E2F0D5;color:#2D581B;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;font-weight:700}
 /* summary */
 .sbox{border:1px solid #e2e8f0;border-radius:8px;overflow:hidden}
 .srow{display:flex;border-bottom:1px solid #e2e8f0}
 .srow:last-child{border:none}
-.sk{font-weight:700;color:#065f46;width:86px;flex-shrink:0;padding:8px 10px;background:#f0fdf4;font-size:15px;border-right:1px solid #e2e8f0}
+.sk{font-weight:700;color:#2D581B;width:86px;flex-shrink:0;padding:8px 10px;background:#F2F8EC;font-size:15px;border-right:1px solid #e2e8f0}
 .sv{color:#334155;flex:1;padding:8px 10px;font-size:14px}
 /* info box */
-.info-box{background:#f0fdf4;border:1px solid #a7f3d0;border-radius:7px;padding:10px 12px;font-size:15px;color:#065f46;font-weight:600;line-height:1.7}
+.info-box{background:#F2F8EC;border:1px solid #C5E2AB;border-radius:7px;padding:10px 12px;font-size:15px;color:#2D581B;font-weight:600;line-height:1.7}
 /* modal */
 .ov{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px}
 .modal{background:#fff;border-radius:14px;padding:22px;width:540px;max-width:100%;max-height:90vh;overflow-y:auto}
 /* toast */
 .toast{position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:8px;color:#fff;font-size:14px;font-weight:700;z-index:9999;animation:ti .3s;box-shadow:0 4px 12px rgba(0,0,0,.2);font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif}
-.toast.ok{background:#059669}.toast.err{background:#dc2626}.toast.info{background:#1a2340}
+.toast.ok{background:#3B7423}.toast.err{background:#dc2626}.toast.info{background:#1a2340}
 @keyframes ti{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .pdf-area{position:fixed;left:-9999px;top:0;width:794px;background:#fff;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif}
 ::-webkit-scrollbar{width:4px}
@@ -508,7 +525,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
 .adm-stat-card{background:#fff;border-radius:10px;padding:12px 16px;text-align:center;flex:1;box-shadow:0 1px 4px rgba(0,0,0,.07)}
 .adm-stat-n{font-size:28px;font-weight:900;color:#1c3557}
 .adm-stat-l{font-size:15px;color:#64748b;font-weight:600;margin-top:2px}
-.spin{width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#10b981;border-radius:50%;animation:sp .7s linear infinite;margin:0 auto}
+.spin{width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#4A8F2C;border-radius:50%;animation:sp .7s linear infinite;margin:0 auto}
 @keyframes sp{to{transform:rotate(360deg)}}
 
 /* ═══════════════════════════════════════════════════════
@@ -516,13 +533,13 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
    ═══════════════════════════════════════════════════════ */
 .adm-topbar{display:flex;align-items:center;justify-content:space-between;background:#fff;border-bottom:1px solid #e2e8f0;padding:14px 22px;gap:14px;flex-wrap:wrap;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 .adm-topbar-left{display:flex;align-items:center;gap:14px}
-.adm-topbar-icon{width:42px;height:42px;background:linear-gradient(135deg,#10b981 0%,#059669 100%);color:#fff;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;box-shadow:0 2px 6px rgba(16,185,129,.25)}
+.adm-topbar-icon{width:42px;height:42px;background:linear-gradient(135deg,#4A8F2C 0%,#3B7423 100%);color:#fff;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;box-shadow:0 2px 6px rgba(74,143,44,.25)}
 .adm-topbar-title{font-size:16px;font-weight:800;color:#0f1f3a;letter-spacing:-0.3px;line-height:1.1}
 .adm-topbar-sub{font-size:11px;color:#64748b;margin-top:2px;letter-spacing:0.2px}
 .adm-topbar-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.adm-topbar-user{font-size:12px;font-weight:700;color:#047857;background:#f0fdf4;padding:5px 12px;border-radius:7px;border:1px solid #bbf7d0}
+.adm-topbar-user{font-size:12px;font-weight:700;color:#047857;background:#F2F8EC;padding:5px 12px;border-radius:7px;border:1px solid #bbf7d0}
 .adm-topbar-btn{font-size:11.5px;font-weight:700;padding:7px 14px;background:#fff;color:#475569;border:1px solid #cbd5e1;border-radius:7px;cursor:pointer;transition:all .15s;letter-spacing:-0.2px}
-.adm-topbar-btn:hover{background:#f0fdf4;border-color:#10b981;color:#047857}
+.adm-topbar-btn:hover{background:#F2F8EC;border-color:#4A8F2C;color:#047857}
 .adm-topbar-btn-danger{color:#dc2626;border-color:#fecaca}
 .adm-topbar-btn-danger:hover{background:#fef2f2;border-color:#fca5a5}
 
@@ -533,10 +550,10 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
 .adm-sidebar-divider{height:1px;background:#e2e8f0;margin:10px 14px}
 .adm-nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;cursor:pointer;font-size:13px;font-weight:600;color:#475569;border-left:3px solid transparent;transition:all .15s;user-select:none}
 .adm-nav-item:hover{background:#f8fafc;color:#0f1f3a}
-.adm-nav-item.active{background:#f0fdf4;border-left-color:#10b981;color:#047857;font-weight:800}
+.adm-nav-item.active{background:#F2F8EC;border-left-color:#4A8F2C;color:#047857;font-weight:800}
 .adm-nav-icon{font-size:15px;width:20px;text-align:center;flex-shrink:0}
 .adm-nav-label{flex:1;letter-spacing:-0.2px}
-.adm-nav-badge{background:#10b981;color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;min-width:18px;text-align:center}
+.adm-nav-badge{background:#4A8F2C;color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;min-width:18px;text-align:center}
 .adm-nav-badge:empty{display:none}
 
 .adm-content{flex:1;padding:22px;background:#f8fafc;overflow:hidden}
@@ -569,7 +586,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
   .adm-sidebar::-webkit-scrollbar{display:none}
   .adm-sidebar-section,.adm-sidebar-divider{display:none}
   .adm-nav-item{flex-shrink:0;border-left:none;border-bottom:3px solid transparent;padding:8px 12px;font-size:12px;white-space:nowrap}
-  .adm-nav-item.active{border-left:none;border-bottom-color:#10b981;background:transparent}
+  .adm-nav-item.active{border-left:none;border-bottom-color:#4A8F2C;background:transparent}
   .adm-content{padding:14px}
   .adm-card-body{padding:14px}
   .adm-filter-grid{padding:10px;grid-template-columns:1fr 1fr}
@@ -582,6 +599,76 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
   .adm-content{padding:16px 18px}
   .adm-tbl tbody td{font-size:11.5px;padding:8px 7px}
   .adm-tbl thead th.ath{font-size:11.5px;padding:9px 7px}
+}
+
+/* ═══ v19.0 디자인 1단계 — 위쪽 메뉴 · 색 · 연락처 · 휴대폰 자동 전환 ═══ */
+:root{--bm-top:64px;--bm-bot:0px;--bm-g5:#67AF3E;--bm-g6:#4A8F2C;--bm-g7:#3B7423;--bm-g8:#2D581B;--bm-g50:#F2F8EC;--bm-line:#DDDBD5;--bm-ink:#1E1E1C;--bm-ink2:#45423D}
+#pg-msds,#pg-edu1,#pg-edu2,#pg-ppe,#pg-admin{height:calc(100vh - var(--bm-top) - var(--bm-bot))}
+@supports(height:100dvh){#pg-msds,#pg-edu1,#pg-edu2,#pg-ppe,#pg-admin{height:calc(100dvh - var(--bm-top) - var(--bm-bot))}}
+.btn,.fc,.pi,.toast,.btn-sm{font-family:'Pretendard','Nanum Gothic','Malgun Gothic',sans-serif}
+.bm-hdr{position:sticky;top:0;z-index:50;background:#fff;border-bottom:1px solid var(--bm-line);display:flex;align-items:center;gap:20px;padding:0 20px;height:64px;box-sizing:border-box}
+.bm-logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--bm-ink);flex-shrink:0}
+.bm-logo i{width:34px;height:34px;background:var(--bm-g6);border-radius:2px;display:grid;place-items:center;color:#fff;font-style:normal}
+.bm-logo b{display:block;font-size:17px;font-weight:800;line-height:1.25}
+.bm-logo small{display:block;font-size:12px;color:#5A5650;font-weight:600}
+.bm-hdr .tab-bar{background:transparent;border:0;flex:1;align-self:stretch;min-width:0;display:flex}
+.bm-hdr .tb{display:flex;align-items:center;gap:7px;padding:0 12px;font-size:15px;font-weight:700;color:var(--bm-ink2);border-top:3px solid transparent;border-bottom:3px solid transparent;box-sizing:border-box}
+.bm-hdr .tb:hover{color:var(--bm-ink);background:#FAFAF8}
+.bm-hdr .tb.on{color:var(--bm-g7);border-bottom-color:var(--bm-g5);font-weight:800}
+.tbi{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.tbs{display:none}
+.bm-ctl{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.bm-sel{border:1px solid var(--bm-line);border-radius:4px;padding:7px 8px;font-size:14px;font-weight:700;color:var(--bm-ink);background:#fff;max-width:150px;font-family:inherit}
+.bm-icbtn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 10px;border:1px solid var(--bm-line);border-radius:4px;background:#fff;color:var(--bm-ink2);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+.bm-icbtn:hover{background:#FAFAF8}
+#bm-auth-badge.bm-chip{position:static;display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-radius:4px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:none;white-space:nowrap;font-family:inherit;background:var(--bm-g6);color:#fff;border:1px solid var(--bm-g6)}
+#bm-auth-badge.bm-chip.in{background:#fff;color:var(--bm-ink);border-color:var(--bm-line)}
+#bm-auth-badge.bm-chip.in::before{content:"";width:9px;height:9px;border-radius:2px;background:var(--bm-g5)}
+#sync-info{font-size:12px;color:#5A5650;white-space:nowrap;cursor:pointer}
+.bm-foot{background:var(--bm-g8);color:#fff;margin:28px -14px -48px;padding:14px 20px;display:flex;flex-wrap:wrap;gap:6px 20px;align-items:center;font-size:14px}
+.bm-foot .m{background:#fff;color:var(--bm-g8);padding:2px 10px;border-radius:2px;font-weight:800}
+#detailView .bm-foot,#pg-chem .bm-foot{margin:28px 0 0;border-radius:4px}
+@media(max-width:1600px){
+  #sync-info,#slbl{display:none}
+  .bm-hdr{gap:14px}
+  .bm-hdr .tb{padding:0 10px}
+  .tbl{display:none}.tbs{display:inline}
+}
+@media(max-width:1180px){
+  .tbl{display:inline}.tbs{display:none}
+  :root{--bm-top:104px}
+  .bm-hdr{flex-wrap:wrap;height:auto;padding:0 16px;column-gap:12px}
+  .bm-logo{height:56px}
+  .bm-ctl{margin-left:auto}
+  .bm-hdr .tab-bar{order:3;flex:0 0 calc(100% + 32px);height:48px;margin:0 -16px;padding:0 6px;border-top:1px solid #ECEBE7;overflow-x:auto}
+  #sync-info{display:none}
+}
+@media(max-width:760px){
+  :root{--bm-top:56px;--bm-bot:64px}
+  body{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+  .bm-hdr{flex-wrap:nowrap;height:56px;padding:0 12px}
+  .bm-logo b{font-size:16px}
+  .bm-logo small{display:none}
+  .bm-logo i{width:30px;height:30px}
+  .bm-sel{max-width:96px;font-size:13px;padding:6px 4px}
+  #slbl{display:none}
+  .bm-hdr .tab-bar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:60;height:calc(64px + env(safe-area-inset-bottom));margin:0;padding:0 0 env(safe-area-inset-bottom);background:#fff;border-top:1px solid var(--bm-line);box-shadow:0 -2px 8px rgba(0,0,0,.06)}
+  .bm-hdr .tb{flex:1 1 0;min-width:0;white-space:nowrap;flex-direction:column;justify-content:center;gap:2px;padding:0 2px;font-size:13px;border-bottom:0;border-top:3px solid transparent}
+  .bm-hdr .tb.on{border-top-color:var(--bm-g6);border-bottom:0;background:var(--bm-g50)}
+  .tbi{width:22px;height:22px}
+  .tbl{display:none}.tbs{display:block}
+  #bm-auth-badge.bm-chip{height:34px;padding:0 8px;font-size:13px}
+  .bm-chip-x{display:none}
+  .toast{left:12px;right:12px;bottom:calc(76px + env(safe-area-inset-bottom));text-align:center}
+  #bm-auth-badge.bm-chip.in::after{content:"로그아웃";font-size:12px;color:#5A5650;font-weight:600}
+  .bm-ctl{gap:6px}
+  .bm-icbtn{padding:0 8px}
+}
+@media(max-width:480px){
+  .bm-logo span{display:none}
+  .bm-sel{max-width:110px}
+  .bm-hdr .tb{font-size:11.5px;letter-spacing:-.3px}
+  .bm-foot{font-size:13px}
 }
 </style>
 </head>
@@ -664,31 +751,38 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
 </div>
 </div>
 
-<!-- HEADER -->
-<header class="bg-[#10b981] text-white px-4 shadow-md flex justify-between items-center h-[60px]">
-  <h1 class="text-base md:text-xl font-black flex items-center gap-1">✚ 부민병원 MSDS</h1>
-  <div class="flex items-center gap-2">
-    <select id="deptSelect" class="bg-white text-slate-800 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer w-28 md:w-auto" onchange="filterDept(this.value)">
+<!-- HEADER (v19.0: 로고 + 위쪽 메뉴 한 줄, 휴대폰은 메뉴가 아래 탭으로 자동 전환) -->
+<header class="bm-hdr" id="bm-hdr">
+  <a class="bm-logo" href="#" onclick="goTab('msds');return false"><i><svg class="tbi" viewBox="0 0 24 24" style="width:20px;height:20px;stroke-width:3.5" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></i><span><b>MSDS 통합관리</b><small>부산부민병원 보건관리실</small></span></a>
+  <nav class="tab-bar" aria-label="주 메뉴">
+  <div class="tb on" id="tab-msds" onclick="goTab('msds')"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2h12.4a1.5 1.5 0 0 0 1.3-2L14 9V3"/><path d="M7 15h10"/></svg><span class="tbl">MSDS 관리</span><span class="tbs">MSDS</span></div>
+  <div class="tb" id="tab-edu1" onclick="goTab('edu1')"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M12 7.5l1.2 2.4 2.6.4-1.9 1.8.5 2.6-2.4-1.3-2.4 1.3.5-2.6-1.9-1.8 2.6-.4z"/></svg><span class="tbl">특별안전보건교육일지</span><span class="tbs">특별교육</span></div>
+  <div class="tb" id="tab-edu2" onclick="goTab('edu2')"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M9 8h6M9 12h6"/></svg><span class="tbl">MSDS 교육일지</span><span class="tbs">MSDS교육</span></div>
+  <div class="tb" id="tab-ppe" onclick="goTab('ppe')"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><span class="tbl">보호구 지급</span><span class="tbs">보호구</span></div>
+  <div class="tb" id="tab-chem" onclick="goTab('chem')"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M9 13h6M9 17h4"/></svg><span class="tbl">화학물질 보고서</span><span class="tbs">보고서</span></div>
+  <!-- v15.43: 결재 탭 제거 — 관리자 모드 안의 결재 관리 섹션으로 통합 -->
+  <div class="tb" id="tab-admin" onclick="goTab('admin')"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg><span class="tbl">관리자</span><span class="tbs">관리자</span></div>
+  </nav>
+  <div class="bm-ctl" id="bm-auth-slot">
+    <div id="sync-info" onclick="diagEdu()" title="클릭하면 부서별 시트값 진단"></div>
+    <select id="deptSelect" class="bm-sel" aria-label="부서 선택" onchange="filterDept(this.value)">
       <option value="all">전체 부서</option>
     </select>
-    <button onclick="syncAll()" class="bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-2 py-1.5 rounded-lg flex items-center gap-1">
+    <button onclick="syncAll()" class="bm-icbtn" title="동기화">
       <span id="sdot" class="w-2 h-2 rounded-full bg-green-300 inline-block"></span><span id="slbl">동기화</span>
     </button>
-    <button onclick="openCfg()" class="bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-2 py-1.5 rounded-lg">⚙</button>
+    <button onclick="openCfg()" class="bm-icbtn" title="연동 설정" aria-label="연동 설정"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg></button>
   </div>
 </header>
-
-<!-- TABS -->
-<div class="tab-bar">
-  <div class="tb on" id="tab-msds"  onclick="goTab('msds')">📋 MSDS 관리</div>
-  <div class="tb"    id="tab-edu1"  onclick="goTab('edu1')">📝 특별안전보건교육일지</div>
-  <div class="tb"    id="tab-edu2"  onclick="goTab('edu2')">📋 MSDS 교육일지</div>
-  <div class="tb" id="tab-ppe"   onclick="goTab('ppe')">🦺 보호구 지급수령증</div>
-  <div class="tb" id="tab-chem"  onclick="goTab('chem')">⚗️ 화학물질 보고서</div>
-  <!-- v15.43: 결재 탭 제거 — 관리자 모드 안의 결재 관리 섹션으로 통합 -->
-  <div class="tb" id="tab-admin" onclick="goTab('admin')">🔐 관리자</div>
-  <div id="sync-info" onclick="diagEdu()" title="클릭하면 부서별 시트값 진단" class="flex items-center ml-auto pr-3 text-[10px] text-slate-400 whitespace-nowrap flex-shrink-0 cursor-pointer hover:text-emerald-600"></div>
-</div>
+<script>
+/* v19.0 — 헤더가 두 줄로 바뀌어도 실제 높이로 화면 높이 계산 (모바일은 하단 탭 제외) */
+(function(){
+  var h=document.getElementById('bm-hdr'); if(!h) return;
+  function fit(){ document.documentElement.style.setProperty('--bm-top', h.offsetHeight+'px'); }
+  fit(); window.addEventListener('resize', fit);
+  if(window.ResizeObserver) new ResizeObserver(fit).observe(h);
+})();
+</script>
 
 <!-- ══ MSDS ══ -->
 <div id="pg-msds">
@@ -2023,17 +2117,24 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     if(!b){
       b = document.createElement('div');
       b.id = 'bm-auth-badge';
-      b.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:9999;background:#1c3557;color:#fff;font-size:12px;font-weight:700;padding:7px 12px;border-radius:999px;box-shadow:0 4px 12px rgba(0,0,0,.2);cursor:pointer;font-family:\'Nanum Gothic\',sans-serif';
-      document.body.appendChild(b);
+      var slot = document.getElementById('bm-auth-slot');
+      if(slot){ b.className = 'bm-chip'; slot.appendChild(b); }
+      else{
+        b.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:9999;background:#1c3557;color:#fff;font-size:12px;font-weight:700;padding:7px 12px;border-radius:999px;box-shadow:0 4px 12px rgba(0,0,0,.2);cursor:pointer;font-family:\'Nanum Gothic\',sans-serif';
+        document.body.appendChild(b);
+      }
     }
     if(session){
-      b.textContent = (session.role === 'admin' ? '🛡 관리자' : '🔓 ' + session.dept) + ' · 로그아웃';
+      b.textContent = (session.role === 'admin' ? '관리자' : session.dept);
+      var bx = document.createElement('span'); bx.className = 'bm-chip-x'; bx.textContent = ' 로그인 · 로그아웃'; b.appendChild(bx);
+      if(b.classList) b.classList.add('in');
       b.onclick = function(){
         if(!confirm('로그아웃할까요?')) return;
         clearSession(); location.reload();
       };
     }else{
-      b.textContent = '🔒 부서 로그인';
+      b.textContent = '부서 로그인';
+      if(b.classList) b.classList.remove('in');
       b.onclick = showLogin;
     }
   }
@@ -2726,7 +2827,8 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     var tab = document.createElement('div');
     tab.className = 'tb';
     tab.id = 'tab-deptview';
-    tab.textContent = '📂 ' + s.dept + ' 제출 현황';
+    tab.innerHTML = '<svg class="tbi" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg><span class="tbl">부서현황</span><span class="tbs">부서현황</span>';
+    tab.title = s.dept + ' 부서현황';
     tab.onclick = function(){ goTab('deptview'); };
     adminTab.parentNode.insertBefore(tab, adminTab);
     var pg = document.createElement('div');
@@ -2734,7 +2836,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
     pg.style.cssText = 'display:none;padding:16px;max-width:1100px;margin:0 auto';
     pg.innerHTML =
       '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">' +
-        '<div><div style="font-size:17px;font-weight:800;color:#1c3557">📂 ' + esc(s.dept) + ' 제출 현황</div>' +
+        '<div><div style="font-size:20px;font-weight:800;color:#1E1E1C">' + esc(s.dept) + ' 부서현황</div>' +
         '<div style="font-size:12px;color:#64748b">우리 부서가 제출한 기록만 보입니다 (조회 전용 · 수정·삭제는 보건관리자에게 요청)</div></div>' +
         '<div style="display:flex;gap:6px"><select id="dv-range" class="fc" style="width:auto">' +
           '<option value="3">최근 3개월</option><option value="12">최근 1년</option><option value="0">전체</option></select>' +
@@ -2748,6 +2850,22 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
 
   window.BMDEPT = { render: render };
 
+  // v19.0 — 화면 맨 아래 연락처 띠 (내선번호를 알게 되면 BM_CONTACTS에 줄만 추가)
+  var BM_CONTACTS = [['보건관리실', '3293', true]];
+  function addFooters(){
+    var html = '<b>연락처</b>' + BM_CONTACTS.map(function(c){
+      return c[2] ? '<span class="m">' + c[0] + ' 내선 ' + c[1] + '</span>' : '<span>' + c[0] + ' 내선 ' + c[1] + '</span>'; }).join('');
+    ['detailView', 'pg-edu1', 'pg-edu2', 'pg-ppe', 'pg-chem', 'pg-deptview'].forEach(function(id){
+      var host = document.getElementById(id);
+      if(!host || host.querySelector(':scope > .bm-foot')) return;
+      var f = document.createElement('footer');
+      f.className = 'bm-foot';
+      f.innerHTML = html;
+      host.appendChild(f);
+    });
+  }
+  window.addEventListener('DOMContentLoaded', function(){ setTimeout(addFooters, 0); });
+
   window.addEventListener('DOMContentLoaded', function(){
     ensureUi();
     var orig = window.goTab;
@@ -2758,6 +2876,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
       if(pg) pg.style.display = t === 'deptview' ? 'block' : 'none';
       if(tab) tab.className = 'tb' + (t === 'deptview' ? ' on' : '');
       if(t === 'deptview') render();
+      if(pg && !pg.querySelector(':scope > .bm-foot')) addFooters();
       return r;
     };
   });
