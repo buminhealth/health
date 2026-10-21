@@ -101,6 +101,15 @@ button{font-family:inherit;font-size:inherit;cursor:pointer}
 .t-green{background:var(--green-600)} .t-teal{background:var(--teal-700)} .t-brown{background:var(--brown-600)}
 .t-navy{background:var(--navy-900)} .t-olive{background:var(--olive-700)} .t-blue{background:var(--blue-700)}
 .m-only{display:none!important}
+#s-home.guest .u-only{display:none!important}
+#s-home:not(.guest) .g-only{display:none!important}
+.login-chip{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 18px;border-radius:999px;background:var(--green-600);color:#fff;font-weight:700;font-size:15px;white-space:nowrap;border:0}
+.login-chip:hover{background:var(--green-700)}
+.how{display:flex;flex-direction:column}
+.how li{display:flex;gap:14px;align-items:flex-start;padding:16px 18px;border-bottom:1px solid var(--line)}
+.how li:last-child{border-bottom:0}
+.how .no{flex:none;width:30px;height:30px;border-radius:50%;background:var(--green-50);color:var(--green-700);font-weight:800;display:grid;place-items:center}
+.how b{display:block;color:var(--ink-900)}
 @media (max-width:640px){.pc-only{display:none}}
 .tabbar.home-tab{position:fixed;display:none;z-index:40}
 .qm .lock{position:absolute;top:14px;right:14px}
@@ -224,7 +233,8 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
 <!-- 미리보기 화면 전환 -->
 <div class="pv-bar" role="tablist" aria-label="미리보기 화면 선택">
   <b>리디자인 미리보기</b>
-  <button data-s="home" aria-pressed="true">① 메인(PC)</button>
+  <button data-s="guest" aria-pressed="false">⓪ 메인 (로그인 전)</button>
+  <button data-s="home" aria-pressed="true">① 메인 (로그인 후)</button>
   <button data-s="mobile" aria-pressed="false">② 모바일</button>
   <button data-s="pin" aria-pressed="false">③ 부서 PIN 로그인</button>
   <button data-s="edu" aria-pressed="false">④ 교육일지 작성</button>
@@ -255,9 +265,10 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
     <div class="wrap">
       <a class="logo" href="#"><span class="logo-mark">B</span><span>MSDS 통합관리<small>부산부민병원 보건관리실</small></span></a>
       <nav aria-label="주 메뉴">
-        <a href="#" aria-current="page">홈</a><a href="#">MSDS 관리</a><a href="#">교육일지</a><a href="#">보호구 지급</a><a href="#">화학물질 보고서</a><a href="#">우리 부서</a>
+        <a href="#" aria-current="page">홈</a><a href="#">MSDS 관리</a><a href="#">교육일지</a><a href="#">보호구 지급</a><a href="#">화학물질 보고서</a><a href="#" class="u-only">우리 부서</a>
       </nav>
-      <div class="user-chip"><span class="dot"></span>61병동 로그인 <button class="btn btn-ghost btn-sm">로그아웃</button></div>
+      <div class="user-chip u-only"><span class="dot"></span>61병동 로그인 <button class="btn btn-ghost btn-sm">로그아웃</button></div>
+      <button class="login-chip g-only" onclick="show('pin')"><svg class="ico" style="width:20px;height:20px"><use href="#i-lock"/></svg>부서 로그인</button>
     </div>
   </header>
 
@@ -271,7 +282,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
         <input id="q" placeholder="예) 뉴젠자임폼, 에탄올, 64-17-5">
         <button class="btn btn-primary" aria-label="검색"><svg class="ico" style="width:22px;height:22px"><use href="#i-search"/></svg><span class="lbl">검색</span></button>
       </form>
-      <div class="chips"><span>최근: 뉴젠자임폼</span><span>멀티엔자임</span><span>10% 포르말린</span><span>우리 부서 물질 32종 →</span></div>
+      <div class="chips"><span class="g-only">자주 찾는 물질:</span><span><span class="u-only">최근: </span>뉴젠자임폼</span><span>멀티엔자임</span><span>10% 포르말린</span><span class="u-only">우리 부서 물질 32종 →</span><span class="g-only">부서별 물질 보기 →</span></div>
     </div>
   </div>
 
@@ -285,7 +296,33 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
       <a class="qm t-blue m-only" href="#" role="listitem"><span class="qi"><svg class="ico"><use href="#i-list"/></svg></span><strong>제출현황</strong><span>우리 부서 제출·결재</span></a>
     </div>
 
-    <div class="sec grid-2">
+    <div class="sec grid-2 g-only">
+      <div>
+        <div class="sec-head"><h2 class="h2">부서 로그인하면 할 수 있는 일</h2><span class="cap">조회는 로그인 없이 가능</span></div>
+        <div class="card">
+          <ol class="how" style="margin:0;padding:0;list-style:none">
+            <li><span class="no">1</span><div><b>우리 부서 할 일 확인</b><span class="cap">신규 입사자 취급 확인 · 교육 기한 알림</span></div></li>
+            <li><span class="no">2</span><div><b>교육일지 · 보호구 지급수령증 · 화학물질 보고서 작성</b><span class="cap">서명까지 화면에서 바로</span></div></li>
+            <li><span class="no">3</span><div><b>우리 부서 제출현황 · 결재 결과 보기</b><span class="cap">PDF 미리보기</span></div></li>
+          </ol>
+          <div style="padding:14px 18px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+            <span class="cap">부서 PIN 4자리 · 모르면 보건관리실 내선 0000</span>
+            <button class="btn btn-primary" onclick="show('pin')"><svg class="ico" style="width:20px;height:20px"><use href="#i-lock"/></svg>부서 로그인</button>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="sec-head"><h2 class="h2">최근 등록 · 변경된 물질</h2><a class="cap" href="#">MSDS 전체 →</a></div>
+        <div class="card">
+          <div class="list-row"><span><b>0.5N - Sodium Hydroxide</b> · 진단검사의학과</span><span class="badge b-green">신규</span></div>
+          <div class="list-row"><span><b>뉴젠자임폼</b> · 61병동 외 4</span><span class="badge b-blue">MSDS 갱신</span></div>
+          <div class="list-row"><span><b>10% Neutral Buffered Formalin</b> · 수술실</span><span class="badge b-blue">MSDS 갱신</span></div>
+          <div class="list-row"><span><b>7200 에나멜 프라임 반광 백색</b> · 시설관리팀</span><span class="badge b-gray">사용중단</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec grid-2 u-only">
       <div>
         <div class="sec-head"><h2 class="h2">61병동 할 일</h2><span class="cap">로그인한 부서에만 보입니다</span></div>
         <div class="card">
@@ -531,8 +568,10 @@ table.tbl{width:100%;border-collapse:collapse;font-size:16px}
 
 <script>
 function show(id){
+  var guest = id === 'guest'; if(guest) id = 'home';
+  document.getElementById('s-home').classList.toggle('guest', guest);
   document.querySelectorAll('.screen').forEach(function(s){ s.classList.toggle('on', s.id === 's-' + id); });
-  document.querySelectorAll('.pv-bar button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.s === id)); });
+  document.querySelectorAll('.pv-bar button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.s === (guest ? 'guest' : id))); });
   window.scrollTo(0, 0);
 }
 document.querySelectorAll('.pv-bar button').forEach(function(b){ b.onclick = function(){ show(b.dataset.s); }; });
@@ -545,6 +584,7 @@ document.getElementById('sw').innerHTML = tokens.map(function(t){
   var v = cs.getPropertyValue(t[0]).trim();
   return '<div class="sw"><div style="background:' + v + '"></div><p><b>' + v + '</b><br>' + t[1] + '</p></div>';
 }).join('');
+show('guest');
 </script>
 </body>
 </html>
