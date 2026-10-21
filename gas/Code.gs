@@ -41,8 +41,8 @@ function onOpen() {
     .addItem('② 관리자 비밀번호 변경', 'changeAdminPassword')
     .addItem('③ 모든 로그인 강제 해제', 'revokeAllSessions')
     .addSeparator()
-    .addItem('④ 인사 사이트 자동 로그인 정보 저장', 'saveHrCredentials')
-    .addItem('④-1 인사 사이트 로그인 정보 삭제', 'clearHrCredentials')
+    .addItem('④ 인사 사이트(Firebase) 연결·자동 로그인 설정', 'saveHrCredentials')
+    .addItem('④-1 인사 사이트 자동 로그인 정보 삭제', 'clearHrCredentials')
     .addItem('⑤ 매일 아침 자동 확인 켜기', 'enableDailyCheck')
     .addItem('⑤-1 매일 아침 자동 확인 끄기', 'disableDailyCheck')
     .addToUi();
@@ -71,7 +71,7 @@ function setupSystem() {
   const cfg = getAdminCfg().data || {};
   if (!cfg['앱주소']) setAdminCfg({ key: '앱주소', value: 'https://buminhealth.github.io/health/' + encodeURI('부민병원_MSDS_통합시스템_v5 - 2026-04-17T095042.287.html') });
   if (!cfg['보건관리자이메일']) setAdminCfg({ key: '보건관리자이메일', value: 'clover8477@bumin.co.kr' });
-  if (!cfg['신규입사기준일수']) setAdminCfg({ key: '신규입사기준일수', value: '30' });
+  if (!cfg['신규입사기준일수']) setAdminCfg({ key: '신규입사기준일수', value: '7' });
   if (!cfg['재알림간격일']) setAdminCfg({ key: '재알림간격일', value: '3' });
   const root = DriveApp.getFolderById(PROPS.getProperty('DATA_ROOT_ID'));
   ui.alert('초기 설정 완료',
@@ -592,19 +592,18 @@ function findEmpSheet_() {
 
 // 직원목록 열 이름 (첫 번째가 새로 만들 때 쓰는 이름, 나머지는 기존 시트·엑셀 붙여넣기 호환 이름)
 const EMP_COLS = {
-  empNo:     ['사번','직원번호','사원번호','사원코드','직원코드','empNo','employeeNo','사번(직원번호)'],
-  name:      ['이름','성명','직원이름','직원명','성함','name','성명(이름)','이름(성명)'],
-  dept:      ['부서','부서명','소속','소속부서','팀','dept','department','부서(팀)','팀(부서)'],
-  joinDate:  ['입사일','입사일자','입사년월일','joinDate','join','입사일(joinDate)','입사년월'],
-  gender:    ['성별','gender','남녀','성(남/여)'],
-  status:    ['재직상태','상태','재직구분','재직여부','status'],
-  leaveDate: ['퇴사일','퇴직일','퇴사일자','leaveDate'],
-  email:     ['이메일','메일','email','E-mail','e-mail','이메일주소'],
-  position:  ['직위','직급','직책','position'],
+  empNo:     ['사번','직원번호','사원번호','사원코드','직원코드','empNo','employeeNo','사번(직원번호)','empId','employeeId','staffNo','sabun'],
+  name:      ['이름','성명','직원이름','직원명','성함','name','성명(이름)','이름(성명)','empName','userName','fullName'],
+  dept:      ['부서','부서명','소속','소속부서','팀','dept','department','부서(팀)','팀(부서)','deptName','team'],
+  joinDate:  ['입사일','입사일자','입사년월일','joinDate','join','입사일(joinDate)','입사년월','hireDate','startDate','entryDate'],
+  status:    ['재직상태','상태','재직구분','재직여부','status','state','workStatus'],
+  leaveDate: ['퇴사일','퇴직일','퇴사일자','leaveDate','resignDate','retireDate'],
+  email:     ['이메일','메일','email','E-mail','e-mail','이메일주소','mail'],
+  position:  ['직위','직급','직책','position','rank','title'],
   firstSeen: ['최초확인일'],
   lastSeen:  ['최종확인일'],
 };
-const EMP_FALLBACK = { empNo: 0, name: 1, dept: 2, joinDate: 3, gender: 4 };   // v1 위치 기반 폴백
+const EMP_FALLBACK = { empNo: 0, name: 1, dept: 2, joinDate: 3 };   // v1 위치 기반 폴백
 
 function empColIndex_(headers) {
   const col = {};
@@ -640,7 +639,7 @@ function isResigned_(e) { return /퇴사|퇴직/.test(e.status || ''); }
 function getEmployees(s) {
   const list = readEmployees_();
   if (list === null) return { success: false, error: '직원목록 시트가 없습니다. 시트명을 "직원목록"으로 해주세요.' };
-  const pick = e => ({ name: e.name, dept: e.dept, empNo: e.empNo, joinDate: e.joinDate, gender: e.gender, status: e.status });
+  const pick = e => ({ name: e.name, dept: e.dept, empNo: e.empNo, joinDate: e.joinDate, status: e.status });
   const data = s && s.role === 'dept'
     ? list.filter(e => e.dept === s.dept && !isResigned_(e)).map(pick)
     : list.map(pick);
@@ -967,7 +966,7 @@ function setAdminCfg(p) {
 //  · "전체 명단"으로 올린 경우에만, 명단에 없는 재직자를 '퇴사(명단없음)'으로 표시
 //  · 교육·보호구 기록은 별도 파일/시트라 동기화가 건드리지 않음
 // ════════════════════════════════════════════════════════════════
-const EMP_NEW_HEADER = ['사번','이름','부서','입사일','성별','재직상태','퇴사일','이메일','직위','최초확인일','최종확인일'];
+const EMP_NEW_HEADER = ['사번','이름','부서','입사일','재직상태','퇴사일','이메일','직위','최초확인일','최종확인일'];
 
 function todayKst_() { return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd'); }
 function nowKst_() { return Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd'T'HH:mm:ss"); }
@@ -1020,7 +1019,7 @@ function syncEmployees_(incoming, fullList) {
       seen.add(k);
       if (pos[k] === undefined) {
         const row = new Array(width).fill('');
-        ['empNo','name','dept','joinDate','gender','leaveDate','email','position'].forEach(f => { row[idx[f]] = e[f] || ''; });
+        ['empNo','name','dept','joinDate','leaveDate','email','position'].forEach(f => { row[idx[f]] = e[f] || ''; });
         row[idx.status] = e.status || '재직';
         row[idx.firstSeen] = today;
         row[idx.lastSeen] = today;
@@ -1032,7 +1031,7 @@ function syncEmployees_(incoming, fullList) {
       }
       const row = data[pos[k]];
       let changed = false;
-      ['name','dept','joinDate','gender','status','leaveDate','email','position'].forEach(f => {
+      ['name','dept','joinDate','status','leaveDate','email','position'].forEach(f => {
         if (!e[f]) return;
         if (fmtDate_(row[idx[f]]) !== e[f]) { row[idx[f]] = e[f]; changed = true; }
       });
@@ -1071,42 +1070,162 @@ function empStatus_() {
     resigned: list.filter(isResigned_).length,
     lastSync: cfg.emp_last_sync || '',
     hrAuto: hrAutoReady_(),
-    hrConnector: HR_CONNECTOR_READY,
+    hrConnector: hrConnectorReady_(),
     dailyOn: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'dailyCheck'),
     hrLastError: cfg.hr_last_error || '',
   };
 }
 
 // ════════════════════════════════════════════════════════════════
-// 인사 사이트 연결 (휴직자관리.html 확인 후 구현 예정)
-//  · 수동: 관리자가 화면에서 비밀번호를 입력 → 이 요청에만 사용, 저장하지 않음
-//  · 자동(매일): 시트 메뉴 ④에서 저장한 아이디·비밀번호(스크립트 속성, 비공개) 사용
+// 인사 사이트 연결 (Firebase: 이메일·비밀번호 로그인 → Firestore 또는 Realtime Database 조회)
+//  · 연결 정보(apiKey·projectId·데이터 위치)는 시트 메뉴 ④에서 입력 → 스크립트 속성(비공개)에 저장
+//  · 수동: 관리자가 화면에서 비밀번호 입력 → 이 요청에만 사용, 저장하지 않음. 메일 발송 없음
+//  · 자동(매일): 메뉴 ④에서 저장한 아이디·비밀번호 사용 → 이때만 신규입사 알림 메일 발송
 // ════════════════════════════════════════════════════════════════
-const HR_CONNECTOR_READY = false;
-
-function hrFetchEmployees_(id, password) {
-  // TODO: 인사 사이트 로그인·조회 방식 확인 후 구현 → { headers: [...], rows: [[...], ...] } 반환
-  throw new Error('인사 사이트 연결은 아직 준비 중입니다 (사이트 접속 방식 확인 필요). 엑셀 붙여넣기를 사용해 주세요.');
+function fbCfg_() {
+  return {
+    apiKey: PROPS.getProperty('FB_API_KEY') || '',
+    projectId: PROPS.getProperty('FB_PROJECT_ID') || '',
+    dbUrl: PROPS.getProperty('FB_DB_URL') || '',
+    mode: PROPS.getProperty('FB_MODE') || 'firestore',      // firestore | rtdb
+    path: PROPS.getProperty('FB_PATH') || '',               // 예: employees
+    fullList: PROPS.getProperty('FB_FULL_LIST') === 'Y',    // Y면 사이트에 없는 재직자를 퇴사로 표시
+    fieldMap: (function () { try { return JSON.parse(PROPS.getProperty('FB_FIELD_MAP') || '{}'); } catch (_) { return {}; } })(),
+  };
+}
+function hrConnectorReady_() {
+  const c = fbCfg_();
+  return !!(c.apiKey && c.path && (c.mode === 'rtdb' ? c.dbUrl : c.projectId));
+}
+function hrAutoReady_() {
+  return hrConnectorReady_() && !!PROPS.getProperty('HR_ID') && !!PROPS.getProperty('HR_PW');
 }
 
-function hrAutoReady_() {
-  return HR_CONNECTOR_READY && !!PROPS.getProperty('HR_ID') && !!PROPS.getProperty('HR_PW');
+function fbSignIn_(c, email, password) {
+  const res = UrlFetchApp.fetch('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=' + encodeURIComponent(c.apiKey), {
+    method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    payload: JSON.stringify({ email: email, password: password, returnSecureToken: true }),
+  });
+  const j = JSON.parse(res.getContentText() || '{}');
+  if (res.getResponseCode() !== 200 || !j.idToken) {
+    const code = (j.error && j.error.message) || ('HTTP ' + res.getResponseCode());
+    const msg = /INVALID_PASSWORD|INVALID_LOGIN_CREDENTIALS|EMAIL_NOT_FOUND/.test(code) ? '인사 사이트 아이디 또는 비밀번호가 올바르지 않습니다'
+              : /TOO_MANY_ATTEMPTS/.test(code) ? '인사 사이트 로그인 시도가 너무 많아 잠시 막혔습니다'
+              : /USER_DISABLED/.test(code) ? '인사 사이트 계정이 비활성화되어 있습니다'
+              : '인사 사이트 로그인 실패: ' + code;
+    throw new Error(msg);
+  }
+  return j.idToken;
+}
+
+// Firestore 값 → 일반 값 (날짜는 KST yyyy-MM-dd)
+function fsValue_(v) {
+  if (!v || typeof v !== 'object') return '';
+  if ('stringValue' in v) return v.stringValue;
+  if ('integerValue' in v) return String(v.integerValue);
+  if ('doubleValue' in v) return String(v.doubleValue);
+  if ('booleanValue' in v) return v.booleanValue ? 'Y' : 'N';
+  if ('timestampValue' in v) return Utilities.formatDate(new Date(v.timestampValue), TZ, 'yyyy-MM-dd');
+  if ('nullValue' in v) return '';
+  if ('mapValue' in v) { const o = {}; Object.keys((v.mapValue && v.mapValue.fields) || {}).forEach(k => { o[k] = fsValue_(v.mapValue.fields[k]); }); return o; }
+  if ('arrayValue' in v) return ((v.arrayValue && v.arrayValue.values) || []).map(fsValue_).join(', ');
+  if ('referenceValue' in v) return v.referenceValue.split('/').pop();
+  return '';
+}
+
+function fbFetchObjects_(c, idToken) {
+  const out = [];
+  if (c.mode === 'rtdb') {
+    const url = c.dbUrl.replace(/\/+$/, '') + '/' + c.path.split('/').map(encodeURIComponent).join('/') + '.json?auth=' + encodeURIComponent(idToken);
+    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) throw new Error('인사 데이터 조회 실패 (HTTP ' + res.getResponseCode() + ')');
+    const data = JSON.parse(res.getContentText() || 'null') || {};
+    (Array.isArray(data) ? data : Object.keys(data).map(k => Object.assign({ _key: k }, data[k])))
+      .forEach(o => { if (o && typeof o === 'object') out.push(o); });
+    return out;
+  }
+  let pageToken = '';
+  for (let page = 0; page < 50; page++) {
+    const url = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(c.projectId) + '/databases/(default)/documents/' +
+      c.path.split('/').map(encodeURIComponent).join('/') + '?pageSize=300' + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : '');
+    const res = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + idToken }, muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) throw new Error('인사 데이터 조회 실패 (HTTP ' + res.getResponseCode() + ')');
+    const j = JSON.parse(res.getContentText() || '{}');
+    (j.documents || []).forEach(d => {
+      const o = { _key: String(d.name || '').split('/').pop() };
+      Object.keys(d.fields || {}).forEach(k => { o[k] = fsValue_(d.fields[k]); });
+      out.push(o);
+    });
+    if (!j.nextPageToken) break;
+    pageToken = j.nextPageToken;
+  }
+  return out;
+}
+
+// 반환: { headers, rows } (rowsToEmployees_가 열 이름으로 사번·이름·부서·입사일 등을 찾음)
+function hrFetchEmployees_(id, password) {
+  const c = fbCfg_();
+  if (!hrConnectorReady_()) throw new Error('인사 사이트 연결 정보가 없습니다 (시트 메뉴 ④에서 설정)');
+  if (!id || !password) throw new Error('인사 사이트 아이디와 비밀번호를 입력하세요');
+  const objs = fbFetchObjects_(c, fbSignIn_(c, id, password));
+  const flat = objs.map(o => {
+    const f = {};
+    Object.keys(o).forEach(k => {
+      const v = o[k];
+      if (v && typeof v === 'object') Object.keys(v).forEach(k2 => { f[k + '.' + k2] = typeof v[k2] === 'object' ? JSON.stringify(v[k2]) : v[k2]; });
+      else f[k] = v;
+    });
+    return f;
+  });
+  const headers = [];
+  flat.forEach(f => Object.keys(f).forEach(k => { if (headers.indexOf(k) < 0) headers.push(k); }));
+  // 사이트 필드명 → 표준 이름 (메뉴 ④의 필드 매핑, 예: {"성명":"nm"} → nm 열을 이름으로)
+  const outHeaders = headers.map(h => {
+    const std = Object.keys(c.fieldMap).find(k => c.fieldMap[k] === h);
+    return std || h;
+  });
+  return { headers: outHeaders, rows: flat.map(f => headers.map(h => f[h] === undefined ? '' : String(f[h]))) };
 }
 
 function saveHrCredentials() {
   const ui = SpreadsheetApp.getUi();
-  const r1 = ui.prompt('인사 사이트 자동 로그인', '아이디(이메일)', ui.ButtonSet.OK_CANCEL);
-  if (r1.getSelectedButton() !== ui.Button.OK) return;
-  const r2 = ui.prompt('인사 사이트 자동 로그인', '비밀번호 (스크립트 속성에만 저장, 코드·시트에 남지 않음)', ui.ButtonSet.OK_CANCEL);
-  if (r2.getSelectedButton() !== ui.Button.OK) return;
-  PROPS.setProperty('HR_ID', r1.getResponseText().trim());
-  PROPS.setProperty('HR_PW', r2.getResponseText());
-  ui.alert('저장했습니다.' + (HR_CONNECTOR_READY ? '' : '\n(인사 사이트 연결 기능이 준비되면 매일 자동 확인에 사용됩니다)'));
+  const ask = (title, msg, def) => {
+    const r = ui.prompt(title, msg + (def ? '\n(현재: ' + def + ' — 비우면 유지)' : ''), ui.ButtonSet.OK_CANCEL);
+    if (r.getSelectedButton() !== ui.Button.OK) throw new Error('취소');
+    return r.getResponseText().trim() || def || '';
+  };
+  try {
+    const c = fbCfg_();
+    const cfgText = ask('인사 사이트(Firebase) 연결 1/5', '휴직자관리 페이지의 firebaseConfig 내용을 그대로 붙여넣으세요\n(apiKey, projectId, databaseURL이 들어 있는 부분)', c.apiKey ? '저장됨' : '');
+    if (cfgText && cfgText !== '저장됨') {
+      const pick = k => { const m = cfgText.match(new RegExp(k + '\\s*["\']?\\s*:\\s*["\']([^"\']+)["\']')); return m ? m[1] : ''; };
+      if (pick('apiKey')) PROPS.setProperty('FB_API_KEY', pick('apiKey'));
+      if (pick('projectId')) PROPS.setProperty('FB_PROJECT_ID', pick('projectId'));
+      if (pick('databaseURL')) PROPS.setProperty('FB_DB_URL', pick('databaseURL'));
+    }
+    PROPS.setProperty('FB_MODE', /^r/i.test(ask('인사 사이트(Firebase) 연결 2/5', '데이터 종류: firestore 또는 rtdb', c.mode)) ? 'rtdb' : 'firestore');
+    PROPS.setProperty('FB_PATH', ask('인사 사이트(Firebase) 연결 3/5', '직원 데이터 위치 (Firestore 컬렉션 이름 또는 RTDB 경로, 예: employees)', c.path));
+    PROPS.setProperty('HR_ID', ask('인사 사이트(Firebase) 연결 4/5', '자동 로그인 아이디(이메일)', PROPS.getProperty('HR_ID') || ''));
+    const pw = ui.prompt('인사 사이트(Firebase) 연결 5/5', '자동 로그인 비밀번호 (스크립트 속성에만 저장, 코드·시트에 남지 않음)\n비우면 기존 값 유지', ui.ButtonSet.OK_CANCEL);
+    if (pw.getSelectedButton() !== ui.Button.OK) throw new Error('취소');
+    if (pw.getResponseText()) PROPS.setProperty('HR_PW', pw.getResponseText());
+  } catch (e) {
+    if (String(e.message) !== '취소') ui.alert('저장 실패: ' + e.message);
+    return;
+  }
+  try {
+    const r = hrFetchEmployees_(PROPS.getProperty('HR_ID'), PROPS.getProperty('HR_PW'));
+    const list = rowsToEmployees_(r.headers, r.rows);
+    ui.alert('연결 성공: 인사 사이트에서 ' + r.rows.length + '건을 읽었고, 그중 ' + list.length + '명을 직원으로 인식했습니다.\n' +
+             '읽은 열: ' + r.headers.slice(0, 15).join(', ') + (r.headers.length > 15 ? ' …' : '') +
+             (list.length ? '' : '\n\n이름 열을 찾지 못했습니다. Claude에게 위 열 목록을 알려주면 필드 매핑을 맞춰 드립니다.'));
+  } catch (e) {
+    ui.alert('연결 정보는 저장했지만 시험 조회에 실패했습니다: ' + e.message);
+  }
 }
 function clearHrCredentials() {
-  PROPS.deleteProperty('HR_ID');
-  PROPS.deleteProperty('HR_PW');
-  SpreadsheetApp.getUi().alert('인사 사이트 로그인 정보를 삭제했습니다.');
+  ['HR_ID', 'HR_PW'].forEach(k => PROPS.deleteProperty(k));
+  SpreadsheetApp.getUi().alert('인사 사이트 자동 로그인 아이디·비밀번호를 삭제했습니다. (연결 정보는 유지)');
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1118,7 +1237,8 @@ function clearHrCredentials() {
 // ════════════════════════════════════════════════════════════════
 const NH_SHEET = '신규입사알림';
 const NH_HEADER = ['알림ID','생성일시','사번','이름','부서','입사일','취급물질','부서장이메일','최초발송','최근재알림',
-                   '재알림횟수','회신일시','취급여부','회신메모','교육일지제출일','상태'];
+                   '재알림횟수','회신일시','취급여부','회신메모','교육일지제출일','상태','교육기한'];
+const EDU_PERIOD_DAYS = 3;   // 입사일로부터 3일 안에 교육
 const NH_MAX_REMIND = 3;
 
 function sysCfg_() {
@@ -1126,7 +1246,7 @@ function sysCfg_() {
   return {
     appUrl: c['앱주소'] || '',
     adminEmail: c['보건관리자이메일'] || '',
-    newHireDays: parseInt(c['신규입사기준일수'] || '30', 10),
+    newHireDays: parseInt(c['신규입사기준일수'] || '7', 10),
     remindDays: parseInt(c['재알림간격일'] || '3', 10),
   };
 }
@@ -1193,7 +1313,8 @@ function detectNewHires_() {
     existing.add(key);
     const o = { '알림ID': 'NH' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
                 '생성일시': nowKst_(), '사번': e.empNo, '이름': e.name, '부서': e.dept, '입사일': normDate_(e.joinDate),
-                '취급물질': chems.slice(0, 30).join(', '), '부서장이메일': deptEmail_(e.dept), '재알림횟수': '0' };
+                '취급물질': chems.slice(0, 30).join(', '), '부서장이메일': deptEmail_(e.dept), '재알림횟수': '0',
+                '교육기한': addDays_(normDate_(e.joinDate), EDU_PERIOD_DAYS) };
     nhSheet_().appendRow(NH_HEADER.map(h => safeCell_(o[h] || '')));
     o._row = nhSheet_().getLastRow();
     o['상태'] = nhSend_(o, false) ? '회신대기' : '이메일없음';
@@ -1202,6 +1323,12 @@ function detectNewHires_() {
     created.push({ name: o['이름'], dept: o['부서'], status: o['상태'] });
   });
   return created;
+}
+
+function addDays_(ymd, n) {
+  const d = new Date(ymd + 'T12:00:00Z');
+  if (isNaN(d.getTime())) return '';
+  return new Date(d.getTime() + n * 86400000).toISOString().slice(0, 10);
 }
 
 function nhSend_(o, isReminder) {
@@ -1216,8 +1343,9 @@ function nhSend_(o, isReminder) {
     '<table style="border-collapse:collapse" cellpadding="6" border="1">' +
     '<tr><th align="left">이름</th><td>' + esc(o['이름']) + '</td></tr>' +
     '<tr><th align="left">입사일</th><td>' + esc(o['입사일']) + '</td></tr>' +
+    '<tr><th align="left">교육 기한</th><td><b>' + esc(o['교육기한'] || addDays_(o['입사일'], EDU_PERIOD_DAYS)) + '</b> (입사일로부터 ' + EDU_PERIOD_DAYS + '일)</td></tr>' +
     '<tr><th align="left">부서 사용 물질</th><td>' + esc(o['취급물질']) + '</td></tr></table>' +
-    '<p>이 직원이 위 물질을 <b>취급하는지</b> 확인해 주세요. 취급하면 MSDS 교육 후 교육일지를 작성해 주세요.</p>' +
+    '<p>이 직원이 위 물질을 <b>취급하는지</b> 확인해 주세요. 취급하면 기한 안에 MSDS 교육을 하고 교육일지를 작성해 주세요.</p>' +
     (link ? '<p><a href="' + esc(link) + '" style="display:inline-block;background:#1c3557;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">확인하기</a></p>'
           : '<p>앱에 부서 PIN으로 로그인하면 확인 요청이 표시됩니다.</p>') +
     '<p style="color:#64748b;font-size:12px">부민병원 보건관리실 · 이 메일에 답장하지 말고 위 버튼으로 회신해 주세요.</p></div>';
@@ -1299,25 +1427,31 @@ function nhResend_(req) {
 //  · 인사 사이트 자동 로그인이 가능할 때만: 직원정보 갱신 → 신규입사자 확인·메일
 //  · 재알림(3일 무회신)은 매일 확인
 // ════════════════════════════════════════════════════════════════
-function dailyCheck() {
-  if (hrAutoReady_()) {
-    try {
-      const r = hrFetchEmployees_(PROPS.getProperty('HR_ID'), PROPS.getProperty('HR_PW'));
-      syncEmployees_(rowsToEmployees_(r.headers, r.rows), true);
-      detectNewHires_();
-      setAdminCfg({ key: 'hr_last_error', value: '' });
-    } catch (e) {
-      setAdminCfg({ key: 'hr_last_error', value: nowKst_() + ' ' + String(e.message || e).slice(0, 200) });
-    }
+function runAutoCheck_() {
+  const out = { created: [], reminded: 0 };
+  try {
+    const r = hrFetchEmployees_(PROPS.getProperty('HR_ID'), PROPS.getProperty('HR_PW'));
+    out.sync = syncEmployees_(rowsToEmployees_(r.headers, r.rows), fbCfg_().fullList);
+    out.created = detectNewHires_();
+    setAdminCfg({ key: 'hr_last_error', value: '' });
+  } catch (e) {
+    setAdminCfg({ key: 'hr_last_error', value: nowKst_() + ' ' + String(e.message || e).slice(0, 200) });
+    out.error = String(e.message || e);
   }
-  sendReminders_();
+  out.reminded = sendReminders_();   // 자동 로그인으로 보낸 알림의 재알림
+  return out;
+}
+
+// 자동 로그인이 될 때만 진행 (안 되면 아무 메일도 보내지 않음)
+function dailyCheck() {
+  if (hrAutoReady_()) runAutoCheck_();
 }
 
 function enableDailyCheck() {
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'dailyCheck').forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('dailyCheck').timeBased().everyDays(1).atHour(7).inTimezone(TZ).create();
   SpreadsheetApp.getUi().alert('매일 아침 7시경 자동 확인을 켰습니다.' +
-    (hrAutoReady_() ? '' : '\n(인사 사이트 자동 로그인이 준비되기 전까지는 재알림만 보냅니다)'));
+    (hrAutoReady_() ? '' : '\n(인사 사이트 자동 로그인(메뉴 ④)이 설정되기 전에는 아무 것도 하지 않습니다)'));
 }
 function disableDailyCheck() {
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'dailyCheck').forEach(t => ScriptApp.deleteTrigger(t));
@@ -1333,8 +1467,7 @@ function staffOp_(req, s) {
       if (deny) return deny;
       const list = rowsToEmployees_(req.headers || [], req.rows || []);
       if (!list.length) return { success: false, error: '올릴 직원이 없습니다' };
-      const summary = syncEmployees_(list, req.fullList === true);
-      summary.notified = req.notify === false ? [] : detectNewHires_();
+      const summary = syncEmployees_(list, req.fullList === true);   // 수동 업데이트: 알림 메일 없음
       return Object.assign({ success: true }, summary);
     }
     case 'hr.fetch': {
@@ -1345,7 +1478,10 @@ function staffOp_(req, s) {
     case 'nh.list':   return requireLogin_(s) || nhList_(s);
     case 'nh.answer': return requireLogin_(s) || nhAnswer_(req, s);
     case 'nh.resend': return deny || nhResend_(req);
-    case 'nh.run':    return deny || { success: true, created: detectNewHires_(), reminded: sendReminders_() };
+    case 'nh.run':    // '지금 확인' = 매일 자동 확인과 같은 동작 (자동 로그인 가능할 때만 메일)
+      if (deny) return deny;
+      if (!hrAutoReady_()) return { success: false, error: '인사 사이트 자동 로그인이 설정되어야 합니다 (시트 메뉴 ④). 알림 메일은 자동 로그인일 때만 발송됩니다.' };
+      return Object.assign({ success: true }, runAutoCheck_());
   }
   return { success: false, error: 'unknown op: ' + req.op };
 }

@@ -166,19 +166,21 @@ function check(name, cond, extra) {
   const after = await page.evaluate(async () => (await BMAUTH.post('fs.get', { path: 'records/edu_records.json', t: window.__t61 })).status);
   check('PIN 변경 → 기존 부서 토큰 무효', revoked && after === 401, after);
 
-  // 11. 직원정보관리: 엑셀 붙여넣기 → 업데이트 (관리자)
+  // 11. 직원정보관리: 엑셀 붙여넣기 → 업데이트 (관리자) — 수동이므로 메일 없음
   const mail = g.ctx.MailApp;
-  const d = new Date(Date.now() + 9 * 3600e3 - 3 * 86400e3).toISOString().slice(0, 10);   // KST 기준 3일 전
+  const fb = g.ctx.FIREBASE;
+  const kstDay = n => new Date(Date.now() + 9 * 3600e3 + n * 86400e3).toISOString().slice(0, 10);
   await page.evaluate(() => goTab('admin'));
   await page.fill('#admin-pw', 'admin-pass-1');
   await page.evaluate(() => adminLogin());   // 실제 관리자 로그인 폼 경로
   await page.waitForSelector('#admin-main', { state: 'visible' });
   await page.click('.adm-nav-item[data-pane="staff"]');
   await page.waitForSelector('#staff-paste');
+  check('직원정보관리: 연결 전에는 [지금 자동 확인] 비활성', await page.$eval('#staff-nh-run', b => b.disabled));
   await page.fill('#staff-paste', [
     '사번\t이름\t부서\t입사일\t재직상태',
     '126051302\t김가나\t61병동\t2026-07-01\t재직',
-    `126101801\t최신입\t61병동\t${d}\t재직`,
+    `126101801\t최신입\t61병동\t${kstDay(-1)}\t재직`,
     '126051303\t이다라\t71병동\t2026.07.02\t휴직',
   ].join('\n'));
   await page.click('#staff-preview');
@@ -187,52 +189,109 @@ function check(name, cond, extra) {
   await page.waitForFunction(() => document.getElementById('staff-stat').textContent.indexOf('퇴사 1') >= 0, null, { timeout: 15000 });
   const empRows = g.sheets['직원목록'].rows;
   const byName = n => empRows.find(r => r[1] === n);
-  const hdr = empRows[0];
-  const stCol = hdr.indexOf('재직상태');
+  const stCol = empRows[0].indexOf('재직상태');
   check('직원 동기화: 행 삭제 없음 (4명 유지)', empRows.length === 5, empRows.length);
   check('직원 동기화: 명단에 없는 박마바 → 퇴사 표시', byName('박마바') && byName('박마바')[stCol] === '퇴사(명단없음)', byName('박마바'));
   check('직원 동기화: 이다라 휴직 반영', byName('이다라')[stCol] === '휴직', byName('이다라')[stCol]);
   check('직원 동기화: 신규 최신입 추가', !!byName('최신입'));
-  const nhMail = mail.sent.find(m => m.to === 'head61@bumin.co.kr');
-  check('신규입사 알림: 61병동 부서장에게 메일', !!nhMail && /최신입/.test(nhMail.subject), mail.sent.map(m => m.to + ' ' + m.subject));
-  check('신규입사 알림: [확인하기] 링크 포함', !!nhMail && /app\.html\?nh=NH/.test(nhMail.htmlBody));
-  check('신규입사 알림: 오래된 입사자·비취급 부서는 제외', mail.sent.length === 1, mail.sent.length);
-  const nhId = g.api.nhRows_()[0]['알림ID'];
-  await page.waitForFunction(() => document.querySelectorAll('#staff-nh-out tr').length >= 2, null, { timeout: 15000 });
-  check('관리자 화면: 신규입사 알림 표 (회신대기)', (await page.textContent('#staff-nh-out')).includes('회신대기'));
+  check('수동 업데이트: 알림 메일 없음', mail.sent.length === 0, mail.sent.length);
+  const nhRun = await page.evaluate(() => BMAUTH.post('nh.run', {}));
+  check('자동 로그인 미설정: 지금 확인 거부 + 메일 없음', !nhRun.success && mail.sent.length === 0, nhRun.error);
+  g.api.dailyCheck();
+  check('자동 로그인 미설정: 매일 확인은 아무 메일도 안 보냄', mail.sent.length === 0, mail.sent.length);
 
-  // 12. 부서장: 메일 링크(?nh=) → 확인 창 → '예' → 교육일지 대상자 자동 추가
-  const tok = await page.evaluate(async () => (await BMAUTH.post('login', { kind: 'dept', dept: '61병동', pin: '4321' })));
-  await page.evaluate(t => localStorage.setItem('bm_session', JSON.stringify({ token: t.token, role: 'dept', dept: '61병동', exp: t.exp })), tok);
-  await page.goto(`http://localhost:${PORT}/index.html?nh=${nhId}`);
+  // 12. Firebase 인사 사이트 연결 (메뉴 ④ 설정을 직접 입력)
+  Object.assign(g.props, { FB_API_KEY: 'AIzaTest', FB_PROJECT_ID: 'bumin-hr', FB_MODE: 'firestore', FB_PATH: 'employees' });
+  fb.users['clover8477@bumin.co.kr'] = 'hr-pass';
+  const S = v => ({ stringValue: v });
+  fb.docs = [
+    { name: 'projects/bumin-hr/databases/(default)/documents/employees/a1', fields: { empNo: S('126051302'), name: S('김가나'), dept: S('61병동'), hireDate: { timestampValue: '2026-06-30T15:00:00Z' }, status: S('재직') } },
+    { name: 'projects/bumin-hr/databases/(default)/documents/employees/a2', fields: { empNo: S('126101801'), name: S('최신입'), dept: S('61병동'), hireDate: S(kstDay(-1)), status: S('재직') } },
+    { name: 'projects/bumin-hr/databases/(default)/documents/employees/a3', fields: { empNo: S('126101802'), name: S('한새봄'), dept: S('71병동'), hireDate: S(kstDay(-1)), status: S('재직') } },
+  ];
+  await page.evaluate(() => BMSTAFF.open());
+  await page.waitForSelector('#staff-hr-pw');
+  await page.fill('#staff-hr-id', 'clover8477@bumin.co.kr');
+  await page.fill('#staff-hr-pw', 'wrong');
+  await page.click('#staff-hr-go');
+  await page.waitForTimeout(800);
+  check('인사 사이트 가져오기: 틀린 비밀번호는 거부', !(await page.$eval('#staff-sync', b => !b.disabled && document.getElementById('staff-preview-out').textContent.includes('총'))));
+  await page.fill('#staff-hr-pw', 'hr-pass');
+  await page.click('#staff-hr-go');
+  await page.waitForFunction(() => document.getElementById('staff-preview-out').textContent.includes('총 3명'), null, { timeout: 15000 });
+  check('인사 사이트 가져오기: Firestore 3명 미리보기', true);
+  check('인사 사이트 가져오기: 비밀번호 칸 비움 (저장 안 함)', (await page.$eval('#staff-hr-pw', i => i.value)) === '' && !g.props.HR_PW);
+  check('수동 가져오기: 메일 없음', mail.sent.length === 0, mail.sent.length);
+
+  // 13. 자동 로그인 저장 후 [지금 자동 확인] → 이때만 신규입사 메일
+  Object.assign(g.props, { HR_ID: 'clover8477@bumin.co.kr', HR_PW: 'hr-pass' });
+  await page.evaluate(() => BMSTAFF.open());
+  await page.waitForSelector('#staff-nh-run:not([disabled])');
+  await page.click('#staff-nh-run');
+  await page.waitForFunction(() => document.querySelectorAll('#staff-nh-out tr').length >= 2, null, { timeout: 15000 });
+  const nhMail = mail.sent.find(m => m.to === 'head61@bumin.co.kr');
+  check('자동 로그인: 61병동 부서장에게 신규입사 메일', !!nhMail && /최신입/.test(nhMail.subject), mail.sent.map(m => m.to + ' ' + m.subject));
+  check('메일: [확인하기] 링크 포함', !!nhMail && /app\.html\?nh=NH/.test(nhMail.htmlBody));
+  check('메일: 교육 기한 = 입사일 + 3일', !!nhMail && nhMail.htmlBody.includes(kstDay(2)), kstDay(2));
+  check('메일: 오래된 입사자·비취급 부서(71병동)는 제외', mail.sent.length === 1, mail.sent.length);
+  const nh0 = g.api.nhRows_()[0];
+  check('알림 기록: 교육기한 저장', nh0['교육기한'] === kstDay(2), nh0['교육기한']);
+  check('자동 동기화: 한새봄 추가', !!g.sheets['직원목록'].rows.find(r => r[1] === '한새봄'));
+  const tableText = await page.textContent('#staff-nh-out');
+  check('관리자 화면: 회신대기 + 교육기한 표시', tableText.includes('회신대기') && tableText.includes(kstDay(2)));
+
+  // 14. 부서장: 메일 링크(?nh=) → 로그인 창 → PIN 로그인 → 확인 창 → '예' → 교육일지 대상자 자동 추가
+  await page.evaluate(() => { localStorage.removeItem('bm_session'); localStorage.removeItem('bm_admin_ok'); });
+  await page.goto(`http://localhost:${PORT}/index.html?nh=${nh0['알림ID']}`);
+  await page.waitForSelector('#bm-login', { state: 'visible', timeout: 15000 });
+  check('링크 열기(비로그인) → 부서 로그인 창', true);
+  await page.waitForFunction(() => document.querySelectorAll('#bm-login-dept option').length > 1);
+  await page.selectOption('#bm-login-dept', '61병동');
+  await page.fill('#bm-login-pin', '4321');
+  await Promise.all([page.waitForNavigation(), page.click('#bm-login-go')]);
   await page.waitForSelector('#bm-nh [data-yes]', { timeout: 15000 });
+  check('로그인 후 같은 링크 → 확인 요청 창', true);
+  check('확인 창: 교육 기한 표시', (await page.textContent('#bm-nh')).includes('교육 기한: ' + kstDay(2)));
   const deptEmps = await page.evaluate(() => empList.map(e => e.name));
   check('부서 직원 검색: 퇴사자 제외', !deptEmps.includes('박마바') && deptEmps.includes('최신입'), deptEmps);
   await page.click('#bm-nh [data-yes]');
   await page.waitForFunction(() => typeof e2 !== 'undefined' && e2.parts.some(p => p.name === '최신입'), null, { timeout: 15000 });
   const part = await page.evaluate(() => e2.parts.find(p => p.name === '최신입'));
-  check("'예' → MSDS 교육일지에 대상자 자동 추가", part && part.empNo === '126101801', part);
+  check("'예' → MSDS 교육일지에 대상자 자동 추가", part && part.empNo === '126101801' && part.join === kstDay(-1), part);
+  check("'예' → MSDS 교육일지 화면 표시 + 부서 고정", await page.evaluate(() => document.getElementById('pg-edu2').style.display === 'block' && document.getElementById('e2-dept').value === '61병동'));
+  check("'예' → 주소의 ?nh 제거", !(await page.evaluate(() => location.search)).includes('nh='));
   check("'예' → 상태 취급-교육대기", g.api.nhRows_()[0]['상태'] === '취급-교육대기', g.api.nhRows_()[0]['상태']);
   check('보건관리자에게 회신 알림 메일', mail.sent.some(m => m.to === 'admin@bumin.co.kr' && /최신입/.test(m.subject)));
 
-  // 13. 교육일지 저장 → 교육완료
+  // 15. 성별 삭제
+  const g2 = await page.evaluate(() => ({
+    input: !!document.getElementById('e2-gender') || !!document.getElementById('e1-gender'),
+    head: [...document.querySelectorAll('.ptbl th')].some(th => th.textContent.includes('성별')),
+    partKey: e2.parts.some(p => 'gender' in p),
+    rowSelect: document.getElementById('e2-ptbody').innerHTML.includes('>남<'),
+  }));
+  check('성별: 입력란·표 머리·대상자 데이터·표 행 모두 없음', !g2.input && !g2.head && !g2.partKey && !g2.rowSelect, g2);
+
+  // 16. 교육일지 저장 → 교육완료
   await page.evaluate(() => new Promise(res => {
     window.__cb2 = r => { window.__rec2 = r; res(); };
     const sc = document.createElement('script');
     sc.src = CFG.url + '?action=record&type=MSDS교육&dept=' + encodeURIComponent('61병동') + '&names=' + encodeURIComponent('최신입') + '&callback=__cb2';
     document.head.appendChild(sc);
   }));
-  check('교육일지 저장 → 취급-교육완료', g.api.nhRows_()[0]['상태'] === '취급-교육완료', g.api.nhRows_()[0]);
+  check('교육일지 저장 → 취급-교육완료', g.api.nhRows_()[0]['상태'] === '취급-교육완료', g.api.nhRows_()[0]['상태']);
 
-  // 14. 3일 무회신 재알림
+  // 17. 3일 무회신 재알림 (자동 확인 시)
   const o = g.api.nhRows_()[0];
   o['상태'] = '회신대기';
   o['최초발송'] = new Date(Date.now() + 9 * 3600e3 - 4 * 86400e3).toISOString().slice(0, 19);
   g.api.nhWrite_(o);
   const before = mail.sent.length;
-  const reminded = g.api.sendReminders_();
-  check('3일 무회신 → 재알림 1건', reminded === 1 && mail.sent.length === before + 1 && /재알림/.test(mail.sent[mail.sent.length - 1].subject), reminded);
-  check('재알림 직후 다시 실행해도 중복 없음', g.api.sendReminders_() === 0);
+  g.api.dailyCheck();
+  const reminders = mail.sent.slice(before).filter(m => /재알림/.test(m.subject));
+  check('3일 무회신 → 매일 자동 확인에서 재알림 1건', reminders.length === 1, mail.sent.slice(before).map(m => m.subject));
+  check('같은 날 다시 실행해도 중복 없음', (g.api.dailyCheck(), mail.sent.filter(m => /재알림/.test(m.subject)).length === 1));
+  check('자동 확인을 반복해도 신규입사 메일 중복 없음', mail.sent.filter(m => m.to === 'head61@bumin.co.kr' && !/재알림/.test(m.subject)).length === 1);
 
   check('페이지 스크립트 오류 없음', errors.length === 0, errors.slice(0, 5));
   await ctx.unrouteAll({ behavior: 'ignoreErrors' });
