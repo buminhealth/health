@@ -2427,6 +2427,10 @@ function chemLawCycle_(req) {
 }
 
 const NOT_TARGET_RE = /^(미대상|비대상|해당없음|대상아님|대상 아님|X|x|-)$/;
+function lawSameCycle_(a, b) {
+  const m = v => (String(v || '').match(/^(\d+)\s*개월/) || [])[1];
+  return !!m(a) && m(a) === m(b);
+}
 function chemLawImport_(req) {
   const KIND = { hc: 2, we: 3, target: 4, special: 5 };
   const ci = KIND[req.kind];
@@ -2462,7 +2466,7 @@ function chemLawImport_(req) {
         const row = cur[at[cas]];
         const old = String(row[ci] || '').trim();
         if (!old) { row[ci] = value; row[6] = String(row[6] || '').indexOf(src) >= 0 ? row[6] : (row[6] ? row[6] + ' · ' : '') + src; row[7] = today; if (!row[1]) row[1] = name; updated++; }
-        else if (old === value) same++;
+        else if (old === value || lawSameCycle_(old, value)) same++;   // '6개월(임/단시)' 와 '6개월'은 같은 주기
         else differ.push(cas + ' (지금 ' + old + ' / 붙여넣기 ' + value + ')');
       }
     });

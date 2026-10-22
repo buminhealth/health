@@ -630,6 +630,10 @@ function check(name, cond, extra) {
   const keepHc = lawRow[2]; lawRow[2] = '미대상';
   const au4 = await page.evaluate(() => BMAUTH.post('chem.audit', {}));
   check("법령대조표 '미대상' → ④ 제안 안 함 · 시트에 주기가 적힌 성분은 따로 표시", !au4.suggestions.some(x => x.cas === '67-56-1' && x.field === 'hc') && au4.lawMismatch.some(x => x.cas === '67-56-1' && x.field === 'hc'), [au4.lawMismatch]);
+  let lsh0;
+  lsh0 = g.sheets['법령대조표']; lsh0.appendRow(['7722-84-1', '과산화수소', '', '6개월(임/단시)', '', '', '', '', '']);
+  const imp6 = await page.evaluate(() => BMAUTH.post('chem.lawImport', { kind: 'we', value: '6개월', text: '과산화수소 7722-84-1' }));
+  check("법령대조표 넣기: '6개월(임/단시)'와 '6개월'은 같은 주기로 봄 (다름으로 안 알림)", imp6.success && imp6.same === 1 && imp6.differCount === 0, imp6);
   // v20.7 ③ 화면에서 직접 고침: 미해당(비움) + 메모1 사유 · 그 사이 바뀐 값(old 불일치)은 건너뜀
   const mm = au4.lawMismatch.find(x => x.cas === '67-56-1' && x.field === 'hc');
   const hcCol = ch.rows[0].findIndex(h => /healthCheck|특수건강/.test(h)), memoCol = ch.rows[0].findIndex(h => /메모1|비고|memo/.test(h));
