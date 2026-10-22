@@ -28,6 +28,10 @@
     - 교육 기록 주인 판정 (서버): 일지에 동명이인 사번이 잘못 들어간 경우 · 재입사로 사번이 바뀐 경우 · 사번 빈칸 ·
       '51병동(신관)' 같은 부서 표기 → 기록 부서의 같은 이름 재직자에게 붙임 (박승희 · 김민지 · 김지은 · 김유진 · 이민경 · 박소영 · 전성자 이수로 바로잡힘)
     - 직원목록에 같은 사번 줄이 두 번 있으면 한 명으로 (우정희 중복 집계 해결)
+    - 수기(종이) 교육일지 이수 등록: 교육 현황 → [수기(종이) 일지 이수 등록] — 부서 명단 체크 또는 엑셀 붙여넣기 → 미리보기
+      (직원 찾기 · 동명이인 · 중복 · 날짜 확인) → 교육이력대장에 '수기(종이) 일지'로 등록 → 바로 이수
+    - 개별 포함: 규칙 · 신규입사 회신으로 제외된 사람도 [대상으로 포함] (개인 결정 > 규칙), [포함 해제]로 되돌림
+    - 연동: 제외 · 포함 · 수기 등록 → 신규입사 알림 상태(미취급 / 취급-교육대기)까지 같이 바꾸고 대시보드 · 홈 할 일 · 규칙 표 다시 계산
 
   ★★★ v20.2 (2026-10-21) — 화면 비율 · 연락처 띠 고정 · 관리자 결재 A-8:
     - 연락처 띠: PC는 화면 맨 아래 고정 한 줄(40px), 휴대폰은 각 페이지 끝
@@ -4016,20 +4020,26 @@ input.apv-in[type=text]{width:110px}
     if(p.moved && p.status !== '이수' && p.status !== '제외') t += '<div style="font-size:12px;color:#A3302A">부서 이동: ' + esc(p.moved) + '에서 받은 교육에 이 부서 물질이 없음 → 1회 교육 필요</div>';
     if(p.onLeave) t += '<div style="font-size:12px;color:#5A5650">휴직 중 (교육은 1회만 · 복직 후 따로 필요 없음)</div>';
     if(p.rule) t += '<div style="font-size:12px;color:#5A5650">대상 규칙 ' + p.rule + ' 적용</div>';
+    if(p.included) t += '<div style="font-size:12px;color:#2D581B">개별 포함: ' + esc(p.included.reason) + ' · ' + esc(p.included.by) + ' ' + esc(p.included.date) + '</div>';
     (p.newChem || []).forEach(function(n){
       t += '<div style="font-size:12px;color:' + (n.done ? '#3B7322' : (n.overdue ? '#A3302A' : '#6E4A00')) + '">새 물질 ' + esc(n.chem) + ': ' + (n.done ? '교육 완료' : '기한 ' + esc(n.due) + (n.overdue ? ' 초과' : '')) + '</div>';
     });
     return t;
   }
-  function peopleTable(list, canAct){
+  function peopleTable(list, canAct, sel){
     var td = 'padding:7px 8px;border-bottom:1px solid #ECEBE7;font-size:14px;vertical-align:top';
     return '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%"><tr>' +
-      ['이름', '사번', '입사일', '교육', '상태', '최근 교육', ''].map(function(h){ return '<th style="text-align:left;padding:8px;background:#E2F0D5;color:#2D581B;font-size:13px;white-space:nowrap">' + h + '</th>'; }).join('') + '</tr>' +
+      (sel ? [''] : []).concat(['이름', '사번', '입사일', '교육', '상태', '최근 교육', '']).map(function(h){ return '<th style="text-align:left;padding:8px;background:#E2F0D5;color:#2D581B;font-size:13px;white-space:nowrap">' + h + '</th>'; }).join('') + '</tr>' +
       list.map(function(p, i){
-        return '<tr' + (p.status === '제외' ? ' style="background:#FAFAF8;color:#8A867E"' : '') + '><td style="' + td + '"><b>' + esc(p.name) + '</b>' + (p.job ? '<div style="font-size:12px;color:#5A5650">' + esc(p.job) + '</div>' : '') + '</td><td style="' + td + '">' + esc(p.no) + '</td><td style="' + td + ';white-space:nowrap">' + esc(p.joinDate) + '</td>' +
+        return '<tr' + (p.status === '제외' ? ' style="background:#FAFAF8;color:#8A867E"' : '') + '>' +
+          (sel ? '<td style="' + td + '">' + (p.status === '이수' ? '' : '<input type="checkbox" data-pick="' + edu.people.indexOf(p) + '" aria-label="' + esc(p.name) + ' 선택">') + '</td>' : '') + '<td style="' + td + '"><b>' + esc(p.name) + '</b>' + (p.job ? '<div style="font-size:12px;color:#5A5650">' + esc(p.job) + '</div>' : '') + '</td><td style="' + td + '">' + esc(p.no) + '</td><td style="' + td + ';white-space:nowrap">' + esc(p.joinDate) + '</td>' +
           '<td style="' + td + ';white-space:nowrap">' + (p.need === '특별' ? '특별안전보건' : 'MSDS') + '</td><td style="' + td + '">' + statusCell(p) + '</td><td style="' + td + ';white-space:nowrap">' + esc(p.lastEdu || '-') + '</td>' +
-          '<td style="' + td + ';white-space:nowrap">' + (!canAct ? '' : (p.status === '제외'
-            ? (p.excluded.route === '신규입사 회신' || p.excluded.route === '대상 규칙' ? '' : '<button data-unx="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer">제외 해제</button>')
+          '<td style="' + td + ';white-space:nowrap">' + (!canAct ? '' : (p.included
+            ? '<button data-unx="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer">포함 해제</button>'
+            : p.status === '제외'
+            ? (p.excluded.route === '신규입사 회신' || p.excluded.route === '대상 규칙'
+                ? '<button data-inc="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer;border-color:#4A8F2C;color:#2D581B">대상으로 포함</button>'
+                : '<button data-unx="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer">제외 해제</button>')
             : (p.records ? '<span style="font-size:12px;color:#5A5650">일지 있음</span>' : '<button data-x="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer">취급 안 함 (제외)</button>'))) + '</td></tr>';
       }).join('') + '</table></div>';
   }
@@ -4041,16 +4051,100 @@ input.apv-in[type=text]{width:110px}
       var fromMail = /[?&]dv=edu/.test(location.search);
       var x = await BMAUTH.post('edu.exclude', { no: p.no, name: p.name, dept: p.dept, reason: reason, fromMail: fromMail });
       say(x.success ? p.name + ' 님을 제외했습니다' : (x.error || '실패'), x.success ? 'ok' : 'err');
-      after();
+      after(); try{ if(window.bmEduChanged) bmEduChanged(); }catch(_){}
+    }; });
+    host.querySelectorAll('[data-inc]').forEach(function(b){ b.onclick = async function(){
+      var p = list[+b.getAttribute('data-inc')];
+      var reason = prompt(p.name + ' 님을 교육 대상으로 포함합니다 (' + p.excluded.reason + '보다 우선).\n사유를 적어 주세요', '개별 확인: 물질 취급함');
+      if(reason === null) return;
+      var x = await BMAUTH.post('edu.exclude', { no: p.no, name: p.name, dept: p.dept, include: true, reason: reason.trim() });
+      say(x.success ? p.name + ' 님을 교육 대상으로 포함했습니다' : (x.error || '실패'), x.success ? 'ok' : 'err');
+      after(); try{ if(window.bmEduChanged) bmEduChanged(); }catch(_){}
     }; });
     host.querySelectorAll('[data-unx]').forEach(function(b){ b.onclick = async function(){
       var p = list[+b.getAttribute('data-unx')];
-      if(!confirm(p.name + ' 님을 다시 교육 대상으로 되돌릴까요?')) return;
+      if(!confirm(p.included ? p.name + ' 님의 개별 포함을 해제할까요? (규칙 · 기본 기준으로 돌아감)' : p.name + ' 님을 다시 교육 대상으로 되돌릴까요?')) return;
       var x = await BMAUTH.post('edu.exclude', { no: p.no, name: p.name, dept: p.dept, undo: true });
       say(x.success ? '되돌렸습니다' : (x.error || '실패'), x.success ? 'ok' : 'err');
-      after();
+      after(); try{ if(window.bmEduChanged) bmEduChanged(); }catch(_){}
     }; });
   }
+  /* v20.3 수기(종이) 교육일지 이수 등록 — 현황판에서 고른 직원 또는 엑셀 붙여넣기 → 미리보기 → 교육이력대장에 등록 */
+  function manualUI(){
+    var host = document.getElementById('eb-manual');
+    if(!host) return;
+    if(host.innerHTML){ host.innerHTML = ''; return; }
+    var IN = 'height:34px;padding:0 8px;border:1px solid #C6C3BB;border-radius:4px;font:inherit;font-size:13px;box-sizing:border-box;background:#fff';
+    var B = 'padding:7px 12px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;font-weight:700;cursor:pointer';
+    host.innerHTML = '<div style="border:1px solid #DDDBD5;border-radius:8px;padding:14px;margin:0 0 12px;background:#FAFAF8">' +
+      '<b style="font-size:15px">수기(종이) 교육일지 이수 등록</b>' +
+      '<div style="font-size:13px;color:#5A5650;margin:4px 0 10px;line-height:1.6">시스템 이전에 종이로 한 교육을 교육이력대장에 넣어 이수로 처리합니다. 서명여부 칸에 <b>수기(종이) 일지</b>로 남고, 종이 원본은 보관 위치를 비고에 적어 두세요.<br>' +
+        '① 아래 부서 명단에서 체크한 직원 또는 ② 엑셀 붙여넣기 (제목 줄 포함: 사번 · 이름 · 부서 · 교육구분 · 교육일 · 종료일 · 시간 · 물질 · 비고 — 없는 칸은 아래 공통 값)</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">' +
+        '<select id="mn-type" style="' + IN + '"><option value="MSDS교육">MSDS 교육</option><option value="특별안전보건교육">특별안전보건교육</option></select>' +
+        '<label style="font-size:13px">교육일 <input id="mn-ds" type="date" style="' + IN + '"></label>' +
+        '<label style="font-size:13px">종료일 <input id="mn-de" type="date" style="' + IN + '"></label>' +
+        '<label style="font-size:13px">시간 <input id="mn-h" type="number" min="0" step="0.5" value="1" style="' + IN + ';width:70px"></label>' +
+        '<input id="mn-chem" placeholder="물질 (비우면 부서 물질)" style="' + IN + ';width:180px">' +
+        '<input id="mn-note" placeholder="비고 (예: 2024 종이일지 · 보건관리실 보관)" style="' + IN + ';width:260px"></div>' +
+      '<textarea id="mn-paste" placeholder="② 엑셀에서 제목 줄까지 복사해 붙여넣기 (비워 두면 ① 체크한 직원)" style="width:100%;height:90px;border:1px solid #C6C3BB;border-radius:4px;font:inherit;font-size:12px;font-family:monospace;padding:6px;box-sizing:border-box"></textarea>' +
+      '<div style="display:flex;gap:6px;margin-top:8px"><button id="mn-dry" style="' + B + '">미리보기</button><button id="mn-go" style="' + B + ';background:#4A8F2C;border-color:#4A8F2C;color:#fff" disabled>등록</button>' +
+        '<span id="mn-sum" style="font-size:13px;color:#5A5650;align-self:center"></span></div>' +
+      '<div id="mn-out" style="margin-top:8px;overflow-x:auto"></div></div>';
+    var val = function(id){ return document.getElementById(id).value.trim(); };
+    var collect = function(){
+      var common = { type: val('mn-type'), ds: val('mn-ds'), de: val('mn-de'), hours: val('mn-h'), chem: val('mn-chem'), note: val('mn-note') };
+      var txt = document.getElementById('mn-paste').value.replace(/\r/g, '').trim();
+      if(txt){
+        var lines = txt.split('\n').map(function(l){ return l.split('\t').map(function(c){ return c.trim(); }); });
+        var syn = { no: ['사번', '직원번호'], name: ['이름', '성명'], dept: ['부서', '교육부서', '소속'], type: ['교육구분', '구분', '교육'], ds: ['교육일', '교육시작일', '시작일', '일자'], de: ['종료일', '교육종료일'], hours: ['시간', '교육시간', '총교육시간'], chem: ['물질', '취급물질'], note: ['비고', '메모'] };
+        var h = lines[0], idx = {};
+        Object.keys(syn).forEach(function(k){ idx[k] = h.findIndex(function(x){ return syn[k].indexOf(x.replace(/\s/g, '')) >= 0; }); });
+        if(idx.name < 0) return { err: '첫 줄에 제목(이름 · 사번 · 부서 · 교육일 …)을 넣어 주세요' };
+        return { rows: lines.slice(1).filter(function(l){ return l[idx.name]; }).map(function(l){
+          var o = {}; Object.keys(syn).forEach(function(k){ o[k] = idx[k] >= 0 && l[idx[k]] ? l[idx[k]] : (common[k] || ''); }); return o;
+        }) };
+      }
+      var picked = [].filter.call(document.querySelectorAll('#eb-people [data-pick]'), function(c){ return c.checked; }).map(function(c){ return edu.people[+c.getAttribute('data-pick')]; });
+      if(!picked.length) return { err: '부서 명단에서 직원을 체크하거나 엑셀을 붙여넣으세요' };
+      if(!common.ds) return { err: '교육일을 넣어 주세요' };
+      return { rows: picked.map(function(p){ return Object.assign({ no: p.no, name: p.name, dept: p.dept }, common); }) };
+    };
+    var last = null;
+    var show = function(r){
+      var ok = r.rows.filter(function(x){ return x.ok; }).length;
+      document.getElementById('mn-sum').textContent = '등록 가능 ' + ok + '명 · 제외 ' + (r.rows.length - ok) + '명';
+      document.getElementById('mn-go').disabled = !r.dry || !ok;
+      var td = 'padding:5px 6px;border-bottom:1px solid #ECEBE7;font-size:13px;white-space:nowrap';
+      document.getElementById('mn-out').innerHTML = '<table style="border-collapse:collapse;width:100%"><tr>' + ['', '이름', '사번', '부서', '교육', '교육일', '시간', '확인'].map(function(x){ return '<th style="text-align:left;padding:6px;background:#E2F0D5;color:#2D581B;font-size:12px">' + x + '</th>'; }).join('') + '</tr>' +
+        r.rows.map(function(x){ var e = x.emp || {}; return '<tr><td style="' + td + '">' + (x.ok ? '✓' : '✕') + '</td><td style="' + td + '">' + esc(e.name || x.name) + '</td><td style="' + td + '">' + esc(e.no || x.no) + '</td><td style="' + td + '">' + esc(e.dept || x.dept) + '</td><td style="' + td + '">' + esc(x.type || '') + '</td><td style="' + td + '">' + esc(x.ds || '') + (x.de && x.de !== x.ds ? ' ~ ' + esc(x.de) : '') + '</td><td style="' + td + '">' + esc(x.hours || '') + '</td><td style="' + td + ';color:' + (x.ok ? '#2D581B' : '#A3302A') + '">' + esc(x.ok ? '등록 가능' : x.reason) + '</td></tr>'; }).join('') + '</table>';
+    };
+    document.getElementById('mn-dry').onclick = async function(){
+      var c = collect(); if(c.err){ say(c.err, 'err'); return; }
+      var r = await BMAUTH.post('edu.manual', { rows: c.rows, dry: true });
+      if(!r.success){ say(r.error || '미리보기 실패', 'err'); return; }
+      last = c.rows; show(r);
+    };
+    document.getElementById('mn-go').onclick = async function(){
+      if(!last) return;
+      var btn = this; btn.disabled = true;
+      var r = await BMAUTH.post('edu.manual', { rows: last });
+      if(!r.success){ say(r.error || '등록 실패', 'err'); btn.disabled = false; return; }
+      say('수기 교육 ' + r.added + '명을 교육이력대장에 등록했습니다 · 이수로 반영', 'ok');
+      host.innerHTML = '';
+      await board();
+      try{ if(window.bmEduChanged) bmEduChanged(); }catch(_){}
+    };
+  }
+  // v20.3 제외 · 포함 · 수기 등록 뒤 다른 화면(대시보드 · 신규입사 알림 · 규칙 · 홈 할 일)도 새로 계산
+  window.bmEduChanged = function(){
+    var on = function(id){ var el = document.getElementById(id); return el && el.classList.contains('active'); };
+    try{ if(window.BMDASH && on('adm-pane-dash')) BMDASH.open(); }catch(_){}
+    try{ if(window.BMSTAFF && on('adm-pane-nh')) BMSTAFF.openNh(); }catch(_){}
+    try{ if(window.BMSTAFF && on('adm-pane-staff') && document.getElementById('staff-rules')) BMSTAFF.rules(); }catch(_){}
+    try{ if(window.BMHOME) BMHOME.render(); }catch(_){}
+    try{ BMAUTH.post('nh.list', {}).then(function(r){ if(r.success && window.BMDASH) BMDASH.nhBadge(r.data); }); }catch(_){}
+  };
   // 관리자 > 교육 현황 맨 위
   async function board(){
     var host = document.getElementById('edu-board');
@@ -4072,7 +4166,8 @@ input.apv-in[type=text]{width:110px}
     host.innerHTML =
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><b style="font-size:17px">교육 이수 현황</b>' +
         '<span style="display:flex;gap:6px;flex-wrap:wrap"><button id="eb-mail" style="padding:8px 12px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-weight:700;cursor:pointer">부서장에게 확인 요청 메일</button>' +
-        '<button id="eb-nc" style="padding:8px 12px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-weight:700;cursor:pointer">새 물질 교육 등록</button></span></div>' +
+        '<button id="eb-nc" style="padding:8px 12px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-weight:700;cursor:pointer">새 물질 교육 등록</button>' +
+        '<button id="eb-manual-btn" style="padding:8px 12px;border:1px solid #4A8F2C;border-radius:4px;background:#fff;color:#2D581B;font:inherit;font-weight:700;cursor:pointer">수기(종이) 일지 이수 등록</button></span></div><div id="eb-manual"></div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">' +
         kpi('교육 대상', T.total, '제외 ' + T.excluded + '명') + kpi('이수', T.done, T.total ? Math.round(T.done / T.total * 100) + '%' : '', '#2D581B') +
         kpi('특별교육 진행중', T.progress, '16시간 미달', '#2B4C7E') + kpi('미이수', T.missing, '기한 초과 ' + T.overdue + '명', T.missing ? '#A3302A' : '') +
@@ -4090,6 +4185,7 @@ input.apv-in[type=text]{width:110px}
       '<div id="eb-people" style="margin-top:12px"></div>';
     host.querySelectorAll('[data-dept]').forEach(function(tr){ tr.onclick = function(){ eduDept = tr.getAttribute('data-dept'); showDept(); host.querySelectorAll('[data-dept]').forEach(function(x){ x.style.background = x === tr ? '#E2F0D5' : ''; }); }; });
     if(eduDept) showDept();
+    document.getElementById('eb-manual-btn').onclick = manualUI;
     document.getElementById('eb-mail').onclick = async function(){
       var pend = r.depts.filter(function(d){ return d.missing || d.progress || d.newChem; }).map(function(d){ return d.dept; });
       if(!pend.length){ say('미이수 부서가 없습니다', 'ok'); return; }
@@ -4110,7 +4206,7 @@ input.apv-in[type=text]{width:110px}
     if(!box || !edu) return;
     var order = { '미이수': 0, '진행중': 1, '이수': 2, '제외': 3 };
     var list = edu.people.filter(function(p){ return p.dept === eduDept; }).sort(function(a, b){ return (order[a.status] - order[b.status]) || ((b.overdue ? 1 : 0) - (a.overdue ? 1 : 0)) || String(a.name).localeCompare(b.name, 'ko'); });
-    box.innerHTML = '<b style="font-size:15px">' + esc(eduDept) + ' ' + list.length + '명</b>' + peopleTable(list, true);
+    box.innerHTML = '<b style="font-size:15px">' + esc(eduDept) + ' ' + list.length + '명</b> <span style="font-size:12px;color:#5A5650">체크 → 위 [수기(종이) 일지 이수 등록]</span>' + peopleTable(list, true, true);
     bindPeople(box, list, board);
   }
   // 부서현황(부서 로그인)의 '교육 대상 확인'
