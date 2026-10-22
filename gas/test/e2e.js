@@ -751,7 +751,12 @@ function check(name, cond, extra) {
   check('교육 제외: 관리자 확인 → 제외 (사유 · 확인자 기록)', ex1.success && Q(est2, '교육다').status === '제외' && Q(est2, '교육다').excluded.by === '보건관리자' && g.sheets['교육제외'].rows[1][3] === '행정 업무만', Q(est2, '교육다'));
   const exA = await page.evaluate(() => BMAUTH.post('edu.exclude', { no: '126000001', name: '교육가', dept: '61병동', reason: '시험' }));
   const est3 = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
-  check('교육 제외: 일지를 쓴 사람은 제외해도 대상', exA.success && Q(est3, '교육가').status === '이수', Q(est3, '교육가'));
+  check('교육 제외: 확인일 전 교육만 있으면 제외 (예전 기록은 보존 표시)', exA.success && Q(est3, '교육가').status === '제외' && Q(est3, '교육가').kept.n === 1, Q(est3, '교육가'));
+  led.rows.push(['8', '2026-10-22T01:00Z', '특별안전보건교육', '61병동', '포름알데히드', est3.today, est3.today, '1', '8시간', '126000001', '교육가', '', '✓ 서명완료']);
+  const est3b = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
+  check('교육 제외: 확인일 이후 지금 부서에서 일지를 쓰면 다시 대상', Q(est3b, '교육가').status === '이수', Q(est3b, '교육가').status);
+  led.rows.pop();
+  await page.evaluate(() => BMAUTH.post('edu.exclude', { no: '126000001', name: '교육가', dept: '61병동', undo: true }));
   const un = await page.evaluate(() => BMAUTH.post('edu.exclude', { no: '126000003', name: '교육다', dept: '61병동', undo: true }));
   const est4 = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
   check('교육 제외: 해제 → 다시 대상', un.success && Q(est4, '교육다').status === '미이수', Q(est4, '교육다'));
@@ -928,6 +933,21 @@ function check(name, cond, extra) {
   });
   const bulkRows = led.rows.filter(r => /일괄/.test(String(r[12])));
   check('전 부서 일괄 수기 이수: 미리보기 → 처리 → 할 일 0명 · 입사일이 늦은 사람은 입사일로', /등록 \d+명/.test(bulk.sum) && bulk.left.length === 0 && bulkRows.length > 0 && bulkRows.every(r => r[5] >= '2025-01-01') && bulkRows.some(r => r[5] === '2025-01-01'), [bulk, bulkRows.length]);
+  // v20.3 규칙 제외는 일괄 수기 기록보다 우선 (치과 의사 사례) · 수기 기록 삭제(백업) · 앱 일지는 삭제 불가
+  const onlyBulk = bulkRows.map(r => r[10]).find(nm => led.rows.filter(r => r[10] === nm).every(r => /일괄/.test(String(r[12]))));
+  const bulkDept = bulkRows.find(r => r[10] === onlyBulk)[3];
+  const rulesBak = (await page.evaluate(() => BMAUTH.post('edu.rules', {}))).rules;
+  await page.evaluate(d => BMAUTH.post('edu.saveRules', { rules: [{ use: true, dept: d, job: '', decision: '제외', note: '의사 — 사용 안 함' }] }), bulkDept);
+  const est14 = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
+  const BP = Q(est14, onlyBulk);
+  check('규칙 제외 > 일괄 수기 기록: 일괄로 이수 처리된 사람도 규칙으로 제외 (기록 보존 표시)', BP.status === '제외' && BP.kept && BP.kept.n >= 1 && BP.manualRows.length >= 1 && BP.manualRows[0].bulk, BP);
+  const appRow = led.rows.findIndex(r => !/^수기/.test(String(r[12])) && r[10]) + 1;
+  const ledLen = led.rows.length;
+  const del = await page.evaluate(([items, app]) => BMAUTH.post('edu.manualDelete', { reason: '시험', items: items.concat([app]) }),
+    [BP.manualRows.map(r => ({ row: r.row, name: onlyBulk, ds: r.ds })), { row: appRow, name: led.rows[appRow - 1][10], ds: led.rows[appRow - 1][5] }]);
+  const bak = g.sheets['교육이력_삭제'];
+  check('수기 기록 삭제: 수기 줄만 삭제 · 앱 일지는 건너뜀 · 교육이력_삭제 시트에 백업(사유)', del.success && del.deleted === BP.manualRows.length && del.skipped === 1 && led.rows.length === ledLen - del.deleted && !led.rows.some(r => r[10] === onlyBulk) && !!bak && bak.rows.some(r => r.includes(onlyBulk) && r.includes('시험')), [del, ledLen, led.rows.length]);
+  await page.evaluate(r => BMAUTH.post('edu.saveRules', { rules: r }), rulesBak);
   led.rows.splice(ledN);
   // v20.3 직원목록 ↔ 인사 사이트 합치기: #N/A · 빈 사번 채움, 입사일 표기 달라도(9/1) 같은 부서 같은 이름이면 같은 사람, 같은 사번 두 줄 합침
   const r1 = empRow('#N/A', '엔에이', '71병동', '재직', ''); empSh.appendRow(r1);

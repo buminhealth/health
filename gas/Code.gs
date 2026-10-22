@@ -178,7 +178,7 @@ function doPost(e) {
       case 'ai.status': case 'ai.setKey': case 'ai.list': case 'ai.analyze': case 'ai.judge': case 'ai.apply': case 'ai.products': case 'ai.compare':
                         result = aiOp_(req, s); break;
       case 'edu.dupes': case 'edu.dedupe': case 'edu.status': case 'edu.exclude': case 'edu.askMail': case 'edu.newChem':
-      case 'edu.rules': case 'edu.saveRules': case 'dept.saveMap': case 'edu.manual': case 'edu.unit':
+      case 'edu.rules': case 'edu.saveRules': case 'dept.saveMap': case 'edu.manual': case 'edu.unit': case 'edu.manualDelete':
                         result = eduOp_(req, s); break;
       default:          result = { success: false, error: 'unknown op: ' + req.op };
     }
@@ -2572,9 +2572,11 @@ function ledgerRows_() {
   const v = sh.getDataRange().getDisplayValues();
   const h = v[0].map(x => String(x).trim());
   const c = k => h.indexOf(k);
-  const C = { type: c('교육구분'), dept: c('교육부서'), chem: c('취급물질'), ds: c('교육시작일'), de: c('교육종료일'), hrs: c('총교육시간'), no: c('사번'), name: c('성명') };
+  const C = { type: c('교육구분'), dept: c('교육부서'), chem: c('취급물질'), ds: c('교육시작일'), de: c('교육종료일'), hrs: c('총교육시간'), no: c('사번'), name: c('성명'), sig: c('서명여부') };
   if (C.name < 0 || C.type < 0) return [];
-  return v.slice(1).filter(r => String(r[C.name] || '').trim()).map(r => ({
+  return v.slice(1).map((r, i) => [r, i + 2]).filter(x => String(x[0][C.name] || '').trim()).map(([r, row]) => ({
+    row: row, sig: C.sig >= 0 ? String(r[C.sig] || '') : '',
+    manual: C.sig >= 0 && /^수기/.test(String(r[C.sig] || '')), bulk: C.sig >= 0 && /^수기.*일괄/.test(String(r[C.sig] || '')),
     no: C.no >= 0 ? String(r[C.no] || '').trim() : '', name: String(r[C.name]).trim(), dept: C.dept >= 0 ? String(r[C.dept] || '').trim() : '',
     type: String(r[C.type] || ''), special: /특별/.test(String(r[C.type] || '')), chem: C.chem >= 0 ? String(r[C.chem] || '') : '',
     ds: C.ds >= 0 ? String(r[C.ds] || '').trim() : '', de: C.de >= 0 ? String(r[C.de] || '').trim() : '',
@@ -2653,6 +2655,37 @@ function unitMap_() {
     out['nm:' + String(r[1]).trim() + '|' + normDept_(deptAlias_(r[2]))] = o;
   });
   return out;
+}
+/* v20.3 수기(종이) 기록 삭제 — 수기로 넣은 줄만 (앱에서 쓴 서명 일지는 삭제 불가).
+   지우기 전에 '교육이력_삭제' 시트에 그대로 옮겨 보관 (누가 · 언제 · 사유) → 필요하면 되살릴 수 있음 */
+function eduManualDelete_(req, s) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
+  try {
+    const sh = SS.getSheetByName('교육이력대장');
+    if (!sh) return { success: false, error: '교육이력대장 시트가 없습니다' };
+    const recs = ledgerRows_();
+    const byRow = {};
+    recs.forEach(r => { byRow[r.row] = r; });
+    const ok = [], skip = [];
+    (req.items || []).slice(0, 2000).forEach(x => {
+      const r = byRow[Number(x.row)];
+      if (!r || !r.manual || r.name !== String(x.name || '').trim() || r.ds !== String(x.ds || '').trim()) { skip.push(x.name || x.row); return; }
+      if (ok.indexOf(r.row) < 0) ok.push(r.row);
+    });
+    if (!ok.length) return { success: true, deleted: 0, skipped: skip.length };
+    const width = sh.getLastColumn();
+    const head = sh.getRange(1, 1, 1, width).getDisplayValues()[0];
+    const bak = eduSheet_('교육이력_삭제', head.concat(['삭제일시', '삭제자', '삭제사유']));
+    const by = s.role === 'admin' ? '보건관리자' : s.dept;
+    const reason = String(req.reason || '').trim().slice(0, 200);
+    const rows = ok.sort((a, b) => a - b).map(r => sh.getRange(r, 1, 1, width).getDisplayValues()[0].concat([nowKst_(), by, reason]).map(safeCell_));
+    bak.getRange(bak.getLastRow() + 1, 1, rows.length, rows[0].length).setNumberFormat('@').setValues(rows);
+    ok.sort((a, b) => b - a).forEach(r => sh.deleteRow(r));   // 아래 줄부터 지워야 행 번호가 안 밀림
+    return { success: true, deleted: ok.length, skipped: skip.length };
+  } finally {
+    lock.releaseLock();
+  }
 }
 function eduUnit_(req, s) {
   const sh = eduSheet_(UNIT_SHEET, UNIT_HEADER);
@@ -2760,7 +2793,16 @@ function eduStatus_(s) {
     const mine = all.filter(r => covers(r, di, un ? Object.assign({}, e, { unit: un.unit }) : e));
     const ruleEx = rule && rule.decision === '제외'
       ? { reason: '대상 규칙 ' + (ri + 1) + (rule.note ? ': ' + rule.note : ''), by: '관리자 규칙', date: '', route: '대상 규칙' } : null;
-    const ex = inc ? null : (excl[eduKey_(e.empNo, e.name, e.dept)] || excl['nm:' + e.name + '|' + normDept_(e.dept)] || ruleEx);
+    /* v20.3 제외 판정 (교육 기록은 지우지 않고 보존):
+       · 개별 제외(관리자 · 부서장 · 신규입사 회신): 확인일 이후(같은 날 포함)에 지금 부서에서 받은 교육이 있으면 대상, 아니면 제외
+         → 부서를 옮겨 더 이상 취급하지 않는 사람은 예전 기록이 있어도 '해당 없음'
+       · 규칙 제외: 지금 부서(근무지)에서 직접 쓴 일지 · 개별 수기 기록이 있으면 대상, 일괄 수기 기록만 있거나 다른 부서 기록이면 제외 */
+    const cur = un ? un.unit : e.dept;
+    const here = r => !r.bulk && (baseDept_(r.dept) === baseDept_(cur) || baseDept_(r.dept) === baseDept_(e.dept));
+    const pex = inc ? null : (excl[eduKey_(e.empNo, e.name, e.dept)] || excl['nm:' + e.name + '|' + normDept_(e.dept)]);
+    let ex = null;
+    if (pex) ex = mine.some(r => here(r) && r.ds >= String(pex.date || '').slice(0, 10)) ? null : pex;
+    else if (ruleEx && !inc) ex = mine.some(here) ? null : ruleEx;
     const p = { no: e.empNo, name: e.name, dept: e.dept, joinDate: e.joinDate, need: di.need, records: mine.length,
                 lastEdu: mine.map(r => r.ds).sort().pop() || '', job: jobOf_(e.position) };
     if (/휴직/.test(e.status || '')) p.onLeave = true;
@@ -2768,7 +2810,8 @@ function eduStatus_(s) {
     if (inc) p.included = inc;
     if (un) p.unit = un.unit;
     if (all.length && !mine.length) p.moved = all.map(r => r.dept).filter(Boolean).pop() || '이전 부서';
-    if (ex && !mine.length) { p.status = '제외'; p.excluded = ex; people.push(p); return; }
+    p.manualRows = all.filter(r => r.manual).map(r => ({ row: r.row, ds: r.ds, type: r.special ? '특별' : 'MSDS', bulk: r.bulk, dept: r.dept }));
+    if (ex) { p.status = '제외'; p.excluded = ex; if (all.length) p.kept = { n: all.length, last: all.map(r => r.ds).sort().pop() || '' }; people.push(p); return; }
     const isNew = e.joinDate && e.joinDate >= addDays_(today, -NEWHIRE_WINDOW);
     if (di.need === '특별') {
       const sp = mine.filter(r => r.special);
@@ -3016,6 +3059,7 @@ function eduOp_(req, s) {
   if (req.op === 'edu.dupes') return Object.assign({ success: true }, eduDupes_());
   if (req.op === 'edu.rules') return eduRulesInfo_();
   if (req.op === 'edu.manual') return eduManual_(req);
+  if (req.op === 'edu.manualDelete') { const r = eduManualDelete_(req, s); if (r.success && r.deleted) eduCacheClear_(); return r; }
   if (req.op === 'edu.unit') { const r = eduUnit_(req, s); eduCacheClear_(); return r; }
   if (req.op === 'edu.saveRules') {
     const list = (req.rules || []).map(r => [r.use === false || r.use === 'N' ? 'N' : 'Y', String(r.dept || '').trim(), String(r.job || '').trim(),
