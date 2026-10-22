@@ -107,8 +107,24 @@ function makeEnv() {
         }
         if (u.startsWith('https://firestore.googleapis.com/v1/projects/')) {
           if (!opt || !opt.headers || opt.headers.Authorization !== 'Bearer fb-id-token') return resp(403, {});
+          if (fb.quota) return resp(429, { error: { message: 'Quota exceeded.', status: 'RESOURCE_EXHAUSTED' } });
+          // 조건 조회 (runQuery): fieldFilter / compositeFilter(AND) 의 >= · == 만 흉내
+          if (u.endsWith(':runQuery')) {
+            const q = JSON.parse(opt.payload).structuredQuery;
+            const coll = q.from[0].collectionId;
+            const docs = (fb.collections && fb.collections[coll]) || [];
+            const val = v => v ? ('stringValue' in v ? v.stringValue : ('timestampValue' in v ? String(v.timestampValue).slice(0, 10) : '')) : undefined;
+            const one = f => d => { const fv = val((d.fields || {})[f.field.fieldPath]); const want = val(f.value);
+              if (fv === undefined) return false;
+              return f.op === 'EQUAL' ? fv === want : f.op === 'GREATER_THAN_OR_EQUAL' ? fv >= want : fv <= want; };
+            const filters = q.where.compositeFilter ? q.where.compositeFilter.filters.map(x => x.fieldFilter) : [q.where.fieldFilter];
+            fb.queries = (fb.queries || []).concat([{ coll, filters: filters.map(f => f.field.fieldPath + f.op) }]);
+            const hits = docs.filter(d => filters.every(f => one(f)(d)));
+            return resp(200, hits.length ? hits.map(d => ({ document: d, readTime: 'x' })) : [{ readTime: 'x' }]);
+          }
           const coll = decodeURIComponent(u.split('/documents/')[1].split('?')[0]);
-          if (fb.collections && fb.collections[coll]) return resp(200, { documents: fb.collections[coll] });
+          const ps = (u.match(/pageSize=(\d+)/) || [])[1];
+          if (fb.collections && fb.collections[coll]) return resp(200, { documents: ps ? fb.collections[coll].slice(0, +ps) : fb.collections[coll] });
           if (fb.collections && fb.denied && fb.denied.indexOf(coll) >= 0) return resp(403, { error: { message: 'Missing or insufficient permissions.' } });
           return resp(200, { documents: fb.docs });
         }
