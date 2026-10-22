@@ -13,6 +13,7 @@ class Blob {
   constructor(bytes, mime, name) { this.buf = bytes; this.mime = mime || 'application/octet-stream'; this.name = name || ''; }
   getBytes() { return toSigned(this.buf); }
   getDataAsString() { return this.buf.toString('utf8'); }
+  setName(n) { return new Blob(this.buf, this.mime, n); }   // 실제 getBlob()은 사본이라 파일 이름은 안 바뀜
 }
 class Iter { constructor(a) { this.a = a; this.i = 0; } hasNext() { return this.i < this.a.length; } next() { return this.a[this.i++]; } }
 class DFile {
@@ -113,7 +114,9 @@ function makeEnv() {
             return resp(200, { LawSearch: { law: [{ '법령명한글': q, '법령일련번호': q.indexOf('기준') >= 0 ? '200' : '100', '시행일자': '20250101' }] } });
           }
           const mst = (u.match(/MST=(\d+)/) || [])[1];
-          return resp(200, { '법령': { '별표': { '별표단위': (lw.byl[mst] || []) } } });
+          const jo = mst === '200' ? [{ '조문번호': '3', '조문여부': '조문', '조문제목': '전도의 방지' }, { '조문번호': '1', '조문여부': '전문', '조문제목': '' },
+            { '조문번호': '597', '조문여부': '조문', '조문제목': '혈액노출 예방 조치' }].concat(Array.from({ length: 60 }, (_, i) => ({ '조문번호': String(100 + i), '조문여부': '조문', '조문제목': '시험조문' + i }))) : [];
+          return resp(200, { '법령': { '조문': { '조문단위': jo }, '별표': { '별표단위': (lw.byl[mst] || []) } } });
         }
         // 가짜 Gemini: GEMINI.status / GEMINI.reply 로 응답 지정, 받은 요청은 GEMINI.calls
         if (u.startsWith('https://generativelanguage.googleapis.com/v1beta/models/')) {

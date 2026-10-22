@@ -121,7 +121,7 @@ function check(name, cond, extra) {
     foot: (document.querySelector('#pg-home > .bm-foot') || {}).textContent || '',
   }));
   check('홈: 처음 화면은 홈', home0.vis && home0.msdsHidden && home0.tabOn, home0);
-  check('홈: 타일 5개', JSON.stringify(home0.tiles) === JSON.stringify(['MSDS 관리', '교육일지 작성', '보호구 지급', '화학물질 보고서', '관리자 모드']), home0.tiles);
+  check('홈: 타일 6개 (AI 위험성평가 포함)', JSON.stringify(home0.tiles) === JSON.stringify(['MSDS 관리', '교육일지 작성', '보호구 지급', '화학물질 보고서', 'AI 위험성평가', '관리자 모드']), home0.tiles);
   check('홈(로그인 전): 작성 타일 버튼은 부서 로그인', home0.ems.slice(1, 4).every(x => x === '부서 로그인'), home0.ems);
   check('홈(로그인 전): 로그인하면 할 수 있는 일 + 로그인 버튼', home0.todo.includes('할 수 있는 일') && home0.login, home0.todo);
   check('홈: 연락처는 보건관리실만', home0.foot.includes('보건관리실 내선 3293') && !home0.foot.includes('['), home0.foot);
@@ -311,11 +311,11 @@ function check(name, cond, extra) {
              disp: getComputedStyle(document.getElementById('admin-main')).display };
   });
   check('옛 일지 PDF: 드라이브에 없으면 공개 저장소에서 읽음 (관리자)', v203.miss === '%PDF-1.4 old' && ghOldHits >= 1, [v203.miss, ghOldHits]);
-  check('관리자 메뉴: A-8 순서 (대시보드 … 신규입사 알림 · 설정)', ['대시보드', '결재 관리', '교육 현황', '보호구 지급 현황', '화학물질 보고서 검토', '물질 마스터 점검', 'AI MSDS 검토', '직원정보관리', '신규입사 알림', '설정', '홈으로 나가기'].join() === v203.nav.join(), v203.nav);
+  check('관리자 메뉴: A-8 순서 (대시보드 … 신규입사 알림 · 설정)', ['대시보드', '결재 관리', '교육 현황', '보호구 지급 현황', '화학물질 보고서 검토', '위험성평가', '물질 마스터 점검', 'AI MSDS 검토', '직원정보관리', '신규입사 알림', '설정', '홈으로 나가기'].join() === v203.nav.join(), v203.nav);
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v20\.7/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.0/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
   const other = await page.evaluate(async () => {
@@ -504,7 +504,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v20.7'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.0'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -1293,6 +1293,69 @@ function check(name, cond, extra) {
   check('3일 무회신 → 매일 자동 확인에서 재알림 1건', reminders.length === 1, mail.sent.slice(before).map(m => m.subject));
   check('같은 날 다시 실행해도 중복 없음', (g.api.dailyCheck(), mail.sent.filter(m => /재알림/.test(m.subject)).length === 1));
   check('자동 확인을 반복해도 신규입사 메일 중복 없음', mail.sent.filter(m => m.to === 'head61@bumin.co.kr' && !/재알림/.test(m.subject)).length === 1);
+
+  // 18. v21.0 AI 위험성평가: 부서 로그인 → 사진 AI 분석(점수 · 등급은 서버 계산, 법령은 기준규칙 조문 목록과 대조) → 제출 → 메일 · 시트 → 관리자 처리 → 부서 화면에 결과
+  g.props.LAW_OC = 'bumin3131';
+  g.sheets['관리자설정'].appendRow(['위험성평가알림이메일', 'safety@bumin.co.kr', '']);
+  const tk = await page.evaluate(async () => ({
+    d: (await BMAUTH.post('login', { kind: 'dept', dept: '61병동', pin: '4321' })).token,
+    a: (await BMAUTH.post('login', { kind: 'admin', password: 'admin-pass-1' })).token }));
+  const jpg = 'data:image/jpeg;base64,' + Buffer.from('fakejpeg').toString('base64');
+  const raNo = await page.evaluate(() => BMAUTH.post('ra.analyze', { image: 'x', t: '' }));
+  check('위험성평가: 로그인 없으면 거부', !raNo.success && raNo.status === 401, raNo);
+  const gmCalls = gm.calls.length;
+  gm.reply = { scene: '처치실 바닥', privacy: '', quality: '', goodPractice: '',
+    hazards: [{ category: '작업환경', hazard: '바닥 물기', situation: '이동 중 미끄러져 넘어짐', evidence: '바닥에 물 고임', freq: 4, sev: 3, score: 99, grade: '낮음',
+                controls: [{ type: '관리적', text: '물기 제거 · 미끄럼 주의 표지', who: '근로자 즉시' }, { type: '공학적', text: '미끄럼 방지 매트', who: '관리자' }],
+                afterFreq: 2, afterSev: 3, laws: ['제3조', '제9999조'] },
+              { category: '생물', hazard: '뚜껑 없는 주사침 용기', situation: '자상', evidence: '용기 넘침', freq: 9, sev: 0, controls: [], laws: ['제597조'] }] };
+  const ra1 = await page.evaluate(a => BMAUTH.post('ra.analyze', { image: a.jpg, place: '61병동 처치실', task: '청소 후', t: a.t }), { jpg, t: tk.d });
+  const sentPrompt = gm.calls.length > gmCalls ? gm.calls[gm.calls.length - 1].body.contents[0].parts : [];
+  check('위험성평가 AI: 사진(image/jpeg) · 장소만 보냄 (부서 · 이름 없음) · 기준규칙 조문 목록 포함', sentPrompt[0] && sentPrompt[0].inline_data.mime_type === 'image/jpeg' && /61병동 처치실/.test(sentPrompt[1].text) && /제3조 전도의 방지/.test(sentPrompt[1].text) && !/작성자/.test(sentPrompt[1].text), (sentPrompt[1] || {}).text && sentPrompt[1].text.slice(0, 80));
+  const h0 = (ra1.hazards || [])[0] || {}, h1 = (ra1.hazards || [])[1] || {};
+  check('위험성평가 AI: 점수 · 등급 서버 재계산(4×3=12 높음) · 범위 밖 값 맞춤 · 위험한 순 · 분류 보정', ra1.success && h0.score === 12 && h0.grade === '높음' && h0.afterScore === 6 && h1.freq === 5 && h1.sev === 1 && h1.category === '생물학적', ra1);
+  check('위험성평가 AI: 법령은 실제 조문만 (제9999조 버림 · 제목은 법령에서)', h0.laws.length === 1 && h0.laws[0].no === '제3조' && h0.laws[0].title === '전도의 방지' && h1.laws[0].title === '혈액노출 예방 조치', [h0.laws, h1.laws]);
+  const mailN = mail.sent.length;
+  const raHz = ra1.hazards.map(h => Object.assign({}, h, { freq: h === ra1.hazards[0] ? 5 : h.freq, picked: [0], extra: '매트 설치 요청' }));
+  const raSub0 = await page.evaluate(a => BMAUTH.post('ra.submit', { image: a.jpg, place: '61병동 처치실', hazards: a.hz, ai: true, author: '', t: a.t }), { jpg, hz: raHz, t: tk.d });
+  check('위험성평가 제출: 작성자 없으면 거부', !raSub0.success && /작성자/.test(raSub0.error), raSub0);
+  const sub = await page.evaluate(a => BMAUTH.post('ra.submit', { image: a.jpg, place: '61병동 처치실', task: '청소 후', hazards: a.hz, ai: true, immediate: '물기 닦음', author: '박간호', t: a.t }), { jpg, hz: raHz, t: tk.d });
+  const raSh = g.sheets['위험성평가'], raRow = raSh.rows[raSh.rows.length - 1], raH = raSh.rows[0];
+  const rv = k => raRow[raH.indexOf(k)];
+  check('위험성평가 제출: 근로자가 고친 값으로 재계산(5×3=15 매우높음) · 시트 · 사진 저장 · 메일(사진 첨부)', sub.success && sub.maxScore === 15 && sub.maxGrade === '매우높음' && rv('부서') === '61병동' && rv('작성자') === '박간호' && /records\/ra\//.test(rv('사진')) && rv('상태') === '접수' &&
+    mail.sent.length === mailN + 1 && mail.sent[mailN].to === 'safety@bumin.co.kr' && /매우높음/.test(mail.sent[mailN].subject) && (mail.sent[mailN].attachments || []).length === 1, [sub, raRow, mail.sent.slice(mailN).map(m => m.subject)]);
+  const raDet = JSON.parse(rv('상세(JSON)'));
+  check('위험성평가 제출: AI 원래 값 · 선택한 대책 · 근로자 제안 보관', raDet.hazards[0].aiFreq === 4 && raDet.hazards[0].freq === 5 && raDet.hazards[0].picked[0] === 0 && raDet.hazards[0].extra === '매트 설치 요청', raDet.hazards[0]);
+  raRow[raH.indexOf('부서')] = '71병동';   // 다른 부서 제출로 바꿔 권한 확인
+  const deny2 = await page.evaluate(a => Promise.all([BMAUTH.post('ra.list', { t: a.d }), BMAUTH.post('ra.photo', { id: a.id, t: a.d }), BMAUTH.post('ra.mine', { t: a.d })]), { d: tk.d, id: sub.id });
+  raRow[raH.indexOf('부서')] = '61병동';
+  check('위험성평가 권한: 부서는 전체 목록 불가 · 다른 부서 사진 · 내역 안 보임', deny2[0].status === 403 && deny2[1].status === 403 && !deny2[2].data.some(x => x.id === sub.id), deny2.map(x => x.status || x.data && x.data.length));
+  const raUp = await page.evaluate(a => BMAUTH.post('ra.update', { id: a.id, status: '개선중', owner: '시설팀', due: '2026-11-05', comment: '매트 구매 요청함', t: a.a }), { id: sub.id, a: tk.a });
+  const raMine = await page.evaluate(a => BMAUTH.post('ra.mine', { t: a }), tk.d);
+  const raPh = await page.evaluate(a => BMAUTH.post('ra.photo', { id: a.id, t: a.d }), { id: sub.id, d: tk.d });
+  check('위험성평가 처리: 관리자 상태 · 담당 · 예정일 · 의견 → 부서 내역에 표시 · 자기 부서 사진 보기', raUp.success && raMine.data[0].status === '개선중' && raMine.data[0].comment === '매트 구매 요청함' && raMine.data[0].due === '2026-11-05' && raPh.success && /^data:image\/jpeg;base64,/.test(raPh.image), [raUp, raMine.data[0]]);
+  const raUi = await page.evaluate(async () => {
+    const r = await BMAUTH.post('login', { kind: 'dept', dept: '61병동', pin: '4321' });
+    goTab('home'); await new Promise(z => setTimeout(z, 200));
+    const tile = !!document.querySelector('#hm-tiles [data-go="risk"]');
+    goTab('risk'); await new Promise(z => setTimeout(z, 1500));
+    const v = { tile, page: getComputedStyle(document.getElementById('pg-risk')).display, drop: !!document.getElementById('ra-drop'), mine: document.getElementById('ra-mine') ? document.getElementById('ra-mine').textContent : '' };
+    document.getElementById('ra-manual').click(); await new Promise(z => setTimeout(z, 100));
+    v.manual = document.querySelectorAll('[data-hz]').length;
+    const box = document.querySelector('[data-hz="0"]'); box.querySelector('[data-k="freq"]').value = '5'; box.querySelector('[data-k="sev"]').value = '4'; box.querySelector('[data-k="freq"]').onchange();
+    v.score = box.querySelector('[data-score]').textContent;
+    admSwitchPane && goTab('admin');
+    return v;
+  });
+  check('위험성평가 화면: 홈 타일 · 탭 · 사진 칸 · 우리 부서 내역(처리 의견) · 직접 입력 시 점수 즉시 계산', raUi.tile && raUi.page === 'block' && raUi.drop && /매트 구매 요청함/.test(raUi.mine) && raUi.manual === 1 && /20점 매우높음/.test(raUi.score), raUi);
+  const raAdm = await page.evaluate(async () => {
+    await BMAUTH.adminLogin('admin-pass-1');
+    admSwitchPane('risk'); await BMRISK.admin(); await new Promise(z => setTimeout(z, 300));
+    const tr = document.querySelector('#ra-adm-body tr.hit'); if(tr) tr.click();
+    await new Promise(z => setTimeout(z, 800));
+    return { rows: document.querySelectorAll('#ra-adm-body tr.hit').length, kpi: document.querySelector('#ra-adm-body .ra-kpi').textContent, img: !!document.querySelector('#ra-adm-body img'), save: !!document.querySelector('#ra-adm-body [data-save]') };
+  });
+  check('위험성평가 관리자 화면: 목록 · 지표 · 사진 · 처리 저장 칸', raAdm.rows >= 1 && /높음 이상 미완료/.test(raAdm.kpi) && raAdm.img && raAdm.save, raAdm);
 
   check('페이지 스크립트 오류 없음', errors.length === 0, errors.slice(0, 5));
   await ctx.unrouteAll({ behavior: 'ignoreErrors' });
