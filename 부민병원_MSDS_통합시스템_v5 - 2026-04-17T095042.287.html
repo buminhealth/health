@@ -21,6 +21,10 @@
     - PDF 원본: 서버(드라이브)에 없는 옛 일지 PDF는 공개 저장소(GitHub)에서 바로 읽음 (관리자 · 교육일지/보호구 PDF만)
       → "GitHub 전체에서 확인되지 않습니다 … 재생성할까요?" 창이 잘못 뜨던 문제 해결 (정말 없을 때만 묻고, 문구 쉽게)
     - 교육 현황 · 보호구 · 화학물질 메뉴: 버튼 · 표 머리 색을 A-8(초록 · 흰 버튼)로 통일
+    - 교육 대상 규칙 (서버 v20.3): 직원정보관리 ④ [부서 매칭 · 교육 대상 규칙] — 부서 · 직종(직위)별 대상/제외를 위 줄부터 적용
+      (기본 예시: 응급센터 제외 · 응급실 간호사 대상 · 8·9병동 간호조무사만 대상), 규칙별 적용 인원 · 부서별 직종 보기, 부서매핑 화면에서 저장
+    - 부서 이동: 이전 부서에서 받은 교육이 지금 부서 물질을 모두 포함하지 않으면 다시 대상(1회) · 같은 물질 부서끼리는 그대로 이수
+    - 휴직자: 교육은 1회면 되므로 그대로 대상 · 현황판에 '휴직 중'과 직종 표시
 
   ★★★ v20.2 (2026-10-21) — 화면 비율 · 연락처 띠 고정 · 관리자 결재 A-8:
     - 연락처 띠: PC는 화면 맨 아래 고정 한 줄(40px), 휴대폰은 각 페이지 끝
@@ -3063,7 +3067,8 @@ input.apv-in[type=text]{width:110px}
           '이름이 다르면 시트의 <b>부서매핑</b>에 "인사 사이트 부서명 → 앱 부서명"을 적은 뒤 다시 업데이트하세요. (띄어쓰기 차이는 자동으로 같게 처리)</div>' +
         '<div style="overflow-x:auto">' + (st.deptCheck ? deptCheckTable(st.deptCheck)
           : '<div style="font-size:12px;color:#b91c1c">서버 코드가 이전 버전이라 점검할 수 없습니다. 최신 Code.gs로 바꾼 뒤 [배포 → 배포 관리 → 새 버전]으로 다시 배포하세요.</div>') + '</div>' +
-      '</div>';
+      '</div>' +
+      '<div style="' + BOX + '"><div style="font-weight:800;color:#1c3557;margin-bottom:6px">④ 부서 매칭 · 교육 대상 규칙</div><div id="staff-rules"></div></div>';
 
     var hrFetch = async function(btn, id, pwEl){
       if(pwEl && !pwEl.value){ say('비밀번호를 입력하세요', 'err'); return; }
@@ -3109,6 +3114,7 @@ input.apv-in[type=text]{width:110px}
       open();
     };
     document.getElementById('staff-go-nh').onclick = function(){ admSwitchPane('nh'); openNh(); };
+    rulesUI();
   }
 
   /* v20.3: 신규입사 알림 — 관리자 왼쪽 메뉴 [신규입사 알림] */
@@ -3138,6 +3144,92 @@ input.apv-in[type=text]{width:110px}
       renderNh();
     };
     renderNh();
+  }
+
+  /* v20.3: 부서 매칭 · 교육 대상 규칙 (부서 · 직종별 예외) */
+  var rulesData = null;
+  async function rulesUI(){
+    var host = document.getElementById('staff-rules');
+    if(!host) return;
+    host.innerHTML = '<div style="font-size:13px;color:#64748b">규칙 · 부서 매칭 불러오는 중…</div>';
+    var r = await post('edu.rules', {});
+    if(!r.success){ host.innerHTML = '<div style="font-size:13px;color:#b91c1c">' + esc(/unknown op/.test(r.error || '') ? '서버(Code.gs)를 v20.3 이상으로 배포하면 사용할 수 있습니다' : (r.error || '불러오기 실패')) + '</div>'; return; }
+    rulesData = r;
+    var IN = 'height:32px;padding:0 8px;border:1px solid #C6C3BB;border-radius:4px;font:inherit;font-size:13px;box-sizing:border-box;background:#fff';
+    var th = function(h, w){ return '<th style="text-align:left;padding:6px;background:#E2F0D5;color:#2D581B;font-size:12px;white-space:nowrap' + (w ? ';width:' + w : '') + '">' + h + '</th>'; };
+    var jobsAll = {};
+    Object.keys(r.jobs).forEach(function(d){ Object.keys(r.jobs[d]).forEach(function(j){ jobsAll[j] = 1; }); });
+    var S = r.summary;
+    host.innerHTML =
+      '<datalist id="rl-depts">' + ['병동', '*'].concat(r.appDepts).map(function(d){ return '<option value="' + esc(d) + '">'; }).join('') + '</datalist>' +
+      '<datalist id="rl-jobs">' + Object.keys(jobsAll).sort().map(function(j){ return '<option value="' + esc(j) + '">'; }).join('') + '</datalist>' +
+      '<div style="font-size:13px;color:#334155;margin-bottom:8px">지금 기준 · 교육 대상 <b>' + S.total + '</b>명 · 이수 <b>' + S.done + '</b> · 미이수/진행중 <b style="color:#A3302A">' + S.missing + '</b> · 제외 <b>' + S.excluded + '</b> (규칙 · 관리자 · 부서장 확인 포함)</div>' +
+      '<div style="font-weight:800;color:#1c3557;margin:6px 0 4px">ⓐ 교육 대상 규칙 <span style="font-weight:400;font-size:12px;color:#64748b">위 줄부터 보고 처음 맞는 줄 하나만 적용 · 맞는 줄이 없으면 chemicals 시트의 부서 기준</span></div>' +
+      '<div style="font-size:12px;color:#64748b;margin-bottom:6px;line-height:1.6">부서: 쉼표로 여러 개 · <b>병동</b> = 모든 병동 · <b>*</b> = 전체 &nbsp;|&nbsp; 직종: 직위에 들어 있는 글자 (간호사 · 간호조무사 · 의사 · 병동도우미 …), 비우면 그 부서 전체 &nbsp;|&nbsp; ' +
+        '예외(좁은 조건)를 위에, 전체(넓은 조건)를 아래에 두세요. 예) 8병동 간호조무사 → 대상, 그 아래 8병동 전체 → 제외</div>' +
+      '<div style="overflow-x:auto"><table id="rl-tbl" style="border-collapse:collapse;width:100%;min-width:980px"><tr>' + th('순서', '44px') + th('사용', '44px') + th('부서') + th('직종') + th('판정', '84px') + th('교육', '96px') + th('물질 (대상 부서에 물질이 없을 때)') + th('비고') + th('적용', '56px') + th('', '96px') + '</tr></table></div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button id="rl-add" style="' + BTN + '">+ 규칙 추가</button><button id="rl-save" style="' + BTN_P + '">저장하고 다시 계산</button>' +
+        '<span style="margin-left:auto;display:flex;gap:6px;align-items:center;font-size:12px;color:#475569">부서별 직종 보기 <select id="rl-jd" style="' + IN + '"><option value="">부서 선택</option>' + Object.keys(r.jobs).sort().map(function(d){ return '<option>' + esc(d) + '</option>'; }).join('') + '</select></span></div>' +
+      '<div id="rl-jobs-out" style="font-size:12px;color:#334155;margin-top:6px"></div>' +
+      '<div style="font-weight:800;color:#1c3557;margin:16px 0 4px">ⓑ 부서 매칭 (인사 사이트 부서명 → 앱 부서명)</div>' +
+      '<div style="font-size:12px;color:#64748b;margin-bottom:6px">앱 부서명을 비워 두면 인사 사이트 이름 그대로 씁니다. 같은 부서인데 이름만 다르면(예: 진단검사의학실 → 진단검사의학과) 앱 부서명을 고르세요. 직종에 따라 갈리는 경우(응급센터 의사 · 응급실 간호사)는 매칭 대신 위 규칙으로 정하세요.</div>' +
+      '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%"><tr>' + th('인사 사이트 부서명') + th('재직', '56px') + th('앱 부서명') + th('비고') + '</tr>' +
+        r.deptMap.slice().sort(function(a, b){ return (a.app ? 1 : 0) - (b.app ? 1 : 0) || b.staff - a.staff; }).map(function(m, i){
+          return '<tr><td style="padding:5px 6px;border-bottom:1px solid #ECEBE7;font-size:13px"><b>' + esc(m.raw) + '</b></td><td style="padding:5px 6px;border-bottom:1px solid #ECEBE7;font-size:13px">' + m.staff + '</td>' +
+            '<td style="padding:5px 6px;border-bottom:1px solid #ECEBE7"><input data-map="' + esc(m.raw) + '" list="rl-depts" value="' + esc(m.app) + '" placeholder="그대로" style="' + IN + ';width:200px"></td>' +
+            '<td style="padding:5px 6px;border-bottom:1px solid #ECEBE7;font-size:12px;color:#64748b">' + esc(m.note) + '</td></tr>';
+        }).join('') + '</table></div>' +
+      '<div style="margin-top:8px"><button id="rl-map-save" style="' + BTN_P + '">부서 매칭 저장</button></div>';
+    var rows = r.rules.map(function(x, i){ return Object.assign({}, x, { hit: r.hits[i] || 0 }); });
+    var tbl = document.getElementById('rl-tbl');
+    var draw = function(){
+      while(tbl.rows.length > 1) tbl.deleteRow(1);
+      rows.forEach(function(x, i){
+        var tr = tbl.insertRow(-1);
+        var td = 'padding:4px 6px;border-bottom:1px solid #ECEBE7;font-size:13px';
+        tr.innerHTML = '<td style="' + td + '">' + (i + 1) + '</td>' +
+          '<td style="' + td + '"><input type="checkbox" data-k="use"' + (x.use ? ' checked' : '') + '></td>' +
+          '<td style="' + td + '"><input data-k="dept" list="rl-depts" value="' + esc(x.dept) + '" style="' + IN + ';width:100%;min-width:140px"></td>' +
+          '<td style="' + td + '"><input data-k="job" list="rl-jobs" value="' + esc(x.job) + '" placeholder="전체" style="' + IN + ';width:100%;min-width:110px"></td>' +
+          '<td style="' + td + '"><select data-k="decision" style="' + IN + '"><option' + (x.decision === '대상' ? ' selected' : '') + '>대상</option><option' + (x.decision === '제외' ? ' selected' : '') + '>제외</option></select></td>' +
+          '<td style="' + td + '"><select data-k="kind" style="' + IN + '"><option value="">자동</option><option' + (x.kind === 'MSDS' ? ' selected' : '') + '>MSDS</option><option' + (x.kind === '특별' ? ' selected' : '') + '>특별</option></select></td>' +
+          '<td style="' + td + '"><input data-k="chem" value="' + esc(x.chem) + '" placeholder="비우면 부서 물질" style="' + IN + ';width:100%;min-width:120px"></td>' +
+          '<td style="' + td + '"><input data-k="note" value="' + esc(x.note) + '" style="' + IN + ';width:100%;min-width:160px"></td>' +
+          '<td style="' + td + ';white-space:nowrap">' + (x.hit == null ? '-' : x.hit + '명') + '</td>' +
+          '<td style="' + td + ';white-space:nowrap"><button data-up="' + i + '" title="위로" style="' + BTN + ';padding:3px 7px">↑</button> <button data-dn="' + i + '" title="아래로" style="' + BTN + ';padding:3px 7px">↓</button> <button data-del="' + i + '" title="삭제" style="' + BTN + ';padding:3px 7px;color:#A3302A">✕</button></td>';
+        tr.querySelectorAll('[data-k]').forEach(function(el){
+          el.onchange = el.oninput = function(){ var k = el.getAttribute('data-k'); x[k] = k === 'use' ? el.checked : el.value; x.hit = null; };
+        });
+      });
+      tbl.querySelectorAll('[data-up]').forEach(function(b){ b.onclick = function(){ var i = +b.getAttribute('data-up'); if(i > 0){ rows.splice(i - 1, 0, rows.splice(i, 1)[0]); draw(); } }; });
+      tbl.querySelectorAll('[data-dn]').forEach(function(b){ b.onclick = function(){ var i = +b.getAttribute('data-dn'); if(i < rows.length - 1){ rows.splice(i + 1, 0, rows.splice(i, 1)[0]); draw(); } }; });
+      tbl.querySelectorAll('[data-del]').forEach(function(b){ b.onclick = function(){ rows.splice(+b.getAttribute('data-del'), 1); draw(); }; });
+    };
+    draw();
+    document.getElementById('rl-add').onclick = function(){ rows.push({ use: true, dept: '', job: '', decision: '제외', kind: '', chem: '', note: '', hit: null }); draw(); };
+    document.getElementById('rl-save').onclick = async function(){
+      var bad = rows.filter(function(x){ return !String(x.dept).trim() && !String(x.job).trim(); });
+      if(bad.length && !confirm('부서와 직종이 모두 빈 줄 ' + bad.length + '개는 저장하지 않습니다. 계속할까요?')) return;
+      var btn = this; btn.disabled = true;
+      var x = await post('edu.saveRules', { rules: rows });
+      btn.disabled = false;
+      say(x.success ? '규칙 ' + x.saved + '개 저장 · 교육 대상을 다시 계산했습니다' : (x.error || '저장 실패'), x.success ? 'ok' : 'err');
+      if(x.success) rulesUI();
+    };
+    document.getElementById('rl-jd').onchange = function(){
+      var d = this.value, out = document.getElementById('rl-jobs-out');
+      if(!d){ out.innerHTML = ''; return; }
+      var j = r.jobs[d] || {};
+      out.innerHTML = '<b>' + esc(d) + '</b> 재직 직종: ' + Object.keys(j).sort(function(a, b){ return j[b] - j[a]; }).map(function(k){ return esc(k) + ' ' + j[k] + '명'; }).join(' · ');
+    };
+    document.getElementById('rl-map-save').onclick = async function(){
+      var list = [].map.call(host.querySelectorAll('[data-map]'), function(el){ return { raw: el.getAttribute('data-map'), app: el.value.trim() }; });
+      var btn = this; btn.disabled = true;
+      var x = await post('dept.saveMap', { rows: list });
+      btn.disabled = false;
+      say(x.success ? '부서 매칭 ' + x.changed + '건 저장 · 교육 대상을 다시 계산했습니다' : (x.error || '저장 실패'), x.success ? 'ok' : 'err');
+      if(x.success) rulesUI();
+    };
   }
 
   function deptCheckTable(list){
@@ -3258,7 +3350,7 @@ input.apv-in[type=text]{width:110px}
     ov.querySelectorAll('[data-edu]').forEach(function(b){ b.onclick = function(){ ov.remove(); try{ history.replaceState(null, '', location.pathname); }catch(_){} startEdu(byId[b.getAttribute('data-edu')]); }; });
   }
 
-  window.BMSTAFF = { open: open, openNh: openNh, showDeptRequests: showDeptRequests };
+  window.BMSTAFF = { open: open, openNh: openNh, rules: rulesUI, showDeptRequests: showDeptRequests };
 
   window.addEventListener('DOMContentLoaded', function(){
     var nh = null;
@@ -3918,6 +4010,9 @@ input.apv-in[type=text]{width:110px}
     if(p.status === '이수' && p.need === '특별') t += '<div style="font-size:12px;color:#5A5650">' + p.hours + '시간 (온라인 8 포함)</div>';
     if(p.deadline && p.status !== '이수') t += '<div style="font-size:12px;color:' + (p.overdue ? '#A3302A;font-weight:700' : '#5A5650') + '">기한 ' + esc(p.deadline) + (p.overdue ? ' · 초과' : '') + '</div>';
     if(p.status === '제외') t += '<div style="font-size:12px;color:#5A5650">' + esc(p.excluded.reason) + ' · ' + esc(p.excluded.by) + ' ' + esc(p.excluded.date) + '</div>';
+    if(p.moved && p.status !== '이수' && p.status !== '제외') t += '<div style="font-size:12px;color:#A3302A">부서 이동: ' + esc(p.moved) + '에서 받은 교육에 이 부서 물질이 없음 → 1회 교육 필요</div>';
+    if(p.onLeave) t += '<div style="font-size:12px;color:#5A5650">휴직 중 (교육은 1회만 · 복직 후 따로 필요 없음)</div>';
+    if(p.rule) t += '<div style="font-size:12px;color:#5A5650">대상 규칙 ' + p.rule + ' 적용</div>';
     (p.newChem || []).forEach(function(n){
       t += '<div style="font-size:12px;color:' + (n.done ? '#3B7322' : (n.overdue ? '#A3302A' : '#6E4A00')) + '">새 물질 ' + esc(n.chem) + ': ' + (n.done ? '교육 완료' : '기한 ' + esc(n.due) + (n.overdue ? ' 초과' : '')) + '</div>';
     });
@@ -3928,10 +4023,10 @@ input.apv-in[type=text]{width:110px}
     return '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%"><tr>' +
       ['이름', '사번', '입사일', '교육', '상태', '최근 교육', ''].map(function(h){ return '<th style="text-align:left;padding:8px;background:#E2F0D5;color:#2D581B;font-size:13px;white-space:nowrap">' + h + '</th>'; }).join('') + '</tr>' +
       list.map(function(p, i){
-        return '<tr' + (p.status === '제외' ? ' style="background:#FAFAF8;color:#8A867E"' : '') + '><td style="' + td + '"><b>' + esc(p.name) + '</b></td><td style="' + td + '">' + esc(p.no) + '</td><td style="' + td + ';white-space:nowrap">' + esc(p.joinDate) + '</td>' +
+        return '<tr' + (p.status === '제외' ? ' style="background:#FAFAF8;color:#8A867E"' : '') + '><td style="' + td + '"><b>' + esc(p.name) + '</b>' + (p.job ? '<div style="font-size:12px;color:#5A5650">' + esc(p.job) + '</div>' : '') + '</td><td style="' + td + '">' + esc(p.no) + '</td><td style="' + td + ';white-space:nowrap">' + esc(p.joinDate) + '</td>' +
           '<td style="' + td + ';white-space:nowrap">' + (p.need === '특별' ? '특별안전보건' : 'MSDS') + '</td><td style="' + td + '">' + statusCell(p) + '</td><td style="' + td + ';white-space:nowrap">' + esc(p.lastEdu || '-') + '</td>' +
           '<td style="' + td + ';white-space:nowrap">' + (!canAct ? '' : (p.status === '제외'
-            ? (p.excluded.route === '신규입사 회신' ? '' : '<button data-unx="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer">제외 해제</button>')
+            ? (p.excluded.route === '신규입사 회신' || p.excluded.route === '대상 규칙' ? '' : '<button data-unx="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer">제외 해제</button>')
             : (p.records ? '<span style="font-size:12px;color:#5A5650">일지 있음</span>' : '<button data-x="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer">취급 안 함 (제외)</button>'))) + '</td></tr>';
       }).join('') + '</table></div>';
   }
@@ -4038,7 +4133,7 @@ input.apv-in[type=text]{width:110px}
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v20.1';
+  var SERVER_EXPECT = 'v20.3';
   var esc = function(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
   var recs = function(k){ try{ return JSON.parse(localStorage.getItem(k) || '[]') || []; }catch(_){ return []; } };
   var post = function(op, b){ return window.BMAUTH ? BMAUTH.post(op, b || {}).catch(function(e){ return { success: false, error: e.message }; }) : Promise.resolve({ success: false, error: '로그인 필요' }); };
