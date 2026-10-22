@@ -38,6 +38,7 @@
     - 제외 판정 (서버, 기록은 지우지 않음): 개별 제외는 확인일 이후 지금 부서에서 받은 교육이 없으면 제외 (부서 이동 → 예전 기록 보존 + 해당 없음),
       규칙 제외는 지금 부서에서 직접 쓴 일지 · 개별 수기 기록이 없으면 제외 (일괄 수기 기록만 있으면 규칙이 우선 — 치과 의사 사례)
     - 수기 기록 삭제: 현황판 [수기 기록 삭제] · [선택 직원 수기 기록 삭제] — 수기 줄만 (앱 일지는 삭제 안 됨), '교육이력_삭제' 시트에 백업 + 사유
+    - 서버 v20.4: 교육 현황이 서버 버전을 함께 보내고, 이전 버전이면 현황판 맨 위에 배포 안내 · 새 기능 버튼은 '배포 필요' 안내 (잘못된 '수기 기록이 있는 직원을 선택하세요' 문구 수정)
     - 개별 포함: 규칙 · 신규입사 회신으로 제외된 사람도 [대상으로 포함] (개인 결정 > 규칙), [포함 해제]로 되돌림
     - 연동: 제외 · 포함 · 수기 등록 → 신규입사 알림 상태(미취급 / 취급-교육대기)까지 같이 바꾸고 대시보드 · 홈 할 일 · 규칙 표 다시 계산
     - 직원목록 ↔ 인사 사이트 합치기 (서버): 사번 '#N/A' · 빈칸은 사번 없음으로 보고 인사 사이트 사번으로 채움, 입사일 표기가 달라도(9/1)
@@ -4244,6 +4245,8 @@ input.apv-in[type=text]{width:110px}
   };
   /* v20.3 부서 명단: 상태 필터 · 전체 선택 · 선택한 직원 일괄 수기 이수 / 근무지 지정 */
   var eduFilter = 'todo';
+  var EDU_SERVER_MIN = 'v20.4';
+  var OLD_MSG = '서버(Code.gs)가 이전 버전이라 이 기능을 쓸 수 없습니다. 최신 Code.gs를 Apps Script에 붙여넣고 [배포 → 배포 관리 → ✏ → 새 버전]으로 배포하세요.';
   var BTNs = 'padding:6px 11px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;font-weight:700;cursor:pointer';
   var INs = 'height:32px;padding:0 6px;border:1px solid #C6C3BB;border-radius:4px;font:inherit;font-size:13px;box-sizing:border-box;background:#fff';
   function deptToolbar(all){
@@ -4284,8 +4287,11 @@ input.apv-in[type=text]{width:110px}
       await board(); try{ if(window.bmEduChanged) bmEduChanged(); }catch(_){}
     };
     document.getElementById('eb-mdel-go').onclick = async function(){
-      var list = picked().filter(function(p){ return (p.manualRows || []).length; });
-      if(!list.length){ say('수기 기록이 있는 직원을 선택하세요', 'err'); return; }
+      if(edu.old){ say(OLD_MSG, 'err'); return; }
+      var sel = picked();
+      if(!sel.length){ say('직원을 먼저 선택하세요', 'err'); return; }
+      var list = sel.filter(function(p){ return (p.manualRows || []).length; });
+      if(!list.length){ say('선택한 ' + sel.length + '명에게 수기(종이) 기록이 없습니다 — 앱에서 쓴 서명 일지는 여기서 삭제할 수 없습니다', 'err'); return; }
       var n = list.reduce(function(a, p){ return a + p.manualRows.length; }, 0);
       var reason = prompt(list.length + '명의 수기 교육 기록 ' + n + '건을 삭제합니다 (앱에서 쓴 일지는 그대로).\n지운 줄은 \'교육이력_삭제\' 시트에 보관됩니다.\n\n삭제 사유', '대상 아님 — 일괄 처리 정정');
       if(reason === null) return;
@@ -4298,6 +4304,7 @@ input.apv-in[type=text]{width:110px}
       await board(); try{ if(window.bmEduChanged) bmEduChanged(); }catch(_){}
     };
     document.getElementById('eb-unit-go').onclick = async function(){
+      if(edu.old){ say(OLD_MSG, 'err'); return; }
       var u = document.getElementById('eb-unit').value, list = picked();
       if(!u){ say('근무지를 고르세요', 'err'); return; }
       if(!list.length){ say('직원을 선택하세요', 'err'); return; }
@@ -4373,11 +4380,15 @@ input.apv-in[type=text]{width:110px}
     var r = await BMAUTH.post('edu.status', {});
     if(!r.success){ host.innerHTML = '<div style="color:#A3302A">' + esc(r.error || '실패') + (/unknown op/.test(r.error || '') ? ' — 서버(Code.gs)를 v20.0 이상으로 배포하세요.' : '') + '</div>'; return; }
     edu = r;
+    // v20.4: 화면만 새 버전이고 서버(Code.gs)가 이전 버전이면 새 기능이 조용히 실패 → 맨 위에 배포 안내
+    edu.old = !r.serverVersion || r.serverVersion < EDU_SERVER_MIN;
     var T = { total: 0, done: 0, progress: 0, missing: 0, overdue: 0, excluded: 0, newChem: 0 };
     r.depts.forEach(function(d){ Object.keys(T).forEach(function(k){ T[k] += d[k] || 0; }); });
     var kpi = function(l, n, sub, color){ return '<div style="border:1px solid #DDDBD5;border-radius:8px;padding:10px 14px;min-width:120px;flex:1"><div style="font-size:13px;font-weight:700;color:#5A5650">' + l + '</div><div style="font-size:24px;font-weight:800;color:' + (color || '#1E1E1C') + '">' + n + '</div><div style="font-size:12px;color:#5A5650">' + (sub || '') + '</div></div>'; };
     var td = 'padding:7px 8px;border-bottom:1px solid #ECEBE7;font-size:14px';
-    host.innerHTML =
+    host.innerHTML = (edu.old ? '<div style="border:1px solid #F1C4BE;background:#FBE5E2;color:#A3302A;border-radius:6px;padding:10px 12px;margin-bottom:10px;font-size:13px;line-height:1.6">' +
+        '⚠ <b>서버(Code.gs)가 이전 버전' + (r.serverVersion ? '(' + esc(r.serverVersion) + ')' : '') + '입니다 — ' + EDU_SERVER_MIN + ' 이상 배포 필요.</b><br>' +
+        '수기 기록 삭제 · 근무지 지정 · 제외 판정(예전 기록 보존 · 지금 부서 기준) · 일괄 이수 입사일 맞춤은 배포 후 동작합니다. 그 전에는 현황 숫자도 이전 기준으로 계산됩니다.</div>' : '') +
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><b style="font-size:17px">교육 이수 현황</b>' +
         '<span style="display:flex;gap:6px;flex-wrap:wrap"><button id="eb-mail" style="padding:8px 12px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-weight:700;cursor:pointer">부서장에게 확인 요청 메일</button>' +
         '<button id="eb-nc" style="padding:8px 12px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-weight:700;cursor:pointer">새 물질 교육 등록</button>' +
@@ -4450,7 +4461,7 @@ input.apv-in[type=text]{width:110px}
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v20.3';
+  var SERVER_EXPECT = 'v20.4';
   var esc = function(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
   var recs = function(k){ try{ return JSON.parse(localStorage.getItem(k) || '[]') || []; }catch(_){ return []; } };
   var post = function(op, b){ return window.BMAUTH ? BMAUTH.post(op, b || {}).catch(function(e){ return { success: false, error: e.message }; }) : Promise.resolve({ success: false, error: '로그인 필요' }); };
