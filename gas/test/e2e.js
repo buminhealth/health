@@ -313,7 +313,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v20\.1/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v20\.3/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
   const other = await page.evaluate(async () => {
@@ -502,7 +502,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v20.1'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v20.3'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -793,6 +793,52 @@ function check(name, cond, extra) {
   check('교육 현황 캐시: 제외하면 바로 반영', cache[0] === '미이수' && cache[1] === '제외', cache);
   await page.evaluate(() => { admSwitchPane('edu'); return BMEDU.board(); });
   check('관리자 화면: 교육 이수 현황판', /교육 이수 현황/.test(await page.textContent('#edu-board')) && /61병동/.test(await page.textContent('#edu-board')));
+  // 13-9. v20.3 교육 대상 규칙 (부서 · 직종) · 부서 이동 · 부서 매칭 저장
+  const seeded = g.sheets['교육대상규칙'];
+  check('대상 규칙: 시트 자동 생성 + 기본 예시 (응급센터 · 응급실 · 8·9병동)', !!seeded && seeded.rows.length === 5 && seeded.rows[3][1] === '8병동,9병동' && seeded.rows[3][2] === '간호조무사', seeded && seeded.rows);
+  const EH = empSh.rows[0];
+  const col = h => { let i = EH.indexOf(h); if (i < 0) { EH.push(h); i = EH.length - 1; } return i; };
+  const empRow = (no, nm, dept, st, pos) => { const r = new Array(EH.length + 2).fill(''); r[col('사번')] = no; r[col('이름')] = nm; r[col('부서')] = dept; r[col('입사일')] = '2020-01-01'; r[col('재직상태')] = st; r[col('직위')] = pos; return r; };
+  col('재직상태'); col('직위');
+  empSh.appendRow(empRow('126000031', '육간호', '61병동', '재직', '간호사5급'));
+  empSh.appendRow(empRow('126000032', '육조무', '61병동', '휴직(육아휴직)', '간호조무사6급'));
+  empSh.appendRow(empRow('126000033', '수술이동', '수술실', '재직', '간호사4급'));
+  empSh.appendRow(empRow('126000034', '칠이동', '71병동', '재직', '간호사4급'));
+  const mkC = (nm, dept) => { const r = new Array(11).fill(''); r[0] = nm; r[2] = dept; r[3] = '성분'; r[4] = '7732-18-5'; return r; };
+  const cOp = mkC('수술물질', '수술실'), c71 = mkC('테스트소독제', '71병동');
+  ch.rows.push(cOp, c71);
+  led.rows.push(['9', '2026-01-01T01:00Z', 'MSDS교육', '61병동', '테스트소독제', '2026-01-02', '2026-01-02', '1', '1시간', '126000033', '수술이동', '', '✓ 서명완료']);
+  led.rows.push(['10', '2026-01-01T01:00Z', 'MSDS교육', '61병동', 'x', '2026-01-02', '2026-01-02', '1', '1시간', '126000034', '칠이동', '', '✓ 서명완료']);
+  const sv = await page.evaluate(() => BMAUTH.post('edu.saveRules', { rules: [
+    { use: true, dept: '61병동', job: '간호조무사', decision: '대상', note: '조무사만 사용' },
+    { use: true, dept: '61병동', job: '', decision: '제외', note: '그 외 사용 안 함' },
+    { use: true, dept: '', job: '', decision: '제외' } ] }));
+  const est7 = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
+  check('대상 규칙 저장: 빈 줄은 빼고 저장', sv.success && sv.saved === 2 && g.sheets['교육대상규칙'].rows.length === 3, sv);
+  check('대상 규칙: 61병동 간호조무사 → 대상 (규칙 1) · 휴직자도 교육 1회 대상', Q(est7, '육조무').status === '미이수' && Q(est7, '육조무').rule === 1 && Q(est7, '육조무').onLeave === true && Q(est7, '육조무').job === '간호조무사', Q(est7, '육조무'));
+  check('대상 규칙: 61병동 그 외 직종 → 제외 (사유 = 규칙 2)', Q(est7, '육간호').status === '제외' && /대상 규칙 2/.test(Q(est7, '육간호').excluded.reason), Q(est7, '육간호'));
+  check('대상 규칙: 일지를 쓴 사람은 규칙 제외여도 이수', Q(est7, '교육가').status === '이수', Q(est7, '교육가').status);
+  check('대상 규칙: 적용 인원 집계', est7.ruleHits[0] === 1 && est7.ruleHits[1] >= 3, est7.ruleHits);
+  check('부서 이동: 병동 교육만 있는 수술실 직원 → 수술실 물질 교육 1회 필요', Q(est7, '수술이동').status === '미이수' && Q(est7, '수술이동').moved === '61병동', Q(est7, '수술이동'));
+  check('부서 이동: 같은 물질 부서(61→71병동)로 옮기면 다시 안 받아도 이수', Q(est7, '칠이동').status === '이수', Q(est7, '칠이동'));
+  const info = await page.evaluate(() => BMAUTH.post('edu.rules', {}));
+  check('규칙 화면 정보: 규칙 · 적용 인원 · 부서별 직종 · 부서 매칭', info.success && info.rules.length === 2 && info.hits[0] === 1 && info.jobs['61병동']['간호조무사'] === 1 && info.deptMap.some(m => m.raw === '진검실' && m.app === '61병동' && m.staff === 1), info.jobs);
+  const msv = await page.evaluate(() => BMAUTH.post('dept.saveMap', { rows: [{ raw: '진검실', app: '71병동' }, { raw: '새부서명', app: '71병동' }] }));
+  const est8 = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
+  check('부서 매칭 저장: 바꾸면 바로 반영 · 없는 이름은 새 줄', msv.success && msv.changed === 2 && Q(est8, '별칭가').dept === '71병동' && dm.rows.some(r => r[0] === '새부서명'), [msv, Q(est8, '별칭가').dept]);
+  const deptDeny = await page.evaluate(async () => {
+    const r = await BMAUTH.post('login', { kind: 'dept', dept: '61병동', pin: '4321' });
+    const a = await BMAUTH.post('edu.saveRules', { rules: [], t: r.token });
+    const b = await BMAUTH.post('dept.saveMap', { rows: [], t: r.token });
+    return [a.status, b.status];
+  });
+  check('규칙 · 부서 매칭 저장은 관리자만', deptDeny[0] === 403 && deptDeny[1] === 403, deptDeny);
+  await page.evaluate(() => { admSwitchPane('staff'); return BMSTAFF.open(); });
+  await page.waitForFunction(() => document.querySelectorAll('#rl-tbl tr').length === 3, null, { timeout: 15000 });
+  const ui = await page.evaluate(() => ({ t: document.getElementById('staff-rules').textContent, maps: document.querySelectorAll('#staff-rules [data-map]').length }));
+  check('관리자 화면: 직원정보관리 ④ 규칙 표 + 부서 매칭 표', /ⓐ 교육 대상 규칙/.test(ui.t) && /ⓑ 부서 매칭/.test(ui.t) && ui.maps >= 2 && /1명/.test(ui.t), ui.t.slice(0, 200));
+  await page.evaluate(() => BMAUTH.post('edu.saveRules', { rules: [] }));
+  ch.rows.splice(ch.rows.indexOf(cOp), 1); ch.rows.splice(ch.rows.indexOf(c71), 1);
   led.rows = ledBak;
   ch.rows.splice(ch.rows.indexOf(spRow), 1); ch.rows[0] = chHead;
 

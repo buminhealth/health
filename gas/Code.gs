@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v20.1 (2026-10-21)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v20.3 (2026-10-22)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -178,6 +178,7 @@ function doPost(e) {
       case 'ai.status': case 'ai.setKey': case 'ai.list': case 'ai.analyze': case 'ai.judge': case 'ai.apply': case 'ai.products': case 'ai.compare':
                         result = aiOp_(req, s); break;
       case 'edu.dupes': case 'edu.dedupe': case 'edu.status': case 'edu.exclude': case 'edu.askMail': case 'edu.newChem':
+      case 'edu.rules': case 'edu.saveRules': case 'dept.saveMap':
                         result = eduOp_(req, s); break;
       default:          result = { success: false, error: 'unknown op: ' + req.op };
     }
@@ -2531,6 +2532,56 @@ function newChemAdd_(chem, depts, src, note) {
   return rows.length;
 }
 
+/* ── v20.3 교육 대상 규칙 (부서 · 직종별 예외) ──
+   시트 '교육대상규칙': 위에 있는 줄부터 보고 처음 맞는 줄 하나만 적용. 맞는 줄이 없으면 chemicals 부서 기준(기본).
+   부서: 앱 부서명 여러 개는 쉼표, '병동' = 모든 병동, '*' = 전체 / 직종: 직위에 들어 있는 글자(간호사 · 간호조무사 · 의사 …), 비우면 전체
+   판정: 대상 | 제외 / 교육구분: 비우면 물질 기준 자동, MSDS | 특별 / 물질: 대상인데 chemicals에 없는 부서일 때 교육 물질(쉼표) */
+const RULE_SHEET = '교육대상규칙', RULE_HEADER = ['사용', '부서', '직종', '판정', '교육구분', '물질', '비고'];
+const RULE_SEED = [
+  ['Y', '응급센터', '', '제외', '', '', '응급센터(의사)는 뉴젠자임폼 사용 안 함'],
+  ['Y', '응급실', '간호사', '대상', '', '', '응급실 간호사는 뉴젠자임폼 사용'],
+  ['Y', '8병동,9병동', '간호조무사', '대상', '', '', '8·9병동은 간호조무사만 뉴젠자임폼 사용'],
+  ['Y', '8병동,9병동', '', '제외', '', '', '8·9병동 그 외 직종은 사용 안 함'],
+];
+function eduRulesSheet_() {
+  let sh = SS.getSheetByName(RULE_SHEET);
+  if (!sh) {
+    sh = eduSheet_(RULE_SHEET, RULE_HEADER);
+    sh.getRange(2, 1, RULE_SEED.length, RULE_HEADER.length).setValues(RULE_SEED);
+  }
+  return sh;
+}
+function eduRules_() {
+  const sh = eduRulesSheet_();
+  if (sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, RULE_HEADER.length).getDisplayValues().map((r, i) => ({
+    row: i + 2, use: !/^(N|아니오|x|0)$/i.test(String(r[0]).trim()), dept: String(r[1]).trim(), job: String(r[2]).trim(),
+    decision: String(r[3]).trim() === '제외' ? '제외' : '대상', kind: /특별/.test(r[4]) ? '특별' : (/MSDS/i.test(r[4]) ? 'MSDS' : ''),
+    chem: String(r[5]).trim(), note: String(r[6]).trim()
+  })).filter(r => r.dept || r.job);
+}
+const splitList_ = v => String(v || '').split(/[,，\/]/).map(x => x.trim()).filter(Boolean);
+function isWardDept_(dept) {
+  return WARDS.some(w => sameDept_(w, dept)) || /병동(\(.*\))?$/.test(normDept_(dept));
+}
+// 직위 '간호사6급' · '의사진료과장' → 직종 '간호사' · '의사'
+function jobOf_(pos) {
+  const p = String(pos || '').replace(/\s+/g, '');
+  if (!p) return '';
+  if (/^의사/.test(p)) return '의사';
+  if (/전공의$/.test(p)) return '전공의';
+  return p.replace(/\d+급$/, '').replace(/(부장|약사|사무직)$/, m => p === m ? m : '') || p;
+}
+function ruleMatch_(r, e) {
+  if (!r.use) return false;
+  const depts = splitList_(r.dept);
+  const dOk = !depts.length || depts.some(d => d === '*' || d === '전체' || (d === '병동' ? isWardDept_(e.dept) : sameDept_(d, e.dept)));
+  if (!dOk) return false;
+  const jobs = splitList_(r.job).filter(j => j !== '*' && j !== '전체');
+  const pos = String(e.position || '').replace(/\s+/g, '');
+  return !jobs.length || jobs.some(j => pos.indexOf(j) >= 0);
+}
+
 function eduStatus_(s) {
   const today = todayKst_();
   const map = handlingDepts_();
@@ -2553,18 +2604,40 @@ function eduStatus_(s) {
     (byName[r.name] = byName[r.name] || []).push(r);
   });
   const newChems = newChemRows_();
+  const rules = eduRules_(), hits = rules.map(() => 0);
+  const specialOf = names => chems.some(c => names.indexOf(c.name) >= 0 && yes(c));
+  // v20.3 부서 이동: 기록의 부서(또는 기록에 적힌 물질)가 지금 부서의 물질을 모두 포함해야 이수로 인정
+  const covers = (r, di, e) => {
+    if (sameDept_(deptAlias_(r.dept), e.dept) || !di.chems.length) return true;
+    const from = info(r.dept);
+    const have = (from ? from.chems : []).map(normChem_), txt = normChem_(r.chem);
+    return di.chems.every(c => { const k = normChem_(c); return !k || have.indexOf(k) >= 0 || txt.indexOf(k) >= 0; });
+  };
   const emps = (readEmployees_() || []).filter(e => !isResigned_(e) && !(e.leaveDate && e.leaveDate < today) && e.dept)
     .map(e => Object.assign({}, e, { dept: deptAlias_(e.dept) }));
   const people = [];
   emps.forEach(e => {
     if (s.role === 'dept' && !sameDept_(e.dept, s.dept)) return;
-    const di = info(e.dept);
+    const ri = rules.findIndex(r => ruleMatch_(r, e));
+    const rule = ri >= 0 ? rules[ri] : null;
+    if (rule) hits[ri]++;
+    let di = info(e.dept);
+    if (rule && rule.decision === '대상') {
+      const names = rule.chem ? splitList_(rule.chem) : (di ? di.chems : []);
+      di = { need: rule.kind || (di && !rule.chem ? di.need : (specialOf(names) ? '특별' : 'MSDS')), chems: names };
+    }
     if (!di) return;
-    let mine = /^\d{6,}$/.test(e.empNo) ? (byNo[e.empNo] || []) : [];
-    if (!mine.length) mine = (byName[e.name] || []).filter(r => !r.no || !/^\d{6,}$/.test(r.no) || r.no === e.empNo).filter(r => sameDept_(r.dept, e.dept) || /^\d{6,}$/.test(e.empNo) === false);
-    const ex = excl[eduKey_(e.empNo, e.name, e.dept)] || excl['nm:' + e.name + '|' + normDept_(e.dept)];
+    let all = /^\d{6,}$/.test(e.empNo) ? (byNo[e.empNo] || []) : [];
+    if (!all.length) all = (byName[e.name] || []).filter(r => !r.no || !/^\d{6,}$/.test(r.no) || r.no === e.empNo).filter(r => sameDept_(r.dept, e.dept) || /^\d{6,}$/.test(e.empNo) === false);
+    const mine = all.filter(r => covers(r, di, e));
+    const ruleEx = rule && rule.decision === '제외'
+      ? { reason: '대상 규칙 ' + (ri + 1) + (rule.note ? ': ' + rule.note : ''), by: '관리자 규칙', date: '', route: '대상 규칙' } : null;
+    const ex = excl[eduKey_(e.empNo, e.name, e.dept)] || excl['nm:' + e.name + '|' + normDept_(e.dept)] || ruleEx;
     const p = { no: e.empNo, name: e.name, dept: e.dept, joinDate: e.joinDate, need: di.need, records: mine.length,
-                lastEdu: mine.map(r => r.ds).sort().pop() || '' };
+                lastEdu: mine.map(r => r.ds).sort().pop() || '', job: jobOf_(e.position) };
+    if (/휴직/.test(e.status || '')) p.onLeave = true;
+    if (rule && rule.decision === '대상') p.rule = ri + 1;
+    if (all.length && !mine.length) p.moved = all.map(r => r.dept).filter(Boolean).pop() || '이전 부서';
     if (ex && !mine.length) { p.status = '제외'; p.excluded = ex; people.push(p); return; }
     const isNew = e.joinDate && e.joinDate >= addDays_(today, -NEWHIRE_WINDOW);
     if (di.need === '특별') {
@@ -2601,8 +2674,29 @@ function eduStatus_(s) {
     if (p.overdue) d.overdue++;
     if (p.newChemPending) d.newChem++;
   });
-  return { success: true, today: today, people: people, depts: Object.keys(depts).sort().map(k => depts[k]),
+  return { success: true, today: today, people: people, depts: Object.keys(depts).sort().map(k => depts[k]), ruleHits: hits,
            rules: { specialHours: SPECIAL_HOURS, online: SPECIAL_ONLINE, months: SPECIAL_MONTHS, newChemDays: NEWCHEM_DAYS } };
+}
+
+// 관리자 > 직원정보관리 '부서 매칭 · 교육 대상 규칙' 화면용
+function eduRulesInfo_() {
+  const rules = eduRules_();
+  const st = eduStatus_({ role: 'admin' });
+  const map = deptMapSheet_();
+  const raw = (readEmployees_() || []).filter(e => !isResigned_(e) && e.dept);
+  const staffRaw = {}, jobs = {};
+  raw.forEach(e => {
+    staffRaw[normDept_(e.dept)] = (staffRaw[normDept_(e.dept)] || 0) + 1;
+    const d = deptAlias_(e.dept), j = jobOf_(e.position) || '(직위 없음)';
+    (jobs[d] = jobs[d] || {})[j] = (jobs[d][j] || 0) + 1;
+  });
+  const deptMap = map.getLastRow() >= 2 ? map.getRange(2, 1, map.getLastRow() - 1, 3).getDisplayValues()
+    .filter(r => String(r[0]).trim()).map(r => ({ raw: r[0], app: r[1], note: r[2], staff: staffRaw[normDept_(r[0])] || 0 })) : [];
+  const appDepts = {};
+  (getChemicals().data || []).forEach(c => (c.departments || []).forEach(d => { appDepts[d] = 1; }));
+  try { SS.getSheetByName('부서인증').getDataRange().getDisplayValues().slice(1).forEach(r => { if (String(r[0]).trim()) appDepts[String(r[0]).trim()] = 1; }); } catch (_) {}
+  return { success: true, rules: rules, hits: st.ruleHits || [], jobs: jobs, deptMap: deptMap, appDepts: Object.keys(appDepts).sort(),
+           summary: st.depts.reduce((a, d) => ({ total: a.total + d.total, done: a.done + d.done, missing: a.missing + d.missing + d.progress, excluded: a.excluded + d.excluded }), { total: 0, done: 0, missing: 0, excluded: 0 }) };
 }
 
 function eduExclude_(req, s) {
@@ -2691,6 +2785,32 @@ function eduOp_(req, s) {
     return n ? { success: true, added: n } : { success: false, error: '물질명과 부서를 확인하세요 (같은 날 같은 등록은 한 번만)' };
   }
   if (req.op === 'edu.dupes') return Object.assign({ success: true }, eduDupes_());
+  if (req.op === 'edu.rules') return eduRulesInfo_();
+  if (req.op === 'edu.saveRules') {
+    const list = (req.rules || []).map(r => [r.use === false || r.use === 'N' ? 'N' : 'Y', String(r.dept || '').trim(), String(r.job || '').trim(),
+      String(r.decision) === '제외' ? '제외' : '대상', /특별/.test(r.kind) ? '특별' : (/MSDS/i.test(r.kind) ? 'MSDS' : ''), String(r.chem || '').trim(), String(r.note || '').trim()].map(safeCell_))
+      .filter(r => r[1] || r[2]);
+    const sh = eduRulesSheet_();
+    if (sh.getLastRow() >= 2) sh.deleteRows(2, sh.getLastRow() - 1);
+    if (list.length) sh.getRange(2, 1, list.length, RULE_HEADER.length).setValues(list);
+    eduCacheClear_();
+    return { success: true, saved: list.length };
+  }
+  if (req.op === 'dept.saveMap') {
+    const sh = deptMapSheet_();
+    const rows = sh.getLastRow() >= 2 ? sh.getRange(2, 1, sh.getLastRow() - 1, 2).getDisplayValues() : [];
+    let changed = 0;
+    (req.rows || []).forEach(x => {
+      const raw = String(x.raw || '').trim(), app = String(x.app || '').trim();
+      if (!raw) return;
+      const i = rows.findIndex(r => normDept_(r[0]) === normDept_(raw));
+      if (i >= 0) { if (rows[i][1] !== app) { sh.getRange(i + 2, 2).setValue(safeCell_(app)); changed++; } }
+      else { sh.appendRow([safeCell_(raw), safeCell_(app), '관리자 화면에서 추가']); rows.push([raw, app]); changed++; }
+    });
+    DEPT_ALIAS_CACHE = null;
+    eduCacheClear_();
+    return { success: true, changed: changed };
+  }
   if (req.op === 'edu.dedupe') {
     const lock = LockService.getScriptLock();
     if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
