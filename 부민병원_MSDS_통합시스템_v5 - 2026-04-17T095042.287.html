@@ -10,7 +10,17 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v20.2 (2026-10-21)
+  부민병원 MSDS 통합시스템 v20.3 (2026-10-22)
+
+  ★★★ v20.3 (2026-10-22) — 관리자 메뉴 A-8 정리 · 대시보드 · 화면 잘림 · PDF 원본 못 찾음:
+    - 왼쪽 메뉴: 대시보드 · 결재 관리 · 교육 현황 · 보호구 지급 현황 · 화학물질 보고서 검토 / 물질 마스터 점검 ·
+      AI MSDS 검토 · 직원정보관리 · 신규입사 알림 · 설정 (0인 배지는 숨김)
+    - 대시보드(새): 요약 6칸 + 결재 대기 일지 · 부서별 교육 이수율 · 신규입사 알림 · 최근 제출 (누르면 해당 메뉴로)
+    - 신규입사 알림: 직원정보관리 안 ③을 별도 메뉴로 · 설정(새): 결재자 · 알림 메일 · 서버 버전 · AI 키 · 저장 공간
+    - 화면 잘림: 관리자 화면이 block으로 열려 세로 배치가 안 되고 아래 내용이 잘리던 문제 → 항상 세로 배치, 내용 영역 스크롤
+    - PDF 원본: 서버(드라이브)에 없는 옛 일지 PDF는 공개 저장소(GitHub)에서 바로 읽음 (관리자 · 교육일지/보호구 PDF만)
+      → "GitHub 전체에서 확인되지 않습니다 … 재생성할까요?" 창이 잘못 뜨던 문제 해결 (정말 없을 때만 묻고, 문구 쉽게)
+    - 교육 현황 · 보호구 · 화학물질 메뉴: 버튼 · 표 머리 색을 A-8(초록 · 흰 버튼)로 통일
 
   ★★★ v20.2 (2026-10-21) — 화면 비율 · 연락처 띠 고정 · 관리자 결재 A-8:
     - 연락처 띠: PC는 화면 맨 아래 고정 한 줄(40px), 휴대폰은 각 페이지 끝
@@ -1030,6 +1040,50 @@ body{padding-bottom:var(--bm-bot)}
 }
 /* 관리자 */
 #admin-main{background:#F5F5F2;height:100%;display:flex;flex-direction:column}
+#admin-main:not([style*="none"]){display:flex!important}   /* v20.3: JS가 block으로 열어도 세로 배치 유지 → 아래 내용 잘림 해결 */
+.adm-shell{min-height:0!important}
+.adm-content{min-width:0}
+.dash{display:flex;flex-direction:column;gap:14px}
+.dash-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.dash-top b{font-size:20px;color:var(--bm-ink)}.dash-top span{font-size:13px;color:#5A5650}
+.dash-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:0}
+#dash-k-edu,#dash-k-nh{display:contents}
+.adm-card-stat:empty{display:none}
+/* v20.3: 교육 현황 · 보호구 · 화학물질 메뉴도 A-8 색(초록 · 흰 버튼)으로 통일 */
+#adm-pane-edu .bm-std-filter-row,#adm-pane-ppe .bm-std-filter-row,#adm-pane-chem .bm-std-filter-row,
+#adm-pane-edu .bm-std-action-row,#adm-pane-ppe .bm-std-action-row,#adm-pane-chem .bm-std-action-row{background:#FAFAF8!important;border:1px solid var(--bm-line)!important;border-radius:8px!important}
+#adm-pane-edu .bm-std-filter-row>.adm-filter-grid,#adm-pane-ppe .bm-std-filter-row>.adm-filter-grid,#adm-pane-chem .bm-std-filter-row>.adm-filter-grid{background:transparent!important;border:0!important;padding:0!important}
+.adm-pane .bm-std-action-row button{background:#fff!important;color:var(--bm-ink)!important;border:1px solid #C6C3BB!important;border-radius:4px!important;font-size:13px!important;padding:7px 12px!important}
+.adm-pane .bm-std-action-row button:hover{border-color:var(--bm-g6)!important;background:#F2F8EC!important}
+.adm-pane .bm-std-action-row button[onclick*="'delete'"],.adm-pane .bm-std-action-row button[onclick*="forcePull"]{color:#A3302A!important}
+.adm-pane .bm-std-filter-row button[onclick*="'apply'"]{background:var(--bm-g6)!important;border-color:var(--bm-g6)!important;color:#fff!important;border-radius:4px!important;font-size:13px!important}
+.adm-pane .adm-tbl thead tr{background:#E2F0D5!important;color:var(--bm-g8)!important}
+.adm-pane .adm-tbl thead th{color:var(--bm-g8)!important;font-size:13px}
+.dash-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
+.dash-card{background:#fff;border:1px solid var(--bm-line);border-radius:8px;overflow:hidden}
+.dash-card>h3{display:flex;justify-content:space-between;align-items:center;margin:0;padding:12px 16px;border-bottom:1px solid #ECEBE7;font-size:16px;color:var(--bm-ink)}
+.dash-card>h3 button{border:0;background:none;color:var(--bm-g7);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.dash-row{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #F0EFEB;font-size:14px;cursor:pointer}
+.dash-row:last-child{border-bottom:0}.dash-row:hover{background:#F7FAF4}
+.dash-row .f{flex:1;min-width:0}.dash-row .f b{display:block;color:var(--bm-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dash-row .f small{display:block;font-size:12px;color:#5A5650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dash-empty{padding:18px 16px;color:#5A5650;font-size:14px}
+.dash-bar{display:flex;align-items:center;gap:8px;width:46%}
+.dash-bar i{flex:1;height:8px;background:#ECEBE7;border-radius:4px;overflow:hidden;display:block}
+.dash-bar i em{display:block;height:100%}
+.dash-bar span{width:40px;text-align:right;font-size:13px}
+.cfg-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.cfg-c{border:1px solid var(--bm-line);border-radius:8px;padding:16px;background:#fff}
+.cfg-c h4{margin:0 0 8px;font-size:16px;color:var(--bm-ink)}
+.cfg-c dl{display:grid;grid-template-columns:110px 1fr;gap:6px 10px;margin:0 0 12px;font-size:14px}
+.cfg-c dt{color:#5A5650}.cfg-c dd{margin:0;color:var(--bm-ink);word-break:break-all}
+.cfg-c p{font-size:13px;color:#5A5650;margin:0 0 10px;line-height:1.6}
+.cfg-b{padding:8px 14px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.cfg-b.p{background:var(--bm-g6);border-color:var(--bm-g6);color:#fff}
+.cfg-ok{color:var(--bm-g7);font-weight:800}.cfg-bad{color:#A3302A;font-weight:800}
+@media(max-width:1400px){.dash-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:1000px){.dash-grid,.cfg-grid{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:760px){.dash-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-bar{width:40%}.cfg-c dl{grid-template-columns:88px 1fr}}
 #pg-admin{overflow:hidden}
 .adm-topbar{padding:8px 24px;min-height:56px}
 .adm-topbar-icon{width:32px;height:32px;font-size:16px}
@@ -1953,10 +2007,14 @@ input.apv-in[type=text]{width:110px}
       <!-- 좌측 사이드바 -->
       <aside class="adm-sidebar">
         <div class="adm-sidebar-section">결재 · 현황</div>
+        <div class="adm-nav-item" data-pane="dash" onclick="admSwitchPane('dash')">
+          <span class="adm-nav-icon">📊</span>
+          <span class="adm-nav-label">대시보드</span>
+        </div>
         <div class="adm-nav-item active" data-pane="apv" onclick="admSwitchPane('apv')">
           <span class="adm-nav-icon">✅</span>
           <span class="adm-nav-label">결재 관리</span>
-          <span class="adm-nav-badge" id="adm-nav-apv-badge">0</span>
+          <span class="adm-nav-badge" id="adm-nav-apv-badge"></span>
         </div>
         <div class="adm-nav-item" data-pane="edu" onclick="admSwitchPane('edu')">
           <span class="adm-nav-icon">📚</span>
@@ -1965,12 +2023,12 @@ input.apv-in[type=text]{width:110px}
         </div>
         <div class="adm-nav-item" data-pane="ppe" onclick="admSwitchPane('ppe')">
           <span class="adm-nav-icon">🦺</span>
-          <span class="adm-nav-label">보호구 지급</span>
+          <span class="adm-nav-label">보호구 지급 현황</span>
           <span class="adm-nav-badge" id="adm-nav-ppe-badge"></span>
         </div>
         <div class="adm-nav-item" data-pane="chem" onclick="admSwitchPane('chem')">
           <span class="adm-nav-icon">⚗️</span>
-          <span class="adm-nav-label">화학물질 보고서</span>
+          <span class="adm-nav-label">화학물질 보고서 검토</span>
           <span class="adm-nav-badge" id="adm-nav-chem-badge"></span>
         </div>
         <div class="adm-sidebar-section">기준 정보</div>
@@ -1988,6 +2046,15 @@ input.apv-in[type=text]{width:110px}
           <span class="adm-nav-label">직원정보관리</span>
           <span class="adm-nav-badge" id="adm-nav-staff-badge"></span>
         </div>
+        <div class="adm-nav-item" data-pane="nh" onclick="admSwitchPane('nh'); BMSTAFF.openNh();">
+          <span class="adm-nav-icon">🆕</span>
+          <span class="adm-nav-label">신규입사 알림</span>
+          <span class="adm-nav-badge" id="adm-nav-nh-badge"></span>
+        </div>
+        <div class="adm-nav-item" data-pane="cfg" onclick="admSwitchPane('cfg'); BMDASH.settings();">
+          <span class="adm-nav-icon">⚙️</span>
+          <span class="adm-nav-label">설정</span>
+        </div>
 
         <div class="adm-nav-item adm-nav-exit" onclick="goTab('home')"><span class="adm-nav-icon">←</span><span class="adm-nav-label">홈으로 나가기</span></div>
         <!-- ★ v17.15: '시스템 > 감사 로그' 메뉴 삭제 — 조회 화면은 원래 미작동(죽은 코드)이었음.
@@ -1997,6 +2064,28 @@ input.apv-in[type=text]{width:110px}
       <!-- 우측 컨텐츠 영역 -->
       <main class="adm-content">
        
+        <!-- ── 📌 대시보드 pane (v20.3) — 내용은 BMDASH.open()이 그림 ── -->
+        <section class="adm-pane" id="adm-pane-dash"><div id="dash-body" class="dash"></div></section>
+
+        <!-- ── 📌 신규입사 알림 pane (v20.3) — 내용은 BMSTAFF.openNh()가 그림 ── -->
+        <section class="adm-pane" id="adm-pane-nh">
+          <div class="adm-card">
+            <div class="adm-card-header">
+              <h2 class="adm-card-title">🆕 신규입사 알림</h2>
+              <span id="nh-stat" class="adm-card-stat"></span>
+            </div>
+            <div class="adm-card-body" id="nh-body"></div>
+          </div>
+        </section>
+
+        <!-- ── 📌 설정 pane (v20.3) — 내용은 BMDASH.settings()가 그림 ── -->
+        <section class="adm-pane" id="adm-pane-cfg">
+          <div class="adm-card">
+            <div class="adm-card-header"><h2 class="adm-card-title">⚙️ 설정</h2></div>
+            <div class="adm-card-body" id="cfg-body"></div>
+          </div>
+        </section>
+
         <!-- ── 📌 결재 관리 pane (기본 활성) ── -->
         <section class="adm-pane active" id="adm-pane-apv">
 <div class="adm-kpi" id="adm-kpi"></div>
@@ -2244,7 +2333,7 @@ input.apv-in[type=text]{width:110px}
         <section class="adm-pane" id="adm-pane-chem">
           <div class="adm-card">
             <div class="adm-card-header">
-              <h2 class="adm-card-title">⚗️ 화학물질 보고서</h2>
+              <h2 class="adm-card-title">⚗️ 화학물질 보고서 검토</h2>
               <span id="adm-chem-stat" class="adm-card-stat"></span>
             </div>
             <div class="adm-card-body">
@@ -2408,8 +2497,22 @@ input.apv-in[type=text]{width:110px}
   function jsonResp(status, obj){
     return new Response(JSON.stringify(obj), { status: status, headers: { 'Content-Type': 'application/json' } });
   }
+  /* v20.3: 드라이브(서버)에 없는 옛 PDF·이미지는 공개 저장소에서 바로 읽기 (관리자만, 기록 json 제외).
+     제출 시 GitHub에 올라간 파일이 드라이브로 옮겨지지 않았거나, 큰 파일을 서버가 읽다 실패한 경우 대비 */
+  function canFallback(path){
+    return !!(session && session.role === 'admin') && !/\.json$/i.test(path) && /^(교육일지|보호구)(\/|$)/.test(path);
+  }
+  async function ghDirect(url){
+    try{ return await _fetch(url + (url.indexOf('?') >= 0 ? '&' : '?') + '_t=' + Date.now(), { cache: 'no-store' }); }
+    catch(_){ return null; }
+  }
   async function apiGet(path){
-    var r = await post('fs.get', { path: path });
+    var r;
+    try{ r = await post('fs.get', { path: path }); }catch(e){ r = { success:false, status:502, error:e.message }; }
+    if(!r.success && canFallback(path)){
+      var g = await ghDirect('https://api.github.com/repos/buminhealth/health/contents/' + path.split('/').map(encodeURIComponent).join('/'));
+      if(g && g.ok) return g;
+    }
     if(!r.success) return jsonResp(r.status || 500, { message: r.error || 'error' });
     if(r.type === 'dir'){
       return jsonResp(200, r.entries.map(function(e){
@@ -2448,6 +2551,15 @@ input.apv-in[type=text]{width:110px}
     });
   }
   async function rawGet(path){
+    var res;
+    try{ res = await rawGetServer(path); }catch(e){ res = new Response('', { status: 502 }); }
+    if(!res.ok && canFallback(path)){
+      var g = await ghDirect(rawUrlFor(path));
+      if(g && g.ok) return g;
+    }
+    return res;
+  }
+  async function rawGetServer(path){
     var r = await post('fs.get', { path: path, offset: 0 });
     if(!r.success) return new Response('', { status: r.status || 500 });
     var parts = [r.content || ''];
@@ -2902,7 +3014,6 @@ input.apv-in[type=text]{width:110px}
     var body = document.getElementById('staff-body');
     if(!body) return;
     body.innerHTML = '<div style="color:#64748b;font-size:13px">불러오는 중…</div>';
-    nhPromise = post('nh.list', {});   // 상태 조회와 동시에 요청 (대기 시간 단축)
     var st = await post('emp.status', {});
     if(!st.success){ body.innerHTML = '<div style="color:#b91c1c">' + esc(st.error || '조회 실패') + '</div>'; return; }
     var stat = document.getElementById('staff-stat');
@@ -2945,18 +3056,9 @@ input.apv-in[type=text]{width:110px}
         '<button id="staff-sync" style="' + BTN_P + '" disabled>직원정보 업데이트</button></div>' +
         '<div id="staff-preview-out" style="margin-top:8px"></div>' +
       '</div>' +
+      '<div style="' + BOX + 'font-size:13px">신규입사 유해화학물질 취급 확인은 왼쪽 메뉴 <b>[신규입사 알림]</b>으로 옮겼습니다. <button id="staff-go-nh" style="' + BTN + '">신규입사 알림 열기</button></div>' +
       '<div style="' + BOX + '">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px">' +
-          '<div style="font-weight:800;color:#1c3557">③ 신규입사 유해화학물질 취급 확인</div>' +
-          '<div style="display:flex;gap:6px"><select id="staff-nh-filter" class="fc" style="width:auto">' +
-            '<option value="">전체</option><option>회신대기</option><option>이메일없음</option><option>취급-교육대기</option><option>취급-교육완료</option><option>미취급</option>' +
-          '</select><button id="staff-nh-run" style="' + BTN + '"' + (st.hrAuto ? '' : ' disabled title="자동 로그인 설정 후 사용"') + '>지금 자동 확인</button></div>' +
-        '</div>' +
-        '<div style="font-size:12px;color:#64748b;margin-bottom:8px">알림 메일은 <b>인사 사이트 자동 로그인</b>(매일 아침 7시 · 지금 자동 확인)일 때만 발송됩니다. 교육 기한: 입사일로부터 3일.</div>' +
-        '<div id="staff-nh-out" style="overflow-x:auto"></div>' +
-      '</div>' +
-      '<div style="' + BOX + '">' +
-        '<div style="font-weight:800;color:#1c3557;margin-bottom:4px">④ 부서 이름 점검</div>' +
+        '<div style="font-weight:800;color:#1c3557;margin-bottom:4px">③ 부서 이름 점검</div>' +
         '<div style="font-size:12px;color:#64748b;margin-bottom:8px">직원목록의 부서 이름이 <b>부서인증</b>·<b>chemicals</b> 시트와 같아야 로그인·알림이 됩니다. ' +
           '이름이 다르면 시트의 <b>부서매핑</b>에 "인사 사이트 부서명 → 앱 부서명"을 적은 뒤 다시 업데이트하세요. (띄어쓰기 차이는 자동으로 같게 처리)</div>' +
         '<div style="overflow-x:auto">' + (st.deptCheck ? deptCheckTable(st.deptCheck)
@@ -3006,6 +3108,28 @@ input.apv-in[type=text]{width:110px}
       try{ if(typeof loadEmps === 'function') loadEmps(); }catch(_){}
       open();
     };
+    document.getElementById('staff-go-nh').onclick = function(){ admSwitchPane('nh'); openNh(); };
+  }
+
+  /* v20.3: 신규입사 알림 — 관리자 왼쪽 메뉴 [신규입사 알림] */
+  async function openNh(){
+    var body = document.getElementById('nh-body');
+    if(!body) return;
+    body.innerHTML = '<div style="color:#64748b;font-size:13px">불러오는 중…</div>';
+    nhPromise = post('nh.list', {});
+    var st = await post('emp.status', {});
+    if(!st.success) st = {};
+    body.innerHTML =
+      '<div style="' + BOX + 'margin:0">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px">' +
+          '<div style="font-weight:800;color:#1c3557">신규입사 유해화학물질 취급 확인</div>' +
+          '<div style="display:flex;gap:6px"><select id="staff-nh-filter" class="fc" style="width:auto">' +
+            '<option value="">전체</option><option>회신대기</option><option>이메일없음</option><option>취급-교육대기</option><option>취급-교육완료</option><option>미취급</option>' +
+          '</select><button id="staff-nh-run" style="' + BTN + '"' + (st.hrAuto ? '' : ' disabled title="자동 로그인 설정 후 사용"') + '>지금 자동 확인</button></div>' +
+        '</div>' +
+        '<div style="font-size:12px;color:#64748b;margin-bottom:8px">알림 메일은 <b>인사 사이트 자동 로그인</b>(매일 아침 7시 · 지금 자동 확인)일 때만 발송됩니다. 교육 기한: 입사일로부터 3일.</div>' +
+        '<div id="staff-nh-out" style="overflow-x:auto"></div>' +
+      '</div>';
     document.getElementById('staff-nh-filter').onchange = renderNh;
     document.getElementById('staff-nh-run').onclick = async function(){
       var r = await post('nh.run', {});
@@ -3047,6 +3171,7 @@ input.apv-in[type=text]{width:110px}
     var r = await (nhPromise || post('nh.list', {}));
     nhPromise = null;
     if(!r.success){ out.innerHTML = '<div style="color:#b91c1c">' + esc(r.error) + '</div>'; return; }
+    try{ if(window.BMDASH) BMDASH.nhBadge(r.data); }catch(_){}
     var f = document.getElementById('staff-nh-filter').value;
     var list = r.data.filter(function(o){ return !f || o['상태'] === f; }).reverse();
     if(!list.length){ out.innerHTML = '<div style="font-size:12px;color:#64748b">해당하는 알림이 없습니다.</div>'; return; }
@@ -3133,7 +3258,7 @@ input.apv-in[type=text]{width:110px}
     ov.querySelectorAll('[data-edu]').forEach(function(b){ b.onclick = function(){ ov.remove(); try{ history.replaceState(null, '', location.pathname); }catch(_){} startEdu(byId[b.getAttribute('data-edu')]); }; });
   }
 
-  window.BMSTAFF = { open: open, showDeptRequests: showDeptRequests };
+  window.BMSTAFF = { open: open, openNh: openNh, showDeptRequests: showDeptRequests };
 
   window.addEventListener('DOMContentLoaded', function(){
     var nh = null;
@@ -3905,6 +4030,202 @@ input.apv-in[type=text]{width:110px}
     bindPeople(host, list, function(){ deptSection(host); });
   }
   window.BMEDU = { dupes: dupes, board: board, deptSection: deptSection };
+})();
+
+/* ★★★ v20.3 — 관리자 대시보드 · 설정 (최종시안 A-8 왼쪽 메뉴와 맞춤)
+   - 대시보드: 결재 대기 · 반려 · 교육 미이수 · 신규입사 회신 대기 · 새 화학물질 보고서 · 새 보호구 기록 요약,
+     결재 대기 일지 · 부서별 교육 이수율 · 신규입사 알림 · 최근 제출 (줄을 누르면 해당 메뉴로 이동)
+   - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
+(function(){
+  if(window.BMDASH) return;
+  var SERVER_EXPECT = 'v20.1';
+  var esc = function(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
+  var recs = function(k){ try{ return JSON.parse(localStorage.getItem(k) || '[]') || []; }catch(_){ return []; } };
+  var post = function(op, b){ return window.BMAUTH ? BMAUTH.post(op, b || {}).catch(function(e){ return { success: false, error: e.message }; }) : Promise.resolve({ success: false, error: '로그인 필요' }); };
+  var NH_WAIT = ['회신대기', '이메일없음', '취급-교육대기'];
+  var seq = 0, nhLoaded = false;
+
+  function eduGroups(){
+    var m = {};
+    recs('bm_edu_records').forEach(function(r){
+      if(!r || (r.type || '').indexOf('보호구') >= 0) return;
+      var k = r.submitted + '__' + r.dept + '__' + r.dateStart + '__' + r.type;
+      var g = m[k] || (m[k] = { key: k, dept: r.dept, type: r.type || '', date: r.dateStart, submitted: String(r.submitted || ''), names: [], approved: true, rejected: false, reason: '' });
+      g.names.push(r.name);
+      if(!r.approved) g.approved = false;
+      if(r.rejected){ g.rejected = true; g.reason = r.rejectReason || ''; }
+    });
+    return Object.keys(m).map(function(k){ return m[k]; });
+  }
+  function badge(cat){ var el = document.getElementById('adm-nav-' + cat + '-badge'); return el ? (parseInt(el.textContent, 10) || 0) : 0; }
+  function nhBadge(list){
+    nhLoaded = true;
+    var n = (list || []).filter(function(o){ return NH_WAIT.indexOf(o['상태']) >= 0; }).length;
+    var el = document.getElementById('adm-nav-nh-badge');
+    if(el) el.textContent = n ? (n > 99 ? '99+' : String(n)) : '';
+    var st = document.getElementById('nh-stat');
+    if(st) st.textContent = '회신 대기 ' + n + '명 · 전체 ' + (list || []).length + '건';
+    return n;
+  }
+  function go(pane, after){
+    try{ admSwitchPane(pane); }catch(_){}
+    if(pane === 'nh' && window.BMSTAFF) BMSTAFF.openNh();
+    if(after) setTimeout(after, 350);
+  }
+  function openApv(key){
+    go('apv');
+    var tries = 0;
+    (function wait(){
+      var ok = typeof apvState !== 'undefined' && (apvState.groups || []).some(function(g){ return g.groupKey === key; });
+      if(ok){ try{ apvOpenViewer(key); }catch(_){} return; }
+      if(++tries < 20) setTimeout(wait, 150);
+    })();
+  }
+  function kpi(label, n, unit, sub, cls, act){
+    return '<button type="button" class="adm-kpi-c ' + (cls || '') + '" data-go="' + act + '"><span>' + label + '</span><b>' + n + '<small> ' + unit + '</small></b><em>' + sub + '</em></button>';
+  }
+  function row(tag, tagCls, title, sub, act, right){
+    return '<div class="dash-row" data-go="' + esc(act) + '"><span class="apv-st ' + tagCls + '">' + tag + '</span><div class="f"><b>' + title + '</b><small>' + sub + '</small></div>' + (right || '') + '</div>';
+  }
+
+  async function open(){
+    var host = document.getElementById('dash-body');
+    if(!host) return;
+    var my = ++seq;
+    try{ if(typeof refreshAdmNavBadges === 'function') refreshAdmNavBadges(); }catch(_){}
+    var G = eduGroups();
+    var wait = G.filter(function(g){ return !g.approved && !g.rejected; }).sort(function(a, b){ return b.submitted.localeCompare(a.submitted); });
+    var rj = G.filter(function(g){ return !g.approved && g.rejected; });
+    var people = wait.reduce(function(n, g){ return n + g.names.length; }, 0);
+    var today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+    var nameStr = function(a){ a = a.filter(Boolean); return esc(a.slice(0, 3).join(', ')) + (a.length > 3 ? ' 외 ' + (a.length - 3) + '명' : ''); };
+    var kind = function(t){ return (t || '').indexOf('MSDS') >= 0 ? 'MSDS 교육일지' : '특별안전보건교육일지'; };
+
+    var recent = G.map(function(g){ return { t: g.submitted, tag: 'MSDS', cls: 'wait', title: esc(g.dept) + ' · ' + kind(g.type), sub: nameStr(g.names) + ' · 교육일 ' + esc(g.date), act: 'apv:' + g.key }; })
+      .map(function(x, i){ var g = G[i]; if(g && (g.type || '').indexOf('MSDS') < 0){ x.tag = '특별'; } return x; })
+      .concat(recs('bm_ppe_records').map(function(r){ return { t: String(r.submitted || ''), tag: '보호구', cls: 'ok', title: esc(r.dept) + ' · 보호구 지급', sub: esc(r.name) + ' · ' + esc(r.date || r.dateStart || ''), act: 'ppe' }; }))
+      .concat(recs('bm_chem_records').map(function(r){ return { t: String(r.submitted || ''), tag: '화학', cls: 'rj', title: esc(r.dept) + ' · ' + esc(r.docType || r.kind || '화학물질 보고서'), sub: esc(r.product || r.name || '') + ' · ' + esc(r.date || r.docDate || ''), act: 'chem' }; }))
+      .sort(function(a, b){ return b.t.localeCompare(a.t); }).slice(0, 6);
+
+    host.innerHTML =
+      '<div class="dash-top"><b>대시보드</b><span>' + today + ' 기준 · 숫자나 줄을 누르면 해당 메뉴로 이동합니다</span></div>' +
+      '<div class="adm-kpi dash-kpis">' +
+        kpi('결재 대기', wait.length, '건', '대상자 ' + people + '명', wait.length ? 'hot' : '', 'apv-pending') +
+        kpi('반려', rj.length, '건', '부서 다시 작성 대기', rj.length ? 'bad' : '', 'apv-rejected') +
+        '<span id="dash-k-edu">' + kpi('교육 미이수', '…', '명', '계산 중', '', 'edu') + '</span>' +
+        '<span id="dash-k-nh">' + kpi('신규입사 회신 대기', '…', '명', '불러오는 중', '', 'nh') + '</span>' +
+        kpi('새 화학물질 보고서', badge('chem'), '건', '확인 안 한 보고서', badge('chem') ? 'hot' : '', 'chem') +
+        kpi('새 보호구 지급', badge('ppe'), '건', '확인 안 한 기록', '', 'ppe') +
+      '</div>' +
+      '<div class="dash-grid">' +
+        '<section class="dash-card"><h3>결재 대기 일지 <button type="button" data-go="apv-pending">전체 보기 ›</button></h3>' +
+          (wait.length ? wait.slice(0, 6).map(function(g){ return row((g.type || '').indexOf('MSDS') >= 0 ? 'MSDS' : '특별', 'wait', esc(g.dept) + ' · ' + kind(g.type), nameStr(g.names) + ' · 교육일 ' + esc(g.date) + (g.submitted ? ' · 제출 ' + esc(g.submitted.slice(0, 10)) : ''), 'apv:' + g.key); }).join('')
+            : '<div class="dash-empty">결재할 일지가 없습니다.</div>') + '</section>' +
+        '<section class="dash-card"><h3>부서별 교육 이수율 <button type="button" data-go="edu">교육 현황 ›</button></h3><div id="dash-edu"><div class="dash-empty">계산 중…</div></div></section>' +
+        '<section class="dash-card"><h3>신규입사 알림 <button type="button" data-go="nh">전체 보기 ›</button></h3><div id="dash-nh"><div class="dash-empty">불러오는 중…</div></div></section>' +
+        '<section class="dash-card"><h3>최근 제출</h3>' +
+          (recent.length ? recent.map(function(x){ return row(x.tag, x.cls, x.title, x.sub, x.act); }).join('') : '<div class="dash-empty">이 PC에 받아 둔 기록이 없습니다. 결재 관리에서 [더보기 → 새로고침]을 누르세요.</div>') + '</section>' +
+      '</div>';
+    bind(host);
+
+    post('edu.status', {}).then(function(r){
+      if(my !== seq) return;
+      var box = document.getElementById('dash-edu'), k = document.getElementById('dash-k-edu');
+      if(!r.success){
+        box.innerHTML = '<div class="dash-empty">' + esc(/unknown op/.test(r.error || '') ? '서버(Code.gs)를 v20.0 이상으로 배포하면 표시됩니다' : (r.error || '불러오지 못했습니다')) + '</div>';
+        k.innerHTML = kpi('교육 미이수', '-', '', '서버 확인 필요', '', 'edu'); bind(k); return;
+      }
+      var miss = 0, over = 0;
+      r.depts.forEach(function(d){ miss += d.missing || 0; over += d.overdue || 0; });
+      k.innerHTML = kpi('교육 미이수', miss, '명', '기한 초과 ' + over + '명', miss ? 'bad' : '', 'edu');
+      var list = r.depts.filter(function(d){ return d.total; }).map(function(d){ return { d: d, pct: Math.round(d.done / d.total * 100) }; })
+        .sort(function(a, b){ return a.pct - b.pct; }).slice(0, 7);
+      box.innerHTML = list.length ? list.map(function(x){
+        var c = x.pct >= 100 ? '#4A8F2C' : (x.pct >= 70 ? '#A3D07C' : '#E8A33D');
+        return '<div class="dash-row" data-go="edu"><div class="f"><b>' + esc(x.d.dept) + '</b><small>대상 ' + x.d.total + '명 · 미이수 ' + (x.d.missing || 0) + (x.d.overdue ? ' · 기한 초과 ' + x.d.overdue : '') + '</small></div>' +
+          '<div class="dash-bar"><i><em style="width:' + x.pct + '%;background:' + c + '"></em></i><span>' + x.pct + '%</span></div></div>';
+      }).join('') : '<div class="dash-empty">교육 대상 부서가 없습니다.</div>';
+      bind(box); bind(k);
+    });
+    post('nh.list', {}).then(function(r){
+      if(my !== seq) return;
+      var box = document.getElementById('dash-nh'), k = document.getElementById('dash-k-nh');
+      if(!r.success){ box.innerHTML = '<div class="dash-empty">' + esc(r.error || '불러오지 못했습니다') + '</div>'; k.innerHTML = kpi('신규입사 회신 대기', '-', '', '서버 확인 필요', '', 'nh'); bind(k); return; }
+      var n = nhBadge(r.data);
+      k.innerHTML = kpi('신규입사 회신 대기', n, '명', '교육 기한 입사 후 3일', n ? 'hot' : '', 'nh');
+      var list = r.data.filter(function(o){ return NH_WAIT.indexOf(o['상태']) >= 0; }).reverse().slice(0, 5);
+      box.innerHTML = list.length ? list.map(function(o){
+        var over = o['교육기한'] && today > o['교육기한'];
+        return row(esc(o['상태']), over ? 'rj' : 'wait', esc(o['부서']) + ' · ' + esc(o['이름']), '입사 ' + esc(o['입사일']) + (o['교육기한'] ? ' · 교육 기한 ' + esc(o['교육기한']) + (over ? ' (초과)' : '') : ''), 'nh');
+      }).join('') : '<div class="dash-empty">회신을 기다리는 신규 입사자가 없습니다.</div>';
+      bind(box); bind(k);
+    });
+  }
+  function bind(root){
+    root.querySelectorAll('[data-go]').forEach(function(el){
+      el.onclick = function(){
+        var a = el.getAttribute('data-go');
+        if(a.indexOf('apv:') === 0) return openApv(a.slice(4));
+        if(a === 'apv-pending' || a === 'apv-rejected') return go('apv', function(){ try{ apvKpiFilter(a.slice(4)); }catch(_){} });
+        go(a);
+      };
+    });
+  }
+
+  async function settings(){
+    var host = document.getElementById('cfg-body');
+    if(!host) return;
+    var C = (typeof CFG !== 'undefined') ? CFG : {};
+    var D = (typeof DEFAULT_CFG !== 'undefined') ? DEFAULT_CFG : {};
+    var v = function(k){ return esc(C[k] || D[k] || '') || '<span class="cfg-bad">비어 있음</span>'; };
+    var used = 0;
+    try{ for(var i = 0; i < localStorage.length; i++){ var key = localStorage.key(i); used += (key.length + (localStorage.getItem(key) || '').length) * 2; } }catch(_){}
+    var ss = window.BMAUTH ? BMAUTH.session() : null;
+    host.innerHTML = '<div class="cfg-grid">' +
+      '<section class="cfg-c"><h4>결재자 · 알림 메일</h4><dl>' +
+        '<dt>결재자(도장)</dt><dd>' + esc(C.stampName || C.apv1Name || D.apv1Name || '') + '</dd>' +
+        '<dt>결재자 메일</dt><dd>' + v('apv1Email') + '</dd>' +
+        '<dt>교육일지 알림</dt><dd>' + v('email') + '</dd>' +
+        '<dt>보호구 알림</dt><dd>' + v('emailPpe') + '</dd>' +
+        '<dt>화학물질 알림</dt><dd>' + v('emailChem') + '</dd></dl>' +
+        '<button type="button" class="cfg-b p" data-c="open">연동 · 메일 · 결재자 설정 열기</button></section>' +
+      '<section class="cfg-c"><h4>서버 (Apps Script)</h4><dl>' +
+        '<dt>서버 주소</dt><dd>' + esc(String(C.url || D.url || '').replace(/^https:\/\/script\.google\.com\/macros\/s\//, '…/').slice(0, 48)) + '</dd>' +
+        '<dt>서버 버전</dt><dd id="cfg-ver">확인 중…</dd>' +
+        '<dt>로그인</dt><dd>' + (ss ? (ss.role === 'admin' ? '보건관리자' : esc(ss.dept)) + ' · ' + new Date(ss.exp).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + '까지' : '<span class="cfg-bad">로그인 안 됨</span>') + '</dd></dl>' +
+        '<p>Code.gs를 고친 뒤에는 Apps Script에서 <b>배포 → 배포 관리 → ✏ → 새 버전</b>으로 다시 배포해야 반영됩니다. GitHub 자동 배포는 gas/배포안내.md 참고.</p></section>' +
+      '<section class="cfg-c"><h4>AI (Gemini) 키</h4><dl><dt>상태</dt><dd id="cfg-ai">확인 중…</dd><dt>모델</dt><dd id="cfg-ai-m">-</dd></dl>' +
+        '<p>키는 화면에 저장하지 않고 서버(스크립트 속성)에만 저장됩니다. [AI MSDS 검토] 화면 위쪽 칸이나 시트 메뉴 <b>[보건관리 시스템 → ⑥ Gemini AI 키 저장]</b>에서 넣으세요. 모델은 관리자설정 시트의 \'AI모델\'로 바꿀 수 있습니다.</p>' +
+        '<button type="button" class="cfg-b" data-c="ai">AI MSDS 검토 열기</button></section>' +
+      '<section class="cfg-c"><h4>이 PC 저장 공간 · 계정</h4><dl><dt>사용량</dt><dd>' + Math.round(used / 1024).toLocaleString() + 'KB / 약 5MB</dd>' +
+        '<dt>파일 저장소</dt><dd>구글 드라이브 (서버 경유) · 옛 파일은 ' + esc(C.ghRepo || D.ghRepo || 'buminhealth/health') + '</dd></dl>' +
+        '<span style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="cfg-b" data-c="storage">저장 공간 안내</button><button type="button" class="cfg-b" data-c="sheet">구글 시트 열기</button><button type="button" class="cfg-b" data-c="logout" style="color:#A3302A">로그아웃</button></span></section>' +
+    '</div>';
+    var act = { open: function(){ openCfg(); }, ai: function(){ admSwitchPane('ai'); BMAI.open(); }, storage: function(){ apvShowStorageGuide(); },
+                sheet: function(){ window.open('https://docs.google.com/spreadsheets/d/1kFRIyXZX8aTgQR2w5MC0Ty66B9ltKrWj3Wz96D0mKIs/edit', '_blank'); }, logout: function(){ adminLogout(); } };
+    host.querySelectorAll('[data-c]').forEach(function(b){ b.onclick = function(){ try{ act[b.getAttribute('data-c')](); }catch(e){ console.warn(e); } }; });
+    post('whoami', {}).then(function(r){
+      var el = document.getElementById('cfg-ver'); if(!el) return;
+      var sv = r && r.serverVersion;
+      el.innerHTML = sv ? esc(sv) + (sv < SERVER_EXPECT ? ' <span class="cfg-bad">→ ' + SERVER_EXPECT + ' 배포 필요</span>' : ' <span class="cfg-ok">최신</span>') : '<span class="cfg-bad">확인 실패 (이전 버전이거나 연결 안 됨)</span>';
+    });
+    post('ai.status', {}).then(function(r){
+      var el = document.getElementById('cfg-ai'), m = document.getElementById('cfg-ai-m'); if(!el) return;
+      if(!r.success){ el.innerHTML = '<span class="cfg-bad">' + esc(/unknown op/.test(r.error || '') ? '서버 v19.7 이상 필요' : (r.error || '확인 실패')) + '</span>'; return; }
+      el.innerHTML = r.hasKey ? '<span class="cfg-ok">저장됨</span>' : '<span class="cfg-bad">키 없음</span> (AI 없이 직접 입력은 가능)';
+      m.textContent = r.model || '-';
+    });
+  }
+
+  // 관리자 메뉴를 처음 열 때 신규입사 배지 한 번 채우기
+  function primeNh(){
+    if(nhLoaded) return;
+    var s = window.BMAUTH && BMAUTH.session();
+    if(!s || s.role !== 'admin') return;
+    nhLoaded = true;
+    post('nh.list', {}).then(function(r){ if(r.success) nhBadge(r.data); else nhLoaded = false; });
+  }
+  window.BMDASH = { open: open, settings: settings, nhBadge: nhBadge, primeNh: primeNh };
 })();
 
 /* ★★★ v19.7 — 🤖 AI MSDS 검토 (3단계, Gemini)
@@ -8075,7 +8396,7 @@ async function apvReprint(groupKey){
     let ok = await apvStampOriginalPdf(group, stampPng);
     // ★ v17.21: GitHub에 원본이 없으면 records(서명 포함)로 재생성·재업로드 후 재시도
     if(!ok){
-      if(confirm(`${group.dept} 원본 PDF가 GitHub 전체에서 확인되지 않습니다.\n(제출 시점 업로드 실패로 추정)\n\n저장된 records(서명 포함)로 PDF를 재생성해서\nGitHub에 재업로드한 뒤 도장 합성을 계속할까요?`)){
+      if(confirm(`${group.dept} 원본 PDF를 서버와 저장소 어디에서도 찾지 못했습니다.\n(제출할 때 파일 올리기가 실패한 것으로 보입니다)\n\n저장된 기록(서명 포함)으로 일지 PDF를 다시 만들어\n올린 뒤 결재 도장을 찍어 내려받을까요?`)){
         const rebuilt = await apvRebuildAndUploadPdf(group);
         if(rebuilt) ok = await apvStampOriginalPdf(group, stampPng, rebuilt);
       }else{
@@ -14736,7 +15057,7 @@ const ADM_BADGE_CATS = ['apv','edu','ppe','chem'];   // ★ v17.15: 감사 로�
 /* 배지 표기 공통 (100건 이상은 99+) */
 function _admSetBadge(cat, n){
   const el = document.getElementById('adm-nav-'+cat+'-badge');
-  if(el) el.textContent = n > 99 ? '99+' : String(n);
+  if(el) el.textContent = n > 99 ? '99+' : (n ? String(n) : '');
 }
 
 /* ★ v17.14: 결재 대기(미결재) 일지 그룹 수 — apvRender의 "결재대기 N건"과 동일 기준
@@ -14800,7 +15121,7 @@ function admMarkSeen(cat){
   if(cat === 'apv'){ _admSetBadge('apv', _admApvPendingCount()); return; }
   _admSeenSet(cat, _admBadgeIds(cat));
   const el = document.getElementById('adm-nav-'+cat+'-badge');
-  if(el) el.textContent = '0';
+  if(el) el.textContent = '';
 }
 
 /* 5개 배지 일괄 갱신 */
@@ -14828,13 +15149,15 @@ function refreshAdmNavBadges(){
         }
       }
       const el = document.getElementById('adm-nav-'+cat+'-badge');
-      if(el) el.textContent = n > 99 ? '99+' : String(n);
+      if(el) el.textContent = n > 99 ? '99+' : (n ? String(n) : '');
     }catch(e){}
   });
 }
 
 function admSwitchPane(name){
   if(name !== 'apv' && typeof apvCloseViewer === 'function') apvCloseViewer();
+  if(name === 'dash' && window.BMDASH) setTimeout(function(){ try{ BMDASH.open(); }catch(_){} }, 0);   // v20.3 대시보드
+  try{ if(window.BMDASH) BMDASH.primeNh(); }catch(_){}
   if(name === 'edu' && window.BMEDU) setTimeout(function(){ try{ BMEDU.board(); }catch(_){} }, 0);   // v20.0 교육 이수 현황판
   // nav-item active 토글
   document.querySelectorAll('.adm-nav-item').forEach(el=>{

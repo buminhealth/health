@@ -22,6 +22,7 @@ function check(name, cond, extra) {
 (async () => {
   const { server, g } = await start(CODE, HTML, PORT);
   const browser = await chromium.launch();
+  let ghOldHits = 0;
   const ctx = await browser.newContext();
   await ctx.route('**/*', async route => {
     const u = route.request().url();
@@ -31,6 +32,10 @@ function check(name, cond, extra) {
       return route.fulfill({ response: resp, headers: { ...resp.headers(), 'access-control-allow-origin': '*' } });
     }
     if (u.startsWith(`http://localhost:${PORT}/`)) return route.continue();
+    if (u.startsWith('https://raw.githubusercontent.com/buminhealth/health/main/' + encodeURIComponent('교육일지') + '/2026-03/' + encodeURIComponent('옛일지-61병동.pdf'))) {
+      ghOldHits++;   // v20.3: 드라이브에 없는 옛 일지 PDF만 공개 저장소에서 읽기 (관리자)
+      return route.fulfill({ status: 200, contentType: 'application/pdf', body: '%PDF-1.4 old' });
+    }
     if (u.startsWith('https://api.github.com') || u.startsWith('https://raw.githubusercontent.com')) {
       check('GitHub로 직접 나가는 요청 없음', false, u);
       return route.abort();
@@ -278,6 +283,38 @@ function check(name, cond, extra) {
     ['새 창으로 열기', '내려받기', '인쇄'].every(t => rj.viewer.btns.includes(t)) && rj.viewer.btns.some(t => t.includes('반려')) && rj.viewer.btns.includes('이 문서 결재'), rj.viewer);
   check('PDF 원본 보기: 닫기', rj.closed);
 
+  // 6-2. v20.3 옛 일지 PDF (드라이브에 없음) → 공개 저장소에서 읽기 · 대시보드 · 설정 · 메뉴
+  const v203 = await page.evaluate(async () => {
+    const miss = await apvResolvePdfBytes({ pdfFileName: '옛일지-61병동.pdf', pdfYm: '2026-03', type: 'MSDS교육', dateStart: '2026-03-02', submitted: '2026-03-02' });
+    admSwitchPane('dash');
+    const t0 = Date.now();
+    while (Date.now() - t0 < 8000 && !/%/.test((document.getElementById('dash-edu') || {}).textContent || '')) await new Promise(r => setTimeout(r, 100));
+    const dash = document.getElementById('dash-body').textContent;
+    const kpis = document.querySelectorAll('#dash-body .adm-kpi-c').length;
+    const row = document.querySelector('#dash-body .dash-row[data-go^="apv:"]');
+    if (row) row.click();
+    const t2 = Date.now();
+    while (Date.now() - t2 < 6000 && !document.getElementById('apv-viewer')) await new Promise(r => setTimeout(r, 100));
+    const jump = !!row && document.getElementById('adm-pane-apv').classList.contains('active') && !!document.getElementById('apv-viewer');
+    apvCloseViewer();
+    admSwitchPane('cfg'); BMDASH.settings();
+    const t1 = Date.now();
+    while (Date.now() - t1 < 8000 && /확인 중/.test((document.getElementById('cfg-ver') || {}).textContent || '')) await new Promise(r => setTimeout(r, 100));
+    const cfg = document.getElementById('cfg-body').textContent;
+    const nav = [...document.querySelectorAll('.adm-nav-item .adm-nav-label')].map(e => e.textContent);
+    const zero = [...document.querySelectorAll('.adm-nav-badge')].filter(b => b.textContent === '0').length;
+    const h = document.querySelector('.adm-content').clientHeight, ph = document.getElementById('pg-admin').clientHeight;
+    admSwitchPane('apv');
+    return { miss: miss ? new TextDecoder().decode(miss) : null, dash, kpis, jump, cfg, nav, zero, fit: h > 0 && h < ph,
+             disp: getComputedStyle(document.getElementById('admin-main')).display };
+  });
+  check('옛 일지 PDF: 드라이브에 없으면 공개 저장소에서 읽음 (관리자)', v203.miss === '%PDF-1.4 old' && ghOldHits >= 1, [v203.miss, ghOldHits]);
+  check('관리자 메뉴: A-8 순서 (대시보드 … 신규입사 알림 · 설정)', ['대시보드', '결재 관리', '교육 현황', '보호구 지급 현황', '화학물질 보고서 검토', '물질 마스터 점검', 'AI MSDS 검토', '직원정보관리', '신규입사 알림', '설정', '홈으로 나가기'].join() === v203.nav.join(), v203.nav);
+  check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
+  check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
+  check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v20\.1/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+
   // 7. 다른 부서는 61병동 PDF를 못 받음
   const other = await page.evaluate(async () => {
     const r = await BMAUTH.post('login', { kind: 'dept', dept: '71병동', pin: '5678' });
@@ -327,9 +364,16 @@ function check(name, cond, extra) {
   await page.fill('#admin-pw', 'admin-pass-1');
   await page.evaluate(() => adminLogin());   // 실제 관리자 로그인 폼 경로
   await page.waitForSelector('#admin-main', { state: 'visible' });
+  const lay = await page.evaluate(() => ({ disp: getComputedStyle(document.getElementById('admin-main')).display,
+    c: document.querySelector('.adm-content').getBoundingClientRect().bottom, p: document.getElementById('pg-admin').getBoundingClientRect().bottom }));
+  check('관리자 화면: 세로 배치 · 내용 영역이 화면 안에서 끝남(잘림 없이 스크롤)', lay.disp === 'flex' && lay.c <= lay.p + 1, lay);
   await page.click('.adm-nav-item[data-pane="staff"]');
   await page.waitForSelector('#staff-paste');
-  check('직원정보관리: 연결 전에는 [지금 자동 확인] 비활성', await page.$eval('#staff-nh-run', b => b.disabled));
+  await page.click('.adm-nav-item[data-pane="nh"]');
+  await page.waitForSelector('#staff-nh-run');
+  check('신규입사 알림 메뉴: 연결 전에는 [지금 자동 확인] 비활성', await page.$eval('#staff-nh-run', b => b.disabled));
+  await page.click('.adm-nav-item[data-pane="staff"]');
+  await page.waitForSelector('#staff-paste');
   await page.fill('#staff-paste', [
     '사번\t이름\t부서\t입사일\t재직상태',
     '126051302\t김가나\t61병동\t2026-07-01\t재직',
@@ -382,7 +426,7 @@ function check(name, cond, extra) {
   Object.assign(g.props, { HR_ID: 'clover8477@bumin.co.kr', HR_PW: 'hr-pass' });
   const savedFetch = await page.evaluate(() => BMAUTH.post('hr.fetch', {}));
   check('저장된 계정으로 가져오기 (비밀번호 입력 없이)', savedFetch.success && savedFetch.rows.length === 3, savedFetch.error);
-  await page.evaluate(() => BMSTAFF.open());
+  await page.evaluate(() => { admSwitchPane('nh'); BMSTAFF.openNh(); });
   await page.waitForSelector('#staff-nh-run:not([disabled])');
   await page.click('#staff-nh-run');
   await page.waitForFunction(() => document.querySelectorAll('#staff-nh-out tr').length >= 2, null, { timeout: 15000 });
@@ -456,7 +500,7 @@ function check(name, cond, extra) {
   check("부서 점검: 61병동 물질 = 전용 1 + '병동' 공통 1", dc('61병동').chems === 2, dc('61병동'));
   check('부서 점검: 인공신장실 로그인 ✕ (PIN 없음)', dc('인공신장실').login === false);
   await page.evaluate(() => BMSTAFF.open());
-  await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('④ 부서 이름 점검'), null, { timeout: 15000 });
+  await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
   check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v20.1'));
 
