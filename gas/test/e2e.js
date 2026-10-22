@@ -879,6 +879,28 @@ function check(name, cond, extra) {
     return { sum: document.getElementById('mn-sum').textContent, go: !document.getElementById('mn-go').disabled, inc };
   });
   check('관리자 화면: 현황판에서 체크 → 수기 등록 미리보기 · 규칙 제외자는 [대상으로 포함] 버튼', /등록 가능 1명/.test(ui2.sum) && ui2.go && ui2.inc, ui2);
+  const rowMan = await page.evaluate(async () => {
+    const b = document.querySelector('#eb-people [data-man]');
+    if (!b) return { none: true };
+    const who = b.closest('tr').querySelector('b').textContent;
+    const besideX = !!b.parentNode.querySelector('[data-x]');
+    b.click();
+    const box = b.parentNode.querySelector('.mn-inline');
+    box.querySelector('[data-f="ds"]').value = '2023-04-05';
+    box.querySelector('[data-f="h"]').value = '8';
+    box.querySelector('[data-f="ok"]').click();
+    const t0 = Date.now();
+    let st = null;
+    while (Date.now() - t0 < 8000) {
+      await new Promise(r => setTimeout(r, 200));
+      const r = await BMAUTH.post('edu.status', { fresh: true });
+      st = (r.people.find(p => p.name === who) || {}).status;
+      if (st === '이수') break;
+    }
+    return { besideX, st, who };
+  });
+  const lastMan = led.rows[led.rows.length - 1];
+  check('현황판 줄마다 [수기 이수] (취급 안 함 옆) → 교육일 · 시간 넣고 이수 처리', rowMan.st === '이수' && lastMan[10] === rowMan.who && lastMan[5] === '2023-04-05' && /수기\(종이\) 일지 · 예전 종이 일지/.test(lastMan[12]), [rowMan, lastMan]);
   led.rows.splice(ledN);
   // v20.3 직원목록 ↔ 인사 사이트 합치기: #N/A · 빈 사번 채움, 입사일 표기 달라도(9/1) 같은 부서 같은 이름이면 같은 사람, 같은 사번 두 줄 합침
   const r1 = empRow('#N/A', '엔에이', '71병동', '재직', ''); empSh.appendRow(r1);

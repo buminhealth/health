@@ -30,6 +30,7 @@
     - 직원목록에 같은 사번 줄이 두 번 있으면 한 명으로 (우정희 중복 집계 해결)
     - 수기(종이) 교육일지 이수 등록: 교육 현황 → [수기(종이) 일지 이수 등록] — 부서 명단 체크 또는 엑셀 붙여넣기 → 미리보기
       (직원 찾기 · 동명이인 · 중복 · 날짜 확인) → 교육이력대장에 '수기(종이) 일지'로 등록 → 바로 이수
+      + 현황판 줄마다 [수기 이수] 버튼 (취급 안 함 옆) — 교육일 · 시간 · 비고 넣고 [이수 처리]로 한 명씩 바로
     - 개별 포함: 규칙 · 신규입사 회신으로 제외된 사람도 [대상으로 포함] (개인 결정 > 규칙), [포함 해제]로 되돌림
     - 연동: 제외 · 포함 · 수기 등록 → 신규입사 알림 상태(미취급 / 취급-교육대기)까지 같이 바꾸고 대시보드 · 홈 할 일 · 규칙 표 다시 계산
     - 직원목록 ↔ 인사 사이트 합치기 (서버): 사번 '#N/A' · 빈칸은 사번 없음으로 보고 인사 사이트 사번으로 채움, 입사일 표기가 달라도(9/1)
@@ -4086,7 +4087,9 @@ input.apv-in[type=text]{width:110px}
             ? (p.excluded.route === '신규입사 회신' || p.excluded.route === '대상 규칙'
                 ? '<button data-inc="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer;border-color:#4A8F2C;color:#2D581B">대상으로 포함</button>'
                 : '<button data-unx="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer">제외 해제</button>')
-            : (p.records ? '<span style="font-size:12px;color:#5A5650">일지 있음</span>' : '<button data-x="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer">취급 안 함 (제외)</button>'))) + '</td></tr>';
+            : (p.records && p.status === '이수' ? '<span style="font-size:12px;color:#5A5650">일지 있음</span>'
+              : (sel ? '<button data-man="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer;border-color:#4A8F2C;color:#2D581B;margin-right:4px" title="예전 종이 일지 · 수기 교육으로 이수 처리">수기 이수</button>' : '') +
+                (p.records ? '' : '<button data-x="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer">취급 안 함 (제외)</button>')))) + '</td></tr>';
       }).join('') + '</table></div>';
   }
   function bindPeople(host, list, after){
@@ -4098,6 +4101,34 @@ input.apv-in[type=text]{width:110px}
       var x = await BMAUTH.post('edu.exclude', { no: p.no, name: p.name, dept: p.dept, reason: reason, fromMail: fromMail });
       say(x.success ? p.name + ' 님을 제외했습니다' : (x.error || '실패'), x.success ? 'ok' : 'err');
       after(); try{ if(window.bmEduChanged) bmEduChanged(); }catch(_){}
+    }; });
+    // v20.3 줄마다 '수기 이수' — 예전 종이 일지 · 수기 교육을 바로 이수 처리 (관리자)
+    host.querySelectorAll('[data-man]').forEach(function(b){ b.onclick = function(){
+      var p = list[+b.getAttribute('data-man')], td = b.parentNode;
+      if(td.querySelector('.mn-inline')) return;
+      var IN = 'height:30px;padding:0 6px;border:1px solid #C6C3BB;border-radius:4px;font:inherit;font-size:13px;box-sizing:border-box';
+      var sp = p.need === '특별';
+      var box = document.createElement('div');
+      box.className = 'mn-inline';
+      box.style.cssText = 'margin-top:6px;padding:8px;border:1px solid #C5E2AB;border-radius:6px;background:#F7FAF4;display:flex;flex-wrap:wrap;gap:6px;align-items:center;white-space:normal;max-width:360px';
+      box.innerHTML = '<span style="font-size:12px;color:#2D581B;width:100%">' + (sp ? '특별안전보건교육' : 'MSDS 교육') + ' 수기 이수 · 교육이력대장에 \'수기(종이) 일지\'로 등록</span>' +
+        '<label style="font-size:12px">교육일 <input type="date" data-f="ds" style="' + IN + '"></label>' +
+        '<label style="font-size:12px">시간 <input type="number" min="0" step="0.5" data-f="h" value="' + (sp ? 8 : 1) + '" style="' + IN + ';width:60px"></label>' +
+        '<input data-f="note" value="예전 종이 일지" placeholder="비고 (보관 위치)" style="' + IN + ';flex:1;min-width:150px">' +
+        '<button type="button" data-f="ok" style="' + 'padding:5px 10px;border:1px solid #4A8F2C;border-radius:4px;background:#4A8F2C;color:#fff;font:inherit;font-size:13px;font-weight:700;cursor:pointer">이수 처리</button>' +
+        '<button type="button" data-f="x" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer">취소</button>' +
+        (sp ? '<span style="font-size:11px;color:#5A5650;width:100%">특별교육은 현장 시간 + 공통 온라인 8시간 ≥ 16시간이면 이수</span>' : '');
+      td.appendChild(box);
+      var f = function(k){ return box.querySelector('[data-f="' + k + '"]'); };
+      f('x').onclick = function(){ box.remove(); };
+      f('ok').onclick = async function(){
+        if(!f('ds').value){ say('교육일을 넣어 주세요 (종이 일지의 날짜)', 'err'); return; }
+        this.disabled = true;
+        var x = await BMAUTH.post('edu.manual', { rows: [{ no: p.no, name: p.name, dept: p.dept, type: sp ? '특별' : 'MSDS', ds: f('ds').value, hours: f('h').value, note: f('note').value.trim() }] });
+        if(!x.success || !x.added){ this.disabled = false; say((x.rows && x.rows[0] && x.rows[0].reason) || x.error || '등록 실패', 'err'); return; }
+        say(p.name + ' 님 수기 교육 이수 처리 (' + f('ds').value + ')', 'ok');
+        after(); try{ if(window.bmEduChanged) bmEduChanged(); }catch(_){}
+      };
     }; });
     host.querySelectorAll('[data-inc]').forEach(function(b){ b.onclick = async function(){
       var p = list[+b.getAttribute('data-inc')];
