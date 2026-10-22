@@ -2172,7 +2172,7 @@ function chemAudit_() {
   const law = readLaw_();
   const byCas = {};
   rows.forEach(r => { if (casCheck_(r.cas)) (byCas[r.cas] = byCas[r.cas] || []).push(r); });
-  const casIssues = rows.filter(r => r.casRaw && !/영업비밀|trade secret|비공개|자료없음|^-$/i.test(r.casRaw) && (r.casFix || !casCheck_(r.casRaw)))
+  const casIssues = rows.filter(r => r.casRaw && !/영업비밀|trade secret|비공개|자료없음|해당없음|^-$/i.test(r.casRaw) && (r.casFix || !casCheck_(r.casRaw)))
     .map(r => {
       const o = { row: r.row, product: r.product, comp: r.comp, raw: r.casRaw, fix: r.casFix, why: r.casFix ? r.casWhy : (r.casWhy || (casCheck_(r.casRaw) === false ? '검증숫자 틀림' : '형식 아님')) };
       if (!o.fix) {   // v19.6: 오타 추정 — 같은 시트에 있는 CAS 중 앞자리 하나 더하기/빼기로 맞는 것 (관리자가 확인 후 체크)
@@ -2264,7 +2264,9 @@ function chemApply_(req) {
       const fix = String(f.fix || '').trim();
       // 자동 복원값이거나, 문제 있는 칸을 관리자가 검증숫자가 맞는 CAS로 고친 경우만 (정상 CAS는 바꾸지 않음)
       const isIssue = r && (r.casFix || !casCheck_(r.casRaw));
-      if (!r || col.cas < 0 || !isIssue || !casCheck_(fix) || (f.raw !== undefined && String(f.raw) !== r.casRaw)) { skipped++; return; }
+      // v20.5: CAS가 원래 없는 성분(혼합물 · 고분자 · 식품첨가물 등)은 '자료없음 · 영업비밀 · 해당없음'으로 표시 가능
+      const marker = /^(자료없음|영업비밀|해당없음)$/.test(fix);
+      if (!r || col.cas < 0 || !isIssue || !(marker || casCheck_(fix)) || (f.raw !== undefined && String(f.raw) !== r.casRaw)) { skipped++; return; }
       sheet.getRange(f.row, col.cas + 1).setValue(fix);
       fixed++;
     });

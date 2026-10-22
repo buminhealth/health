@@ -628,8 +628,22 @@ function check(name, cond, extra) {
     return BMAUTH.post('chem.audit', { t: r.token });
   });
   check('물질 점검: 부서 계정은 거부', !denyChem.success && denyChem.status === 403, denyChem);
+  ch.appendRow(['혼합물X', 'Z사', '병리과', 'Ester Lubricant', 'N/A', '5', '', '']);
   await page.evaluate(() => { admSwitchPane('chemm'); return BMCHEM.open(); });
   check('관리자 화면: 물질 마스터 점검 표시', /CAS 번호 문제/.test(await page.textContent('#chemm-body')));
+  const chUi = await page.evaluate(async () => {
+    const inp = document.querySelector('#chemm-body [data-casin]');
+    if (!inp) return { none: true };
+    inp.value = '1334-28-1'; inp.dispatchEvent(new Event('input'));
+    const bad = document.querySelector('#chemm-body [data-casok="' + inp.getAttribute('data-casin') + '"]').textContent;
+    inp.value = '해당없음'; inp.dispatchEvent(new Event('input'));
+    const mark = document.querySelector('#chemm-body [data-casok="' + inp.getAttribute('data-casin') + '"]').textContent;
+    return { bad, mark, btn: !!document.querySelector('#chemm-body .chemm-apply2') };
+  });
+  check('물질 점검 화면: 직접 입력 즉시 검증(✕/✓) · ① 표 아래 [CAS 수정 반영] 버튼', /틀림/.test(chUi.bad) && /CAS 없음/.test(chUi.mark) && chUi.btn, chUi);
+  const apN = await page.evaluate(r => BMAUTH.post('chem.apply', { casFixes: [{ row: r, fix: '해당없음' }] }), chRow('혼합물X'));
+  const au3 = await page.evaluate(() => BMAUTH.post('chem.audit', {}));
+  check('CAS가 원래 없는 성분: "해당없음"으로 표시 → 다음 점검에서 문제 목록에서 빠짐', apN.fixed === 1 && ch.rows[chRow('혼합물X') - 1][4] === '해당없음' && !au3.casIssues.some(x => x.product === '혼합물X'), [apN, au3.casIssues.map(x => x.product)]);
 
   // 13-5. v19.7 AI MSDS 검토 (Gemini) — 키 없음 → 직접 입력 / 키 저장 → AI 추출 · 판정 근거 · 승인 → 시트 추가
   const gm = g.env.GEMINI;
