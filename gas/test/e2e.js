@@ -830,6 +830,56 @@ function check(name, cond, extra) {
   check('대상 규칙: 적용 인원 집계', est7.ruleHits[0] === 1 && est7.ruleHits[1] >= 3, est7.ruleHits);
   check('부서 이동: 병동 교육만 있는 수술실 직원 → 수술실 물질 교육 1회 필요', Q(est7, '수술이동').status === '미이수' && Q(est7, '수술이동').moved === '61병동', Q(est7, '수술이동'));
   check('부서 이동: 같은 물질 부서(61→71병동)로 옮기면 다시 안 받아도 이수', Q(est7, '칠이동').status === '이수', Q(est7, '칠이동'));
+  // v20.3 개별 포함 (규칙 제외보다 우선) · 신규입사 알림 연동 · 수기(종이) 교육 등록
+  const nhSh = g.sheets['신규입사알림'];
+  const NHH = nhSh.rows[0];
+  const nhRow = new Array(NHH.length).fill(''); nhRow[NHH.indexOf('알림ID')] = 'NH-T1'; nhRow[NHH.indexOf('사번')] = '126000031'; nhRow[NHH.indexOf('이름')] = '육간호'; nhRow[NHH.indexOf('부서')] = '61병동'; nhRow[NHH.indexOf('부서장이메일')] = 'head61@bumin.co.kr'; nhRow[NHH.indexOf('상태')] = '회신대기';
+  nhSh.rows.push(nhRow);
+  const nhSt = () => nhSh.rows.find(r => r[0] === 'NH-T1')[NHH.indexOf('상태')];
+  const incR = await page.evaluate(() => BMAUTH.post('edu.exclude', { no: '126000031', name: '육간호', dept: '61병동', include: true, reason: '인터벤션 근무' }));
+  const est9 = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
+  check('개별 포함: 규칙으로 제외된 사람 → 대상 (규칙보다 우선)', incR.success && Q(est9, '육간호').status === '미이수' && Q(est9, '육간호').included.reason === '인터벤션 근무', Q(est9, '육간호'));
+  check('개별 포함 → 신규입사 알림도 취급-교육대기 (부서 확인 창 안 뜸)', nhSt() === '취급-교육대기', nhSt());
+  const undoInc = await page.evaluate(() => BMAUTH.post('edu.exclude', { no: '126000031', name: '육간호', dept: '61병동', undo: true }));
+  const est10 = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
+  check('포함 해제 → 다시 규칙대로 제외 · 알림은 회신대기로', undoInc.success && Q(est10, '육간호').status === '제외' && nhSt() === '회신대기', [Q(est10, '육간호').status, nhSt()]);
+  const undoRule = await page.evaluate(() => BMAUTH.post('edu.exclude', { no: '126000031', name: '육간호', dept: '61병동', undo: true }));
+  check('규칙 제외를 [제외 해제]하면 안내 (대상으로 포함 쓰기)', !undoRule.success && /대상으로 포함/.test(undoRule.error), undoRule);
+  await page.evaluate(() => BMAUTH.post('edu.exclude', { no: '126000031', name: '육간호', dept: '61병동', reason: '행정 업무만' }));
+  check('개별 제외 → 신규입사 알림 미취급', nhSt() === '미취급', nhSt());
+  await page.evaluate(() => BMAUTH.post('edu.exclude', { no: '126000031', name: '육간호', dept: '61병동', undo: true }));
+  const ledN = led.rows.length;
+  const md = await page.evaluate(() => BMAUTH.post('edu.manual', { dry: true, rows: [
+    { name: '육조무', dept: '61병동', type: 'MSDS', ds: '2024.3.4', hours: '1', note: '2024 종이일지' },
+    { name: '동명가', ds: '2024-03-04' },
+    { name: '없는사람', dept: '61병동', ds: '2024-03-04' },
+    { name: '육간호', dept: '61병동', type: '특별', ds: '2024-03-04', hours: '' },
+    { no: '126000033', name: '수술이동', dept: '수술실', ds: '2099-01-01' } ] }));
+  const R = i => md.rows[i];
+  check('수기 등록 미리보기: 날짜 2024.3.4 → 2024-03-04 · 동명이인 · 못 찾음 · 특별은 시간 필수 · 미래 날짜', md.success && R(0).ok && R(0).ds === '2024-03-04' && /동명이인/.test(R(1).reason) && /못 찾음/.test(R(2).reason) && /시간/.test(R(3).reason) && /이후/.test(R(4).reason) && led.rows.length === ledN, md.rows.map(r => r.reason || r.ds));
+  const mg = await page.evaluate(() => BMAUTH.post('edu.manual', { rows: [{ name: '육조무', dept: '61병동', type: '특별', ds: '2024.3.4', de: '2024.3.5', hours: '8', note: '2024 종이일지' }] }));
+  const last = led.rows[led.rows.length - 1];
+  const est11 = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
+  check('수기 등록: 교육이력대장에 한 줄 (서명여부 = 수기(종이) 일지) → 이수', mg.added === 1 && last[10] === '육조무' && last[9] === '126000032' && /수기\(종이\) 일지 · 2024 종이일지/.test(last[12]) && last[2] === '특별안전보건교육' && last[7] === '2' && Q(est11, '육조무').status === '이수' && Q(est11, '육조무').hours === 16, [last, Q(est11, '육조무')]);
+  const mg2 = await page.evaluate(() => BMAUTH.post('edu.manual', { rows: [{ name: '육조무', dept: '61병동', type: '특별', ds: '2024-03-04', hours: '8' }] }));
+  check('수기 등록: 같은 날 같은 교육은 중복으로 건너뜀', mg2.added === 0 && /이미/.test(mg2.rows[0].reason), mg2.rows[0]);
+  const mgDeny = await page.evaluate(async () => { const r = await BMAUTH.post('login', { kind: 'dept', dept: '61병동', pin: '4321' }); return (await BMAUTH.post('edu.manual', { rows: [], t: r.token })).status; });
+  check('수기 등록은 관리자만', mgDeny === 403, mgDeny);
+  await page.evaluate(async () => { admSwitchPane('edu'); await new Promise(r => setTimeout(r, 50)); await BMEDU.board(); document.querySelector('#edu-board [data-dept="61병동"]').click(); });
+  await page.waitForFunction(() => !/계산 중/.test(document.getElementById('edu-board').textContent) && document.querySelector('#eb-people [data-pick]'), null, { timeout: 15000 });
+  const ui2 = await page.evaluate(async () => {
+    document.getElementById('eb-manual-btn').click();
+    const box = document.querySelector('#eb-people [data-pick]');
+    const inc = !!document.querySelector('#eb-people [data-inc]');
+    box.checked = true;
+    document.getElementById('mn-ds').value = '2023-05-05';
+    document.getElementById('mn-dry').click();
+    const t0 = Date.now();
+    while (Date.now() - t0 < 6000 && !/등록 가능/.test(document.getElementById('mn-sum').textContent)) await new Promise(r => setTimeout(r, 100));
+    return { sum: document.getElementById('mn-sum').textContent, go: !document.getElementById('mn-go').disabled, inc };
+  });
+  check('관리자 화면: 현황판에서 체크 → 수기 등록 미리보기 · 규칙 제외자는 [대상으로 포함] 버튼', /등록 가능 1명/.test(ui2.sum) && ui2.go && ui2.inc, ui2);
+  led.rows.splice(ledN);
   const info = await page.evaluate(() => BMAUTH.post('edu.rules', {}));
   check('규칙 화면 정보: 규칙 · 적용 인원 · 부서별 직종 · 부서 매칭', info.success && info.rules.length === 2 && info.hits[0] === 1 && info.jobs['61병동']['간호조무사'] === 1 && info.deptMap.some(m => m.raw === '진검실' && m.app === '61병동' && m.staff === 1), info.jobs);
   const msv = await page.evaluate(() => BMAUTH.post('dept.saveMap', { rows: [{ raw: '진검실', app: '71병동' }, { raw: '새부서명', app: '71병동' }] }));
