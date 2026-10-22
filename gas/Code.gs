@@ -2347,6 +2347,15 @@ function lawFlat_(v) {
   if (typeof v === 'object') return Object.keys(v).map(k => lawFlat_(v[k])).join('\n');
   return String(v);
 }
+// OC 하나를 법령 검색 1회로 시험 (성공 여부 + 사유)
+function lawTestOc_(oc) {
+  try {
+    const q = lawGetJson_('https://www.law.go.kr/DRF/lawSearch.do?OC=' + encodeURIComponent(oc) + '&target=law&type=JSON&display=1&query=' + encodeURIComponent('산업안전보건법'));
+    if (q.json && q.json.LawSearch) return { ok: true, msg: '사용 가능' };
+    const j = q.json || {};
+    return { ok: false, msg: String(j.result || '') + (j.msg ? ' ' + j.msg : '') || ('HTTP ' + q.code) };
+  } catch (e) { return { ok: false, msg: String(e.message || e).slice(0, 120) }; }
+}
 function chemLawFetch_(req) {
   const spec = LAW_BYL[req.kind];
   if (!spec) return { success: false, error: '항목을 고르세요' };
@@ -2367,7 +2376,7 @@ function chemLawFetch_(req) {
     const units = lawFindByl_(b.json, []);
     const unit = units.find(u => parseInt(String(u['별표번호']), 10) === spec.no && !/서식/.test(String(u['별표구분'] || '')));
     if (!unit) { errs.push(oc + ': 별표' + spec.no + '을 찾지 못함 (받은 별표 ' + units.length + '개)'); continue; }
-    if (ocs.length > 1) PROPS.setProperty('LAW_OC', oc);   // 되는 OC만 남김
+    if (oc !== ocs[0]) PROPS.setProperty('LAW_OC', [oc].concat(ocs.filter(x => x !== oc)).join(','));   // 되는 OC를 맨 앞으로 (지우지 않음)
     const text = lawFlat_(unit['별표내용'] !== undefined ? unit['별표내용'] : unit);
     return { success: true, kind: req.kind, title: String(unit['별표제목'] || ''), law: spec.law, no: spec.no,
              enforce: String(hit['시행일자'] || ''), value: spec.value, src: spec.src + (hit['시행일자'] ? ' · 시행 ' + hit['시행일자'] : ''),
@@ -3408,9 +3417,12 @@ function chemOp_(req, s) {
     case 'chem.lawCycle': return chemLawCycle_(req);
     case 'law.status': return { success: true, hasOc: !!PROPS.getProperty('LAW_OC'), oc: lawOcMask_() };
     case 'law.setOc': {
-      const v = String(req.oc || '').split(/[,\s]+/).map(x => x.trim()).filter(x => /^[A-Za-z0-9_.@-]{2,60}$/.test(x)).join(',');
-      if (v) PROPS.setProperty('LAW_OC', v); else PROPS.deleteProperty('LAW_OC');
-      return { success: true, hasOc: !!v, oc: lawOcMask_() };
+      // v20.7: 저장할 때 OC마다 바로 시험해 결과를 보여 줌 · 되는 OC를 앞에 두고 안 되는 것도 지우지 않음 (말없이 바뀌지 않게)
+      const list = String(req.oc || '').split(/[,\s]+/).map(x => x.trim()).filter(x => /^[A-Za-z0-9_.@-]{2,60}$/.test(x));
+      const tests = list.map(oc => Object.assign({ mask: oc.slice(0, 3) + '*'.repeat(Math.max(1, oc.length - 3)) }, lawTestOc_(oc)));
+      const ordered = list.filter((oc, i) => tests[i].ok).concat(list.filter((oc, i) => !tests[i].ok));
+      if (ordered.length) PROPS.setProperty('LAW_OC', ordered.join(',')); else PROPS.deleteProperty('LAW_OC');
+      return { success: true, hasOc: ordered.length > 0, oc: lawOcMask_(), tests: tests.map(t => ({ oc: t.mask, ok: t.ok, msg: t.msg })) };
     }
   }
   return { success: false, error: 'unknown op: ' + req.op };
