@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v20.5 (2026-10-22)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v20.6 (2026-10-22)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -173,7 +173,7 @@ function doPost(e) {
       case 'emp.status': case 'emp.sync': case 'emp.merge': case 'hr.fetch':
       case 'nh.list': case 'nh.answer': case 'nh.resend': case 'nh.run':
                         result = staffOp_(req, s); break;
-      case 'chem.audit': case 'chem.seedLaw': case 'chem.apply': case 'chem.lawImport':
+      case 'chem.audit': case 'chem.seedLaw': case 'chem.apply': case 'chem.lawImport': case 'chem.lawFetch': case 'law.status': case 'law.setOc':
                         result = chemOp_(req, s); break;
       case 'ai.status': case 'ai.setKey': case 'ai.list': case 'ai.analyze': case 'ai.judge': case 'ai.apply': case 'ai.products': case 'ai.compare':
                         result = aiOp_(req, s); break;
@@ -2298,6 +2298,71 @@ function chemApply_(req) {
 // 법령대조표: 고시 목록 붙여넣기 (별표 표를 복사해 붙이면 줄마다 CAS를 찾아 해당 항목에 기록)
 //  kind: hc 특수건강진단 · we 작업환경측정 · target 관리대상 · special 특별관리 / value: 주기 또는 '해당'
 //  이미 값이 있는 칸은 덮어쓰지 않음 (다르면 '다름'으로 알려줌)
+/* v20.6 국가법령정보센터 OPEN API (DRF) — 별표 원문 불러오기
+   · OC(API 인증키)는 스크립트 속성 LAW_OC에만 저장 (관리자 화면 설정 또는 물질 마스터 점검 ⑤). 쉼표로 여러 개면 되는 것을 찾아 그것만 남김
+   · 불러온 별표 글은 화면 ⑤ 칸에 채워 보여 주고, 관리자가 확인 후 [법령대조표에 넣기] (자동 반영 안 함) */
+const LAW_BYL = {
+  hc:      { law: '산업안전보건법 시행규칙', no: 22, value: '12개월', src: '산업안전보건법 시행규칙 별표22 (특수건강진단 대상 유해인자)' },
+  we:      { law: '산업안전보건법 시행규칙', no: 21, value: '6개월',  src: '산업안전보건법 시행규칙 별표21 (작업환경측정 대상 유해인자)' },
+  target:  { law: '산업안전보건기준에 관한 규칙', no: 12, value: '해당', src: '안전보건규칙 별표12 (관리대상 유해물질)' },
+  special: { law: '산업안전보건기준에 관한 규칙', no: 12, value: '해당', src: '안전보건규칙 별표12 (특별관리물질 표시 항목)' },
+  cycle:   { law: '산업안전보건법 시행규칙', no: 23, value: '', src: '산업안전보건법 시행규칙 별표23 (특수건강진단 시기 · 주기)' },
+};
+function lawOcMask_() {
+  const v = PROPS.getProperty('LAW_OC') || '';
+  return v.split(',').filter(Boolean).map(x => x.slice(0, 3) + '*'.repeat(Math.max(1, x.length - 3))).join(', ');
+}
+function lawGetJson_(url) {
+  const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { Referer: 'https://buminhealth.github.io/' } });
+  const t = res.getContentText() || '';
+  let j = null;
+  try { j = JSON.parse(t); } catch (_) {}
+  return { code: res.getResponseCode(), json: j, text: t };
+}
+// JSON 어디에 있든 '별표번호'가 있는 묶음을 모두 찾음 (API 응답 구조가 바뀌어도 동작하도록)
+function lawFindByl_(node, out) {
+  if (!node || typeof node !== 'object') return out;
+  if (Array.isArray(node)) { node.forEach(n => lawFindByl_(n, out)); return out; }
+  if (node['별표번호'] !== undefined) out.push(node);
+  Object.keys(node).forEach(k => { if (typeof node[k] === 'object') lawFindByl_(node[k], out); });
+  return out;
+}
+function lawFlat_(v) {
+  if (v == null) return '';
+  if (typeof v === 'string') return v;
+  if (Array.isArray(v)) return v.map(lawFlat_).join('\n');
+  if (typeof v === 'object') return Object.keys(v).map(k => lawFlat_(v[k])).join('\n');
+  return String(v);
+}
+function chemLawFetch_(req) {
+  const spec = LAW_BYL[req.kind];
+  if (!spec) return { success: false, error: '항목을 고르세요' };
+  const ocs = String(PROPS.getProperty('LAW_OC') || '').split(',').filter(Boolean);
+  if (!ocs.length) return { success: false, noOc: true, error: '국가법령정보 OPEN API 인증키(OC)가 없습니다. 관리자 모드 → 설정에서 OC를 저장하세요.' };
+  const base = 'https://www.law.go.kr/DRF/';
+  const errs = [];
+  for (const oc of ocs) {
+    const q = lawGetJson_(base + 'lawSearch.do?OC=' + encodeURIComponent(oc) + '&target=law&type=JSON&display=20&query=' + encodeURIComponent(spec.law));
+    if (!q.json) { errs.push(oc + ': ' + (q.code !== 200 ? 'HTTP ' + q.code : '') + ' ' + q.text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 120)); continue; }
+    if (!q.json.LawSearch) { errs.push(oc + ': ' + JSON.stringify(q.json).slice(0, 120)); continue; }   // 인증 실패 등 (예: {"result":"사용자 정보 검증에 실패…"})
+    const items = [].concat(((q.json.LawSearch || {}).law) || []);
+    const hit = items.find(x => String(x['법령명한글'] || '').replace(/\s/g, '') === spec.law.replace(/\s/g, '')) || items[0];
+    if (!hit) { errs.push(oc + ': 법령 검색 결과 없음'); continue; }
+    const mst = hit['법령일련번호'] || hit.MST || '';
+    const b = lawGetJson_(base + 'lawService.do?OC=' + encodeURIComponent(oc) + '&target=law&type=JSON&MST=' + encodeURIComponent(mst));
+    if (!b.json) { errs.push(oc + ': 본문 ' + (b.code !== 200 ? 'HTTP ' + b.code : '') + ' ' + b.text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 120)); continue; }
+    const units = lawFindByl_(b.json, []);
+    const unit = units.find(u => parseInt(String(u['별표번호']), 10) === spec.no && !/서식/.test(String(u['별표구분'] || '')));
+    if (!unit) { errs.push(oc + ': 별표' + spec.no + '을 찾지 못함 (받은 별표 ' + units.length + '개)'); continue; }
+    if (ocs.length > 1) PROPS.setProperty('LAW_OC', oc);   // 되는 OC만 남김
+    const text = lawFlat_(unit['별표내용'] !== undefined ? unit['별표내용'] : unit);
+    return { success: true, kind: req.kind, title: String(unit['별표제목'] || ''), law: spec.law, no: spec.no,
+             enforce: String(hit['시행일자'] || ''), value: spec.value, src: spec.src + (hit['시행일자'] ? ' · 시행 ' + hit['시행일자'] : ''),
+             text: text, casCount: (text.match(/\b\d{2,7}-\d{2}-\d\b/g) || []).length };
+  }
+  return { success: false, error: '국가법령정보 API 호출 실패 — ' + errs.join(' / ') + ' (OC 값 · 승인 여부 · 등록한 도메인/IP를 확인하세요)' };
+}
+
 const NOT_TARGET_RE = /^(미대상|비대상|해당없음|대상아님|대상 아님|X|x|-)$/;
 function chemLawImport_(req) {
   const KIND = { hc: 2, we: 3, target: 4, special: 5 };
@@ -3285,6 +3350,13 @@ function chemOp_(req, s) {
     case 'chem.seedLaw': return chemSeedLaw_();
     case 'chem.apply': return chemApply_(req);
     case 'chem.lawImport': return chemLawImport_(req);
+    case 'chem.lawFetch': return chemLawFetch_(req);
+    case 'law.status': return { success: true, hasOc: !!PROPS.getProperty('LAW_OC'), oc: lawOcMask_() };
+    case 'law.setOc': {
+      const v = String(req.oc || '').split(/[,\s]+/).map(x => x.trim()).filter(x => /^[A-Za-z0-9_.@-]{2,60}$/.test(x)).join(',');
+      if (v) PROPS.setProperty('LAW_OC', v); else PROPS.deleteProperty('LAW_OC');
+      return { success: true, hasOc: !!v, oc: lawOcMask_() };
+    }
   }
   return { success: false, error: 'unknown op: ' + req.op };
 }

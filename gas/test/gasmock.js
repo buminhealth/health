@@ -85,6 +85,11 @@ function makeEnv() {
     // 가짜 Firebase: signInWithPassword + Firestore 목록 (FIREBASE.users / FIREBASE.docs 로 데이터 지정)
     FIREBASE: { users: {}, docs: [], calls: [] },
     GEMINI: { status: 200, reply: {}, calls: [] },
+    LAW: { okOc: 'bumin3131', calls: [], byl: {
+      '100': [
+        { '별표번호': '0022', '별표구분': '별표', '별표제목': '특수건강진단 대상 유해인자(제201조 관련)', '별표내용': [['1. 화학적 인자', '가. 유기화합물', '1) 가솔린(Gasoline; 8006-61-9)', '2) 글루타르알데히드(Glutaraldehyde; 111-30-8)', '라. 산 및 알칼리류', '1) 염화수소(Hydrogen chloride; 7647-01-0)']] },
+        { '별표번호': '0023', '별표구분': '별표', '별표제목': '특수건강진단의 시기 및 주기(제202조 관련)', '별표내용': [['N,N-디메틸아세트아미드 … 6개월', '광물성 분진 … 24개월', '그 밖의 유해인자 … 12개월']] },
+        { '별표번호': '0022', '별표구분': '서식', '별표제목': '서식 22', '별표내용': 'x' }] } },
     UrlFetchApp: {
       fetch(u, opt) {
         const fb = this.__fb;
@@ -97,6 +102,18 @@ function makeEnv() {
         }
         if (u === 'https://bumin-leave.web.app/__/firebase/init.json') {
           return resp(200, { apiKey: 'AIzaFromSite', projectId: 'bumin-leave', authDomain: 'bumin-leave.firebaseapp.com' });
+        }
+        // 가짜 국가법령정보 OPEN API (DRF): LAW.okOc 인 OC만 통과
+        if (u.startsWith('https://www.law.go.kr/DRF/')) {
+          const lw = env.LAW; const oc = decodeURIComponent((u.match(/OC=([^&]+)/) || [])[1] || '');
+          lw.calls.push(u);
+          if (oc !== lw.okOc) return resp(200, { result: '사용자 정보 검증에 실패하였습니다.' });
+          if (u.indexOf('lawSearch.do') >= 0) {
+            const q = decodeURIComponent((u.match(/query=([^&]+)/) || [])[1] || '');
+            return resp(200, { LawSearch: { law: [{ '법령명한글': q, '법령일련번호': q.indexOf('기준') >= 0 ? '200' : '100', '시행일자': '20250101' }] } });
+          }
+          const mst = (u.match(/MST=(\d+)/) || [])[1];
+          return resp(200, { '법령': { '별표': { '별표단위': (lw.byl[mst] || []) } } });
         }
         // 가짜 Gemini: GEMINI.status / GEMINI.reply 로 응답 지정, 받은 요청은 GEMINI.calls
         if (u.startsWith('https://generativelanguage.googleapis.com/v1beta/models/')) {

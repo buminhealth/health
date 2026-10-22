@@ -40,6 +40,8 @@
     - 수기 기록 삭제: 현황판 [수기 기록 삭제] · [선택 직원 수기 기록 삭제] — 수기 줄만 (앱 일지는 삭제 안 됨), '교육이력_삭제' 시트에 백업 + 사유
     - 물질 마스터 점검: ① CAS 직접 입력 즉시 검증(✓ 검증숫자 맞음 / ✕ 틀림), ① · ② 표 아래 [반영] 버튼, CAS가 원래 없는 성분은
       '자료없음 · 영업비밀 · 해당없음'으로 표시 가능 (서버 v20.5) → 다음 점검부터 문제 목록에서 빠짐
+    - 국가법령정보 OPEN API (서버 v20.6): 물질 마스터 점검 ⑤ [법령에서 불러오기] — 시행규칙 별표22(특검)·21(작업측정), 안전보건규칙 별표12 원문을
+      칸에 채움(확인 후 [법령대조표에 넣기]), [별표23(주기) 보기], OC는 설정 화면에서 서버에만 저장(여러 개면 되는 것만 남김)
     - 법령대조표: 칸에 '미대상'이면 ④에서 제안하지 않음(다른 제품 판정으로도), 시트에 주기가 적힌 성분은 ③ 아래 따로 표시,
       ⑤에 앱 ④ 목록을 붙여넣으면 거부(고시 원문만) — 2026-10-22 수산화나트륨 12개월 오기록 정정
     - 서버 v20.5 인사 사이트(Firebase) 읽기 줄이기: 매일 확인은 조건 조회(신규입사 · 최근 퇴사 · 현재 휴직만, 하루 약 50~100건 → 전체의 약 1/15),
@@ -3986,11 +3988,46 @@ input.apv-in[type=text]{width:110px}
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">' +
         '<select id="chemm-kind" style="padding:6px 8px;border:1px solid #C6C3BB;border-radius:4px;font:inherit"><option value="hc">특수건강진단 (주기)</option><option value="we">작업환경측정 (주기)</option><option value="target">관리대상 유해물질</option><option value="special">특별관리물질</option></select>' +
         '<input id="chemm-val" value="12개월" placeholder="주기 (예: 12개월)" style="width:130px;padding:6px 8px;border:1px solid #C6C3BB;border-radius:4px;font:inherit">' +
-        '<input id="chemm-src" value="시행규칙 별표22·23" placeholder="출처" style="flex:1;min-width:180px;padding:6px 8px;border:1px solid #C6C3BB;border-radius:4px;font:inherit"></div>' +
+        '<input id="chemm-src" value="시행규칙 별표22·23" placeholder="출처" style="flex:1;min-width:180px;padding:6px 8px;border:1px solid #C6C3BB;border-radius:4px;font:inherit">' +
+        '<button type="button" id="chemm-lawfetch" style="' + BTN + ';border-color:#4A8F2C;color:#2D581B" title="국가법령정보센터 OPEN API로 고른 항목의 별표 원문을 아래 칸에 불러옴">법령에서 불러오기</button>' +
+        '<button type="button" id="chemm-cycle" style="' + BTN + '" title="특수건강진단 주기(별표23) 원문 보기 — 6개월 · 24개월 물질 확인용">별표23(주기) 보기</button></div>' +
+      '<div id="chemm-law-msg" style="font-size:12px;margin-bottom:6px"></div>' +
       '<textarea id="chemm-paste" rows="6" placeholder="여기에 별표 표를 붙여넣기 (CAS 번호가 들어 있는 줄만 읽음)" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #C6C3BB;border-radius:4px;font:inherit;font-size:13px"></textarea>' +
       '<div style="text-align:right;margin-top:8px"><button id="chemm-import" style="' + BTN_P + '">법령대조표에 넣기</button></div>' +
       '<div id="chemm-import-msg" style="font-size:12px;margin-top:6px"></div></div>';
     var DEF = { hc: ['12개월', '시행규칙 별표22·23'], we: ['6개월', '시행규칙 별표21'], target: ['해당', '안전보건규칙 별표12'], special: ['해당', '안전보건규칙 별표12 (특별관리)'] };
+    // v20.6: 국가법령정보 OPEN API — 별표 원문을 칸에 채우고, 확인 후 [법령대조표에 넣기]
+    var lawMsg = function(h){ document.getElementById('chemm-law-msg').innerHTML = h; };
+    var ocForm = function(){
+      lawMsg('<div style="padding:8px 10px;border:1px solid #F1C4BE;background:#FBE5E2;border-radius:6px">국가법령정보 OPEN API 인증키(OC)가 없습니다. ' +
+        '<input id="chemm-oc" placeholder="OC 값 (여러 개면 쉼표)" style="padding:4px 6px;border:1px solid #C6C3BB;border-radius:4px;font:inherit;width:200px"> ' +
+        '<button type="button" id="chemm-oc-save" style="' + BTN + '">저장</button> <span style="color:#5A5650">서버에만 저장 · 화면/시트에 남지 않음</span></div>');
+      document.getElementById('chemm-oc-save').onclick = async function(){
+        var v = document.getElementById('chemm-oc').value.trim(); if(!v) return;
+        var x = await BMAUTH.post('law.setOc', { oc: v });
+        if(x.success){ say('OC 저장 (' + x.oc + ')', 'ok'); lawMsg(''); document.getElementById('chemm-lawfetch').click(); } else say(x.error || '저장 실패', 'err');
+      };
+    };
+    var lawFetch = async function(kind, show){
+      lawMsg('<span style="color:#5A5650">국가법령정보센터에서 불러오는 중…</span>');
+      var x = await BMAUTH.post('chem.lawFetch', { kind: kind });
+      if(!x.success){ if(x.noOc) ocForm(); else lawMsg('<span style="color:#A3302A">' + esc(/unknown op/.test(x.error || '') ? '서버(Code.gs)를 v20.6 이상으로 배포하면 사용할 수 있습니다' : (x.error || '실패')) + '</span>'); return null; }
+      return x;
+    };
+    document.getElementById('chemm-lawfetch').onclick = async function(){
+      var kind = document.getElementById('chemm-kind').value;
+      var x = await lawFetch(kind); if(!x) return;
+      document.getElementById('chemm-paste').value = x.text;
+      document.getElementById('chemm-val').value = x.value;
+      document.getElementById('chemm-src').value = x.src;
+      lawMsg('<span style="color:#2D581B"><b>' + esc(x.law) + ' 별표' + x.no + '</b> ' + esc(x.title) + (x.enforce ? ' (시행 ' + esc(x.enforce) + ')' : '') + ' — CAS ' + x.casCount + '개.</span> ' +
+        '<span style="color:#5A5650">내용을 확인한 뒤 [법령대조표에 넣기]를 누르세요.' + (kind === 'hc' ? ' 모두 12개월로 들어가니, 주기가 다른 물질(6개월 · 24개월)은 [별표23(주기) 보기]로 확인해 시트에서 고치거나 따로 넣으세요.' : '') + '</span>');
+    };
+    document.getElementById('chemm-cycle').onclick = async function(){
+      var x = await lawFetch('cycle'); if(!x) return;
+      lawMsg('<details open style="border:1px solid #DDDBD5;border-radius:6px;padding:8px 10px;background:#FAFAF8"><summary style="cursor:pointer;font-weight:700">' + esc(x.law) + ' 별표23 ' + esc(x.title) + '</summary>' +
+        '<pre style="white-space:pre-wrap;font:inherit;font-size:12px;max-height:320px;overflow:auto;margin:6px 0 0">' + esc(x.text) + '</pre></details>');
+    };
     document.getElementById('chemm-kind').onchange = function(){
       var d = DEF[this.value]; document.getElementById('chemm-val').value = d[0]; document.getElementById('chemm-src').value = d[1];
     };
@@ -4496,7 +4533,7 @@ input.apv-in[type=text]{width:110px}
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v20.5';
+  var SERVER_EXPECT = 'v20.6';
   var esc = function(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
   var recs = function(k){ try{ return JSON.parse(localStorage.getItem(k) || '[]') || []; }catch(_){ return []; } };
   var post = function(op, b){ return window.BMAUTH ? BMAUTH.post(op, b || {}).catch(function(e){ return { success: false, error: e.message }; }) : Promise.resolve({ success: false, error: '로그인 필요' }); };
@@ -4655,17 +4692,31 @@ input.apv-in[type=text]{width:110px}
       '<section class="cfg-c"><h4>AI (Gemini) 키</h4><dl><dt>상태</dt><dd id="cfg-ai">확인 중…</dd><dt>모델</dt><dd id="cfg-ai-m">-</dd></dl>' +
         '<p>키는 화면에 저장하지 않고 서버(스크립트 속성)에만 저장됩니다. [AI MSDS 검토] 화면 위쪽 칸이나 시트 메뉴 <b>[보건관리 시스템 → ⑥ Gemini AI 키 저장]</b>에서 넣으세요. 모델은 관리자설정 시트의 \'AI모델\'로 바꿀 수 있습니다.</p>' +
         '<button type="button" class="cfg-b" data-c="ai">AI MSDS 검토 열기</button></section>' +
+      '<section class="cfg-c"><h4>국가법령정보 OPEN API</h4><dl><dt>인증키(OC)</dt><dd id="cfg-law">확인 중…</dd></dl>' +
+        '<p>물질 마스터 점검 ⑤ [법령에서 불러오기]에 씁니다. 서버(스크립트 속성)에만 저장. 여러 개를 쉼표로 넣으면 되는 것을 찾아 남깁니다.</p>' +
+        '<span style="display:flex;gap:6px;flex-wrap:wrap"><input id="cfg-law-oc" placeholder="OC 값" style="height:34px;padding:0 8px;border:1px solid #C6C3BB;border-radius:4px;font:inherit;width:220px"><button type="button" class="cfg-b" data-c="lawoc">저장</button></span></section>' +
       '<section class="cfg-c"><h4>이 PC 저장 공간 · 계정</h4><dl><dt>사용량</dt><dd>' + Math.round(used / 1024).toLocaleString() + 'KB / 약 5MB</dd>' +
         '<dt>파일 저장소</dt><dd>구글 드라이브 (서버 경유) · 옛 파일은 ' + esc(C.ghRepo || D.ghRepo || 'buminhealth/health') + '</dd></dl>' +
         '<span style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="cfg-b" data-c="storage">저장 공간 안내</button><button type="button" class="cfg-b" data-c="sheet">구글 시트 열기</button><button type="button" class="cfg-b" data-c="logout" style="color:#A3302A">로그아웃</button></span></section>' +
     '</div>';
-    var act = { open: function(){ openCfg(); }, ai: function(){ admSwitchPane('ai'); BMAI.open(); }, storage: function(){ apvShowStorageGuide(); },
+    var act = { lawoc: async function(){
+                  var v = document.getElementById('cfg-law-oc').value.trim();
+                  var x = await post('law.setOc', { oc: v });
+                  document.getElementById('cfg-law').innerHTML = x.success ? (x.hasOc ? '<span class="cfg-ok">저장됨</span> ' + esc(x.oc) : '<span class="cfg-bad">없음</span>') : '<span class="cfg-bad">' + esc(x.error || '실패') + '</span>';
+                  document.getElementById('cfg-law-oc').value = '';
+                },
+                open: function(){ openCfg(); }, ai: function(){ admSwitchPane('ai'); BMAI.open(); }, storage: function(){ apvShowStorageGuide(); },
                 sheet: function(){ window.open('https://docs.google.com/spreadsheets/d/1kFRIyXZX8aTgQR2w5MC0Ty66B9ltKrWj3Wz96D0mKIs/edit', '_blank'); }, logout: function(){ adminLogout(); } };
     host.querySelectorAll('[data-c]').forEach(function(b){ b.onclick = function(){ try{ act[b.getAttribute('data-c')](); }catch(e){ console.warn(e); } }; });
     post('whoami', {}).then(function(r){
       var el = document.getElementById('cfg-ver'); if(!el) return;
       var sv = r && r.serverVersion;
       el.innerHTML = sv ? esc(sv) + (sv < SERVER_EXPECT ? ' <span class="cfg-bad">→ ' + SERVER_EXPECT + ' 배포 필요</span>' : ' <span class="cfg-ok">최신</span>') : '<span class="cfg-bad">확인 실패 (이전 버전이거나 연결 안 됨)</span>';
+    });
+    post('law.status', {}).then(function(r){
+      var el = document.getElementById('cfg-law'); if(!el) return;
+      el.innerHTML = !r.success ? '<span class="cfg-bad">' + esc(/unknown op/.test(r.error || '') ? '서버 v20.6 이상 필요' : (r.error || '확인 실패')) + '</span>'
+        : (r.hasOc ? '<span class="cfg-ok">저장됨</span> ' + esc(r.oc) : '<span class="cfg-bad">없음</span>');
     });
     post('ai.status', {}).then(function(r){
       var el = document.getElementById('cfg-ai'), m = document.getElementById('cfg-ai-m'); if(!el) return;

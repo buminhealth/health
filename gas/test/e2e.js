@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v20\.5/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v20\.6/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
   const other = await page.evaluate(async () => {
@@ -504,7 +504,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v20.5'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v20.6'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -631,6 +631,26 @@ function check(name, cond, extra) {
   const au4 = await page.evaluate(() => BMAUTH.post('chem.audit', {}));
   check("법령대조표 '미대상' → ④ 제안 안 함 · 시트에 주기가 적힌 성분은 따로 표시", !au4.suggestions.some(x => x.cas === '67-56-1' && x.field === 'hc') && au4.lawMismatch.some(x => x.cas === '67-56-1' && x.field === 'hc'), [au4.lawMismatch]);
   lawRow[2] = keepHc;
+  // v20.6 국가법령정보 OPEN API: OC 없으면 안내 · 여러 OC 중 되는 것만 남김 · 별표22 원문 → 칸에 채움 (반영은 관리자가)
+  const lf0 = await page.evaluate(() => BMAUTH.post('chem.lawFetch', { kind: 'hc' }));
+  check('법령 불러오기: OC 없으면 설정 안내', !lf0.success && lf0.noOc, lf0);
+  const so = await page.evaluate(() => BMAUTH.post('law.setOc', { oc: 'clover8477, bumin3131' }));
+  const lf1 = await page.evaluate(() => BMAUTH.post('chem.lawFetch', { kind: 'hc' }));
+  check('법령 불러오기: 별표22 원문(CAS 3개) · 서식 22는 무시 · 되는 OC(bumin3131)만 남김 · OC는 가려서 표시', so.success && /^clo\*+, bum\*+$/.test(so.oc) && lf1.success && lf1.no === 22 && lf1.casCount === 3 && /7647-01-0/.test(lf1.text) && lf1.value === '12개월' && /별표22/.test(lf1.src) && g.props.LAW_OC === 'bumin3131', [so.oc, lf1, g.props.LAW_OC]);
+  const lf2 = await page.evaluate(() => BMAUTH.post('chem.lawFetch', { kind: 'cycle' }));
+  check('법령 불러오기: 별표23(주기) 보기', lf2.success && /24개월/.test(lf2.text), lf2.title);
+  g.props.LAW_OC = 'wrongoc';
+  const lf3 = await page.evaluate(() => BMAUTH.post('chem.lawFetch', { kind: 'hc' }));
+  check('법령 불러오기: 인증 실패면 사유 안내', !lf3.success && /검증에 실패/.test(lf3.error), lf3.error);
+  g.props.LAW_OC = 'bumin3131';
+  const lawUi = await page.evaluate(async () => {
+    admSwitchPane('chemm'); await BMCHEM.open();
+    document.getElementById('chemm-lawfetch').click();
+    const t0 = Date.now();
+    while (Date.now() - t0 < 6000 && !document.getElementById('chemm-paste').value) await new Promise(r => setTimeout(r, 100));
+    return { text: document.getElementById('chemm-paste').value, src: document.getElementById('chemm-src').value, msg: document.getElementById('chemm-law-msg').textContent };
+  });
+  check('물질 점검 ⑤ [법령에서 불러오기]: 원문을 칸에 채우고 출처 · 안내 표시 (자동 반영 안 함)', /111-30-8/.test(lawUi.text) && /별표22/.test(lawUi.src) && /법령대조표에 넣기/.test(lawUi.msg), lawUi);
   const denyChem = await page.evaluate(async () => {
     const r = await BMAUTH.post('login', { kind: 'dept', dept: '61병동', pin: '4321' });
     return BMAUTH.post('chem.audit', { t: r.token });
