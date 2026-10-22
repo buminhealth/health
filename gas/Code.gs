@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v20.6 (2026-10-22)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v20.7 (2026-10-22)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -173,7 +173,7 @@ function doPost(e) {
       case 'emp.status': case 'emp.sync': case 'emp.merge': case 'hr.fetch':
       case 'nh.list': case 'nh.answer': case 'nh.resend': case 'nh.run':
                         result = staffOp_(req, s); break;
-      case 'chem.audit': case 'chem.seedLaw': case 'chem.apply': case 'chem.lawImport': case 'chem.lawFetch': case 'law.status': case 'law.setOc':
+      case 'chem.audit': case 'chem.seedLaw': case 'chem.apply': case 'chem.lawImport': case 'chem.lawFetch': case 'chem.lawCycle': case 'law.status': case 'law.setOc':
                         result = chemOp_(req, s); break;
       case 'ai.status': case 'ai.setKey': case 'ai.list': case 'ai.analyze': case 'ai.judge': case 'ai.apply': case 'ai.products': case 'ai.compare':
                         result = aiOp_(req, s); break;
@@ -2363,6 +2363,47 @@ function chemLawFetch_(req) {
   return { success: false, error: '국가법령정보 API 호출 실패 — ' + errs.join(' / ') + ' (OC 값 · 승인 여부 · 등록한 도메인/IP를 확인하세요)' };
 }
 
+// v20.7 별표23 주기 자동 반영: 별표22를 넣으면 모두 12개월 → 6개월 물질만 골라 고침 (별표23 원문으로 이름 확인)
+//  · 24개월(광물성 분진 · 나무 분진 · 소음)은 CAS가 없는 유해인자라 자동 반영하지 않고 목록만 알려줌
+const LAW_CYCLE6 = [
+  { cas: '127-19-5', name: 'N,N-디메틸아세트아미드' }, { cas: '68-12-2', name: '디메틸포름아미드' }, { cas: '71-43-2', name: '벤젠' },
+  { cas: '79-34-5', name: '1,1,2,2-테트라클로로에탄' }, { cas: '56-23-5', name: '사염화탄소' }, { cas: '107-13-1', name: '아크릴로니트릴' },
+  { cas: '75-01-4', name: '염화비닐' }];
+function chemLawCycle_(req) {
+  const norm = v => String(v || '').replace(/[\s,·\-()]/g, '');
+  const f = chemLawFetch_({ kind: 'cycle' });
+  const txt = f.success ? norm(f.text) : '';
+  const list = LAW_CYCLE6.map(x => Object.assign({ found: !f.success || txt.indexOf(norm(x.name)) >= 0 }, x));
+  const sh = lawSheet_();
+  const last = sh.getLastRow();
+  const cur = last >= 2 ? sh.getRange(2, 1, last - 1, LAW_HEADER.length).getDisplayValues() : [];
+  const at = {};
+  cur.forEach((r, i) => { if (String(r[0]).trim()) at[String(r[0]).trim()] = i; });
+  const src = '산업안전보건법 시행규칙 별표23' + (f.success && f.enforce ? ' · 시행 ' + f.enforce : '');
+  const today = todayKst_();
+  const changes = [], skip = [], added = [];
+  list.forEach(x => {
+    if (!x.found) { skip.push(x.name + ' (별표23 원문에서 이름을 찾지 못함 — 법령 확인)'); return; }
+    if (at[x.cas] === undefined) {
+      const row = [x.cas, x.name, '6개월', '', '', '', src, today, '별표23 주기'];
+      cur.push(row); at[x.cas] = cur.length - 1; added.push(x.name + ' ' + x.cas); return;
+    }
+    const row = cur[at[x.cas]], old = String(row[2] || '').trim();
+    if (old === '6개월') return;
+    if (old && old !== '12개월') { skip.push(x.name + ' (지금 ' + old + ' — 직접 확인)'); return; }
+    changes.push(x.name + ' ' + x.cas + ' : ' + (old || '빈칸') + ' → 6개월');
+    row[2] = '6개월'; row[7] = today;
+    if (String(row[6] || '').indexOf('별표23') < 0) row[6] = (row[6] ? row[6] + ' · ' : '') + src;
+  });
+  const dust = cur.filter(r => /분진|소음/.test(String(r[1])) && String(r[2]).trim() !== '24개월').map(r => r[1] + ' ' + r[0] + ' (지금 ' + (r[2] || '빈칸') + ')');
+  if (!req.dry && cur.length && (changes.length || added.length)) {
+    sh.getRange('A:A').setNumberFormat('@');
+    sh.getRange(2, 1, cur.length, LAW_HEADER.length).setValues(cur.map(r => r.map(safeCell_)));
+  }
+  return { success: true, dry: !!req.dry, checked: f.success, lawError: f.success ? '' : (f.error || ''), changes: changes, added: added, skip: skip, dust: dust.slice(0, 30),
+           note24: '24개월: 광물성 분진 · 나무 분진 · 소음 및 충격소음 (CAS 없음 — 해당 제품은 chemicals 시트에서 직접 24개월로)' };
+}
+
 const NOT_TARGET_RE = /^(미대상|비대상|해당없음|대상아님|대상 아님|X|x|-)$/;
 function chemLawImport_(req) {
   const KIND = { hc: 2, we: 3, target: 4, special: 5 };
@@ -3351,6 +3392,7 @@ function chemOp_(req, s) {
     case 'chem.apply': return chemApply_(req);
     case 'chem.lawImport': return chemLawImport_(req);
     case 'chem.lawFetch': return chemLawFetch_(req);
+    case 'chem.lawCycle': return chemLawCycle_(req);
     case 'law.status': return { success: true, hasOc: !!PROPS.getProperty('LAW_OC'), oc: lawOcMask_() };
     case 'law.setOc': {
       const v = String(req.oc || '').split(/[,\s]+/).map(x => x.trim()).filter(x => /^[A-Za-z0-9_.@-]{2,60}$/.test(x)).join(',');
