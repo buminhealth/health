@@ -2582,6 +2582,33 @@ function ruleMatch_(r, e) {
   return !jobs.length || jobs.some(j => pos.indexOf(j) >= 0);
 }
 
+/* v20.3: 교육이력대장 한 줄이 '재직 직원 누구의 기록인지' 정함 (사번만 믿지 않음)
+   ① 사번 주인이 같은 이름 · 같은 부서 → 그 사람
+   ② 기록 부서(괄호 · 띄어쓰기 무시, 부서매핑 반영)에 같은 이름 재직자가 한 명 → 그 사람
+      (일지 작성 때 동명이인 사번을 잘못 고름 · 재입사로 사번 바뀜 · 사번 빈칸 · '51병동(신관)' 같은 부서 표기)
+   ③ 사번 주인이 같은 이름 → 그 사람 (부서를 옮긴 경우 — 부서 이동 판정은 covers가 함)
+   그 외(다른 부서 동명이인 · 퇴사자 사번)는 아무에게도 붙이지 않음 */
+const baseDept_ = d => normDept_(deptAlias_(d)).replace(/\(.*\)$/, '');
+function ledgerOwners_(recs, emps) {
+  const valid = no => /^\d{6,}$/.test(String(no || ''));
+  const byNo = {}, byNameDept = {};
+  emps.forEach(e => {
+    if (valid(e.empNo)) byNo[e.empNo] = e;
+    const k = e.name + '|' + baseDept_(e.dept);
+    (byNameDept[k] = byNameDept[k] || []).push(e);
+  });
+  const out = new Map();
+  const give = (e, r) => { if (!out.has(e)) out.set(e, []); out.get(e).push(r); };
+  recs.forEach(r => {
+    const byN = valid(r.no) ? byNo[r.no] : null;
+    if (byN && byN.name === r.name && baseDept_(byN.dept) === baseDept_(r.dept)) return give(byN, r);
+    const same = byNameDept[r.name + '|' + baseDept_(r.dept)] || [];
+    if (same.length === 1) return give(same[0], r);
+    if (byN && byN.name === r.name) return give(byN, r);
+  });
+  return out;
+}
+
 function eduStatus_(s) {
   const today = todayKst_();
   const map = handlingDepts_();
@@ -2598,23 +2625,20 @@ function eduStatus_(s) {
   };
   const excl = exclMap_();
   const recs = ledgerRows_();
-  const byNo = {}, byName = {};
-  recs.forEach(r => {
-    if (/^\d{6,}$/.test(r.no)) (byNo[r.no] = byNo[r.no] || []).push(r);
-    (byName[r.name] = byName[r.name] || []).push(r);
-  });
   const newChems = newChemRows_();
   const rules = eduRules_(), hits = rules.map(() => 0);
   const specialOf = names => chems.some(c => names.indexOf(c.name) >= 0 && yes(c));
   // v20.3 부서 이동: 기록의 부서(또는 기록에 적힌 물질)가 지금 부서의 물질을 모두 포함해야 이수로 인정
   const covers = (r, di, e) => {
-    if (sameDept_(deptAlias_(r.dept), e.dept) || !di.chems.length) return true;
+    if (baseDept_(r.dept) === baseDept_(e.dept) || !di.chems.length) return true;
     const from = info(r.dept);
     const have = (from ? from.chems : []).map(normChem_), txt = normChem_(r.chem);
     return di.chems.every(c => { const k = normChem_(c); return !k || have.indexOf(k) >= 0 || txt.indexOf(k) >= 0; });
   };
   const emps = (readEmployees_() || []).filter(e => !isResigned_(e) && !(e.leaveDate && e.leaveDate < today) && e.dept)
-    .map(e => Object.assign({}, e, { dept: deptAlias_(e.dept) }));
+    .map(e => Object.assign({}, e, { dept: deptAlias_(e.dept) }))
+    .filter((e, i, a) => !/^\d{6,}$/.test(e.empNo) || a.map(x => x.empNo).lastIndexOf(e.empNo) === i);   // 직원목록에 같은 사번 줄이 두 번 → 아래(최근) 줄 한 명
+  const own = ledgerOwners_(recs, emps);
   const people = [];
   emps.forEach(e => {
     if (s.role === 'dept' && !sameDept_(e.dept, s.dept)) return;
@@ -2627,8 +2651,7 @@ function eduStatus_(s) {
       di = { need: rule.kind || (di && !rule.chem ? di.need : (specialOf(names) ? '특별' : 'MSDS')), chems: names };
     }
     if (!di) return;
-    let all = /^\d{6,}$/.test(e.empNo) ? (byNo[e.empNo] || []) : [];
-    if (!all.length) all = (byName[e.name] || []).filter(r => !r.no || !/^\d{6,}$/.test(r.no) || r.no === e.empNo).filter(r => sameDept_(r.dept, e.dept) || /^\d{6,}$/.test(e.empNo) === false);
+    const all = own.get(e) || [];
     const mine = all.filter(r => covers(r, di, e));
     const ruleEx = rule && rule.decision === '제외'
       ? { reason: '대상 규칙 ' + (ri + 1) + (rule.note ? ': ' + rule.note : ''), by: '관리자 규칙', date: '', route: '대상 규칙' } : null;
