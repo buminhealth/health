@@ -38,6 +38,8 @@
     - 제외 판정 (서버, 기록은 지우지 않음): 개별 제외는 확인일 이후 지금 부서에서 받은 교육이 없으면 제외 (부서 이동 → 예전 기록 보존 + 해당 없음),
       규칙 제외는 지금 부서에서 직접 쓴 일지 · 개별 수기 기록이 없으면 제외 (일괄 수기 기록만 있으면 규칙이 우선 — 치과 의사 사례)
     - 수기 기록 삭제: 현황판 [수기 기록 삭제] · [선택 직원 수기 기록 삭제] — 수기 줄만 (앱 일지는 삭제 안 됨), '교육이력_삭제' 시트에 백업 + 사유
+    - 물질 마스터 점검: ① CAS 직접 입력 즉시 검증(✓ 검증숫자 맞음 / ✕ 틀림), ① · ② 표 아래 [반영] 버튼, CAS가 원래 없는 성분은
+      '자료없음 · 영업비밀 · 해당없음'으로 표시 가능 (서버 v20.5) → 다음 점검부터 문제 목록에서 빠짐
     - 서버 v20.5 인사 사이트(Firebase) 읽기 줄이기: 매일 확인은 조건 조회(신규입사 · 최근 퇴사 · 현재 휴직만, 하루 약 50~100건 → 전체의 약 1/15),
       전체 동기화 · 이상 감지는 주 1회(일요일 또는 7일 경과), 메뉴 ④ 시험 조회는 1건, [저장된 계정으로 가져오기] · [합치기]는 6시간 안 결과 재사용
       ([새로 읽기] 별도), 한도 초과(429)면 "오후 4시 이후" 안내, 직원정보관리에 오늘 읽기 건수 표시
@@ -3917,7 +3919,7 @@ input.apv-in[type=text]{width:110px}
         '<td style="' + TD + '">' + esc(x.product) + '</td><td style="' + TD + '">' + esc(x.comp) + '</td>' +
         '<td style="' + TD + ';color:#B42318;font-weight:700">' + esc(x.raw) + '</td>' +
         '<td style="' + TD + ';color:#3B7322;font-weight:700">' + (x.fix ? esc(x.fix) + (x.guess ? ' <span style="color:#6E4A00;font-weight:600">(추정)</span>' : '')
-          : '<input data-casin="' + i + '" placeholder="맞는 CAS 입력" style="width:130px;padding:4px 6px;border:1px solid #C6C3BB;border-radius:4px;font:inherit">') + '</td>' +
+          : '<input data-casin="' + i + '" list="chemm-nocas" placeholder="맞는 CAS 또는 자료없음" style="width:150px;padding:4px 6px;border:1px solid #C6C3BB;border-radius:4px;font:inherit"> <span data-casok="' + i + '" style="font-size:12px"></span>') + '</td>' +
         '<td style="' + TD + '">' + esc(x.why) + '</td></tr>';
     });
     var amt = r.amountIssues.map(function(x, i){
@@ -3948,11 +3950,15 @@ input.apv-in[type=text]{width:110px}
       '<div style="' + BOX + '"><div style="font-weight:800;color:#044B75;margin-bottom:6px">① CAS 번호 문제 ' + r.casIssues.length + '건</div>' +
       '<div style="font-size:12px;color:#64748b;margin-bottom:8px">구글시트가 CAS를 날짜로 바꾼 경우(예: 9014-01-1 → 9014-01-01) 검증숫자로 원래 값을 찾아 제안합니다. ' +
         '<b>(추정)</b>은 같은 시트의 CAS와 한 자리 차이인 오타 후보라 MSDS를 보고 맞으면 체크하세요. 제안이 없으면 MSDS의 CAS를 직접 입력하세요(검증숫자가 맞아야 반영). 반영하면 CAS 열을 텍스트 형식으로 고정합니다.</div>' +
-      (casRows.length ? table(['반영', '제품', '성분', '지금 값', '제안 · 직접 입력', '사유'], casRows) : '<div style="font-size:12px;color:#15803d">문제 없음</div>') + '</div>' +
+      '<datalist id="chemm-nocas"><option value="자료없음"><option value="영업비밀"><option value="해당없음"></datalist>' +
+      (casRows.length ? table(['반영', '제품', '성분', '지금 값', '제안 · 직접 입력', '사유'], casRows) +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px"><span style="font-size:12px;color:#64748b">CAS가 원래 없는 성분(혼합물 · 고분자 · 식품첨가물 · EC 번호만 있는 경우)은 <b>자료없음 · 영업비밀 · 해당없음</b> 중 하나를 입력하세요.</span>' +
+        '<button type="button" class="chemm-apply2" style="' + BTN_P + '">① CAS 수정 반영</button></div>'
+        : '<div style="font-size:12px;color:#15803d">문제 없음</div>') + '</div>' +
 
       '<div style="' + BOX + '"><div style="font-weight:800;color:#044B75;margin-bottom:6px">② 함유량이 날짜로 바뀜 ' + r.amountIssues.length + '건</div>' +
       '<div style="font-size:12px;color:#64748b;margin-bottom:8px">구글시트가 함유량 범위(예: 9-10)를 날짜(2026-09-10)로 바꾼 칸입니다. AI가 함량 1% 기준을 판단하려면 원래 값이어야 합니다. 반영하면 함유량 열도 텍스트 형식으로 고정합니다.</div>' +
-      (amt.length ? table(['반영', '제품', '성분', '지금 값', '원래 값'], amt) : '<div style="font-size:12px;color:#15803d">문제 없음</div>') + '</div>' +
+      (amt.length ? table(['반영', '제품', '성분', '지금 값', '원래 값'], amt) + '<div style="text-align:right;margin-top:8px"><button type="button" class="chemm-apply2" style="' + BTN_P + '">② 함유량 수정 반영</button></div>' : '<div style="font-size:12px;color:#15803d">문제 없음</div>') + '</div>' +
 
       '<div style="' + BOX + '"><div style="font-weight:800;color:#044B75;margin-bottom:6px">③ 같은 CAS인데 주기가 다름 ' + r.conflicts.length + '건</div>' +
       '<div style="font-size:12px;color:#64748b;margin-bottom:8px">\'제외(사유)\'는 제품별 판단이라 빼고, 주기(개월)가 서로 다른 것만 보여줍니다. 확인 후 시트에서 직접 맞춰 주세요.</div>' +
@@ -3966,7 +3972,7 @@ input.apv-in[type=text]{width:110px}
       (sug.length ? table(['반영', '제품', '성분', 'CAS', '함량', '항목', '제안 값', '근거'], sug)
                   : '<div style="font-size:12px;color:#64748b">제안 없음 — 법령대조표가 비어 있으면 위 [기존 판정으로 법령대조표 만들기]를 누르거나, 시트 [법령대조표]에 고시 목록(CAS·주기)을 붙여넣으세요.</div>') + '</div>' +
 
-      '<div style="text-align:right;margin-bottom:12px"><button id="chemm-apply" style="' + BTN_P + ';padding:10px 18px;font-size:14px">선택한 항목 시트에 반영</button></div>' +
+      '<div style="text-align:right;margin-bottom:12px"><button id="chemm-apply" style="' + BTN_P + ';padding:10px 18px;font-size:14px">체크 · 입력한 항목 모두 시트에 반영 (① · ② · ④)</button></div>' +
 
       '<div style="' + BOX + '"><div style="font-weight:800;color:#044B75;margin-bottom:6px">⑤ 법령대조표에 고시 목록 붙여넣기</div>' +
       '<div style="font-size:12px;color:#64748b;margin-bottom:8px">국가법령정보센터의 별표(특수건강진단 대상 유해인자 별표22 · 주기 별표23, 작업환경측정 대상 별표21, 관리대상 유해물질 별표12)를 표째 복사해 붙여넣으세요. ' +
@@ -4000,6 +4006,16 @@ input.apv-in[type=text]{width:110px}
       say(x.success ? '법령대조표에 ' + x.added + '종 추가 (출처: 기존 시트 판정 · 고시 확인 필요)' : (x.error || '실패'), x.success ? 'ok' : 'err');
       open();
     };
+    // v20.5: 직접 입력하면 바로 검증 표시 · 표마다 [반영] 버튼 (맨 아래 버튼과 같은 동작)
+    body.querySelectorAll('[data-casin]').forEach(function(inp){
+      inp.oninput = function(){
+        var v = inp.value.trim(), ok = body.querySelector('[data-casok="' + inp.getAttribute('data-casin') + '"]');
+        var mark = /^(자료없음|영업비밀|해당없음)$/.test(v);
+        inp.style.borderColor = !v ? '#C6C3BB' : (mark || casOk(v) ? '#4A8F2C' : '#C23B32');
+        if(ok) ok.innerHTML = !v ? '' : (mark ? '<span style="color:#2D581B">✓ CAS 없음 표시</span>' : (casOk(v) ? '<span style="color:#2D581B">✓ 검증숫자 맞음</span>' : '<span style="color:#A3302A">✕ 검증숫자 틀림</span>'));
+      };
+    });
+    body.querySelectorAll('.chemm-apply2').forEach(function(b){ b.onclick = function(){ document.getElementById('chemm-apply').click(); }; });
     document.getElementById('chemm-all').onclick = function(){
       body.querySelectorAll('[data-sug]').forEach(function(c){ c.checked = true; });
     };
@@ -4012,10 +4028,10 @@ input.apv-in[type=text]{width:110px}
       [].slice.call(body.querySelectorAll('[data-casin]')).forEach(function(inp){
         var v = inp.value.trim(); if(!v) return;
         var x = data.casIssues[+inp.getAttribute('data-casin')];
-        if(!casOk(v)){ badIn.push(v); inp.style.borderColor = '#C23B32'; return; }
+        if(!/^(자료없음|영업비밀|해당없음)$/.test(v) && !casOk(v)){ badIn.push(v); inp.style.borderColor = '#C23B32'; return; }
         casFixes.push({ row: x.row, fix: v, raw: x.raw });
       });
-      if(badIn.length){ say('CAS 검증숫자가 맞지 않습니다: ' + badIn.join(', '), 'err'); return; }
+      if(badIn.length){ say('CAS 검증숫자가 맞지 않습니다: ' + badIn.join(', ') + ' — MSDS의 CAS를 다시 확인하세요 (CAS가 없는 성분은 자료없음 · 영업비밀 · 해당없음)', 'err'); return; }
       var amountFixes = [].slice.call(body.querySelectorAll('[data-amt]:checked')).map(function(c){
         var x = data.amountIssues[+c.getAttribute('data-amt')]; return { row: x.row, fix: x.fix }; });
       if(!fills.length && !casFixes.length && !amountFixes.length){ say('반영할 항목을 체크하세요', 'err'); return; }
