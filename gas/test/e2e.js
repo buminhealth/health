@@ -655,7 +655,8 @@ function check(name, cond, extra) {
   check('법령 불러오기: OC 없으면 설정 안내', !lf0.success && lf0.noOc, lf0);
   const so = await page.evaluate(() => BMAUTH.post('law.setOc', { oc: 'clover8477, bumin3131' }));
   const lf1 = await page.evaluate(() => BMAUTH.post('chem.lawFetch', { kind: 'hc' }));
-  check('법령 불러오기: 별표22 원문(CAS 3개) · 서식 22는 무시 · 되는 OC(bumin3131)만 남김 · OC는 가려서 표시', so.success && /^clo\*+, bum\*+$/.test(so.oc) && lf1.success && lf1.no === 22 && lf1.casCount === 3 && /7647-01-0/.test(lf1.text) && lf1.value === '12개월' && /별표22/.test(lf1.src) && g.props.LAW_OC === 'bumin3131', [so.oc, lf1, g.props.LAW_OC]);
+  check('OC 저장: 바로 시험해 ✓/✕ 사유 표시 · 되는 OC를 앞으로 (안 되는 것도 지우지 않음) · 가려서 표시', so.success && so.tests.length === 2 && !so.tests[0].ok && /검증에 실패/.test(so.tests[0].msg) && so.tests[1].ok && /^bum\*+, clo\*+$/.test(so.oc) && g.props.LAW_OC === 'bumin3131,clover8477', [so, g.props.LAW_OC]);
+  check('법령 불러오기: 별표22 원문(CAS 3개) · 서식 22는 무시', lf1.success && lf1.no === 22 && lf1.casCount === 3 && /7647-01-0/.test(lf1.text) && lf1.value === '12개월' && /별표22/.test(lf1.src) && g.props.LAW_OC === 'bumin3131,clover8477', [lf1, g.props.LAW_OC]);
   const lf2 = await page.evaluate(() => BMAUTH.post('chem.lawFetch', { kind: 'cycle' }));
   check('법령 불러오기: 별표23(주기) 보기', lf2.success && /24개월/.test(lf2.text), lf2.title);
   // v20.7 별표23 주기 자동 고침: 12개월 → 6개월 (원문에서 이름 확인된 것만) · 다른 값은 건너뜀 · 미리보기는 시트 안 바꿈

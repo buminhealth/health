@@ -4753,21 +4753,26 @@ input.apv-in[type=text]{width:110px}
         '<p>키는 화면에 저장하지 않고 서버(스크립트 속성)에만 저장됩니다. [AI MSDS 검토] 화면 위쪽 칸이나 시트 메뉴 <b>[보건관리 시스템 → ⑥ Gemini AI 키 저장]</b>에서 넣으세요. 모델은 관리자설정 시트의 \'AI모델\'로 바꿀 수 있습니다.</p>' +
         '<button type="button" class="cfg-b" data-c="ai">AI MSDS 검토 열기</button></section>' +
       '<section class="cfg-c"><h4>국가법령정보 OPEN API</h4><dl><dt>인증키(OC)</dt><dd id="cfg-law">확인 중…</dd></dl>' +
-        '<p>물질 마스터 점검 ⑤ [법령에서 불러오기]에 씁니다. 서버(스크립트 속성)에만 저장. 여러 개를 쉼표로 넣으면 되는 것을 찾아 남깁니다.</p>' +
-        '<span style="display:flex;gap:6px;flex-wrap:wrap"><input id="cfg-law-oc" placeholder="OC 값" style="height:34px;padding:0 8px;border:1px solid #C6C3BB;border-radius:4px;font:inherit;width:220px"><button type="button" class="cfg-b" data-c="lawoc">저장</button></span></section>' +
+        '<p>물질 마스터 점검 ⑤ [법령에서 불러오기]에 씁니다. 서버(스크립트 속성)에만 저장. 저장하면 바로 법령 서버에 시험해 결과를 보여 줍니다. OC는 보통 open.law.go.kr <b>로그인 아이디</b>(이메일 @ 앞부분)입니다.</p>' +
+        '<span style="display:flex;gap:6px;flex-wrap:wrap"><input id="cfg-law-oc" placeholder="OC 값" style="height:34px;padding:0 8px;border:1px solid #C6C3BB;border-radius:4px;font:inherit;width:220px"><button type="button" class="cfg-b" data-c="lawoc">저장</button></span><div id="cfg-law-test" style="font-size:12px;margin-top:6px;line-height:1.6"></div></section>' +
       '<section class="cfg-c"><h4>이 PC 저장 공간 · 계정</h4><dl><dt>사용량</dt><dd>' + Math.round(used / 1024).toLocaleString() + 'KB / 약 5MB</dd>' +
         '<dt>파일 저장소</dt><dd>구글 드라이브 (서버 경유) · 옛 파일은 ' + esc(C.ghRepo || D.ghRepo || 'buminhealth/health') + '</dd></dl>' +
         '<span style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="cfg-b" data-c="storage">저장 공간 안내</button><button type="button" class="cfg-b" data-c="sheet">구글 시트 열기</button><button type="button" class="cfg-b" data-c="logout" style="color:#A3302A">로그아웃</button></span></section>' +
     '</div>';
     var act = { lawoc: async function(){
                   var v = document.getElementById('cfg-law-oc').value.trim();
+                  var t = document.getElementById('cfg-law-test');
+                  if(!v){ t.innerHTML = '<span class="cfg-bad">OC 값을 입력하세요</span>'; return; }
+                  t.textContent = '저장하고 법령 서버에 시험하는 중…';
                   var x = await post('law.setOc', { oc: v });
                   document.getElementById('cfg-law').innerHTML = x.success ? (x.hasOc ? '<span class="cfg-ok">저장됨</span> ' + esc(x.oc) : '<span class="cfg-bad">없음</span>') : '<span class="cfg-bad">' + esc(x.error || '실패') + '</span>';
+                  t.innerHTML = (x.tests || []).map(function(r){ return (r.ok ? '<span class="cfg-ok">✓ ' : '<span class="cfg-bad">✕ ') + esc(r.oc) + '</span> ' + esc(r.msg); }).join('<br>');
                   document.getElementById('cfg-law-oc').value = '';
                 },
                 open: function(){ openCfg(); }, ai: function(){ admSwitchPane('ai'); BMAI.open(); }, storage: function(){ apvShowStorageGuide(); },
                 sheet: function(){ window.open('https://docs.google.com/spreadsheets/d/1kFRIyXZX8aTgQR2w5MC0Ty66B9ltKrWj3Wz96D0mKIs/edit', '_blank'); }, logout: function(){ adminLogout(); } };
     host.querySelectorAll('[data-c]').forEach(function(b){ b.onclick = function(){ try{ act[b.getAttribute('data-c')](); }catch(e){ console.warn(e); } }; });
+    var ocIn = document.getElementById('cfg-law-oc'); if(ocIn) ocIn.onkeydown = function(e){ if(e.key === 'Enter') act.lawoc(); };
     post('whoami', {}).then(function(r){
       var el = document.getElementById('cfg-ver'); if(!el) return;
       var sv = r && r.serverVersion;
