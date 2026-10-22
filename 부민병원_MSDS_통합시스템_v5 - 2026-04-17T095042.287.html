@@ -4083,7 +4083,7 @@ input.apv-in[type=text]{width:110px}
       var x = await BMAUTH.post('chem.lawImport', { kind: kindNow, value: document.getElementById('chemm-val').value,
         src: document.getElementById('chemm-src').value, text: text });
       if(!x.success){ say(x.error || '실패', 'err'); return; }
-      say('법령대조표: 새로 ' + x.added + ' · 빈칸 채움 ' + x.updated + ' · 같음 ' + x.same + (x.invalid ? ' · CAS 오류 ' + x.invalid : ''), 'ok');
+      say('법령대조표: 새로 ' + x.added + ' · 빈칸 채움 ' + x.updated + ' · 같음 ' + x.same + (x.keep6 ? ' · 별표23 6개월 유지 ' + x.keep6 : '') + (x.invalid ? ' · CAS 오류 ' + x.invalid : ''), 'ok');
       document.getElementById('chemm-paste').value = '';
       await open();
       var m = document.getElementById('chemm-import-msg');

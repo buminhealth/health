@@ -673,6 +673,8 @@ function check(name, cond, extra) {
   check('별표23 주기 고치기 미리보기: 벤젠 12→6 · 사염화탄소(미대상) 건너뜀 · 염화비닐(원문에 없음) 건너뜀 · 시트 그대로', cy0.success && cy0.checked && cy0.changes.some(x => /벤젠/.test(x)) && cy0.skip.some(x => /사염화탄소/.test(x)) && cy0.skip.some(x => /염화비닐/.test(x)) && benz()[2] === '12개월' && cy0.dust.length === 1, cy0);
   const cy1 = await page.evaluate(() => BMAUTH.post('chem.lawCycle', {}));
   check('별표23 주기 고치기 반영: 벤젠 6개월 · 출처에 별표23 · 없던 물질은 6개월로 추가', cy1.success && benz()[2] === '6개월' && /별표23/.test(benz()[6]) && lsh.rows.some(r => r[0] === '68-12-2' && r[2] === '6개월'), [benz(), cy1.added]);
+  const re22 = await page.evaluate(() => BMAUTH.post('chem.lawImport', { kind: 'hc', value: '12개월', text: '벤젠 71-43-2\n디메틸포름아미드 68-12-2' }));
+  check('별표22를 다시 넣어도 별표23 6개월 물질은 다름으로 안 알리고 6개월 유지', re22.success && re22.keep6 === 2 && re22.differCount === 0 && benz()[2] === '6개월', re22);
   g.props.LAW_OC = 'wrongoc';
   const lf3 = await page.evaluate(() => BMAUTH.post('chem.lawFetch', { kind: 'hc' }));
   check('법령 불러오기: 인증 실패면 사유 안내', !lf3.success && /검증에 실패/.test(lf3.error), lf3.error);

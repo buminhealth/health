@@ -2449,7 +2449,7 @@ function chemLawImport_(req) {
   const cur = last >= 2 ? sh.getRange(2, 1, last - 1, LAW_HEADER.length).getDisplayValues() : [];
   const at = {};
   cur.forEach((r, i) => { if (String(r[0]).trim()) at[String(r[0]).trim()] = i; });
-  let added = 0, updated = 0, same = 0, invalid = 0;
+  let added = 0, updated = 0, same = 0, invalid = 0, keep6 = 0;
   const differ = [], seen = {};
   lines.forEach(line => {
     const found = String(line).match(/\b\d{2,7}-\d{2}-\d\b/g) || [];
@@ -2467,6 +2467,7 @@ function chemLawImport_(req) {
         const old = String(row[ci] || '').trim();
         if (!old) { row[ci] = value; row[6] = String(row[6] || '').indexOf(src) >= 0 ? row[6] : (row[6] ? row[6] + ' · ' : '') + src; row[7] = today; if (!row[1]) row[1] = name; updated++; }
         else if (old === value || lawSameCycle_(old, value)) same++;   // '6개월(임/단시)' 와 '6개월'은 같은 주기
+        else if (req.kind === 'hc' && LAW_CYCLE6.some(x => x.cas === cas) && lawSameCycle_(old, '6개월')) keep6++;   // 별표23 6개월 물질 — 별표22 기본값(12개월)보다 우선
         else differ.push(cas + ' (지금 ' + old + ' / 붙여넣기 ' + value + ')');
       }
     });
@@ -2475,7 +2476,7 @@ function chemLawImport_(req) {
     sh.getRange('A:A').setNumberFormat('@');
     sh.getRange(2, 1, cur.length, LAW_HEADER.length).setValues(cur.map(r => r.map(safeCell_)));
   }
-  return { success: true, added: added, updated: updated, same: same, invalid: invalid, differ: differ.slice(0, 50), differCount: differ.length };
+  return { success: true, added: added, updated: updated, same: same, keep6: keep6, invalid: invalid, differ: differ.slice(0, 50), differCount: differ.length };
 }
 
 // ════════════════════════════════════════════════════════════════
