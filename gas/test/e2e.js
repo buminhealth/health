@@ -804,11 +804,20 @@ function check(name, cond, extra) {
   empSh.appendRow(empRow('126000032', '육조무', '61병동', '휴직(육아휴직)', '간호조무사6급'));
   empSh.appendRow(empRow('126000033', '수술이동', '수술실', '재직', '간호사4급'));
   empSh.appendRow(empRow('126000034', '칠이동', '71병동', '재직', '간호사4급'));
+  empSh.appendRow(empRow('126000041', '동명가', '61병동', '재직', '간호사5급'));
+  empSh.appendRow(empRow('126000042', '동명가', '수술실', '재직', '간호사5급'));
+  empSh.appendRow(empRow('126000043', '중복가', '61병동', '', ''));
+  empSh.appendRow(empRow('126000043', '중복가', '61병동', '재직', '간호사5급'));
   const mkC = (nm, dept) => { const r = new Array(11).fill(''); r[0] = nm; r[2] = dept; r[3] = '성분'; r[4] = '7732-18-5'; return r; };
   const cOp = mkC('수술물질', '수술실'), c71 = mkC('테스트소독제', '71병동');
   ch.rows.push(cOp, c71);
   led.rows.push(['9', '2026-01-01T01:00Z', 'MSDS교육', '61병동', '테스트소독제', '2026-01-02', '2026-01-02', '1', '1시간', '126000033', '수술이동', '', '✓ 서명완료']);
   led.rows.push(['10', '2026-01-01T01:00Z', 'MSDS교육', '61병동', 'x', '2026-01-02', '2026-01-02', '1', '1시간', '126000034', '칠이동', '', '✓ 서명완료']);
+  led.rows.push(['11', '2026-01-01T01:00Z', '특별안전보건교육', '61병동(신관)', '테스트소독제', '2026-01-02', '2026-01-03', '2', '8시간', '126000042', '동명가', '', '✓ 서명완료']);
+  const est0 = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
+  const DM = d => (est0.people || []).find(p => p.name === '동명가' && p.dept === d) || {};
+  check('교육 기록 주인: 일지에 동명이인 사번 · 부서 표기 61병동(신관) → 61병동 동명가 이수', DM('61병동').status === '이수' && DM('수술실').status === '미이수' && !DM('수술실').moved, [DM('61병동').status, DM('수술실')]);
+  check('직원목록에 같은 사번 두 줄 → 한 명만', (est0.people || []).filter(p => p.name === '중복가').length === 1 && Q(est0, '중복가').job === '간호사', (est0.people || []).filter(p => p.name === '중복가'));
   const sv = await page.evaluate(() => BMAUTH.post('edu.saveRules', { rules: [
     { use: true, dept: '61병동', job: '간호조무사', decision: '대상', note: '조무사만 사용' },
     { use: true, dept: '61병동', job: '', decision: '제외', note: '그 외 사용 안 함' },
