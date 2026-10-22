@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v20.4 (2026-10-22)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v20.5 (2026-10-22)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -1296,6 +1296,8 @@ function empStatus_() {
     hrSite: PROPS.getProperty('FB_SITE_URL') || '',
     dailyOn: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'dailyCheck'),
     hrLastError: cfg.hr_last_error || '',
+    hrReads: String(cfg.hr_reads || '').indexOf(todayKst_() + '|') === 0 ? parseInt(String(cfg.hr_reads).split('|')[1], 10) || 0 : 0,
+    hrLastFull: cfg.hr_last_full || '', hrLastCheck: cfg.hr_last_check || '',
     deptCheck: deptCheck_(list),
     serverVersion: SERVER_VERSION,
   };
@@ -1381,8 +1383,19 @@ function fsValue_(v) {
 }
 
 // 조회 실패 사유를 알기 쉽게 (Firebase가 보낸 메시지 포함)
+let FB_READS = 0;   // 이번 실행에서 읽은 문서 수 (관리자설정 hr_reads에 날짜별로 더함)
+function fbCountReads_(n) {
+  FB_READS += n;
+  try {
+    const t = todayKst_(), cur = String((getAdminCfg().data || {}).hr_reads || '');
+    const prev = cur.indexOf(t + '|') === 0 ? parseInt(cur.split('|')[1], 10) || 0 : 0;
+    setAdminCfg({ key: 'hr_reads', value: t + '|' + (prev + n) });
+  } catch (_) {}
+}
+const FB_QUOTA_MSG = '인사 사이트(Firebase) 하루 읽기 한도를 넘었습니다. 한도는 매일 오후 4시(한국시간)에 초기화되니 그 뒤에 다시 시도하세요. (휴직자관리 사이트와 한도를 같이 씁니다)';
 function fbErr_(res, path) {
   const code = res.getResponseCode();
+  if (code === 429 || /RESOURCE_EXHAUSTED|Quota exceeded/i.test(res.getContentText() || '')) return FB_QUOTA_MSG;
   let msg = '';
   try { const j = JSON.parse(res.getContentText() || '{}'); msg = (j.error && (j.error.message || j.error)) || ''; } catch (_) {}
   const hint = code === 403 ? ' → 이 계정에 "' + path + '" 읽기 권한이 없습니다 (데이터 위치 이름 또는 Firebase 보안 규칙 확인)'
@@ -1391,7 +1404,7 @@ function fbErr_(res, path) {
   return '인사 데이터 조회 실패 (HTTP ' + code + (msg ? ', ' + String(msg).slice(0, 150) : '') + ')' + hint;
 }
 
-function fbFetchObjects_(c, idToken, path) {
+function fbFetchObjects_(c, idToken, path, limit) {
   path = path || c.path;
   const out = [];
   if (c.mode === 'rtdb') {
@@ -1401,24 +1414,50 @@ function fbFetchObjects_(c, idToken, path) {
     const data = JSON.parse(res.getContentText() || 'null') || {};
     (Array.isArray(data) ? data : Object.keys(data).map(k => Object.assign({ _key: k }, data[k])))
       .forEach(o => { if (o && typeof o === 'object') out.push(o); });
-    return out;
+    return limit ? out.slice(0, limit) : out;
   }
   let pageToken = '';
   for (let page = 0; page < 50; page++) {
     const url = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(c.projectId) + '/databases/(default)/documents/' +
-      path.split('/').map(encodeURIComponent).join('/') + '?pageSize=300' + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : '');
+      path.split('/').map(encodeURIComponent).join('/') + '?pageSize=' + (limit || 300) + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : '');
     const res = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + idToken }, muteHttpExceptions: true });
     if (res.getResponseCode() !== 200) throw new Error(fbErr_(res, path));
     const j = JSON.parse(res.getContentText() || '{}');
-    (j.documents || []).forEach(d => {
-      const o = { _key: String(d.name || '').split('/').pop() };
-      Object.keys(d.fields || {}).forEach(k => { o[k] = fsValue_(d.fields[k]); });
-      out.push(o);
-    });
-    if (!j.nextPageToken) break;
+    const docs = (j.documents || []).slice(0, limit || undefined);
+    fbCountReads_(docs.length || 1);   // 빈 결과도 1건으로 계산됨
+    docs.forEach(d => out.push(fbDocObj_(d)));
+    if (limit || !j.nextPageToken) break;
     pageToken = j.nextPageToken;
   }
   return out;
+}
+function fbDocObj_(d) {
+  const o = { _key: String(d.name || '').split('/').pop() };
+  Object.defineProperty(o, '_raw', { value: d.fields || {}, enumerable: false });
+  Object.keys(d.fields || {}).forEach(k => { o[k] = fsValue_(d.fields[k]); });
+  return o;
+}
+
+/* v20.4 Firestore 조건 조회 (필요한 문서만 읽기 — 하루 읽기 한도 절약)
+   filters: [{ field, op: '>=' | '==', value, type: 'stringValue' | 'timestampValue' }] (여러 개면 AND) */
+function fbRunQuery_(c, idToken, path, filters) {
+  const segs = path.split('/');
+  const coll = segs.pop();
+  const parent = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(c.projectId) + '/databases/(default)/documents' +
+    (segs.length ? '/' + segs.map(encodeURIComponent).join('/') : '');
+  const OP = { '>=': 'GREATER_THAN_OR_EQUAL', '==': 'EQUAL', '<=': 'LESS_THAN_OR_EQUAL' };
+  const ff = f => ({ fieldFilter: { field: { fieldPath: f.field }, op: OP[f.op],
+    value: f.type === 'timestampValue' ? { timestampValue: f.value + 'T00:00:00+09:00' } : { stringValue: f.value } } });
+  const where = filters.length === 1 ? ff(filters[0]) : { compositeFilter: { op: 'AND', filters: filters.map(ff) } };
+  const res = UrlFetchApp.fetch(parent + ':runQuery', {
+    method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { Authorization: 'Bearer ' + idToken },
+    payload: JSON.stringify({ structuredQuery: { from: [{ collectionId: coll }], where: where } }),
+  });
+  if (res.getResponseCode() !== 200) throw new Error(fbErr_(res, path));
+  const arr = JSON.parse(res.getContentText() || '[]');
+  const docs = (Array.isArray(arr) ? arr : []).filter(x => x && x.document).map(x => x.document);
+  fbCountReads_(docs.length || 1);
+  return docs.map(fbDocObj_);
 }
 
 // 반환: { headers, rows } (rowsToEmployees_가 열 이름으로 사번·이름·부서·입사일 등을 찾음)
@@ -1428,18 +1467,27 @@ function hrFetchEmployees_(id, password) {
   if (!id || !password) throw new Error('인사 사이트 아이디와 비밀번호를 입력하세요');
   const idToken = fbSignIn_(c, id, password);
   const objs = fbFetchObjects_(c, idToken);
-  // 재직상태가 없으면 퇴사일·휴직 기록으로 계산 (퇴사일이 오늘 이전 → 퇴사, 오늘이 휴직 기간 → 휴직)
-  const today = todayKst_();
   let onLeave = {};
   if (c.leavePath) {
-    try {
-      fbFetchObjects_(c, idToken, c.leavePath).forEach(l => {
-        const code = String(l.empCode || '').trim();
-        const st = normDate_(l.start || ''), en = normDate_(l.end || '');
-        if (code && (!st || st <= today) && (!en || en >= today)) onLeave[code] = l.type || '휴직';
-      });
-    } catch (e) { onLeave = {}; }   // 휴직 기록을 못 읽어도 직원 명단은 계속 사용
+    try { onLeave = leaveMap_(fbFetchObjects_(c, idToken, c.leavePath)); }
+    catch (e) { onLeave = {}; }   // 휴직 기록을 못 읽어도 직원 명단은 계속 사용
   }
+  return hrObjsToRows_(c, objs, onLeave);
+}
+// 휴직 기록 → { 사번: 휴직종류 } (오늘이 휴직 기간인 것만)
+function leaveMap_(list) {
+  const today = todayKst_(), m = {};
+  list.forEach(l => {
+    const code = String(l.empCode || '').trim();
+    const st = normDate_(l.start || ''), en = normDate_(l.end || '');
+    if (code && (!st || st <= today) && (!en || en >= today)) m[code] = l.type || '휴직';
+  });
+  return m;
+}
+function hrObjsToRows_(c, objs, onLeave) {
+  // 재직상태가 없으면 퇴사일·휴직 기록으로 계산 (퇴사일이 오늘 이전 → 퇴사, 오늘이 휴직 기간 → 휴직)
+  const today = todayKst_();
+  try { setAdminCfg({ key: 'hr_status_computed', value: objs.some(o => o.status || o['재직상태']) ? 'N' : 'Y' }); } catch (_) {}
   objs.forEach(o => {
     if (o.status || o['재직상태']) return;
     const code = String(o.empCode || o.empNo || o['사번'] || o._key || '').trim();
@@ -1465,6 +1513,87 @@ function hrFetchEmployees_(id, password) {
     return std || h;
   });
   return { headers: outHeaders, rows: flat.map(f => headers.map(h => f[h] === undefined ? '' : String(f[h]))) };
+}
+
+/* v20.4 [저장된 계정으로 가져오기] · [인사 사이트와 합치기]: 6시간 안에 읽은 결과를 다시 사용 (스크립트 캐시, 큰 값은 나눠 저장) */
+const HR_CACHE_SEC = 6 * 3600;
+function bigCachePut_(key, text) {
+  const c = CacheService.getScriptCache(), size = 90000, n = Math.ceil(text.length / size);
+  if (n > 90) return false;
+  for (let i = 0; i < n; i++) c.put(key + ':' + i, text.substr(i * size, size), HR_CACHE_SEC);
+  c.put(key + ':n', String(n), HR_CACHE_SEC);
+  return true;
+}
+function bigCacheGet_(key) {
+  const c = CacheService.getScriptCache(), n = parseInt(c.get(key + ':n') || '0', 10);
+  if (!n) return null;
+  let t = '';
+  for (let i = 0; i < n; i++) { const p = c.get(key + ':' + i); if (p === null) return null; t += p; }
+  return t;
+}
+function hrFetchSavedCached_(fresh) {
+  if (!fresh) {
+    const hit = bigCacheGet_('hrfetch');
+    if (hit) { try { const j = JSON.parse(hit); j.cached = true; return j; } catch (_) {} }
+  }
+  const r = hrFetchEmployees_(PROPS.getProperty('HR_ID') || '', PROPS.getProperty('HR_PW') || '');
+  r.at = nowKst_();
+  bigCachePut_('hrfetch', JSON.stringify(r));
+  return r;
+}
+function hrCacheClear_() { try { CacheService.getScriptCache().remove('hrfetch:n'); } catch (_) {} }
+
+/* v20.4 매일 자동 확인 = 부분 조회 (필요한 문서만, 하루 약 50~100건)
+   · 신규 입사: 입사일 >= 오늘 - 기준일수(최소 14일) · 최근 퇴사: 퇴사일 >= 지난 확인일 - 3일 · 현재 휴직: 휴직 종료일 >= 오늘 (+ 빈 종료일)
+   · 결과는 직원목록에 부분 반영 (명단에 없는 직원을 퇴사로 바꾸지 않음) · 이상 감지는 주 1회 전체 동기화에서만
+   · Firestore가 아니거나 필드를 못 찾으면 null → 호출한 쪽에서 전체 조회 */
+const HR_JOIN_FIELDS = ['joinDate', 'hireDate', 'joinDt', 'hireDt', '입사일', 'startDate'];
+const HR_QUIT_FIELDS = ['quitDate', 'leaveDate', 'resignDate', 'retireDate', '퇴사일'];
+function hrPartialFetch_() {
+  const c = fbCfg_();
+  if (c.mode !== 'firestore') return null;
+  const idToken = fbSignIn_(c, PROPS.getProperty('HR_ID'), PROPS.getProperty('HR_PW'));
+  const probe = fbFetchObjects_(c, idToken, c.path, 1);   // 1건만 읽어 필드 이름 · 값 종류 확인
+  if (!probe.length) return null;
+  const raw = probe[0]._raw || {};
+  const jf = HR_JOIN_FIELDS.concat(c.fieldMap.joinDate ? [c.fieldMap.joinDate] : []).find(f => raw[f]);
+  const qf = HR_QUIT_FIELDS.concat(c.fieldMap.leaveDate ? [c.fieldMap.leaveDate] : []).find(f => raw[f]);
+  if (!jf) return null;
+  const typ = f => ('timestampValue' in raw[f]) ? 'timestampValue' : 'stringValue';
+  const today = todayKst_(), cfg = getAdminCfg().data || {};
+  const since = addDays_(today, -Math.max(sysCfg_().newHireDays || 7, 14));
+  const lastCheck = /^\d{4}-\d{2}-\d{2}/.test(cfg.hr_last_check || '') ? String(cfg.hr_last_check).slice(0, 10) : addDays_(today, -7);
+  const byKey = {};
+  fbRunQuery_(c, idToken, c.path, [{ field: jf, op: '>=', value: since, type: typ(jf) }]).forEach(o => { byKey[o._key] = o; });
+  if (qf) fbRunQuery_(c, idToken, c.path, [{ field: qf, op: '>=', value: addDays_(lastCheck, -3), type: typ(qf) }]).forEach(o => { byKey[o._key] = o; });
+  let onLeave = null;
+  if (c.leavePath) {
+    try {
+      const lv = fbRunQuery_(c, idToken, c.leavePath, [{ field: 'end', op: '>=', value: today, type: 'stringValue' }])
+        .concat(fbRunQuery_(c, idToken, c.leavePath, [{ field: 'end', op: '==', value: '', type: 'stringValue' }]));
+      onLeave = leaveMap_(lv);
+    } catch (e) { onLeave = null; }
+  }
+  const objs = Object.keys(byKey).map(k => byKey[k]);
+  const r = objs.length ? hrObjsToRows_(c, objs, onLeave || {}) : { headers: [], rows: [] };
+  return { headers: r.headers, rows: r.rows, onLeave: onLeave, count: objs.length };
+}
+// 부분 조회의 휴직 목록으로 직원목록 재직상태 맞추기 (인사 사이트에 재직상태 필드가 없을 때만 — 전체 동기화 때 기록)
+function applyLeaveStatus_(onLeave) {
+  if (!onLeave || (getAdminCfg().data || {}).hr_status_computed !== 'Y') return 0;
+  const sh = findEmpSheet_();
+  if (!sh || sh.getLastRow() < 2) return 0;
+  const data = sh.getDataRange().getValues();
+  const idx = empColIndex_(data[0]);
+  if (idx.empNo < 0 || idx.status < 0) return 0;
+  let n = 0;
+  for (let i = 1; i < data.length; i++) {
+    const st = String(data[i][idx.status] || ''), code = String(data[i][idx.empNo] || '').trim();
+    if (!code || /퇴사|퇴직/.test(st)) continue;
+    const want = onLeave[code] ? '휴직(' + onLeave[code] + ')' : (/^휴직/.test(st) ? '재직' : st);
+    if (want !== st) { sh.getRange(i + 1, idx.status + 1).setValue(want); n++; }
+  }
+  return n;
 }
 
 // 메뉴 ④ 1/5 입력 → 연결 정보. 사이트 주소(https://○○.web.app)면 Firebase 호스팅의
@@ -1513,10 +1642,13 @@ function saveHrCredentials() {
     if (String(e.message) !== '취소') ui.alert('저장 실패: ' + e.message);
     return;
   }
-  try {
-    const r = hrFetchEmployees_(PROPS.getProperty('HR_ID'), PROPS.getProperty('HR_PW'));
-    const list = rowsToEmployees_(r.headers, r.rows);
-    ui.alert('연결 성공: 인사 사이트에서 ' + r.rows.length + '건을 읽었고, 그중 ' + list.length + '명을 직원으로 인식했습니다.\n' +
+  try {   // v20.4: 시험 조회는 1건만 읽음 (하루 읽기 한도 절약)
+    const c2 = fbCfg_();
+    const one = fbFetchObjects_(c2, fbSignIn_(c2, PROPS.getProperty('HR_ID'), PROPS.getProperty('HR_PW')), c2.path, 1);
+    const r = hrObjsToRows_(c2, one, {});
+    const list = r.rows.length ? rowsToEmployees_(r.headers, r.rows) : [];
+    hrCacheClear_();
+    ui.alert('연결 성공: 인사 사이트에서 시험으로 1건을 읽었습니다' + (list.length ? ' (직원으로 인식됨)' : '') + '.\n' +
              '읽은 열: ' + r.headers.slice(0, 15).join(', ') + (r.headers.length > 15 ? ' …' : '') +
              (list.length ? '' : '\n\n이름 열을 찾지 못했습니다. Claude에게 위 열 목록을 알려주면 필드 매핑을 맞춰 드립니다.'));
   } catch (e) {
@@ -1820,15 +1952,36 @@ function notifyHrFailure_(msg) {
   } catch (e) { return false; }
 }
 
-function runAutoCheck_() {
+function runAutoCheck_(forceFull) {
   const out = { created: [], reminded: 0 };
+  FB_READS = 0;
   try {
-    const r = hrFetchEmployees_(PROPS.getProperty('HR_ID'), PROPS.getProperty('HR_PW'));
-    const list = rowsToEmployees_(r.headers, r.rows);
-    const chk = hrSanity_(list);
-    if (!chk.ok) throw new Error('인사 사이트 데이터가 평소와 달라 반영하지 않았습니다: ' + chk.problems.join(' / '));
-    out.sync = syncEmployees_(list, fbCfg_().fullList);
-    saveHrBaseline_(chk);
+    const cfg0 = getAdminCfg().data || {};
+    const today = todayKst_();
+    const lastFull = String(cfg0.hr_last_full || '').slice(0, 10);
+    const sunday = new Date(today + 'T12:00:00Z').getUTCDay() === 0;
+    // 전체 동기화: 주 1회(일요일 또는 마지막 전체가 7일 넘음) · 처음 · 요청 시 / 나머지는 부분 조회
+    let part = null;
+    if (!forceFull && lastFull && !sunday && addDays_(lastFull, 7) > today) {
+      try { part = hrPartialFetch_(); } catch (e) { if (String(e.message) === FB_QUOTA_MSG) throw e; part = null; }
+    }
+    if (part) {
+      const list = part.rows.length ? rowsToEmployees_(part.headers, part.rows) : [];
+      out.sync = list.length ? syncEmployees_(list, false) : { added: 0, updated: 0, resigned: 0, unchanged: 0, newEmployees: [], unknownDepts: [] };
+      out.sync.leaveChanged = applyLeaveStatus_(part.onLeave);
+      out.mode = 'partial';
+    } else {
+      const r = hrFetchEmployees_(PROPS.getProperty('HR_ID'), PROPS.getProperty('HR_PW'));
+      const list = rowsToEmployees_(r.headers, r.rows);
+      const chk = hrSanity_(list);
+      if (!chk.ok) throw new Error('인사 사이트 데이터가 평소와 달라 반영하지 않았습니다: ' + chk.problems.join(' / '));
+      out.sync = syncEmployees_(list, fbCfg_().fullList);
+      saveHrBaseline_(chk);
+      setAdminCfg({ key: 'hr_last_full', value: today });
+      try { r.at = nowKst_(); bigCachePut_('hrfetch', JSON.stringify(r)); } catch (_) {}   // 전체 조회 결과는 화면 [가져오기]에서 재사용
+      out.mode = 'full';
+    }
+    setAdminCfg({ key: 'hr_last_check', value: today });
     out.created = detectNewHires_();
     setAdminCfg({ key: 'hr_last_error', value: '' });
   } catch (e) {
@@ -1838,6 +1991,7 @@ function runAutoCheck_() {
     out.mailed = notifyHrFailure_(msg);
   }
   out.reminded = sendReminders_();   // 자동 로그인으로 보낸 알림의 재알림
+  out.reads = FB_READS;
   return out;
 }
 
@@ -1872,23 +2026,23 @@ function staffOp_(req, s) {
     case 'emp.merge': {   // v20.3 인사 사이트(저장된 계정)와 합치기 — dry면 미리보기
       if (deny) return deny;
       if (!hrAutoReady_()) return { success: false, error: '인사 사이트 자동 로그인이 설정되어야 합니다 (시트 메뉴 ④). 그동안은 ② 엑셀 붙여넣기로 합치세요.' };
-      const r = hrFetchEmployees_(PROPS.getProperty('HR_ID') || '', PROPS.getProperty('HR_PW') || '');
+      const r = hrFetchSavedCached_(req.fresh === true);
       const list = rowsToEmployees_(r.headers, r.rows);
       const chk = hrSanity_(list);
       if (!chk.ok && !req.force) return { success: false, warnings: chk.problems, error: '인사 사이트 데이터가 평소와 다릅니다: ' + chk.problems.join(' / ') };
       const full = req.fullList === undefined ? !!fbCfg_().fullList : req.fullList === true;
-      return Object.assign({ success: true, fullList: full, hrCount: list.length }, syncEmployees_(list, full, req.dry === true));
+      return Object.assign({ success: true, fullList: full, hrCount: list.length, cached: !!r.cached, at: r.at || '' }, syncEmployees_(list, full, req.dry === true));
     }
     case 'hr.fetch': {
       if (deny) return deny;
       // 비밀번호를 비우면 메뉴 ④에서 저장한 자동 로그인 계정 사용 (수동 가져오기는 메일 없음)
       const useSaved = !req.password;
-      const r = hrFetchEmployees_(useSaved ? (PROPS.getProperty('HR_ID') || '') : String(req.id || PROPS.getProperty('HR_ID') || ''),
-                                  useSaved ? (PROPS.getProperty('HR_PW') || '') : String(req.password));
+      const r = useSaved ? hrFetchSavedCached_(req.fresh === true)   // v20.4: 6시간 안의 결과 재사용 (새로 읽기는 fresh)
+                         : hrFetchEmployees_(String(req.id || PROPS.getProperty('HR_ID') || ''), String(req.password));
       // 수동 가져오기도 이상 감지 결과를 함께 돌려줌 (화면에서 경고 후 관리자가 판단)
       const chk = hrSanity_(rowsToEmployees_(r.headers, r.rows));
       if (chk.ok && useSaved) saveHrBaseline_(chk);
-      return { success: true, headers: r.headers, rows: r.rows, warnings: chk.problems };
+      return { success: true, headers: r.headers, rows: r.rows, warnings: chk.problems, cached: !!r.cached, at: r.at || '' };
     }
     case 'nh.list':   return requireLogin_(s) || nhList_(s);
     case 'nh.answer': return requireLogin_(s) || nhAnswer_(req, s);
@@ -1896,7 +2050,7 @@ function staffOp_(req, s) {
     case 'nh.run':    // '지금 확인' = 매일 자동 확인과 같은 동작 (자동 로그인 가능할 때만 메일)
       if (deny) return deny;
       if (!hrAutoReady_()) return { success: false, error: '인사 사이트 자동 로그인이 설정되어야 합니다 (시트 메뉴 ④). 알림 메일은 자동 로그인일 때만 발송됩니다.' };
-      return Object.assign({ success: true }, runAutoCheck_());
+      return Object.assign({ success: true }, runAutoCheck_(req.full === true));
   }
   return { success: false, error: 'unknown op: ' + req.op };
 }

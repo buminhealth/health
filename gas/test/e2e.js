@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v20\.4/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v20\.5/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
   const other = await page.evaluate(async () => {
@@ -504,7 +504,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v20.4'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v20.5'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -512,24 +512,24 @@ function check(name, cond, extra) {
   const many = [];
   for (let i = 0; i < 20; i++) many.push(mk('1300000' + String(i).padStart(2, '0'), { name: S('직원' + i), dept: S('61병동'), joinDate: S('2020-01-01'), quitDate: S('') }));
   fb.collections = { employees_public: many, leaves: [] };
-  const okRun = await page.evaluate(() => BMAUTH.post('nh.run', {}));
+  const okRun = await page.evaluate(() => BMAUTH.post('nh.run', { full: true }));
   check('정상 데이터: 자동 확인 성공·기준 인원 기록', okRun.success && !okRun.error, okRun.error);
   const cfgVal = k => { const r = g.sheets['관리자설정'].rows.find(x => x[0] === k); return r ? r[1] : ''; };
   check('정상 데이터: 기준 인원 20명 기록', cfgVal('hr_last_count') === '20', cfgVal('hr_last_count'));
   const empBefore = g.sheets['직원목록'].rows.length;
   const mailBefore = mail.sent.length;
   fb.collections.employees_public = many.slice(0, 5);   // 인원 급감
-  const dropRun = await page.evaluate(() => BMAUTH.post('nh.run', {}));
+  const dropRun = await page.evaluate(() => BMAUTH.post('nh.run', { full: true }));
   check('이상 감지: 인원 급감 → 반영 중단', !!dropRun.error && /크게 줄었습니다/.test(dropRun.error) && g.sheets['직원목록'].rows.length === empBefore, dropRun.error);
   const failMail = mail.sent.slice(mailBefore).filter(m => m.to === 'admin@bumin.co.kr' && /자동 확인 실패/.test(m.subject));
   check('실패 시 보건관리자 메일 1통', failMail.length === 1, mail.sent.slice(mailBefore).map(m => m.subject));
-  await page.evaluate(() => BMAUTH.post('nh.run', {}));
+  await page.evaluate(() => BMAUTH.post('nh.run', { full: true }));
   check('같은 날 같은 실패는 메일 다시 안 보냄', mail.sent.slice(mailBefore).filter(m => /자동 확인 실패/.test(m.subject)).length === 1);
   fb.collections.employees_public = many.map(d => ({ name: d.name, fields: { name: d.fields.name, dept: d.fields.dept, hireDt: d.fields.joinDate } }));   // 필드 이름 변경
-  const renRun = await page.evaluate(() => BMAUTH.post('nh.run', {}));
+  const renRun = await page.evaluate(() => BMAUTH.post('nh.run', { full: true }));
   check('이상 감지: 입사일 필드 이름 변경(빈 비율 0%→100%) → 반영 중단', !!renRun.error && /입사일/.test(renRun.error), renRun.error);
   check('다른 사유의 실패는 새로 메일', mail.sent.slice(mailBefore).filter(m => /자동 확인 실패/.test(m.subject)).length === 2);
-  const manual = await page.evaluate(() => BMAUTH.post('hr.fetch', {}));
+  const manual = await page.evaluate(() => BMAUTH.post('hr.fetch', { fresh: true }));
   check('수동 가져오기: 이상 경고를 함께 반환', manual.success && manual.warnings.length > 0, manual.warnings);
   const st186 = await page.evaluate(() => BMAUTH.post('emp.status', {}));
   check('관리자 화면용 최근 오류에 사유 표시', /입사일/.test(st186.hrLastError), st186.hrLastError);
@@ -537,9 +537,41 @@ function check(name, cond, extra) {
   g.sheets['관리자설정'].rows = g.sheets['관리자설정'].rows.filter(x => !/^hr_last_(count|ratios)$/.test(x[0]));
   fb.collections.employees_public = many.map((d, i) => ({ name: d.name, fields: i < 15 ? { name: d.fields.name, dept: d.fields.dept }
                                                                                     : { name: d.fields.name, dept: d.fields.dept, joinDate: d.fields.joinDate } }));
-  const noFalse1 = await page.evaluate(() => BMAUTH.post('nh.run', {}));
-  const noFalse2 = await page.evaluate(() => BMAUTH.post('nh.run', {}));
+  const noFalse1 = await page.evaluate(() => BMAUTH.post('nh.run', { full: true }));
+  const noFalse2 = await page.evaluate(() => BMAUTH.post('nh.run', { full: true }));
   check('오탐 방지: 원래 입사일 75%가 빈 데이터도 정상 반영 (첫 실행·다음 실행 모두)', !noFalse1.error && !noFalse2.error, [noFalse1.error, noFalse2.error]);
+  // v20.4 인사 사이트 읽기 줄이기: 매일 확인은 조건 조회(부분), 전체는 주 1회 · 가져오기 6시간 재사용 · 한도 초과 안내
+  fb.collections = { employees_public: many.map(d => ({ name: d.name, fields: Object.assign({}, d.fields) })), leaves: [] };
+  fb.collections.employees_public.push(mk('126102101', { name: S('부분신입'), dept: S('61병동'), joinDate: S(kstDay(-1)), quitDate: S('') }));
+  fb.collections.employees_public[3].fields.quitDate = S(kstDay(-1));   // 직원3 어제 퇴사
+  fb.collections.leaves = [{ name: 'x/leaves/a', fields: { empCode: S('130000005'), type: S('육아휴직'), start: S(kstDay(-2)), end: S(kstDay(60)) } }];
+  const setCfg = (k, v) => { const rr = g.sheets['관리자설정'].rows; const r = rr.find(x => x[0] === k); if (r) r[1] = v; else rr.push([k, v, '']); };
+  setCfg('hr_last_full', kstDay(-1)); setCfg('hr_last_check', kstDay(-1));
+  const sunday = new Date(kstDay(0) + 'T12:00:00Z').getUTCDay() === 0;
+  fb.queries = [];
+  const callsBefore = fb.calls.length;
+  const pr = await page.evaluate(() => BMAUTH.post('nh.run', {}));
+  const eRows = g.sheets['직원목록'].rows, EH2 = eRows[0];
+  const empOf = nm => eRows.find(r => r[EH2.indexOf('이름')] === nm) || [];
+  if (!sunday) {
+    check('매일 확인 = 부분 조회 (입사일 · 퇴사일 · 휴직 종료일 조건) · 읽은 문서 수가 전체보다 훨씬 적음', pr.success && pr.mode === 'partial' && pr.reads < 15 &&
+      ['joinDateGREATER_THAN_OR_EQUAL', 'quitDateGREATER_THAN_OR_EQUAL', 'endGREATER_THAN_OR_EQUAL', 'endEQUAL'].every(q => fb.queries.some(x => x.filters.indexOf(q) >= 0)), [pr.mode, pr.reads, fb.queries]);
+    check('부분 조회 반영: 신규 입사 추가 · 어제 퇴사 → 퇴사 · 현재 휴직 → 휴직 (명단 없는 직원은 그대로)', !!empOf('부분신입').length && /퇴사/.test(empOf('직원3')[EH2.indexOf('재직상태')]) &&
+      /휴직\(육아휴직\)/.test(empOf('직원5')[EH2.indexOf('재직상태')]) && !/퇴사/.test(empOf('직원7')[EH2.indexOf('재직상태')]), [empOf('직원3'), empOf('직원5')]);
+  }
+  const full = await page.evaluate(() => BMAUTH.post('nh.run', { full: true }));
+  check('전체 동기화(요청 · 주 1회)는 전체 조회 + 이상 감지', full.success && full.mode === 'full' && full.reads >= 20, [full.mode, full.reads, full.error]);
+  const c0 = fb.calls.length;
+  const f1 = await page.evaluate(() => BMAUTH.post('hr.fetch', {}));
+  const c1 = fb.calls.length;
+  const f2 = await page.evaluate(() => BMAUTH.post('hr.fetch', { fresh: true }));
+  check('[저장된 계정으로 가져오기]: 6시간 안이면 다시 읽지 않음 · 새로 읽기는 fresh', f1.success && f1.cached && c1 === c0 && f2.success && !f2.cached && fb.calls.length > c1, [f1.cached, c1 - c0, f2.cached]);
+  fb.quota = true;
+  const q429 = await page.evaluate(() => BMAUTH.post('nh.run', { full: true }));
+  fb.quota = false;
+  check('읽기 한도 초과(429) → "오후 4시 이후 다시" 안내', /한도/.test(q429.error || '') && /오후 4시/.test(q429.error || ''), q429.error);
+  const stR = await page.evaluate(() => BMAUTH.post('emp.status', {}));
+  check('직원정보관리 상태: 오늘 인사 사이트 읽기 건수 · 마지막 전체 동기화', stR.hrReads > 0 && stR.hrLastFull === kstDay(0), [stR.hrReads, stR.hrLastFull]);
   fb.collections = null; g.props.FB_PATH = 'employees';
 
   // 13-4. 물질 마스터 점검 (v18.7): CAS 복원·검증, 빈칸 제안, 법령대조표, 빈 칸에만 반영
@@ -976,8 +1008,8 @@ function check(name, cond, extra) {
   const rowOfName = nm => empSh.rows.filter(r => r[EH.indexOf('이름')] === nm);
   check('합치기 적용: #N/A → 인사 사번, 빈 사번 + 입사일 9/1 → 사번 · 입사일 채움 (새 줄 없음)', realM.success && realM.added === 0 && rowOfName('엔에이').length === 1 && rowOfName('엔에이')[0][0] === '126000051' && rowOfName('빈사번').length === 1 && rowOfName('빈사번')[0][0] === '126000052' && rowOfName('빈사번')[0][EH.indexOf('입사일')] === '2026-09-01', [rowOfName('엔에이'), rowOfName('빈사번')]);
   check('합치기 적용: 같은 사번 두 줄 → 한 줄 (빈 칸은 다른 줄 값)', rowOfName('중복가').length === 1 && rowOfName('중복가')[0][EH.indexOf('직위')] === '간호사5급' && rowOfName('중복가')[0][EH.indexOf('재직상태')] === '재직', rowOfName('중복가'));
-  const mergeWarn = await page.evaluate(() => BMAUTH.post('emp.merge', { dry: true }));
-  const mergeAuto = await page.evaluate(() => BMAUTH.post('emp.merge', { dry: true, force: true }));
+  const mergeWarn = await page.evaluate(() => BMAUTH.post('emp.merge', { dry: true, fresh: true }));
+  const mergeAuto = await page.evaluate(() => BMAUTH.post('emp.merge', { dry: true, force: true, fresh: true }));
   check('인사 사이트와 합치기: 인원이 크게 줄면 경고 후 멈춤 → 확인하면 미리보기', !mergeWarn.success && mergeWarn.warnings.length > 0 && mergeAuto.success && mergeAuto.dry && mergeAuto.hrCount > 0 && Array.isArray(mergeAuto.missingNo), [mergeWarn.error, mergeAuto.error || mergeAuto.hrCount]);
   const info = await page.evaluate(() => BMAUTH.post('edu.rules', {}));
   check('규칙 화면 정보: 규칙 · 적용 인원 · 부서별 직종 · 부서 매칭', info.success && info.rules.length === 2 && info.hits[0] === 1 && info.jobs['61병동']['간호조무사'] === 1 && info.deptMap.some(m => m.raw === '진검실' && m.app === '61병동' && m.staff === 1), info.jobs);
