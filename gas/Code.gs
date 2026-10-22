@@ -2194,7 +2194,8 @@ function chemAudit_() {
       if (vals.length > 1) {
         const memos = byCas[cas].filter(r => r.memo).map(r => r.product + ': ' + r.memo);
         conflicts.push({ cas: cas, comp: byCas[cas][0].comp, field: f, values: vals, explained: memos.length > 0, memos: memos,
-                         rows: byCas[cas].map(r => r.product + ' (' + (r[f] || '미해당') + ')') });
+                         rows: byCas[cas].map(r => r.product + ' (' + (r[f] || '미해당') + ')'),
+                         items: byCas[cas].map(r => ({ row: r.row, product: r.product, value: r[f], memo: r.memo })) });
       }
     });
   });
@@ -2259,8 +2260,20 @@ function chemApply_(req) {
   rows.forEach(r => { byRow[r.row] = r; });
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
-  let filled = 0, fixed = 0, amounts = 0, skipped = 0;
+  let filled = 0, fixed = 0, amounts = 0, skipped = 0, edited = 0;
   try {
+    // v20.7: ③ 화면에서 직접 고침 — 주기 바꾸기 / 비우기(미해당) / 메모1에 사유 추가. 그 사이 시트 값이 바뀌었으면(old 불일치) 건너뜀
+    (req.edits || []).forEach(e => {
+      const r = byRow[e.row];
+      const ci = e.field === 'hc' ? col.hc : e.field === 'we' ? col.we : -1;
+      const v = String(e.value == null ? '' : e.value).trim();
+      const memo = String(e.memo || '').trim().slice(0, 200);
+      if (!r || ci < 0 || String(e.old == null ? '' : e.old).trim() !== r[e.field] || (v && !isCycle_(v))) { skipped++; return; }
+      let did = false;
+      if (v !== r[e.field]) { sheet.getRange(e.row, ci + 1).setValue(safeCell_(v)); did = true; }
+      if (memo && col.memo >= 0 && r.memo.indexOf(memo) < 0) { sheet.getRange(e.row, col.memo + 1).setValue(safeCell_(r.memo ? r.memo + ' · ' + memo : memo)); did = true; }
+      if (did) edited++;
+    });
     (req.fills || []).forEach(f => {
       const r = byRow[f.row];
       const ci = f.field === 'hc' ? col.hc : col.we;
@@ -2292,7 +2305,7 @@ function chemApply_(req) {
   } finally {
     lock.releaseLock();
   }
-  return { success: true, filled: filled, fixed: fixed, amounts: amounts, skipped: skipped };
+  return { success: true, filled: filled, fixed: fixed, amounts: amounts, edited: edited, skipped: skipped };
 }
 
 // 법령대조표: 고시 목록 붙여넣기 (별표 표를 복사해 붙이면 줄마다 CAS를 찾아 해당 항목에 기록)

@@ -630,6 +630,25 @@ function check(name, cond, extra) {
   const keepHc = lawRow[2]; lawRow[2] = '미대상';
   const au4 = await page.evaluate(() => BMAUTH.post('chem.audit', {}));
   check("법령대조표 '미대상' → ④ 제안 안 함 · 시트에 주기가 적힌 성분은 따로 표시", !au4.suggestions.some(x => x.cas === '67-56-1' && x.field === 'hc') && au4.lawMismatch.some(x => x.cas === '67-56-1' && x.field === 'hc'), [au4.lawMismatch]);
+  // v20.7 ③ 화면에서 직접 고침: 미해당(비움) + 메모1 사유 · 그 사이 바뀐 값(old 불일치)은 건너뜀
+  const mm = au4.lawMismatch.find(x => x.cas === '67-56-1' && x.field === 'hc');
+  const hcCol = ch.rows[0].findIndex(h => /healthCheck|특수건강/.test(h)), memoCol = ch.rows[0].findIndex(h => /메모1|비고|memo/.test(h));
+  const ed0 = await page.evaluate(m => BMAUTH.post('chem.apply', { edits: [{ row: m.row, field: 'hc', old: '99개월', value: '' }] }), mm);
+  check('③ 직접 고침: 시트 값이 그 사이 바뀌었으면 건너뜀', ed0.success && ed0.edited === 0 && ed0.skipped === 1 && ch.rows[mm.row - 1][hcCol] === mm.value, ed0);
+  const nRows = ch.rows.length;
+  ch.appendRow(['석회A', 'Z사', '병리과', 'Limestone', '1317-65-3', '50', '24개월', '']);
+  ch.appendRow(['석회B', 'Z사', '병리과', 'Limestone', '1317-65-3', '50', '12개월', '']);
+  const uiEd = await page.evaluate(async m => {
+    admSwitchPane('chemm'); await BMCHEM.open();
+    const sel = document.querySelector('[data-medit][data-row="' + m.row + '"]'); sel.value = '';
+    document.querySelector('[data-cmemo="' + m.row + '"]').value = '고시 미대상 확인';
+    document.getElementById('chemm-edit').click();
+    await new Promise(r => setTimeout(r, 1500));
+    return !!document.querySelector('[data-cedit]');
+  }, mm);
+  const limeB = ch.rows[nRows + 1];
+  ch.rows.length = nRows;
+  check('③ 직접 고침(화면): 미해당(비움) 선택 + 메모1 사유 → 시트 반영 · 같은 CAS 주기 다름 표에도 고르기 칸', ch.rows[mm.row - 1][hcCol] === '' && (memoCol < 0 || /고시 미대상 확인/.test(ch.rows[mm.row - 1][memoCol])), [ch.rows[mm.row - 1], uiEd]);
   lawRow[2] = keepHc;
   // v20.6 국가법령정보 OPEN API: OC 없으면 안내 · 여러 OC 중 되는 것만 남김 · 별표22 원문 → 칸에 채움 (반영은 관리자가)
   const lf0 = await page.evaluate(() => BMAUTH.post('chem.lawFetch', { kind: 'hc' }));
