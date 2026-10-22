@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v20.7 (2026-10-22)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.0 (2026-10-22)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -177,6 +177,8 @@ function doPost(e) {
                         result = chemOp_(req, s); break;
       case 'ai.status': case 'ai.setKey': case 'ai.list': case 'ai.analyze': case 'ai.judge': case 'ai.apply': case 'ai.products': case 'ai.compare':
                         result = aiOp_(req, s); break;
+      case 'ra.meta': case 'ra.analyze': case 'ra.submit': case 'ra.mine': case 'ra.photo': case 'ra.list': case 'ra.update':
+                        result = raOp_(req, s); break;
       case 'edu.dupes': case 'edu.dedupe': case 'edu.status': case 'edu.exclude': case 'edu.askMail': case 'edu.newChem':
       case 'edu.rules': case 'edu.saveRules': case 'dept.saveMap': case 'edu.manual': case 'edu.unit': case 'edu.manualDelete':
                         result = eduOp_(req, s); break;
@@ -3428,6 +3430,290 @@ function chemOp_(req, s) {
       const ordered = list.filter((oc, i) => tests[i].ok).concat(list.filter((oc, i) => !tests[i].ok));
       if (ordered.length) PROPS.setProperty('LAW_OC', ordered.join(',')); else PROPS.deleteProperty('LAW_OC');
       return { success: true, hasOc: ordered.length > 0, oc: lawOcMask_(), tests: tests.map(t => ({ oc: t.mask, ok: t.ok, msg: t.msg })) };
+    }
+  }
+  return { success: false, error: 'unknown op: ' + req.op };
+}
+
+// ════════════════════════════════════════════════════════════════
+// v21.0 AI 위험성평가 (근로자 참여형 수시 위험성평가)
+//  근로자: 현장 사진 → AI가 유해·위험요인 파악 · 가능성×중대성 추정 → 근로자가 체감에 맞게 조정 → 감소대책 선택 → 관리자에게 제출
+//  관리자: 접수 목록 · 상태(접수/검토중/개선중/개선완료/해당없음) · 담당자 · 완료예정일 · 의견 → 부서 화면에 처리 결과 표시
+//  · 절차: 「사업장 위험성평가에 관한 지침」(유해·위험요인 파악 → 위험성 결정 → 감소대책 수립 · 실행), 빈도·강도법(5×4)
+//  · 점수 · 등급은 서버가 다시 계산 (AI 계산을 그대로 믿지 않음)
+//  · 관련 법령은 국가법령정보 API로 받은 「산업안전보건기준에 관한 규칙」 조문 목록 안에서만 고르게 하고 번호를 대조 (없는 조문은 버림)
+//  · AI에는 사진 · 장소 · 작업 설명만 보냄 (이름 · 부서 등 개인정보는 보내지 않음). 사진은 앱에서 줄이며 위치정보(EXIF)가 지워짐
+// ════════════════════════════════════════════════════════════════
+const RA_SHEET = '위험성평가';
+const RA_HEADER = ['평가ID', '제출일시', '부서', '작성자', '장소', '작업·상황', '사진', '분석방식', '위험요인 요약', '최고점수', '최고등급',
+                   '즉시조치', '상세(JSON)', '상태', '담당자', '완료예정일', '관리자의견', '처리일시', '처리자'];
+const RA_STATUS = ['접수', '검토중', '개선중', '개선완료', '해당없음'];
+const RA_CATS = ['기계적', '전기적', '화학적', '생물학적', '작업특성(근골격계)', '작업환경', '화재·폭발', '심리사회적'];
+const RA_FREQ = ['', '거의 없음 (연 1회 미만)', '가끔 (연 수회)', '종종 (월 수회)', '자주 (주 수회)', '매우 자주 (매일)'];
+const RA_SEV = ['', '경미 (치료 불필요)', '보통 (치료 필요한 부상 · 질병)', '중대 (휴업이 필요한 부상 · 직업병)', '치명 (사망 · 영구장해)'];
+const RA_DAILY_LIMIT = 40;   // 부서별 하루 AI 분석 횟수 (무료 한도 보호)
+const RA_MAX_BYTES = 6 * 1024 * 1024;
+
+function raGrade_(score) {
+  return score >= 15 ? '매우높음' : score >= 8 ? '높음' : score >= 4 ? '보통' : '낮음';
+}
+function raInt_(v, lo, hi) { const n = parseInt(v, 10); return isNaN(n) ? lo : Math.max(lo, Math.min(hi, n)); }
+function raSheet_() {
+  let sh = SS.getSheetByName(RA_SHEET);
+  if (!sh) { sh = SS.insertSheet(RA_SHEET); sh.appendRow(RA_HEADER); sh.setFrozenRows(1); }
+  return sh;
+}
+function raRows_() {
+  const sh = raSheet_();
+  const last = sh.getLastRow();
+  if (last < 2) return [];
+  return sh.getRange(2, 1, last - 1, RA_HEADER.length).getDisplayValues().map((r, i) => {
+    const o = { _row: i + 2 };
+    RA_HEADER.forEach((h, j) => { o[h] = r[j]; });
+    return o;
+  });
+}
+
+// 「산업안전보건기준에 관한 규칙」 조문 목록 (번호 → 제목). 드라이브에 30일 보관, 법령 API로 갱신
+function raLawArticles_() {
+  const path = 'law/기준규칙_조문.json';
+  const f = getFile_(path);
+  let cur = null;
+  if (f) { try { cur = JSON.parse(f.getBlob().getDataAsString('UTF-8')); } catch (_) {} }
+  if (cur && cur.items && (Date.now() - new Date(cur.date).getTime()) < 30 * 86400000) return cur.items;
+  const ocs = String(PROPS.getProperty('LAW_OC') || '').split(',').filter(Boolean);
+  for (const oc of ocs) {
+    try {
+      const base = 'https://www.law.go.kr/DRF/';
+      const q = lawGetJson_(base + 'lawSearch.do?OC=' + encodeURIComponent(oc) + '&target=law&type=JSON&display=20&query=' + encodeURIComponent('산업안전보건기준에 관한 규칙'));
+      const items = [].concat(((q.json || {}).LawSearch || {}).law || []);
+      const hit = items.find(x => String(x['법령명한글'] || '').replace(/\s/g, '') === '산업안전보건기준에관한규칙') || items[0];
+      if (!hit) continue;
+      const b = lawGetJson_(base + 'lawService.do?OC=' + encodeURIComponent(oc) + '&target=law&type=JSON&MST=' + encodeURIComponent(hit['법령일련번호'] || ''));
+      const out = {};
+      (function walk(n) {
+        if (!n || typeof n !== 'object') return;
+        if (Array.isArray(n)) { n.forEach(walk); return; }
+        if (n['조문번호'] !== undefined && n['조문제목'] && String(n['조문여부'] || '조문') === '조문') {
+          const no = '제' + parseInt(n['조문번호'], 10) + '조' + (n['조문가지번호'] ? '의' + parseInt(n['조문가지번호'], 10) : '');
+          out[no] = String(n['조문제목']).trim();
+        }
+        Object.keys(n).forEach(k => { if (typeof n[k] === 'object') walk(n[k]); });
+      })(b.json);
+      if (Object.keys(out).length > 50) {
+        writeFile_(path, Utilities.newBlob(JSON.stringify({ date: new Date().toISOString(), enforce: hit['시행일자'] || '', items: out })).getBytes(), 'application/json', '');
+        return out;
+      }
+    } catch (_) {}
+  }
+  return cur && cur.items ? cur.items : null;   // API가 안 되면 예전 목록(있으면)
+}
+
+function raPrompt_(place, task, laws) {
+  const lawList = laws ? Object.keys(laws).map(k => k + ' ' + laws[k]).join('\n') : '';
+  return [
+    '너는 병원(의료기관) 산업안전보건 위험성평가 전문가다. 근로자가 찍은 현장 사진과 설명을 보고',
+    '「사업장 위험성평가에 관한 지침」(고용노동부 고시)의 절차(유해·위험요인 파악 → 위험성 결정 → 위험성 감소대책)에 따라 평가해 JSON으로만 답하라.',
+    '',
+    '[규칙]',
+    '- 사진에 실제로 보이는 것과 근로자 설명에 근거해 판단하라. 보이지 않는 것은 추측하지 말고 evidence에 "확인 필요"라고 적어라.',
+    '- 사람의 신원(얼굴 · 이름표 · 환자 정보)은 언급하거나 추정하지 마라. 개인정보가 보이면 privacy에 무엇이 보이는지만 적어라.',
+    '- category는 다음 중 하나: ' + RA_CATS.join(', '),
+    '- 병원에서 흔한 위험 예: 주사침 · 날카로운 기구 자상, 혈액 · 체액 노출, 감염성 폐기물, 환자 이송 · 체위변경 시 요통(근골격계), 바닥 물기 · 전선 · 적재물로 미끄러짐 · 넘어짐,',
+    '  의료가스 용기 고정 미흡, 문어발 콘센트 · 손상 전선, 소독제 · 포르말린 · 항암제 등 화학물질 노출, 방사선, 고온 멸균기 화상, 폭언 · 폭행, 소화기 · 비상구 차단, 높은 곳 물건 낙하.',
+    '- 가능성(freq) 1~5: ' + RA_FREQ.slice(1).map((x, i) => (i + 1) + ' ' + x).join(', '),
+    '- 중대성(sev) 1~4: ' + RA_SEV.slice(1).map((x, i) => (i + 1) + ' ' + x).join(', '),
+    '- 감소대책은 제거 → 대체 → 공학적 → 관리적(교육 · 절차 · 표지) → 보호구 순서로 효과가 큰 것부터. 근로자가 지금 바로 할 수 있는 것은 who="근로자 즉시", 시설 · 구매 · 규정이 필요한 것은 who="관리자".',
+    '- 대책을 시행한 뒤 예상 가능성(afterFreq) · 중대성(afterSev)도 적어라.',
+    '- laws에는 아래 「산업안전보건기준에 관한 규칙」 조문 목록에 있는 번호만 적어라(관련 있는 것 0~3개). 목록이 비어 있으면 빈 배열.',
+    '- 위험요인은 최대 5개, 위험한 순서로. 위험이 없어 보이면 hazards는 빈 배열, goodPractice에 잘 된 점.',
+    '',
+    '[근로자 입력] 장소: ' + (place || '(미입력)') + ' / 작업 · 상황: ' + (task || '(미입력)'),
+    '',
+    '[응답 형식]',
+    '{"scene":"사진 설명 한 줄","privacy":"개인정보 노출 의심 내용(없으면 빈 문자열)","quality":"사진 품질 문제(없으면 빈 문자열)",',
+    '"hazards":[{"category":"","hazard":"유해·위험요인","situation":"위험 발생 상황 및 결과","evidence":"사진에서 본 근거","freq":3,"sev":2,',
+    '"controls":[{"type":"제거|대체|공학적|관리적|보호구","text":"대책","who":"근로자 즉시|관리자"}],"afterFreq":1,"afterSev":2,"laws":["제3조"]}],',
+    '"goodPractice":"잘 되어 있는 점(없으면 빈 문자열)"}',
+    '',
+    '[산업안전보건기준에 관한 규칙 조문 목록]',
+    lawList || '(없음)'
+  ].join('\n');
+}
+
+// AI 응답 정리: 범위 맞춤 · 점수/등급 재계산 · 법령 번호 대조
+function raNormalize_(d, laws) {
+  const types = ['제거', '대체', '공학적', '관리적', '보호구'];
+  const hz = (d.hazards || []).slice(0, 8).map(h => {
+    const freq = raInt_(h.freq, 1, 5), sev = raInt_(h.sev, 1, 4);
+    const af = raInt_(h.afterFreq || freq, 1, 5), as = raInt_(h.afterSev || sev, 1, 4);
+    const lawOut = [];
+    (h.laws || []).forEach(x => {
+      const no = String(x || '').replace(/\s/g, '').match(/제\d+조(의\d+)?/);
+      if (no && laws && laws[no[0]] && !lawOut.some(l => l.no === no[0])) lawOut.push({ no: no[0], title: laws[no[0]] });
+    });
+    return {
+      category: RA_CATS.indexOf(String(h.category || '').trim()) >= 0 ? String(h.category).trim() : (RA_CATS.find(c => String(h.category || '').indexOf(c.slice(0, 2)) >= 0) || '작업환경'),
+      hazard: String(h.hazard || '').trim().slice(0, 200), situation: String(h.situation || '').trim().slice(0, 300),
+      evidence: String(h.evidence || '').trim().slice(0, 200),
+      freq: freq, sev: sev, score: freq * sev, grade: raGrade_(freq * sev),
+      aiFreq: freq, aiSev: sev,
+      controls: (h.controls || []).slice(0, 8).map(c => ({
+        type: types.indexOf(String(c.type || '').trim()) >= 0 ? String(c.type).trim() : '관리적',
+        text: String(c.text || '').trim().slice(0, 200), who: /근로자/.test(String(c.who || '')) ? '근로자 즉시' : '관리자'
+      })).filter(c => c.text),
+      afterFreq: af, afterSev: as, afterScore: af * as, afterGrade: raGrade_(af * as),
+      laws: lawOut
+    };
+  }).filter(h => h.hazard);
+  hz.sort((a, b) => b.score - a.score);
+  return { scene: String(d.scene || '').slice(0, 200), privacy: String(d.privacy || '').slice(0, 200), quality: String(d.quality || '').slice(0, 200),
+           goodPractice: String(d.goodPractice || '').slice(0, 300), hazards: hz };
+}
+
+function raAnalyze_(req, s) {
+  const key = PROPS.getProperty('GEMINI_API_KEY');
+  if (!key) return { success: false, noKey: true, error: 'AI 키가 없어 자동 분석을 할 수 없습니다. 아래 [직접 입력]으로 위험요인을 적어 제출할 수 있습니다.' };
+  const b64 = String(req.image || '').replace(/^data:image\/\w+;base64,/, '');
+  if (!b64) return { success: false, error: '사진이 없습니다' };
+  if (b64.length * 0.75 > RA_MAX_BYTES) return { success: false, error: '사진이 너무 큽니다' };
+  const ck = 'ra_n_' + todayKst_() + '_' + sha256Hex_(s.dept || 'admin').slice(0, 12);
+  const cache = CacheService.getScriptCache();
+  const n = parseInt(cache.get(ck) || '0', 10);
+  if (s.role !== 'admin' && n >= RA_DAILY_LIMIT) return { success: false, error: '오늘 이 부서의 AI 분석 횟수(' + RA_DAILY_LIMIT + '회)를 다 썼습니다. [직접 입력]으로 제출하거나 내일 다시 시도하세요.' };
+  cache.put(ck, String(n + 1), 86400);
+  let laws = null;
+  try { laws = raLawArticles_(); } catch (_) {}
+  const mime = /^image\/(png|webp)$/.test(String(req.mime || '')) ? String(req.mime) : 'image/jpeg';
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(aiModel_()) + ':generateContent';
+  const body = { contents: [{ parts: [{ inline_data: { mime_type: mime, data: b64 } },
+                                      { text: raPrompt_(String(req.place || '').slice(0, 100), String(req.task || '').slice(0, 300), laws) }] }],
+                 generationConfig: { temperature: 0.2, responseMimeType: 'application/json' } };
+  let res;
+  try {
+    res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify(body), headers: { 'x-goog-api-key': key }, muteHttpExceptions: true });
+  } catch (e) { return { success: false, error: 'AI 연결 실패: ' + e.message }; }
+  const code = res.getResponseCode();
+  let j = null;
+  try { j = JSON.parse(res.getContentText()); } catch (_) {}
+  if (code === 429) return { success: false, error: 'AI 무료 사용 한도를 넘었습니다. 잠시 후 다시 시도하거나 [직접 입력]으로 제출하세요.' };
+  if (code !== 200) return { success: false, error: 'AI 오류 (' + code + '): ' + ((j && j.error && j.error.message) || '').slice(0, 200) };
+  const text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(p => p.text || '').join('');
+  let d;
+  try { d = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); }
+  catch (_) { return { success: false, error: 'AI 응답을 읽지 못했습니다 — 다시 시도하거나 [직접 입력]으로 제출하세요' }; }
+  return Object.assign({ success: true, model: aiModel_(), lawChecked: !!laws }, raNormalize_(d, laws));
+}
+
+function raSubmit_(req, s) {
+  const author = String(req.author || '').trim().slice(0, 30);
+  if (!author) return { success: false, error: '작성자 이름을 적어 주세요' };
+  const place = String(req.place || '').trim().slice(0, 100);
+  if (!place) return { success: false, error: '장소를 적어 주세요' };
+  const hz = raNormalize_({ hazards: (req.hazards || []).map(h => Object.assign({}, h, { laws: (h.laws || []).map(l => l.no || l) })) }, raLawSafe_()).hazards
+    .map((h, i) => {   // 근로자가 고른 대책 · AI 원래 값 유지
+      const src = (req.hazards || []).find(x => String(x.hazard || '').trim().slice(0, 200) === h.hazard) || {};
+      h.aiFreq = src.aiFreq ? raInt_(src.aiFreq, 1, 5) : ''; h.aiSev = src.aiSev ? raInt_(src.aiSev, 1, 4) : '';
+      h.picked = (src.picked || []).map(Number).filter(k => k >= 0 && k < h.controls.length);
+      h.extra = String(src.extra || '').trim().slice(0, 300);
+      return h;
+    });
+  if (!hz.length) return { success: false, error: '위험요인을 하나 이상 적어 주세요' };
+  const id = 'RA' + Utilities.formatDate(new Date(), TZ, 'yyMMdd') + '-' + Math.random().toString(36).slice(2, 7).toUpperCase();
+  let photo = '';
+  const b64 = String(req.image || '').replace(/^data:image\/\w+;base64,/, '');
+  if (b64) {
+    if (b64.length * 0.75 > RA_MAX_BYTES) return { success: false, error: '사진이 너무 큽니다' };
+    photo = 'records/ra/' + Utilities.formatDate(new Date(), TZ, 'yyyy-MM') + '/' + id + '.jpg';
+    writeFile_(photo, Utilities.base64Decode(b64), 'image/jpeg', s.dept || '');
+  }
+  const max = hz.reduce((m, h) => Math.max(m, h.score), 0);
+  const summary = hz.map((h, i) => (i + 1) + ') [' + h.category + '] ' + h.hazard + ' — ' + h.freq + '×' + h.sev + '=' + h.score + ' ' + h.grade +
+    (h.picked.length ? ' / 대책: ' + h.picked.map(k => h.controls[k].text).join(', ') : '') + (h.extra ? ' / 제안: ' + h.extra : '')).join('\n');
+  const detail = { scene: String(req.scene || '').slice(0, 200), method: req.ai ? 'AI' : '직접', hazards: hz };
+  const row = [id, nowKst_().replace('T', ' '), s.dept || '관리자', author, place, String(req.task || '').trim().slice(0, 300), photo, req.ai ? 'AI(' + aiModel_() + ')' : '직접 입력',
+               summary, max, raGrade_(max), String(req.immediate || '').trim().slice(0, 300), JSON.stringify(detail), '접수', '', '', '', '', ''];
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
+  try { raSheet_().appendRow(row.map(safeCell_)); } finally { lock.releaseLock(); }
+  let mailed = false;
+  try { mailed = raMail_(row, hz, photo); } catch (_) {}
+  return { success: true, id: id, maxScore: max, maxGrade: raGrade_(max), mailed: mailed };
+}
+function raLawSafe_() { try { return raLawArticles_(); } catch (_) { return null; } }
+
+function raMail_(row, hz, photo) {
+  const c = getAdminCfg().data || {};
+  const to = c['위험성평가알림이메일'] || c['보건관리자이메일'] || '';
+  if (!to) return false;
+  const esc = v => String(v || '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  const o = {}; RA_HEADER.forEach((h, i) => { o[h] = row[i]; });
+  const html = '<div style="font-family:sans-serif;font-size:14px;line-height:1.6">' +
+    '<p><b>' + esc(o['부서']) + '</b> ' + esc(o['작성자']) + '님이 수시 위험성평가(AI)를 제출했습니다.</p>' +
+    '<table style="border-collapse:collapse" cellpadding="6" border="1">' +
+    '<tr><th align="left">장소</th><td>' + esc(o['장소']) + '</td></tr><tr><th align="left">작업 · 상황</th><td>' + esc(o['작업·상황']) + '</td></tr>' +
+    '<tr><th align="left">최고 위험</th><td><b>' + esc(o['최고점수']) + '점 ' + esc(o['최고등급']) + '</b></td></tr>' +
+    '<tr><th align="left">즉시 조치</th><td>' + esc(o['즉시조치'] || '-') + '</td></tr></table>' +
+    '<ol>' + hz.map(h => '<li>[' + esc(h.category) + '] ' + esc(h.hazard) + ' — 가능성 ' + h.freq + ' × 중대성 ' + h.sev + ' = <b>' + h.score + ' ' + esc(h.grade) + '</b>' +
+      (h.picked.length ? '<br>대책: ' + esc(h.picked.map(k => h.controls[k].text).join(', ')) : '') + (h.extra ? '<br>근로자 제안: ' + esc(h.extra) : '') + '</li>').join('') + '</ol>' +
+    '<p>앱 → 관리자 모드 → 위험성평가에서 처리 상태를 입력해 주세요. (평가ID ' + esc(o['평가ID']) + ')</p></div>';
+  const opts = { to: to, subject: '[위험성평가] ' + o['최고등급'] + ' · ' + o['부서'] + ' · ' + o['장소'], htmlBody: html, name: '부민병원 보건관리' };
+  if (photo) { const f = getFile_(photo); if (f) opts.attachments = [f.getBlob().setName(o['평가ID'] + '.jpg')]; }
+  MailApp.sendEmail(opts);
+  return true;
+}
+
+function raView_(o, full) {
+  let d = {};
+  try { d = JSON.parse(o['상세(JSON)'] || '{}'); } catch (_) {}
+  const v = { id: o['평가ID'], date: o['제출일시'], dept: o['부서'], author: o['작성자'], place: o['장소'], task: o['작업·상황'], hasPhoto: !!o['사진'],
+              method: o['분석방식'], maxScore: Number(o['최고점수']) || 0, maxGrade: o['최고등급'], immediate: o['즉시조치'],
+              status: o['상태'] || '접수', owner: o['담당자'], due: o['완료예정일'], comment: o['관리자의견'], doneAt: o['처리일시'], summary: o['위험요인 요약'] };
+  if (full) { v.hazards = d.hazards || []; v.scene = d.scene || ''; }
+  return v;
+}
+
+function raOp_(req, s) {
+  const deny = requireLogin_(s);
+  if (deny) return deny;
+  const isAdmin = s.role === 'admin';
+  switch (req.op) {
+    case 'ra.meta':
+      return { success: true, hasKey: !!PROPS.getProperty('GEMINI_API_KEY'), cats: RA_CATS, freq: RA_FREQ, sev: RA_SEV, status: RA_STATUS };
+    case 'ra.analyze': return raAnalyze_(req, s);
+    case 'ra.submit': return raSubmit_(req, s);
+    case 'ra.mine': {
+      const rows = raRows_().filter(o => isAdmin || o['부서'] === s.dept).reverse().slice(0, 50);
+      return { success: true, data: rows.map(o => raView_(o, true)) };
+    }
+    case 'ra.photo': {
+      const o = raRows_().find(x => x['평가ID'] === req.id);
+      if (!o || (!isAdmin && o['부서'] !== s.dept)) return { success: false, status: 403, error: '권한 없음' };
+      const f = o['사진'] ? getFile_(o['사진']) : null;
+      if (!f) return { success: false, error: '사진 없음' };
+      return { success: true, image: 'data:image/jpeg;base64,' + Utilities.base64Encode(f.getBlob().getBytes()) };
+    }
+  }
+  if (!isAdmin) return { success: false, status: 403, error: '관리자 권한 필요' };
+  switch (req.op) {
+    case 'ra.list': {
+      const rows = raRows_().reverse();
+      return { success: true, data: rows.slice(0, 300).map(o => raView_(o, true)), total: rows.length };
+    }
+    case 'ra.update': {
+      const o = raRows_().find(x => x['평가ID'] === req.id);
+      if (!o) return { success: false, error: '평가를 찾지 못했습니다' };
+      const st = String(req.status || o['상태']);
+      if (RA_STATUS.indexOf(st) < 0) return { success: false, error: '상태 값이 올바르지 않습니다' };
+      const sh = raSheet_(), col = h => RA_HEADER.indexOf(h) + 1;
+      const set = (h, v) => sh.getRange(o._row, col(h)).setValue(safeCell_(v));
+      set('상태', st);
+      if (req.owner !== undefined) set('담당자', String(req.owner).slice(0, 50));
+      if (req.due !== undefined) { set('완료예정일', String(req.due).slice(0, 10)); sh.getRange(o._row, col('완료예정일')).setNumberFormat('@'); }
+      if (req.comment !== undefined) set('관리자의견', String(req.comment).slice(0, 500));
+      set('처리일시', nowKst_().replace('T', ' '));
+      set('처리자', '보건관리자');
+      return { success: true };
     }
   }
   return { success: false, error: 'unknown op: ' + req.op };
