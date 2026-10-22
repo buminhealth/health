@@ -51,7 +51,7 @@ function check(name, cond, extra) {
   await page.waitForTimeout(2500);
 
   // 1. 비로그인 상태
-  check('비로그인: 배지 표시', (await page.textContent('#bm-auth-badge')).includes('부서 로그인'));
+  check('비로그인: 배지 표시', (await page.textContent('#bm-auth-badge')).includes('부서 / 관리자 로그인'));
   check('비로그인: 실제 GitHub 토큰 없음', await page.evaluate(() => CFG.ghToken === 'gas-proxy' && localStorage.getItem('bm_ghToken') === 'gas-proxy'));
   check('비로그인: 직원목록 미로드', await page.evaluate(() => empList.length === 0));
   const anonEmp = await page.evaluate(async () => (await fetch('https://script.google.com/macros/s/X/exec?action=emp&callback=cb')).text());
@@ -119,7 +119,7 @@ function check(name, cond, extra) {
     foot: (document.querySelector('#pg-home > .bm-foot') || {}).textContent || '',
   }));
   check('홈: 처음 화면은 홈', home0.vis && home0.msdsHidden && home0.tabOn, home0);
-  check('홈: 타일 5개', JSON.stringify(home0.tiles) === JSON.stringify(['MSDS 관리', '교육일지 작성', '보호구 지급', '화학물질 보고서', '관리자 모드']), home0.tiles);
+  check('홈: 타일 4개 (관리자 모드 없음)', JSON.stringify(home0.tiles) === JSON.stringify(['MSDS 관리', '교육일지 작성', '보호구 지급', '화학물질 보고서']), home0.tiles);
   check('홈(로그인 전): 작성 타일 버튼은 부서 로그인', home0.ems.slice(1, 4).every(x => x === '부서 로그인'), home0.ems);
   check('홈(로그인 전): 로그인하면 할 수 있는 일 + 로그인 버튼', home0.todo.includes('할 수 있는 일') && home0.login, home0.todo);
   check('홈: 연락처는 보건관리실만', home0.foot.includes('보건관리실 내선 3293') && !home0.foot.includes('['), home0.foot);
