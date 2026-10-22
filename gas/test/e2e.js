@@ -251,12 +251,12 @@ function check(name, cond, extra) {
     const chip = [...document.querySelectorAll('#apv-list .apv-row')].find(r => r.dataset.key === key).textContent;
     const kpi1 = document.getElementById('adm-kpi').textContent;
     document.getElementById('apv-status').value = 'pending'; apvRender();
-    const pendingRows = document.querySelectorAll('#apv-list .apv-row').length;
+    const pendingRows = document.querySelectorAll('#apv-list .apv-row[data-key]').length;
     document.getElementById('apv-status').value = 'rejected'; apvRender();
-    const rjRows = document.querySelectorAll('#apv-list .apv-row').length;
+    const rjRows = document.querySelectorAll('#apv-list .apv-row[data-key]').length;
     document.getElementById('apv-status').value = ''; apvRender();
     // 줄 누르면 PDF 원본 보기
-    document.querySelector('#apv-list .apv-row').click();
+    document.querySelector('#apv-list .apv-row[data-key]').click();
     const t0 = Date.now();
     while (Date.now() - t0 < 8000 && !document.querySelector('#apv-v-frame, #apv-v-data')) await new Promise(r => setTimeout(r, 100));
     const viewer = { open: !!document.getElementById('apv-viewer'), frame: !!document.getElementById('apv-v-frame'),

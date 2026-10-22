@@ -10,8 +10,13 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v20.0 (2026-10-21)
+  부민병원 MSDS 통합시스템 v20.2 (2026-10-21)
 
+  ★★★ v20.2 (2026-10-21) — 화면 비율 · 연락처 띠 고정 · 관리자 결재 A-8:
+    - 연락처 띠: PC는 화면 맨 아래 고정 한 줄(40px), 휴대폰은 각 페이지 끝
+    - 큰 화면(1600px 이상) 홈 · 작성 화면 넓게, 부서현황 1280px
+    - 관리자 결재: 제목 한 줄 + 요약 4칸 + 왼쪽 결재 목록(검색 한 줄 · 선택 반려 · 선택 결재 · 더보기 메뉴) + 오른쪽 PDF 원본 고정 칸(1280px 이상)
+      목록 열을 종류 · 부서/교육일 · 대상 · 서명 · 상태로 줄임, 사이드바 '결재 · 현황 / 기준 정보 / 홈으로 나가기'
   ★★★ v20.0 (2026-10-21) — 교육 보완 ① 이수 현황판 + 교육 제외 · ③ 새 물질 교육 (서버 v20.0):
     - 관리자 > 교육 현황 맨 위 '교육 이수 현황': 부서별 대상 · 이수율 · 진행중(특별 16시간 미달) · 미이수 · 기한 초과 · 새 물질 · 제외
     - 대상은 기본 모두, 관리자 · 부서장이 '취급 안 함'으로 확인한 사람만 제외(사유 · 확인자 · 날짜 기록, 신규입사 '아니오' 회신 포함)
@@ -654,7 +659,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
 }
 
 /* ═══ v19.0 디자인 1단계 — 위쪽 메뉴 · 색 · 연락처 · 휴대폰 자동 전환 ═══ */
-:root{--bm-top:64px;--bm-bot:0px;--bm-g5:#67AF3E;--bm-g6:#4A8F2C;--bm-g7:#3B7423;--bm-g8:#2D581B;--bm-g50:#F2F8EC;--bm-line:#DDDBD5;--bm-ink:#1E1E1C;--bm-ink2:#45423D}
+:root{--bm-top:64px;--bm-bot:40px;--bm-g5:#67AF3E;--bm-g6:#4A8F2C;--bm-g7:#3B7423;--bm-g8:#2D581B;--bm-g50:#F2F8EC;--bm-line:#DDDBD5;--bm-ink:#1E1E1C;--bm-ink2:#45423D}
 #pg-msds,#pg-edu1,#pg-edu2,#pg-ppe,#pg-admin{height:calc(100vh - var(--bm-top) - var(--bm-bot))}
 @supports(height:100dvh){#pg-msds,#pg-edu1,#pg-edu2,#pg-ppe,#pg-admin{height:calc(100dvh - var(--bm-top) - var(--bm-bot))}}
 .btn,.fc,.pi,.toast,.btn-sm{font-family:'Pretendard','Nanum Gothic','Malgun Gothic',sans-serif}
@@ -993,7 +998,7 @@ b.hm-f{font-weight:700}
 .apv-v-ac{display:flex;gap:8px}
 .apv-v-b{flex:1;min-height:46px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:15px;font-weight:700;color:var(--bm-ink);cursor:pointer}
 .apv-v-b.p{flex:2;background:var(--bm-g6);border-color:var(--bm-g6);color:#fff}
-@media(min-width:1500px){body.apv-vopen #adm-pane-apv{margin-right:560px}}
+
 .dv-card.bad{border-color:#F1C4BE}.dv-card.bad b{color:#A3302A}
 .dv-rj{margin-top:4px;font-size:13px;color:#A3302A;font-weight:600}
 #dv-edu{padding:16px 18px}
@@ -1006,6 +1011,93 @@ b.hm-f{font-weight:700}
   .adm-nav-item{border-radius:4px;font-size:14px}
   .adm-content{padding:12px}
   .adm-kpi{gap:8px}.adm-kpi-c{padding:10px 12px}.adm-kpi-c b{font-size:22px}
+}
+/* v20.2 — 연락처 띠 고정 · 화면 비율 · 관리자 결재 A-8 */
+body{padding-bottom:var(--bm-bot)}
+.bm-foot-fix{position:fixed;left:0;right:0;bottom:0;height:var(--bm-bot);margin:0!important;padding:0 20px;z-index:40;border-radius:0!important;flex-wrap:nowrap;box-sizing:border-box}
+.bm-foot-fix .bm-foot-r{margin-left:auto;font-size:13px;color:#C5E2AB}
+.bm-foot:not(.bm-foot-fix){display:none}
+.hm-wrap{max-width:1440px}
+.dv-wrap{max-width:1280px}
+#pg-edu1 .ew,#pg-edu2 .ew,.ppe-wrap,.chem-wrap{max-width:1080px}
+@media(min-width:1600px){
+  .hm-wrap{padding-top:40px}
+  .hm-tile{min-height:200px;padding:26px 24px}
+  .hm-tile strong{font-size:23px}.hm-tile span{font-size:16px}
+  .hm-cols{gap:28px;margin-top:40px}
+  .hm-row{padding:16px 20px}
+  #pg-edu1 .ew,#pg-edu2 .ew,.ppe-wrap,.chem-wrap{max-width:1180px}
+}
+/* 관리자 */
+#admin-main{background:#F5F5F2;height:100%;display:flex;flex-direction:column}
+#pg-admin{overflow:hidden}
+.adm-topbar{padding:8px 24px;min-height:56px}
+.adm-topbar-icon{width:32px;height:32px;font-size:16px}
+.adm-topbar-title{font-size:16px}
+.adm-shell{flex:1;min-height:0}
+.adm-sidebar{overflow-y:auto}
+.adm-content{overflow-y:auto;padding:20px 24px}
+.adm-sidebar-section{margin-top:14px}
+.adm-sidebar-section:first-child{margin-top:0}
+.adm-nav-exit{margin-top:22px;border:1px solid rgba(255,255,255,.25)!important}
+.apv-wrap{display:flex;flex-direction:column;gap:12px}
+.apv-top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.apv-top b{font-size:18px;color:var(--bm-ink)}.apv-top small{margin-left:8px;font-size:13px;color:#5A5650}
+.apv-meta{display:flex;align-items:center;gap:12px;font-size:13px;color:#5A5650}
+.apv-meta b{color:var(--bm-ink)}
+.apv-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border:1px solid var(--bm-line);border-radius:12px;background:#fff;cursor:pointer;font-weight:600}
+.apv-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start}
+.apv-card{background:#fff;border:1px solid var(--bm-line);border-radius:8px;overflow:hidden}
+.apv-card-hd{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid #ECEBE7}
+.apv-card-hd>b{font-size:16px;color:var(--bm-ink)}
+.apv-btn-ok{padding:8px 16px;border:0;border-radius:4px;background:var(--bm-g6);color:#fff;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.apv-btn-ok:hover{background:var(--bm-g7)}.apv-btn-ok:disabled,.apv-btn-rj:disabled{opacity:.6}
+.apv-tools{display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px;border-bottom:1px solid #ECEBE7;background:#FAFAF8}
+.apv-in{height:36px;padding:0 10px;border:1px solid #C6C3BB;border-radius:4px;font:inherit;font-size:14px;background:#fff;min-width:0;box-sizing:border-box}
+input.apv-in[type=text]{width:110px}
+.apv-dates{display:inline-flex;align-items:center;gap:4px;color:#5A5650}
+.apv-dates .apv-in{width:140px}
+.apv-tb{height:36px;padding:0 14px;border:1px solid var(--bm-g6);border-radius:4px;background:#fff;color:var(--bm-g8);font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.apv-selrow{display:flex;align-items:center;gap:14px;padding:8px 16px;border-bottom:1px solid #ECEBE7;font-size:13px;color:#45423D;flex-wrap:wrap}
+.apv-selrow label{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:700}
+.apv-selrow b{color:var(--bm-ink)}
+.apv-more{margin-left:auto;position:relative}
+.apv-more summary{cursor:pointer;list-style:none;padding:6px 12px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font-weight:700}
+.apv-more summary::-webkit-details-marker{display:none}
+.apv-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:20;width:240px;background:#fff;border:1px solid var(--bm-line);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.14);padding:6px;display:flex;flex-direction:column;gap:2px}
+.apv-menu button{text-align:left;padding:8px 10px;border:0;border-radius:4px;background:none;font:inherit;font-size:14px;color:var(--bm-ink);cursor:pointer}
+.apv-menu button:hover{background:#F2F8EC}.apv-menu button.danger{color:#A3302A}.apv-menu button.danger:hover{background:#FBE5E2}
+.apv-menu label{padding:8px 10px;border-top:1px solid #ECEBE7;margin-top:4px;font-weight:600}
+.apv-menu #apv-archive-status{padding:0 10px 6px;font-size:12px;color:#5A5650}
+#apv-list{max-height:calc(100vh - var(--bm-top) - var(--bm-bot) - 330px);min-height:240px;overflow-y:auto}
+#apv-list .apv-row{display:grid;grid-template-columns:22px 70px minmax(110px,1.1fr) minmax(90px,1fr) 44px 74px 36px;gap:10px;align-items:center;padding:9px 12px 9px 12px;border-bottom:1px solid #ECEBE7;font-size:14px;cursor:pointer}
+#apv-list .apv-head{position:sticky;top:0;z-index:5;background:#E2F0D5!important;color:var(--bm-g8);font-size:13px;font-weight:800;cursor:default;border-left:4px solid #E2F0D5}
+#apv-list .apv-row input{width:16px;height:16px;accent-color:var(--bm-g6)}
+.apv-kind{font-size:12px;font-weight:800;padding:3px 6px;border-radius:2px;text-align:center;white-space:nowrap}
+.apv-kind.m{background:#FFF1D6;color:#6E4A00}.apv-kind.s{background:#E4ECF5;color:#2B4C7E}
+.apv-dept{min-width:0}.apv-dept b{display:block;color:var(--bm-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.apv-dept small{display:block;font-size:12px;color:#5A5650;white-space:nowrap}
+.apv-who{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#45423D}
+.apv-sig{font-size:12px;font-weight:800;padding:2px 6px;border-radius:2px;text-align:center}
+.apv-sig.ok{background:#E2F0D5;color:var(--bm-g8)}.apv-sig.warn{background:#FFF1D6;color:#6E4A00}
+.apv-ra button{width:32px;height:32px;border:1px solid var(--bm-line);border-radius:4px;background:#fff;cursor:pointer}
+.apv-dock{display:none}
+.apv-dock-ph{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;height:100%;min-height:420px;color:#5A5650;text-align:center;font-size:14px;line-height:1.6;background:#FAFAF8}
+.apv-dock-ph b{font-size:16px;color:var(--bm-ink)}
+.apv-dock:has(#apv-viewer) .apv-dock-ph{display:none}
+@media(min-width:1280px){
+  .apv-grid{grid-template-columns:minmax(0,1fr) minmax(400px,44%)}
+  .apv-dock{display:block;position:sticky;top:0;height:calc(100vh - var(--bm-top) - var(--bm-bot) - 150px);min-height:520px}
+  .apv-v.docked{position:static;width:auto;height:100%;box-shadow:none;border:0;z-index:auto}
+  body.apv-vopen #adm-pane-apv{margin-right:0}
+}
+@media(max-width:760px){
+  :root{--bm-bot:64px}
+  .bm-foot-fix{display:none}
+  .bm-foot:not(.bm-foot-fix){display:flex}
+  #apv-list{max-height:none}
+  .apv-tools .apv-in,.apv-dates{flex:1 1 140px}
+  .apv-more{margin-left:0}
 }
 @media(max-width:1600px){
   #sync-info,#slbl{display:none}
@@ -1833,15 +1925,15 @@ b.hm-f{font-weight:700}
   <!-- ═══════════════════════════════════════════════════════════════
        관리자 본문 (v15.43 — 사이드바 + sub-tab 구조)
        ═══════════════════════════════════════════════════════════════ -->
-  <div id="admin-main" style="display:none;background:#f8fafc;min-height:calc(100vh - 110px)">
+  <div id="admin-main" style="display:none">
 
     <!-- ── 상단 헤더 바 ── -->
     <div class="adm-topbar">
       <div class="adm-topbar-left">
         <div class="adm-topbar-icon">🔐</div>
         <div>
-          <div class="adm-topbar-title">관리자 콘솔</div>
-          <div class="adm-topbar-sub">인당의료재단 부민병원 · 안전보건관리시스템</div>
+          <div class="adm-topbar-title">관리자 모드</div>
+          <div class="adm-topbar-sub">부산부민병원 보건관리실</div>
         </div>
       </div>
       <div class="adm-topbar-right">
@@ -1860,7 +1952,7 @@ b.hm-f{font-weight:700}
 
       <!-- 좌측 사이드바 -->
       <aside class="adm-sidebar">
-        <div class="adm-sidebar-section">메뉴</div>
+        <div class="adm-sidebar-section">결재 · 현황</div>
         <div class="adm-nav-item active" data-pane="apv" onclick="admSwitchPane('apv')">
           <span class="adm-nav-icon">✅</span>
           <span class="adm-nav-label">결재 관리</span>
@@ -1881,6 +1973,7 @@ b.hm-f{font-weight:700}
           <span class="adm-nav-label">화학물질 보고서</span>
           <span class="adm-nav-badge" id="adm-nav-chem-badge"></span>
         </div>
+        <div class="adm-sidebar-section">기준 정보</div>
         <div class="adm-nav-item" data-pane="chemm" onclick="admSwitchPane('chemm'); BMCHEM.open();">
           <span class="adm-nav-icon">🧪</span>
           <span class="adm-nav-label">물질 마스터 점검</span>
@@ -1896,6 +1989,7 @@ b.hm-f{font-weight:700}
           <span class="adm-nav-badge" id="adm-nav-staff-badge"></span>
         </div>
 
+        <div class="adm-nav-item adm-nav-exit" onclick="goTab('home')"><span class="adm-nav-icon">←</span><span class="adm-nav-label">홈으로 나가기</span></div>
         <!-- ★ v17.15: '시스템 > 감사 로그' 메뉴 삭제 — 조회 화면은 원래 미작동(죽은 코드)이었음.
              기록 엔진(BM.audit)은 수정 이력·정정 PDF의 데이터 원천이므로 백그라운드에서 그대로 작동 -->
       </aside>
@@ -1906,97 +2000,56 @@ b.hm-f{font-weight:700}
         <!-- ── 📌 결재 관리 pane (기본 활성) ── -->
         <section class="adm-pane active" id="adm-pane-apv">
 <div class="adm-kpi" id="adm-kpi"></div>
-<div style="background:transparent;padding:0">
-
-  <!-- 헤더 -->
-  <div style="background:#fff;border-radius:10px;padding:14px 18px;margin-bottom:12px;border:1px solid #e2e8f0">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <div>
-        <div style="font-size:15px;font-weight:700;color:#1c3557">✅ 교육일지 결재 <span id="apv-mode-badge" style="display:none;font-size:10.5px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:5px;margin-left:6px;font-weight:700;vertical-align:middle">📦 아카이브 모드</span></div>
-        <div style="font-size:11px;color:#64748b;margin-top:2px">특별안전보건교육일지 · MSDS 교육일지 · 일괄 결재 처리</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <!-- 용량 사용량 배지 -->
-        <div id="apv-storage-badge" onclick="apvShowStorageGuide()" style="cursor:pointer;display:flex;align-items:center;gap:5px;padding:4px 10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:7px;font-size:10.5px;color:#15803d;font-weight:600" title="저장 용량 상세 보기">
-          <span id="apv-storage-icon">💾</span>
-          <span id="apv-storage-text">0KB / 5MB (0%)</span>
-        </div>
-        <div style="font-size:11px;color:#64748b">
-          결재자: <b id="apv-approver-name" style="color:#1c3557">보건관리자</b>
-        </div>
-      </div>
+<div class="apv-wrap">
+  <div class="apv-top">
+    <div><b>결재 관리</b> <span id="apv-mode-badge" class="apv-st wait" style="display:none">옛 일지 포함</span>
+      <small>특별안전보건교육일지 · MSDS 교육일지</small></div>
+    <div class="apv-meta">
+      <span id="apv-storage-badge" onclick="apvShowStorageGuide()" class="apv-chip" title="이 PC 저장 용량"><span id="apv-storage-icon">💾</span> <span id="apv-storage-text">0KB / 5MB (0%)</span></span>
+      <span>결재자 <b id="apv-approver-name">보건관리자</b></span>
     </div>
   </div>
-
-
-              <!-- ★ 표준 필터 행 (4개 탭 동일) ★ -->
-              <div class="bm-std-filter-row" data-tab="apv" style="background:#fff;border-radius:10px;padding:14px 16px;margin-bottom:10px;border:1px solid #e2e8f0">
-                <div class="adm-filter-grid">
-                  <div class="fg" style="margin:0">
-                    <label class="fl">🔍 검색어</label>
-                    <input type="text" class="fc" id="apv-name" placeholder="참석자 이름 (부분일치)" onkeydown="if(event.key==='Enter')handleTabAction('apv','apply')">
-                  </div>
-                  <div class="fg" style="margin:0">
-                    <label class="fl">부서</label>
-                    <input type="text" class="fc" id="apv-dept" placeholder="부서명 (부분일치)" onkeydown="if(event.key==='Enter')handleTabAction('apv','apply')">
-                  </div>
-                  <div class="fg" style="margin:0">
-                    <label class="fl">시작일 (from)</label>
-                    <input type="date" class="fc" id="apv-date-from" onchange="handleTabAction('apv','apply')">
-                  </div>
-                  <div class="fg" style="margin:0">
-                    <label class="fl">종료일 (to)</label>
-                    <input type="date" class="fc" id="apv-date-to" onchange="handleTabAction('apv','apply')">
-                  </div>
-                  <div class="fg" style="margin:0">
-                    <label class="fl">교육종류</label>
-                    <select class="fc" id="apv-type" onchange="handleTabAction('apv','apply')">
-                      <option value="">전체</option><option value="특별안전보건교육">📝 특별안전보건교육</option><option value="MSDS교육">📋 MSDS 교육</option>
-                    </select>
-                  </div>
-                  <div class="fg" style="margin:0">
-                    <label class="fl">결재상태</label>
-                    <select class="fc" id="apv-status" onchange="handleTabAction('apv','apply')">
-                      <option value="">전체</option><option value="pending">결재대기</option><option value="rejected">반려</option><option value="approved">결재완료</option>
-                    </select>
-                  </div>
-                  <div style="display:flex;gap:6px;align-items:flex-end">
-                    <button type="button" onclick="handleTabAction('apv','apply')" style="padding:7px 14px;background:#10b981;color:#fff;border:1px solid #10b981;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">🔍 조회</button>
-                  </div>
-                </div>
-              </div>
-              <!-- ★ 표준 버튼 행 (4개 탭 동일) ★ -->
-              <div class="bm-std-action-row" data-tab="apv" style="background:#fff;border-radius:10px;padding:10px 14px;margin-bottom:10px;border:1px solid #e2e8f0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-                <button type="button" onclick="handleTabAction('apv','refresh')" style="padding:7px 14px;background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="클라우드 → 로컬 Hard Sync">☁ 새로고침</button>
-                <button type="button" onclick="handleTabAction('apv','dedupe')"  style="padding:7px 14px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="recordId 기준 중복 자동 정리">🧹 중복정리</button>
-                <button type="button" onclick="handleTabAction('apv','delete')"  style="padding:7px 14px;background:#fee2e2;color:#dc2626;border:1px solid #ef4444;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="선택된 항목 영구 삭제">🗑 선택삭제</button>
-                <button type="button" onclick="handleTabAction('apv','csv')"     style="padding:7px 14px;background:#10b981;color:#fff;border:1px solid #10b981;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">📥 CSV 출력</button>
-                <button type="button" onclick="handleTabAction('apv','pdf')"     style="padding:7px 14px;background:#2563eb;color:#fff;border:1px solid #2563eb;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">🖨️ PDF 출력</button>
-                <span style="margin-left:auto;font-size:10.5px;color:#94a3b8">※ 비로그인 시 비밀번호 요구</span>
-              </div>
-              <!-- ★ 결재 탭 전용: 아카이브 + 전체선택 + 일괄결재 ★ -->
-              <div style="background:#fff;border-radius:10px;padding:10px 14px;margin-bottom:10px;border:1px solid #e2e8f0;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11.5px;color:#475569;font-weight:600">
-                  <input type="checkbox" id="apv-archive-mode" onchange="apvToggleArchive()" style="width:14px;height:14px;accent-color:#1c3557">
-                  📦 GitHub 전체 검색 (정리된 옛 일지 포함)
-                </label>
-                <span id="apv-archive-status" style="font-size:10.5px;color:#94a3b8"></span>
-              </div>
-              <div style="background:#fff;border-radius:10px;padding:10px 14px;margin-bottom:10px;border:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-                <div style="font-size:12px;color:#475569">
-                  <label style="cursor:pointer"><input type="checkbox" id="apv-check-all" onchange="apvToggleAll(this.checked)" style="margin-right:5px"> 전체 선택</label>
-                  <span style="margin-left:14px">선택: <b id="apv-sel-count" style="color:#1c3557">0</b>건 / 결재대기: <b id="apv-pending-count" style="color:#f59e0b">0</b>건 / 완료: <b id="apv-done-count" style="color:#16a34a">0</b>건</span>
-                </div>
-                <span class="apv-acts"><button onclick="apvBatchReject()" id="apv-btn-reject" class="apv-btn-rj">선택 반려</button>
-                <button onclick="apvBatchApprove()" id="apv-btn-approve" style="padding:7px 16px;background:#1c3557;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">✅ 선택 일지 결재</button></span>
-                <button onclick="apvBatchDownload()" id="apv-btn-download" style="padding:7px 16px;background:#0ea5e9;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;margin-left:6px">📥 개별 PDF 다운로드</button>
-<button onclick="apvMergeDownload()" id="apv-btn-merge" style="padding:7px 16px;background:#10b981;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;margin-left:6px">📚 전체 PDF 병합 다운로드</button>
-              </div>
-
-    <!-- 일지 목록 -->
-  <div style="background:#fff;border-radius:10px;border:1px solid #e2e8f0;overflow:hidden">
-    <div style="padding:8px 14px;font-size:14px;color:#5A5650;border-bottom:1px solid #ECEBE7">줄을 누르면 오른쪽에 제출된 PDF 원본이 열립니다</div>
-    <div id="apv-list" style="max-height:calc(100vh - 320px);overflow-y:auto"></div>
+  <div class="apv-grid">
+    <section class="apv-card apv-listcard">
+      <div class="apv-card-hd">
+        <b>결재 목록</b>
+        <span class="apv-acts"><button onclick="apvBatchReject()" id="apv-btn-reject" class="apv-btn-rj">선택 반려</button>
+        <button onclick="apvBatchApprove()" id="apv-btn-approve" class="apv-btn-ok">선택 결재</button></span>
+      </div>
+      <div class="apv-tools bm-std-filter-row" data-tab="apv">
+        <input type="text" class="apv-in" id="apv-name" placeholder="이름" aria-label="참석자 이름" onkeydown="if(event.key==='Enter')handleTabAction('apv','apply')">
+        <input type="text" class="apv-in" id="apv-dept" placeholder="부서" aria-label="부서" onkeydown="if(event.key==='Enter')handleTabAction('apv','apply')">
+        <select class="apv-in" id="apv-type" aria-label="교육종류" onchange="handleTabAction('apv','apply')">
+          <option value="">교육 전체</option><option value="특별안전보건교육">특별안전보건교육</option><option value="MSDS교육">MSDS 교육</option>
+        </select>
+        <select class="apv-in" id="apv-status" aria-label="결재상태" onchange="handleTabAction('apv','apply')">
+          <option value="">상태 전체</option><option value="pending">결재대기</option><option value="rejected">반려</option><option value="approved">결재완료</option>
+        </select>
+        <span class="apv-dates"><input type="date" class="apv-in" id="apv-date-from" aria-label="시작일" onchange="handleTabAction('apv','apply')"><span>~</span><input type="date" class="apv-in" id="apv-date-to" aria-label="종료일" onchange="handleTabAction('apv','apply')"></span>
+        <button type="button" class="apv-tb" onclick="handleTabAction('apv','apply')">조회</button>
+      </div>
+      <div class="apv-selrow">
+        <label><input type="checkbox" id="apv-check-all" onchange="apvToggleAll(this.checked)"> 전체 선택</label>
+        <span>선택 <b id="apv-sel-count">0</b> · 대기 <b id="apv-pending-count">0</b> · 완료 <b id="apv-done-count">0</b></span>
+        <details class="apv-more"><summary>더보기 ▾</summary>
+          <div class="apv-menu bm-std-action-row" data-tab="apv">
+            <button type="button" onclick="handleTabAction('apv','refresh')" title="클라우드 → 이 PC 다시 받기">☁ 새로고침</button>
+            <button type="button" onclick="apvBatchDownload()" id="apv-btn-download">📥 선택 PDF 다운로드</button>
+            <button type="button" onclick="apvMergeDownload()" id="apv-btn-merge">📚 PDF 병합 다운로드</button>
+            <button type="button" onclick="handleTabAction('apv','csv')">CSV 출력</button>
+            <button type="button" onclick="handleTabAction('apv','pdf')">🖨 목록 PDF 출력</button>
+            <button type="button" onclick="handleTabAction('apv','dedupe')" title="recordId 기준 중복 자동 정리">🧹 중복정리</button>
+            <button type="button" onclick="handleTabAction('apv','delete')" class="danger" title="선택된 항목 영구 삭제">🗑 선택 삭제</button>
+            <label><input type="checkbox" id="apv-archive-mode" onchange="apvToggleArchive()"> 옛 일지까지 전체 검색</label>
+            <span id="apv-archive-status"></span>
+          </div>
+        </details>
+      </div>
+      <div id="apv-list"></div>
+    </section>
+    <aside id="apv-dock" class="apv-card apv-dock" aria-label="PDF 원본 보기">
+      <div class="apv-dock-ph"><b>PDF 원본</b><span>왼쪽 목록에서 줄을 누르면<br>제출된 PDF 원본이 여기 열립니다</span></div>
+    </aside>
   </div>
 </div>
 
@@ -3321,6 +3374,16 @@ b.hm-f{font-weight:700}
     });
   }
   window.addEventListener('DOMContentLoaded', function(){ setTimeout(addFooters, 0); });
+  // v20.2: PC는 화면 맨 아래 고정 연락처 띠 하나 (페이지마다 붙인 띠는 휴대폰에서만 보임)
+  window.addEventListener('DOMContentLoaded', function(){
+    if(document.getElementById('bm-foot-fix')) return;
+    var f = document.createElement('footer');
+    f.id = 'bm-foot-fix'; f.className = 'bm-foot bm-foot-fix';
+    f.innerHTML = '<b>연락처</b>' + BM_CONTACTS.map(function(c){
+      return c[2] ? '<span class="m">' + c[0] + ' 내선 ' + c[1] + '</span>' : '<span>' + c[0] + ' 내선 ' + c[1] + '</span>'; }).join('') +
+      '<span class="bm-foot-r">부산부민병원 보건관리실 · MSDS 통합관리</span>';
+    document.body.appendChild(f);
+  });
 
   window.addEventListener('DOMContentLoaded', function(){
     ensureUi();
@@ -7947,16 +8010,8 @@ function apvRender(){
   }
 
   // 컬럼 헤더 (한 줄 표시)
-  const headerHtml = `<div style="display:grid;grid-template-columns:28px 90px minmax(90px,1fr) 130px 60px 70px minmax(150px,1.4fr) 80px auto;gap:10px;align-items:center;padding:9px 14px 9px 18px;background:#f8fafc;border-bottom:1.5px solid #cbd5e1;font-size:10.5px;font-weight:700;color:#475569;letter-spacing:0.3px;position:sticky;top:0;z-index:5">
-    <div></div>
-    <div>종류</div>
-    <div>부서</div>
-    <div>교육일</div>
-    <div style="text-align:center">인원</div>
-    <div style="text-align:center">시간</div>
-    <div>취급물질</div>
-    <div style="text-align:center">상태</div>
-    <div style="text-align:right;min-width:170px">결재정보</div>
+  const headerHtml = `<div class="apv-row apv-head">
+    <div></div><div>종류</div><div>부서 · 교육일</div><div>대상</div><div>서명</div><div>상태</div><div></div>
   </div>`;
 
   const rows = filtered.map((g, idx) => {
@@ -7965,44 +8020,20 @@ function apvRender(){
       ? g.dateStart
       : `${g.dateStart}~${g.dateEnd.slice(5)}`;
     const isMSDS = (g.type||'').includes('MSDS');
-    const typeIcon = isMSDS ? '📋' : '📝';
     const typeShort = isMSDS ? 'MSDS' : '특별교육';
-    const typeColor = isMSDS ? '#92400e' : '#1e40af';
-    const typeBg    = isMSDS ? '#fef3c7' : '#dbeafe';
-    const sideBar   = g.approved ? '#16a34a' : (g.rejected ? '#C23B32' : '#f59e0b');
+    const sideBar   = g.approved ? '#4A8F2C' : (g.rejected ? '#C23B32' : '#E8A33D');
     const rowBg     = apvViewKey === g.groupKey ? '#E2F0D5' : (isSelected ? '#F2F8EC' : (idx%2===0 ? '#fff' : '#fafbfc'));
     const memberStr = g.members.slice(0,3).map(m=>m.name).join(', ') + (g.members.length>3?` 외 ${g.members.length-3}명`:'');
     const sigCount = g.members.filter(m=>(m.signed||'').includes('서명완료')).length;
-    const chemShort = (g.chem||'-').length > 30 ? (g.chem||'').slice(0,28)+'…' : (g.chem||'-');
-
-    // 우측 결재정보 셀
-    const apvCell = g.approved
-      ? `<div style="display:flex;align-items:center;gap:4px;justify-content:flex-end;min-width:200px">
-          <span style="font-size:10.5px;color:#15803d;font-weight:600;white-space:nowrap" title="결재일시: ${(g.approvedAt||'').slice(0,16).replace('T',' ')}">
-            ✓ ${g.approverName||'장은선'}
-          </span>
-          <button onclick="viewApvRecord('${g.groupKey}')" style="padding:3px 7px;background:#fff;color:#0891b2;border:1px solid #0891b2;border-radius:4px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap" title="PDF 새 창에서 보기">👁</button>
-          <button onclick="apvDownloadPdf('${g.groupKey}')" style="padding:3px 7px;background:#1c3557;color:#fff;border:none;border-radius:4px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap" title="결재 도장 합성 PDF 다운로드">📥</button>
-        </div>`
-      : `<div style="display:flex;align-items:center;gap:4px;justify-content:flex-end;min-width:200px">
-          ${g.rejected ? '<span style="font-size:10.5px;color:#A3302A;font-weight:700">반려</span>' : '<span style="font-size:10.5px;color:#94a3b8">결재대기</span>'}
-          <button onclick="viewApvRecord('${g.groupKey}')" style="padding:3px 7px;background:#fff;color:#0891b2;border:1px solid #0891b2;border-radius:4px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap" title="원본 PDF 새 창에서 보기">👁</button>
-          <button onclick="apvDownloadPdf('${g.groupKey}')" style="padding:3px 7px;background:#fff;color:#1c3557;border:1px solid #1c3557;border-radius:4px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap" title="원본 PDF 다운로드">📥</button>
-        </div>`;
-
-    return `<div title="참석자: ${memberStr}" class="apv-row" data-key="${g.groupKey}" onclick="apvRowClick(event,'${g.groupKey}')" style="display:grid;grid-template-columns:28px 90px minmax(90px,1fr) 130px 60px 70px minmax(150px,1.4fr) 80px auto;gap:10px;align-items:center;padding:8px 14px 8px 18px;background:${rowBg};border-bottom:1px solid #f1f5f9;border-left:4px solid ${sideBar};font-size:12px;transition:background 0.1s;cursor:pointer">
-      <input type="checkbox" ${isSelected?'checked':''} 
-             onchange="apvToggle('${g.groupKey}', this.checked)"
-             title="${g.approved?'결재 완료됨 — 영구 삭제용으로만 선택 가능':'선택하여 결재 또는 삭제'}"
-             style="width:16px;height:16px;cursor:pointer;accent-color:${g.approved?'#dc2626':'#1c3557'}">
-      <span style="font-size:10.5px;background:${typeBg};color:${typeColor};padding:3px 7px;border-radius:4px;font-weight:700;text-align:center;white-space:nowrap">${typeIcon} ${typeShort}</span>
-      <span style="font-weight:700;color:#1c3557;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${g.dept||'-'}</span>
-      <span style="color:#64748b;white-space:nowrap;font-variant-numeric:tabular-nums">${dispDate}</span>
-      <span style="text-align:center;color:#1c3557;font-weight:600">${g.members.length}/${sigCount}</span>
-      <span style="text-align:center;color:#475569;white-space:nowrap">${g.totalHours||g.time||'-'}</span>
-      <span style="color:#475569;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${g.chem||''}">${chemShort}</span>
-      <span style="text-align:center">${apvStatusChip(g)}</span>
-      ${apvCell}
+    return `<div title="참석자: ${memberStr} · 물질: ${g.chem||'-'}" class="apv-row" data-key="${g.groupKey}" onclick="apvRowClick(event,'${g.groupKey}')" style="background:${rowBg};border-left:4px solid ${sideBar}">
+      <input type="checkbox" ${isSelected?'checked':''} onchange="apvToggle('${g.groupKey}', this.checked)"
+             title="${g.approved?'결재 완료됨 — 영구 삭제용으로만 선택 가능':'선택하여 결재 · 반려 · 삭제'}" aria-label="선택">
+      <span class="apv-kind ${isMSDS?'m':'s'}">${typeShort}</span>
+      <span class="apv-dept"><b>${g.dept||'-'}</b><small>${dispDate}${g.totalHours||g.time?' · '+(g.totalHours||g.time):''}</small></span>
+      <span class="apv-who">${memberStr}</span>
+      <span class="apv-sig ${sigCount>=g.members.length?'ok':'warn'}">${sigCount}/${g.members.length}</span>
+      <span>${apvStatusChip(g)}</span>
+      <span class="apv-ra"><button onclick="apvDownloadPdf('${g.groupKey}')" title="${g.approved?'결재 도장 합성 PDF 내려받기':'원본 PDF 내려받기'}" aria-label="PDF 내려받기">📥</button></span>
     </div>`;
   }).join('');
 
@@ -9005,9 +9036,12 @@ async function apvOpenViewer(key){
   if(apvViewUrl){ try{ URL.revokeObjectURL(apvViewUrl); }catch(_){} apvViewUrl = ''; }
   apvViewKey = key;
   document.querySelectorAll('#apv-list .apv-row').forEach(r=>r.classList.toggle('on', r.dataset.key===key));
+  const dock = document.getElementById('apv-dock');
+  const docked = !!(dock && dock.offsetParent !== null && getComputedStyle(dock).display !== 'none');
   let v = document.getElementById('apv-viewer');
-  if(!v){ v = document.createElement('aside'); v.id = 'apv-viewer'; v.className = 'apv-v'; v.setAttribute('aria-label','PDF 원본 보기'); document.body.appendChild(v); }
-  document.body.classList.add('apv-vopen');
+  if(v && (v.parentNode === dock) !== docked){ v.remove(); v = null; }
+  if(!v){ v = document.createElement('div'); v.id = 'apv-viewer'; v.className = 'apv-v' + (docked ? ' docked' : ''); v.setAttribute('aria-label','PDF 원본 보기'); (docked ? dock : document.body).appendChild(v); }
+  if(!docked) document.body.classList.add('apv-vopen');
   const isMSDS = (g.type||'').includes('MSDS');
   const title = `${apvEsc(g.dept)} · ${isMSDS?'MSDS 교육일지':'특별안전보건교육일지'}`;
   const who = (g.members||[]).map(m=>m.name).filter(Boolean);
@@ -9129,7 +9163,7 @@ async function apvBatchApprove(){
     alert('결재 처리 중 오류:\n\n'+(err.stack||err.message||err));
   }finally{
     btn.disabled = false;
-    btn.innerHTML = '✅ 선택 일지 결재';
+    btn.innerHTML = '선택 결재';
   }
 }
 
