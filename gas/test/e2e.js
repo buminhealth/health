@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v20\.3/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v20\.4/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
   const other = await page.evaluate(async () => {
@@ -504,7 +504,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v20.3'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v20.4'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -948,6 +948,22 @@ function check(name, cond, extra) {
   const bak = g.sheets['교육이력_삭제'];
   check('수기 기록 삭제: 수기 줄만 삭제 · 앱 일지는 건너뜀 · 교육이력_삭제 시트에 백업(사유)', del.success && del.deleted === BP.manualRows.length && del.skipped === 1 && led.rows.length === ledLen - del.deleted && !led.rows.some(r => r[10] === onlyBulk) && !!bak && bak.rows.some(r => r.includes(onlyBulk) && r.includes('시험')), [del, ledLen, led.rows.length]);
   await page.evaluate(r => BMAUTH.post('edu.saveRules', { rules: r }), rulesBak);
+  const oldSrv = await page.evaluate(async () => {
+    const orig = BMAUTH.post;
+    BMAUTH.post = async (op, b) => { const r = await orig(op, b); if (op === 'edu.status') { delete r.serverVersion; r.people.forEach(p => delete p.manualRows); } return r; };
+    try {
+      await BMEDU.board();
+      const banner = /이전 버전/.test(document.getElementById('edu-board').textContent);
+      document.querySelector('#edu-board [data-dept]').click();
+      const c = document.querySelector('#eb-people [data-pick]'); c.checked = true;
+      const msgs = [];
+      const t0 = window.toast; window.toast = (m) => msgs.push(m);
+      document.getElementById('eb-mdel-go').click();
+      window.toast = t0;
+      return { banner, msg: msgs.join(' ') };
+    } finally { BMAUTH.post = orig; await BMEDU.board(); }
+  });
+  check('서버가 이전 버전이면: 현황판 맨 위 배포 안내 · [수기 기록 삭제]는 배포 필요 메시지', oldSrv.banner && /이전 버전/.test(oldSrv.msg) && /배포/.test(oldSrv.msg), oldSrv);
   led.rows.splice(ledN);
   // v20.3 직원목록 ↔ 인사 사이트 합치기: #N/A · 빈 사번 채움, 입사일 표기 달라도(9/1) 같은 부서 같은 이름이면 같은 사람, 같은 사번 두 줄 합침
   const r1 = empRow('#N/A', '엔에이', '71병동', '재직', ''); empSh.appendRow(r1);

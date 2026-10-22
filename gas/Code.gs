@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v20.3 (2026-10-22)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v20.4 (2026-10-22)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -2847,7 +2847,7 @@ function eduStatus_(s) {
     if (p.overdue) d.overdue++;
     if (p.newChemPending) d.newChem++;
   });
-  return { success: true, today: today, people: people, depts: Object.keys(depts).sort().map(k => depts[k]), ruleHits: hits,
+  return { success: true, today: today, serverVersion: SERVER_VERSION, people: people, depts: Object.keys(depts).sort().map(k => depts[k]), ruleHits: hits,
            unitOptions: Object.keys(map).filter(k => k !== '병동').sort(),
            rules: { specialHours: SPECIAL_HOURS, online: SPECIAL_ONLINE, months: SPECIAL_MONTHS, newChemDays: NEWCHEM_DAYS } };
 }
