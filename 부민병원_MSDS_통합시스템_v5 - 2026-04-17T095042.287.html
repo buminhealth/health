@@ -3931,10 +3931,24 @@ input.apv-in[type=text]{width:110px}
         '<td style="' + TD + '">' + esc(x.product) + '</td><td style="' + TD + '">' + esc(x.comp) + '</td>' +
         '<td style="' + TD + ';color:#B42318;font-weight:700">' + esc(x.raw) + '</td><td style="' + TD + ';color:#3B7322;font-weight:700">' + esc(x.fix) + '</td></tr>';
     });
-    var conf = r.conflicts.map(function(x){
+    // v20.7: ③ 화면에서 바로 고침 — 제품마다 주기 고르기 + 메모1 사유 (바꾼 것만 저장)
+    var INP = 'padding:4px 6px;border:1px solid #C6C3BB;border-radius:4px;font:inherit;font-size:12px';
+    var cycSel = function(attr, cur, opts){
+      var all = []; opts.concat(['6개월', '12개월', '24개월']).forEach(function(v){ if(v && all.indexOf(v) < 0) all.push(v); });
+      return '<select ' + attr + ' data-old="' + esc(cur) + '" style="' + INP + '">' + all.map(function(v){ return '<option' + (v === cur ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join('') +
+        '<option value=""' + (cur ? '' : ' selected') + '>미해당(비움)</option>' + (cur && all.indexOf(cur) < 0 ? '<option selected>' + esc(cur) + '</option>' : '') + '</select>';
+    };
+    var conf = r.conflicts.map(function(x, ci){
+      var items = (x.items || []).map(function(it){
+        return '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:3px 0"><span style="min-width:180px">' + esc(it.product) + '</span>' +
+          cycSel('data-cedit="' + ci + '" data-row="' + it.row + '" data-field="' + x.field + '"', it.value, x.values) +
+          '<input data-cmemo="' + it.row + '" placeholder="' + esc(it.memo ? '메모1: ' + it.memo : '메모1에 사유 (선택)') + '" style="' + INP + ';width:200px"></div>';
+      }).join('');
       return '<tr><td style="' + TD + '">' + esc(x.cas) + '</td><td style="' + TD + '">' + esc(x.comp) + '</td><td style="' + TD + '">' + (FIELD[x.field] || FIELD.hc) + '</td>' +
-        '<td style="' + TD + ';font-weight:700">' + esc(x.values.join(' / ')) + '</td><td style="' + TD + '">' + esc(x.rows.join(', ')) +
-        (x.explained ? '<div style="margin-top:4px;color:#3B7322;font-weight:700">✔ 메모1로 설명됨: ' + esc(x.memos.join(' · ')) + '</div>' : '<div style="margin-top:4px;color:#A3302A;font-weight:700">메모1에 사유를 적어 주세요</div>') + '</td></tr>';
+        '<td style="' + TD + ';font-weight:700">' + esc(x.values.join(' / ')) +
+          '<div style="margin-top:6px">' + x.values.map(function(v){ return '<button type="button" data-call="' + ci + '" data-v="' + esc(v) + '" style="' + BTN + ';padding:2px 8px;font-size:11px;margin:2px">모두 ' + esc(v) + '</button>'; }).join('') + '</div></td>' +
+        '<td style="' + TD + '">' + (items || esc(x.rows.join(', '))) +
+        (x.explained ? '<div style="margin-top:4px;color:#3B7322;font-weight:700">✔ 메모1로 설명됨: ' + esc(x.memos.join(' · ')) + '</div>' : '<div style="margin-top:4px;color:#A3302A;font-weight:700">값을 맞추거나 메모1에 사유를 적어 주세요</div>') + '</td></tr>';
     });
     var sug = r.suggestions.map(function(x, i){
       return '<tr><td style="' + TD + '"><input type="checkbox" data-sug="' + i + '"></td>' +
@@ -3965,11 +3979,13 @@ input.apv-in[type=text]{width:110px}
       (amt.length ? table(['반영', '제품', '성분', '지금 값', '원래 값'], amt) + '<div style="text-align:right;margin-top:8px"><button type="button" class="chemm-apply2" style="' + BTN_P + '">② 함유량 수정 반영</button></div>' : '<div style="font-size:12px;color:#15803d">문제 없음</div>') + '</div>' +
 
       '<div style="' + BOX + '"><div style="font-weight:800;color:#044B75;margin-bottom:6px">③ 같은 CAS인데 주기가 다름 ' + r.conflicts.length + '건</div>' +
-      '<div style="font-size:12px;color:#64748b;margin-bottom:8px">\'제외(사유)\'는 제품별 판단이라 빼고, 주기(개월)가 서로 다른 것만 보여줍니다. 확인 후 시트에서 직접 맞춰 주세요.</div>' +
-      (conf.length ? table(['CAS', '성분', '항목', '주기', '제품(현재 값)'], conf) : '<div style="font-size:12px;color:#15803d">없음</div>') +
+      '<div style="font-size:12px;color:#64748b;margin-bottom:8px">\'제외(사유)\'는 제품별 판단이라 빼고, 주기(개월)가 서로 다른 것만 보여줍니다. 여기서 제품별로 값을 고르거나 메모1에 사유를 적고 [③ 저장]을 누르세요.</div>' +
+      (conf.length ? table(['CAS', '성분', '항목', '주기', '제품 · 고칠 값 · 사유'], conf) : '<div style="font-size:12px;color:#15803d">없음</div>') +
       ((r.lawMismatch || []).length ? '<div style="font-weight:800;color:#A3302A;margin:12px 0 6px">법령대조표는 \'미대상\'인데 시트에 주기가 적힌 성분 ' + r.lawMismatch.length + '건</div>' +
-        '<div style="font-size:12px;color:#64748b;margin-bottom:6px">chemicals 시트에서 해당 칸을 확인해 지우거나(미대상) 메모1에 사유를 적어 주세요. (자동으로 바꾸지 않음)</div>' +
-        table(['시트 줄', '제품', '성분', 'CAS', '항목', '시트 값'], r.lawMismatch.map(function(x){ return '<tr><td style="' + TD + '">' + x.row + '</td><td style="' + TD + '">' + esc(x.product) + '</td><td style="' + TD + '">' + esc(x.comp) + '</td><td style="' + TD + '">' + esc(x.cas) + '</td><td style="' + TD + '">' + (FIELD[x.field] || x.field) + '</td><td style="' + TD + ';color:#A3302A;font-weight:700">' + esc(x.value) + '</td></tr>'; })) : '') + '</div>' +
+        '<div style="font-size:12px;color:#64748b;margin-bottom:6px">법령상 대상이 아니면 <b>미해당(비움)</b>을 고르고, 회사 기준으로 유지하려면 값을 두고 메모1에 사유를 적은 뒤 [③ 저장]을 누르세요.</div>' +
+        table(['시트 줄', '제품', '성분', 'CAS', '항목', '고칠 값', '메모1 사유'], r.lawMismatch.map(function(x){ return '<tr><td style="' + TD + '">' + x.row + '</td><td style="' + TD + '">' + esc(x.product) + '</td><td style="' + TD + '">' + esc(x.comp) + '</td><td style="' + TD + '">' + esc(x.cas) + '</td><td style="' + TD + '">' + (FIELD[x.field] || x.field) + '</td>' +
+          '<td style="' + TD + '">' + cycSel('data-medit="1" data-row="' + x.row + '" data-field="' + x.field + '"', x.value, []) + '</td><td style="' + TD + '"><input data-cmemo="' + x.row + '" placeholder="유지 사유 (선택)" style="' + INP + ';width:160px"></td></tr>'; })) : '') +
+      (conf.length || (r.lawMismatch || []).length ? '<div style="text-align:right;margin-top:8px"><button type="button" id="chemm-edit" style="' + BTN_P + '">③ 저장</button></div>' : '') + '</div>' +
 
       '<div style="' + BOX + '"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px">' +
         '<div style="font-weight:800;color:#044B75">④ 미해당(빈칸)인데 대상일 수 있음 ' + r.suggestions.length + '건</div>' +
@@ -4081,6 +4097,27 @@ input.apv-in[type=text]{width:110px}
         if(ok) ok.innerHTML = !v ? '' : (mark ? '<span style="color:#2D581B">✓ CAS 없음 표시</span>' : (casOk(v) ? '<span style="color:#2D581B">✓ 검증숫자 맞음</span>' : '<span style="color:#A3302A">✕ 검증숫자 틀림</span>'));
       };
     });
+    body.querySelectorAll('[data-call]').forEach(function(b){ b.onclick = function(){
+      var v = b.getAttribute('data-v');
+      body.querySelectorAll('[data-cedit="' + b.getAttribute('data-call') + '"]').forEach(function(sel){ sel.value = v; sel.style.borderColor = sel.value !== sel.getAttribute('data-old') ? '#4A8F2C' : '#C6C3BB'; });
+    }; });
+    body.querySelectorAll('[data-cedit],[data-medit]').forEach(function(sel){ sel.onchange = function(){ sel.style.borderColor = sel.value !== sel.getAttribute('data-old') ? '#4A8F2C' : '#C6C3BB'; }; });
+    var editBtn = document.getElementById('chemm-edit');
+    if(editBtn) editBtn.onclick = async function(){
+      var edits = [];
+      body.querySelectorAll('[data-cedit],[data-medit]').forEach(function(sel){
+        var row = +sel.getAttribute('data-row'), m = body.querySelector('[data-cmemo="' + row + '"]'), memo = m ? m.value.trim() : '';
+        if(sel.value === sel.getAttribute('data-old') && !memo) return;
+        edits.push({ row: row, field: sel.getAttribute('data-field'), old: sel.getAttribute('data-old'), value: sel.value, memo: memo });
+      });
+      if(!edits.length){ say('바꾼 값이나 적은 사유가 없습니다', 'err'); return; }
+      if(!confirm('chemicals 시트 ' + edits.length + '개 칸을 고칠까요?')) return;
+      var x = await BMAUTH.post('chem.apply', { edits: edits });
+      if(!x.success){ say(x.error || '실패', 'err'); return; }
+      if(x.edited === undefined){ say('서버(Code.gs)를 v20.7 이상으로 배포하면 저장할 수 있습니다', 'err'); return; }
+      say('시트 ' + x.edited + '칸 고침' + (x.skipped ? ' · 건너뜀 ' + x.skipped + ' (그 사이 시트 값이 바뀜 — 새로 열어 확인)' : ''), x.skipped ? 'err' : 'ok');
+      open();
+    };
     body.querySelectorAll('.chemm-apply2').forEach(function(b){ b.onclick = function(){ document.getElementById('chemm-apply').click(); }; });
     document.getElementById('chemm-all').onclick = function(){
       body.querySelectorAll('[data-sug]').forEach(function(c){ c.checked = true; });
