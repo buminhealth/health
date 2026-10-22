@@ -2206,6 +2206,8 @@ function chemAudit_() {
     ['hc', 'we'].forEach(f => {
       if (r[f]) return;
       let val = '', src = '';
+      const lv = law[r.cas] ? String(law[r.cas][f] || '').trim() : '';
+      if (NOT_TARGET_RE.test(lv)) return;   // v20.5: 법령대조표에 '미대상'이면 다른 제품 판정으로도 제안하지 않음
       if (law[r.cas] && isCycle_(law[r.cas][f])) { val = law[r.cas][f]; src = '법령대조표(' + (law[r.cas].src || '') + ')'; }
       else {
         const vals = [...new Set((byCas[r.cas] || []).map(x => x[f]).filter(isCycle_))];
@@ -2214,10 +2216,18 @@ function chemAudit_() {
       if (val) suggestions.push({ row: r.row, field: f, product: r.product, comp: r.comp, cas: r.cas, amount: r.amount, value: val, src: src });
     });
   });
+  // v20.5: 법령대조표는 '미대상'인데 시트에 주기가 적힌 성분 (시트에서 직접 확인 · 수정)
+  const lawMismatch = [];
+  rows.forEach(r => {
+    if (!casCheck_(r.cas) || !law[r.cas]) return;
+    ['hc', 'we'].forEach(f => {
+      if (NOT_TARGET_RE.test(String(law[r.cas][f] || '').trim()) && isCycle_(r[f])) lawMismatch.push({ row: r.row, field: f, product: r.product, comp: r.comp, cas: r.cas, value: r[f] });
+    });
+  });
   const blankHc = rows.filter(r => !r.hc).length, blankWe = rows.filter(r => !r.we).length;
   return { success: true, total: rows.length, products: new Set(rows.map(r => r.product)).size, uniqueCas: Object.keys(byCas).length,
            blankHc: blankHc, blankWe: blankWe, lawCount: Object.keys(law).length,
-           casIssues: casIssues, conflicts: conflicts, suggestions: suggestions, amountIssues: amountIssues,
+           casIssues: casIssues, conflicts: conflicts, suggestions: suggestions, amountIssues: amountIssues, lawMismatch: lawMismatch,
            unknownCas: Object.keys(byCas).filter(cas => !law[cas]).length };
 }
 
@@ -2288,6 +2298,7 @@ function chemApply_(req) {
 // 법령대조표: 고시 목록 붙여넣기 (별표 표를 복사해 붙이면 줄마다 CAS를 찾아 해당 항목에 기록)
 //  kind: hc 특수건강진단 · we 작업환경측정 · target 관리대상 · special 특별관리 / value: 주기 또는 '해당'
 //  이미 값이 있는 칸은 덮어쓰지 않음 (다르면 '다름'으로 알려줌)
+const NOT_TARGET_RE = /^(미대상|비대상|해당없음|대상아님|대상 아님|X|x|-)$/;
 function chemLawImport_(req) {
   const KIND = { hc: 2, we: 3, target: 4, special: 5 };
   const ci = KIND[req.kind];
@@ -2296,6 +2307,10 @@ function chemLawImport_(req) {
   if (!value) return { success: false, error: '주기(예: 12개월)를 입력하세요' };
   const src = String(req.src || '').trim().slice(0, 80) || '고시 목록 붙여넣기';
   const lines = String(req.text || '').split(/\r?\n/).slice(0, 3000);
+  // v20.5: 앱 화면(④ 제안 목록 · 법령대조표)을 복사해 붙여넣은 경우 거부 — 고시 원문만 받음
+  if (/같은 CAS의 다른 제품 판정|법령대조표\(|기존 시트\(보건관리자 판정\)|특수건강진단\s+\d+개월\s+(같은|법령)/.test(String(req.text || ''))) {
+    return { success: false, error: '앱 화면(④ 제안 목록)의 내용을 붙여넣으신 것 같습니다. 국가법령정보센터의 별표 원문(물질명 · CAS 번호)을 복사해 붙여넣으세요.' };
+  }
   const sh = lawSheet_();
   const today = todayKst_();
   const last = sh.getLastRow();

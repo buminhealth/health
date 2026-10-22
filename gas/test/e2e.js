@@ -623,6 +623,14 @@ function check(name, cond, extra) {
   check('법령대조표 붙여넣기: 기존 값과 다르면 바꾸지 않고 알림', imp2.success && imp2.differCount === 1 && imp2.updated === 0, imp2);
   const imp3 = await page.evaluate(() => BMAUTH.post('chem.lawImport', { kind: 'target', text: '메틸알코올 67-56-1' }));
   check('법령대조표 붙여넣기: 관리대상 칸 채우기', imp3.success && imp3.updated === 1, imp3);
+  const guard = await page.evaluate(() => BMAUTH.post('chem.lawImport', { kind: 'hc', value: '12개월', text: 'Sodium Hydroxide\tSodium Hydroxide\t1310-73-2\t100\t특수건강진단\t12개월\t같은 CAS의 다른 제품 판정' }));
+  check('법령대조표 붙여넣기: 앱 ④ 목록을 붙여넣으면 거부 (고시 원문만)', !guard.success && /원문/.test(guard.error), guard);
+  const lawSh = g.sheets['법령대조표'];
+  const lawRow = lawSh.rows.find(r => r[0] === '67-56-1');
+  const keepHc = lawRow[2]; lawRow[2] = '미대상';
+  const au4 = await page.evaluate(() => BMAUTH.post('chem.audit', {}));
+  check("법령대조표 '미대상' → ④ 제안 안 함 · 시트에 주기가 적힌 성분은 따로 표시", !au4.suggestions.some(x => x.cas === '67-56-1' && x.field === 'hc') && au4.lawMismatch.some(x => x.cas === '67-56-1' && x.field === 'hc'), [au4.lawMismatch]);
+  lawRow[2] = keepHc;
   const denyChem = await page.evaluate(async () => {
     const r = await BMAUTH.post('login', { kind: 'dept', dept: '61병동', pin: '4321' });
     return BMAUTH.post('chem.audit', { t: r.token });
