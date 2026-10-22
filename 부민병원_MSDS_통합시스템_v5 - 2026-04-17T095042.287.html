@@ -31,6 +31,10 @@
     - 수기(종이) 교육일지 이수 등록: 교육 현황 → [수기(종이) 일지 이수 등록] — 부서 명단 체크 또는 엑셀 붙여넣기 → 미리보기
       (직원 찾기 · 동명이인 · 중복 · 날짜 확인) → 교육이력대장에 '수기(종이) 일지'로 등록 → 바로 이수
       + 현황판 줄마다 [수기 이수] 버튼 (취급 안 함 옆) — 교육일 · 시간 · 비고 넣고 [이수 처리]로 한 명씩 바로
+    - 근무지 지정 (서버): 한 인사 부서에 여러 작업장이 섞인 경우(외래 = 인터벤션 · 소아과 · 부인과) 직원별 근무지를 정하면
+      그 근무지의 물질 · 교육구분 · 규칙으로 판정 (부서 규칙보다 우선) — 시트 '근무지지정', 현황판 [근무지 지정…] → [근무지 적용]
+    - 현황판 부서 명단: 상태 필터(할 일 · 전체 · 이수 · 제외) · 보이는 직원 전체 선택 · 선택 직원 수기 이수(기준일) · 근무지 일괄 지정
+    - [전 부서 일괄 수기 이수]: 부서를 골라 미이수 · 진행중 전원을 기준일(기본 2025-01-01) 수기 교육으로 · 입사일이 늦으면 입사일로
     - 개별 포함: 규칙 · 신규입사 회신으로 제외된 사람도 [대상으로 포함] (개인 결정 > 규칙), [포함 해제]로 되돌림
     - 연동: 제외 · 포함 · 수기 등록 → 신규입사 알림 상태(미취급 / 취급-교육대기)까지 같이 바꾸고 대시보드 · 홈 할 일 · 규칙 표 다시 계산
     - 직원목록 ↔ 인사 사이트 합치기 (서버): 사번 '#N/A' · 빈칸은 사번 없음으로 보고 인사 사이트 사번으로 채움, 입사일 표기가 달라도(9/1)
@@ -4079,7 +4083,7 @@ input.apv-in[type=text]{width:110px}
       (sel ? [''] : []).concat(['이름', '사번', '입사일', '교육', '상태', '최근 교육', '']).map(function(h){ return '<th style="text-align:left;padding:8px;background:#E2F0D5;color:#2D581B;font-size:13px;white-space:nowrap">' + h + '</th>'; }).join('') + '</tr>' +
       list.map(function(p, i){
         return '<tr' + (p.status === '제외' ? ' style="background:#FAFAF8;color:#8A867E"' : '') + '>' +
-          (sel ? '<td style="' + td + '">' + (p.status === '이수' ? '' : '<input type="checkbox" data-pick="' + edu.people.indexOf(p) + '" aria-label="' + esc(p.name) + ' 선택">') + '</td>' : '') + '<td style="' + td + '"><b>' + esc(p.name) + '</b>' + (p.job ? '<div style="font-size:12px;color:#5A5650">' + esc(p.job) + '</div>' : '') + '</td><td style="' + td + '">' + esc(p.no) + '</td><td style="' + td + ';white-space:nowrap">' + esc(p.joinDate) + '</td>' +
+          (sel ? '<td style="' + td + '">' + ('<input type="checkbox" data-pick="' + edu.people.indexOf(p) + '" aria-label="' + esc(p.name) + ' 선택">') + '</td>' : '') + '<td style="' + td + '"><b>' + esc(p.name) + '</b>' + (p.job || p.unit ? '<div style="font-size:12px;color:#5A5650">' + esc(p.job || '') + (p.unit ? (p.job ? ' · ' : '') + '<b style="color:#2B4C7E">근무지 ' + esc(p.unit) + '</b>' : '') + '</div>' : '') + '</td><td style="' + td + '">' + esc(p.no) + '</td><td style="' + td + ';white-space:nowrap">' + esc(p.joinDate) + '</td>' +
           '<td style="' + td + ';white-space:nowrap">' + (p.need === '특별' ? '특별안전보건' : 'MSDS') + '</td><td style="' + td + '">' + statusCell(p) + '</td><td style="' + td + ';white-space:nowrap">' + esc(p.lastEdu || '-') + '</td>' +
           '<td style="' + td + ';white-space:nowrap">' + (!canAct ? '' : (p.included
             ? '<button data-unx="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer">포함 해제</button>'
@@ -4222,6 +4226,108 @@ input.apv-in[type=text]{width:110px}
     try{ if(window.BMHOME) BMHOME.render(); }catch(_){}
     try{ BMAUTH.post('nh.list', {}).then(function(r){ if(r.success && window.BMDASH) BMDASH.nhBadge(r.data); }); }catch(_){}
   };
+  /* v20.3 부서 명단: 상태 필터 · 전체 선택 · 선택한 직원 일괄 수기 이수 / 근무지 지정 */
+  var eduFilter = 'todo';
+  var BTNs = 'padding:6px 11px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;font-weight:700;cursor:pointer';
+  var INs = 'height:32px;padding:0 6px;border:1px solid #C6C3BB;border-radius:4px;font:inherit;font-size:13px;box-sizing:border-box;background:#fff';
+  function deptToolbar(all){
+    var n = function(f){ return all.filter(f).length; };
+    var todo = function(p){ return p.status === '미이수' || p.status === '진행중'; };
+    var opt = function(v, l, c){ return '<option value="' + v + '"' + (eduFilter === v ? ' selected' : '') + '>' + l + ' ' + c + '</option>'; };
+    return '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0;padding:8px 10px;border:1px solid #DDDBD5;border-radius:6px;background:#FAFAF8">' +
+      '<select id="eb-f" style="' + INs + '">' + opt('todo', '할 일(미이수 · 진행중)', n(todo)) + opt('', '전체', all.length) + opt('이수', '이수', n(function(p){ return p.status === '이수'; })) + opt('제외', '제외', n(function(p){ return p.status === '제외'; })) + '</select>' +
+      '<label style="font-size:13px;font-weight:700"><input type="checkbox" id="eb-all"> 보이는 직원 전체 선택</label>' +
+      '<span style="font-size:13px;color:#5A5650">선택 <b id="eb-n">0</b>명</span>' +
+      '<span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
+        '<label style="font-size:12px">교육일 <input type="date" id="eb-ds" value="2025-01-01" style="' + INs + '"></label>' +
+        '<button id="eb-man-go" style="' + BTNs + ';border-color:#4A8F2C;color:#2D581B">선택 직원 수기 이수</button>' +
+        '<select id="eb-unit" style="' + INs + '"><option value="">근무지 지정…</option>' + (edu.unitOptions || []).map(function(u){ return '<option>' + esc(u) + '</option>'; }).join('') + '<option value="__clear">근무지 해제</option></select>' +
+        '<button id="eb-unit-go" style="' + BTNs + '">근무지 적용</button></span></div>';
+  }
+  function picked(){
+    return [].filter.call(document.querySelectorAll('#eb-people [data-pick]'), function(c){ return c.checked; }).map(function(c){ return edu.people[+c.getAttribute('data-pick')]; });
+  }
+  function bindToolbar(){
+    var cnt = function(){ document.getElementById('eb-n').textContent = picked().length; };
+    document.getElementById('eb-f').onchange = function(){ eduFilter = this.value; showDept(); };
+    document.getElementById('eb-all').onchange = function(){ var on = this.checked; document.querySelectorAll('#eb-people [data-pick]').forEach(function(c){ c.checked = on; }); cnt(); };
+    document.querySelectorAll('#eb-people [data-pick]').forEach(function(c){ c.addEventListener('change', cnt); });
+    document.getElementById('eb-man-go').onclick = async function(){
+      var ds = document.getElementById('eb-ds').value;
+      var list = picked().filter(function(p){ return p.status === '미이수' || p.status === '진행중'; });
+      if(!list.length){ say('미이수 · 진행중 직원을 선택하세요', 'err'); return; }
+      if(!ds){ say('교육일을 넣어 주세요', 'err'); return; }
+      if(!confirm(list.length + '명을 ' + ds + ' 수기(종이) 교육으로 이수 처리합니다.\n(입사일이 더 늦은 사람은 입사일로 기록)')) return;
+      this.disabled = true;
+      var x = await BMAUTH.post('edu.manual', { clampJoin: true, rows: list.map(function(p){ return { no: p.no, name: p.name, dept: p.dept, type: p.need === '특별' ? '특별' : 'MSDS', ds: ds, hours: p.need === '특별' ? 8 : 1, note: '예전 종이 일지 (일괄)' }; }) });
+      this.disabled = false;
+      if(!x.success){ say(x.error || '실패', 'err'); return; }
+      var bad = x.rows.filter(function(r){ return !r.ok; });
+      say('수기 이수 ' + x.added + '명 등록' + (bad.length ? ' · 건너뜀 ' + bad.length + '명 (' + bad.slice(0, 3).map(function(r){ return r.name + ': ' + r.reason; }).join(', ') + ')' : ''), bad.length ? 'info' : 'ok');
+      await board(); try{ if(window.bmEduChanged) bmEduChanged(); }catch(_){}
+    };
+    document.getElementById('eb-unit-go').onclick = async function(){
+      var u = document.getElementById('eb-unit').value, list = picked();
+      if(!u){ say('근무지를 고르세요', 'err'); return; }
+      if(!list.length){ say('직원을 선택하세요', 'err'); return; }
+      var unit = u === '__clear' ? '' : u;
+      this.disabled = true;
+      var x = await BMAUTH.post('edu.unit', { rows: list.map(function(p){ return { no: p.no, name: p.name, dept: p.dept, unit: unit }; }) });
+      this.disabled = false;
+      say(x.success ? (unit ? list.length + '명 근무지 → ' + unit + ' (그 근무지 물질 · 교육으로 판정)' : '근무지 해제 ' + x.cleared + '명') : (x.error || '실패'), x.success ? 'ok' : 'err');
+      await board(); try{ if(window.bmEduChanged) bmEduChanged(); }catch(_){}
+    };
+  }
+
+  /* v20.3 전 부서 일괄 수기 이수 — 부서를 골라 할 일(미이수 · 진행중) 전원을 기준일 수기 교육으로 */
+  function bulkUI(){
+    var host = document.getElementById('eb-manual');
+    if(!host || !edu) return;
+    if(host.getAttribute('data-mode') === 'bulk' && host.innerHTML){ host.innerHTML = ''; host.removeAttribute('data-mode'); return; }
+    host.setAttribute('data-mode', 'bulk');
+    var todo = function(p){ return p.status === '미이수' || p.status === '진행중'; };
+    var by = {};
+    edu.people.filter(todo).forEach(function(p){ by[p.dept] = (by[p.dept] || 0) + 1; });
+    var depts = Object.keys(by).sort();
+    host.innerHTML = '<div style="border:1px solid #C5E2AB;border-radius:8px;padding:14px;margin:0 0 12px;background:#F7FAF4">' +
+      '<b style="font-size:15px">전 부서 일괄 수기 이수</b>' +
+      '<div style="font-size:13px;color:#5A5650;margin:4px 0 8px">고른 부서의 <b>미이수 · 진행중 전원</b>을 기준일 수기(종이) 교육으로 교육이력대장에 등록합니다. 입사일이 기준일보다 늦은 사람은 입사일로 기록. MSDS 1시간 · 특별 8시간(+온라인 8 = 16).</div>' +
+      '<label style="font-size:13px;font-weight:700"><input type="checkbox" id="bk-all" checked> 전체 부서</label>' +
+      '<div id="bk-depts" style="display:flex;flex-wrap:wrap;gap:6px 14px;margin:6px 0 10px">' + depts.map(function(d){ return '<label style="font-size:13px"><input type="checkbox" data-bk="' + esc(d) + '" checked> ' + esc(d) + ' <b>' + by[d] + '</b></label>'; }).join('') + '</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><label style="font-size:13px">기준 교육일 <input type="date" id="bk-ds" value="2025-01-01" style="' + INs + '"></label>' +
+        '<input id="bk-note" value="예전 종이 일지 (일괄)" style="' + INs + ';width:220px">' +
+        '<button id="bk-dry" style="' + BTNs + '">미리보기</button><button id="bk-go" style="' + BTNs + ';background:#4A8F2C;border-color:#4A8F2C;color:#fff" disabled>일괄 이수 처리</button>' +
+        '<span id="bk-sum" style="font-size:13px;color:#5A5650"></span></div><div id="bk-out" style="margin-top:8px;font-size:12px;color:#5A5650"></div></div>';
+    var rows = function(){
+      var on = {}; document.querySelectorAll('#bk-depts [data-bk]').forEach(function(c){ if(c.checked) on[c.getAttribute('data-bk')] = 1; });
+      var ds = document.getElementById('bk-ds').value, note = document.getElementById('bk-note').value.trim();
+      return edu.people.filter(function(p){ return todo(p) && on[p.dept]; }).map(function(p){ return { no: p.no, name: p.name, dept: p.dept, type: p.need === '특별' ? '특별' : 'MSDS', ds: ds, hours: p.need === '특별' ? 8 : 1, note: note }; });
+    };
+    var reset = function(){ document.getElementById('bk-go').disabled = true; document.getElementById('bk-sum').textContent = ''; };
+    document.getElementById('bk-all').onchange = function(){ var on = this.checked; document.querySelectorAll('#bk-depts [data-bk]').forEach(function(c){ c.checked = on; }); reset(); };
+    document.querySelectorAll('#bk-depts [data-bk], #bk-ds').forEach(function(c){ c.addEventListener('change', reset); });
+    document.getElementById('bk-dry').onclick = async function(){
+      var list = rows(); if(!list.length){ say('부서를 고르세요', 'err'); return; }
+      if(!document.getElementById('bk-ds').value){ say('기준 교육일을 넣어 주세요', 'err'); return; }
+      var x = await BMAUTH.post('edu.manual', { dry: true, clampJoin: true, rows: list });
+      if(!x.success){ say(x.error || '미리보기 실패', 'err'); return; }
+      var ok = x.rows.filter(function(r){ return r.ok; }), bad = x.rows.filter(function(r){ return !r.ok; });
+      var later = ok.filter(function(r){ return r.ds !== document.getElementById('bk-ds').value; }).length;
+      document.getElementById('bk-sum').textContent = '등록 ' + ok.length + '명 (입사일로 맞춤 ' + later + '명) · 건너뜀 ' + bad.length + '명';
+      document.getElementById('bk-out').innerHTML = bad.length ? '건너뜀: ' + bad.slice(0, 30).map(function(r){ return esc(r.dept + ' ' + r.name + ' — ' + r.reason); }).join(' · ') + (bad.length > 30 ? ' 외' : '') : '';
+      document.getElementById('bk-go').disabled = !ok.length;
+    };
+    document.getElementById('bk-go').onclick = async function(){
+      var list = rows();
+      if(!confirm(list.length + '명을 수기 교육 이수로 일괄 등록합니다. 진행할까요?')) return;
+      this.disabled = true;
+      var x = await BMAUTH.post('edu.manual', { clampJoin: true, rows: list });
+      if(!x.success){ say(x.error || '실패', 'err'); this.disabled = false; return; }
+      say('일괄 수기 이수 ' + x.added + '명 등록', 'ok');
+      host.innerHTML = ''; host.removeAttribute('data-mode');
+      await board(); try{ if(window.bmEduChanged) bmEduChanged(); }catch(_){}
+    };
+  }
   // 관리자 > 교육 현황 맨 위
   async function board(){
     var host = document.getElementById('edu-board');
@@ -4244,7 +4350,8 @@ input.apv-in[type=text]{width:110px}
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><b style="font-size:17px">교육 이수 현황</b>' +
         '<span style="display:flex;gap:6px;flex-wrap:wrap"><button id="eb-mail" style="padding:8px 12px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-weight:700;cursor:pointer">부서장에게 확인 요청 메일</button>' +
         '<button id="eb-nc" style="padding:8px 12px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-weight:700;cursor:pointer">새 물질 교육 등록</button>' +
-        '<button id="eb-manual-btn" style="padding:8px 12px;border:1px solid #4A8F2C;border-radius:4px;background:#fff;color:#2D581B;font:inherit;font-weight:700;cursor:pointer">수기(종이) 일지 이수 등록</button></span></div><div id="eb-manual"></div>' +
+        '<button id="eb-manual-btn" style="padding:8px 12px;border:1px solid #4A8F2C;border-radius:4px;background:#fff;color:#2D581B;font:inherit;font-weight:700;cursor:pointer">수기(종이) 일지 이수 등록</button>' +
+        '<button id="eb-bulk-btn" style="padding:8px 12px;border:1px solid #4A8F2C;border-radius:4px;background:#4A8F2C;color:#fff;font:inherit;font-weight:700;cursor:pointer">전 부서 일괄 수기 이수</button></span></div><div id="eb-manual"></div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">' +
         kpi('교육 대상', T.total, '제외 ' + T.excluded + '명') + kpi('이수', T.done, T.total ? Math.round(T.done / T.total * 100) + '%' : '', '#2D581B') +
         kpi('특별교육 진행중', T.progress, '16시간 미달', '#2B4C7E') + kpi('미이수', T.missing, '기한 초과 ' + T.overdue + '명', T.missing ? '#A3302A' : '') +
@@ -4262,7 +4369,8 @@ input.apv-in[type=text]{width:110px}
       '<div id="eb-people" style="margin-top:12px"></div>';
     host.querySelectorAll('[data-dept]').forEach(function(tr){ tr.onclick = function(){ eduDept = tr.getAttribute('data-dept'); showDept(); host.querySelectorAll('[data-dept]').forEach(function(x){ x.style.background = x === tr ? '#E2F0D5' : ''; }); }; });
     if(eduDept) showDept();
-    document.getElementById('eb-manual-btn').onclick = manualUI;
+    document.getElementById('eb-manual-btn').onclick = function(){ var h = document.getElementById('eb-manual'); if(h.getAttribute('data-mode') === 'bulk'){ h.innerHTML = ''; h.removeAttribute('data-mode'); } manualUI(); };
+    document.getElementById('eb-bulk-btn').onclick = function(){ var h = document.getElementById('eb-manual'); if(h.getAttribute('data-mode') !== 'bulk') h.innerHTML = ''; bulkUI(); };
     document.getElementById('eb-mail').onclick = async function(){
       var pend = r.depts.filter(function(d){ return d.missing || d.progress || d.newChem; }).map(function(d){ return d.dept; });
       if(!pend.length){ say('미이수 부서가 없습니다', 'ok'); return; }
@@ -4282,9 +4390,11 @@ input.apv-in[type=text]{width:110px}
     var box = document.getElementById('eb-people');
     if(!box || !edu) return;
     var order = { '미이수': 0, '진행중': 1, '이수': 2, '제외': 3 };
-    var list = edu.people.filter(function(p){ return p.dept === eduDept; }).sort(function(a, b){ return (order[a.status] - order[b.status]) || ((b.overdue ? 1 : 0) - (a.overdue ? 1 : 0)) || String(a.name).localeCompare(b.name, 'ko'); });
-    box.innerHTML = '<b style="font-size:15px">' + esc(eduDept) + ' ' + list.length + '명</b> <span style="font-size:12px;color:#5A5650">체크 → 위 [수기(종이) 일지 이수 등록]</span>' + peopleTable(list, true, true);
+    var all = edu.people.filter(function(p){ return p.dept === eduDept; });
+    var list = all.filter(function(p){ return !eduFilter || (eduFilter === 'todo' ? (p.status === '미이수' || p.status === '진행중') : p.status === eduFilter); }).sort(function(a, b){ return (order[a.status] - order[b.status]) || ((b.overdue ? 1 : 0) - (a.overdue ? 1 : 0)) || String(a.name).localeCompare(b.name, 'ko'); });
+    box.innerHTML = '<b style="font-size:15px">' + esc(eduDept) + ' ' + all.length + '명</b>' + deptToolbar(all) + peopleTable(list, true, true);
     bindPeople(box, list, board);
+    bindToolbar();
   }
   // 부서현황(부서 로그인)의 '교육 대상 확인'
   async function deptSection(host){

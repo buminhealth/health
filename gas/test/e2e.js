@@ -28,8 +28,10 @@ function check(name, cond, extra) {
     const u = route.request().url();
     if (u.startsWith('https://script.google.com/macros/')) {
       const q = u.indexOf('?') >= 0 ? u.slice(u.indexOf('?')) : '';
-      const resp = await route.fetch({ url: MOCK + q });
-      return route.fulfill({ response: resp, headers: { ...resp.headers(), 'access-control-allow-origin': '*' } });
+      try {
+        const resp = await route.fetch({ url: MOCK + q });
+        return route.fulfill({ response: resp, headers: { ...resp.headers(), 'access-control-allow-origin': '*' } });
+      } catch (e) { return route.abort().catch(() => {}); }   // 시험 끝날 때 남은 요청 (연결 끊김) 무시
     }
     if (u.startsWith(`http://localhost:${PORT}/`)) return route.continue();
     if (u.startsWith('https://raw.githubusercontent.com/buminhealth/health/main/' + encodeURIComponent('교육일지') + '/2026-03/' + encodeURIComponent('옛일지-61병동.pdf'))) {
@@ -868,8 +870,9 @@ function check(name, cond, extra) {
   await page.evaluate(async () => { admSwitchPane('edu'); await new Promise(r => setTimeout(r, 50)); await BMEDU.board(); document.querySelector('#edu-board [data-dept="61병동"]').click(); });
   await page.waitForFunction(() => !/계산 중/.test(document.getElementById('edu-board').textContent) && document.querySelector('#eb-people [data-pick]'), null, { timeout: 15000 });
   const ui2 = await page.evaluate(async () => {
+    const f = document.getElementById('eb-f'); f.value = ''; f.dispatchEvent(new Event('change'));
     document.getElementById('eb-manual-btn').click();
-    const box = document.querySelector('#eb-people [data-pick]');
+    const box = [...document.querySelectorAll('#eb-people [data-pick]')].find(c => /미이수|진행중/.test(c.closest('tr').textContent));
     const inc = !!document.querySelector('#eb-people [data-inc]');
     box.checked = true;
     document.getElementById('mn-ds').value = '2023-05-05';
@@ -901,6 +904,30 @@ function check(name, cond, extra) {
   });
   const lastMan = led.rows[led.rows.length - 1];
   check('현황판 줄마다 [수기 이수] (취급 안 함 옆) → 교육일 · 시간 넣고 이수 처리', rowMan.st === '이수' && lastMan[10] === rowMan.who && lastMan[5] === '2023-04-05' && /수기\(종이\) 일지 · 예전 종이 일지/.test(lastMan[12]), [rowMan, lastMan]);
+  // v20.3 근무지 지정: 규칙으로 제외된 61병동 직원을 근무지 '수술실'로 → 수술실 물질 · 교육으로 판정 (부서 규칙보다 우선)
+  const un1 = await page.evaluate(() => BMAUTH.post('edu.unit', { rows: [{ no: '126000031', name: '육간호', dept: '61병동', unit: '수술실' }] }));
+  const est12 = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
+  check('근무지 지정: 61병동 직원 → 근무지 수술실 (규칙 제외 무시, 수술실 물질로 대상)', un1.success && un1.set === 1 && Q(est12, '육간호').unit === '수술실' && Q(est12, '육간호').status === '미이수' && !!g.sheets['근무지지정'], Q(est12, '육간호'));
+  const un0 = await page.evaluate(() => BMAUTH.post('edu.unit', { rows: [{ no: '126000031', name: '육간호', dept: '61병동', unit: '' }] }));
+  const est13 = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
+  check('근무지 해제 → 다시 부서 규칙대로', un0.cleared === 1 && Q(est13, '육간호').status === '제외' && !Q(est13, '육간호').unit, Q(est13, '육간호').status);
+  // 전 부서 일괄 수기 이수 (기준일 · 입사일 맞춤)
+  const bulk = await page.evaluate(async () => {
+    await BMEDU.board();
+    document.getElementById('eb-bulk-btn').click();
+    document.getElementById('bk-ds').value = '2025-01-01';
+    document.getElementById('bk-dry').click();
+    let t0 = Date.now();
+    while (Date.now() - t0 < 8000 && document.getElementById('bk-go').disabled) await new Promise(r => setTimeout(r, 100));
+    const sum = document.getElementById('bk-sum').textContent;
+    document.getElementById('bk-go').click();
+    t0 = Date.now();
+    let r;
+    while (Date.now() - t0 < 10000) { await new Promise(x => setTimeout(x, 300)); r = await BMAUTH.post('edu.status', { fresh: true }); if (!r.people.some(p => p.status === '미이수' || p.status === '진행중')) break; }
+    return { sum, left: r.people.filter(p => p.status === '미이수' || p.status === '진행중').map(p => p.dept + ' ' + p.name) };
+  });
+  const bulkRows = led.rows.filter(r => /일괄/.test(String(r[12])));
+  check('전 부서 일괄 수기 이수: 미리보기 → 처리 → 할 일 0명 · 입사일이 늦은 사람은 입사일로', /등록 \d+명/.test(bulk.sum) && bulk.left.length === 0 && bulkRows.length > 0 && bulkRows.every(r => r[5] >= '2025-01-01') && bulkRows.some(r => r[5] === '2025-01-01'), [bulk, bulkRows.length]);
   led.rows.splice(ledN);
   // v20.3 직원목록 ↔ 인사 사이트 합치기: #N/A · 빈 사번 채움, 입사일 표기 달라도(9/1) 같은 부서 같은 이름이면 같은 사람, 같은 사번 두 줄 합침
   const r1 = empRow('#N/A', '엔에이', '71병동', '재직', ''); empSh.appendRow(r1);

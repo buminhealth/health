@@ -178,7 +178,7 @@ function doPost(e) {
       case 'ai.status': case 'ai.setKey': case 'ai.list': case 'ai.analyze': case 'ai.judge': case 'ai.apply': case 'ai.products': case 'ai.compare':
                         result = aiOp_(req, s); break;
       case 'edu.dupes': case 'edu.dedupe': case 'edu.status': case 'edu.exclude': case 'edu.askMail': case 'edu.newChem':
-      case 'edu.rules': case 'edu.saveRules': case 'dept.saveMap': case 'edu.manual':
+      case 'edu.rules': case 'edu.saveRules': case 'dept.saveMap': case 'edu.manual': case 'edu.unit':
                         result = eduOp_(req, s); break;
       default:          result = { success: false, error: 'unknown op: ' + req.op };
     }
@@ -2639,6 +2639,40 @@ function jobOf_(pos) {
   if (/전공의$/.test(p)) return '전공의';
   return p.replace(/\d+급$/, '').replace(/(부장|약사|사무직)$/, m => p === m ? m : '') || p;
 }
+/* v20.3 근무지 지정: 인사 부서 안에 여러 작업장이 섞인 경우(예: 외래 = 인터벤션 · 소아과 · 부인과)
+   직원별로 실제 근무지를 정하면 그 근무지의 물질 · 교육구분 · 규칙으로 판정 (부서 규칙보다 우선) */
+const UNIT_SHEET = '근무지지정', UNIT_HEADER = ['사번', '이름', '부서', '근무지', '비고', '지정일', '지정자', '해제일'];
+function unitMap_() {
+  const out = {};
+  const sh = SS.getSheetByName(UNIT_SHEET);
+  if (!sh || sh.getLastRow() < 2) return out;
+  sh.getRange(2, 1, sh.getLastRow() - 1, UNIT_HEADER.length).getDisplayValues().forEach((r, i) => {
+    if (!String(r[1]).trim() || !String(r[3]).trim() || String(r[7]).trim()) return;
+    const o = { row: i + 2, unit: String(r[3]).trim(), note: r[4], date: r[5], by: r[6] };
+    out[eduKey_(r[0], r[1], r[2])] = o;
+    out['nm:' + String(r[1]).trim() + '|' + normDept_(deptAlias_(r[2]))] = o;
+  });
+  return out;
+}
+function eduUnit_(req, s) {
+  const sh = eduSheet_(UNIT_SHEET, UNIT_HEADER);
+  const today = todayKst_(), by = s.role === 'admin' ? '보건관리자' : (s.dept + ' 부서장');
+  const emps = (readEmployees_() || []).filter(e => !isResigned_(e)).map(e => Object.assign({}, e, { dept: deptAlias_(e.dept) }));
+  let set = 0, cleared = 0;
+  const miss = [];
+  (req.rows || []).slice(0, 1000).forEach(x => {
+    const name = String(x.name || '').trim(), no = String(x.no || '').trim(), dept = String(x.dept || '').trim();
+    const e = emps.find(v => v.name === name && sameDept_(v.dept, dept) && (!no || !v.empNo || v.empNo === no));
+    if (!e) { miss.push(name); return; }
+    if (s.role === 'dept' && !sameDept_(e.dept, s.dept)) { miss.push(name); return; }
+    const cur = unitMap_()[eduKey_(e.empNo, e.name, e.dept)] || unitMap_()['nm:' + e.name + '|' + normDept_(e.dept)];
+    if (cur) sh.getRange(cur.row, 8).setValue(today + ' ' + by);
+    const unit = String(x.unit || '').trim();
+    if (unit) { sh.appendRow([e.empNo || '', e.name, e.dept, unit, String(x.note || ''), today, by, ''].map(safeCell_)); set++; }
+    else if (cur) cleared++;
+  });
+  return { success: true, set: set, cleared: cleared, missing: miss };
+}
 function ruleMatch_(r, e) {
   if (!r.use) return false;
   const depts = splitList_(r.dept);
@@ -2690,14 +2724,14 @@ function eduStatus_(s) {
     const special = chems.some(c => names.indexOf(c.name) >= 0 && yes(c));
     return (deptInfo[k] = { need: special ? '특별' : 'MSDS', chems: names });
   };
-  const excl = exclMap_(), incl = inclMap_();
+  const excl = exclMap_(), incl = inclMap_(), units = unitMap_();
   const recs = ledgerRows_();
   const newChems = newChemRows_();
   const rules = eduRules_(), hits = rules.map(() => 0);
   const specialOf = names => chems.some(c => names.indexOf(c.name) >= 0 && yes(c));
   // v20.3 부서 이동: 기록의 부서(또는 기록에 적힌 물질)가 지금 부서의 물질을 모두 포함해야 이수로 인정
   const covers = (r, di, e) => {
-    if (baseDept_(r.dept) === baseDept_(e.dept) || !di.chems.length) return true;
+    if (baseDept_(r.dept) === baseDept_(e.dept) || (e.unit && baseDept_(r.dept) === baseDept_(e.unit)) || !di.chems.length) return true;
     const from = info(r.dept);
     const have = (from ? from.chems : []).map(normChem_), txt = normChem_(r.chem);
     return di.chems.every(c => { const k = normChem_(c); return !k || have.indexOf(k) >= 0 || txt.indexOf(k) >= 0; });
@@ -2710,10 +2744,12 @@ function eduStatus_(s) {
   emps.forEach(e => {
     if (s.role === 'dept' && !sameDept_(e.dept, s.dept)) return;
     const inc = incl[eduKey_(e.empNo, e.name, e.dept)] || incl['nm:' + e.name + '|' + normDept_(e.dept)];
-    const ri = rules.findIndex(r => ruleMatch_(r, e));
+    const un = units[eduKey_(e.empNo, e.name, e.dept)] || units['nm:' + e.name + '|' + normDept_(e.dept)];
+    const eR = un ? Object.assign({}, e, { dept: un.unit }) : e;   // 근무지가 있으면 규칙도 근무지로 판단
+    const ri = rules.findIndex(r => ruleMatch_(r, eR));
     const rule = ri >= 0 && !(inc && rules[ri].decision === '제외') ? rules[ri] : null;
     if (rule) hits[ri]++;
-    let di = info(e.dept);
+    let di = (un && info(un.unit)) || info(e.dept);
     if (inc && !di) di = { need: 'MSDS', chems: [] };
     if (rule && rule.decision === '대상') {
       const names = rule.chem ? splitList_(rule.chem) : (di ? di.chems : []);
@@ -2721,7 +2757,7 @@ function eduStatus_(s) {
     }
     if (!di) return;
     const all = own.get(e) || [];
-    const mine = all.filter(r => covers(r, di, e));
+    const mine = all.filter(r => covers(r, di, un ? Object.assign({}, e, { unit: un.unit }) : e));
     const ruleEx = rule && rule.decision === '제외'
       ? { reason: '대상 규칙 ' + (ri + 1) + (rule.note ? ': ' + rule.note : ''), by: '관리자 규칙', date: '', route: '대상 규칙' } : null;
     const ex = inc ? null : (excl[eduKey_(e.empNo, e.name, e.dept)] || excl['nm:' + e.name + '|' + normDept_(e.dept)] || ruleEx);
@@ -2730,6 +2766,7 @@ function eduStatus_(s) {
     if (/휴직/.test(e.status || '')) p.onLeave = true;
     if (rule && rule.decision === '대상') p.rule = ri + 1;
     if (inc) p.included = inc;
+    if (un) p.unit = un.unit;
     if (all.length && !mine.length) p.moved = all.map(r => r.dept).filter(Boolean).pop() || '이전 부서';
     if (ex && !mine.length) { p.status = '제외'; p.excluded = ex; people.push(p); return; }
     const isNew = e.joinDate && e.joinDate >= addDays_(today, -NEWHIRE_WINDOW);
@@ -2768,6 +2805,7 @@ function eduStatus_(s) {
     if (p.newChemPending) d.newChem++;
   });
   return { success: true, today: today, people: people, depts: Object.keys(depts).sort().map(k => depts[k]), ruleHits: hits,
+           unitOptions: Object.keys(map).filter(k => k !== '병동').sort(),
            rules: { specialHours: SPECIAL_HOURS, online: SPECIAL_ONLINE, months: SPECIAL_MONTHS, newChemDays: NEWCHEM_DAYS } };
 }
 
@@ -2859,7 +2897,7 @@ function eduManual_(req) {
   };
   const recs = ledgerRows_();
   const own = ledgerOwners_(recs, emps);
-  const map = handlingDepts_();
+  const map = handlingDepts_(), units = unitMap_();
   const out = (req.rows || []).slice(0, 2000).map((x, i) => {
     const name = String(x.name || '').trim(), dept = String(x.dept || '').trim(), no = String(x.no || '').trim();
     const r = { i: i, name: name, dept: dept, no: no };
@@ -2873,12 +2911,16 @@ function eduManual_(req) {
     const ds = ymd(x.ds), de = ymd(x.de) || ds;
     if (!ds) return Object.assign(r, { ok: false, reason: '교육일 형식 (예: 2025-03-04)' });
     if (ds > today) return Object.assign(r, { ok: false, reason: '교육일이 오늘 이후' });
+    // 일괄 처리: 기준일이 입사 전이면 입사일로 (입사 전 교육은 말이 안 됨)
+    let ds2 = ds;
+    if (req.clampJoin && /^\d{4}-\d{2}-\d{2}$/.test(e.joinDate || '') && e.joinDate > ds) ds2 = e.joinDate > today ? today : e.joinDate;
     const hours = Number(String(x.hours || '').replace(/[^\d.]/g, '')) || (type === 'MSDS교육' ? 1 : 0);
     if (!hours) return Object.assign(r, { ok: false, reason: '특별교육은 교육 시간을 적으세요' });
-    const dup = (own.get(e) || []).some(q => q.special === (type !== 'MSDS교육') && q.ds === ds);
-    const chem = String(x.chem || '').trim() || (chemsForDept_(map, e.dept) || []).join(', ');
+    const dup = (own.get(e) || []).some(q => q.special === (type !== 'MSDS교육') && q.ds === ds2);
+    const un = units[eduKey_(e.empNo, e.name, e.dept)] || units['nm:' + e.name + '|' + normDept_(e.dept)];
+    const chem = String(x.chem || '').trim() || ((un && chemsForDept_(map, un.unit)) || chemsForDept_(map, e.dept) || []).join(', ');
     return Object.assign(r, { ok: !dup, dup: dup, reason: dup ? '같은 날 같은 교육이 이미 있음' : '', emp: { no: e.empNo, name: e.name, dept: e.dept, joinDate: e.joinDate },
-      type: type, ds: ds, de: de < ds ? ds : de, hours: hours, chem: chem, note: String(x.note || '').trim() });
+      type: type, ds: ds2, de: (de < ds2 || ds2 !== ds) ? ds2 : de, hours: hours, chem: chem, note: String(x.note || '').trim() });
   });
   const okRows = out.filter(r => r.ok);
   if (req.dry || !okRows.length) return { success: true, dry: !!req.dry, rows: out, added: 0 };
@@ -2974,6 +3016,7 @@ function eduOp_(req, s) {
   if (req.op === 'edu.dupes') return Object.assign({ success: true }, eduDupes_());
   if (req.op === 'edu.rules') return eduRulesInfo_();
   if (req.op === 'edu.manual') return eduManual_(req);
+  if (req.op === 'edu.unit') { const r = eduUnit_(req, s); eduCacheClear_(); return r; }
   if (req.op === 'edu.saveRules') {
     const list = (req.rules || []).map(r => [r.use === false || r.use === 'N' ? 'N' : 'Y', String(r.dept || '').trim(), String(r.job || '').trim(),
       String(r.decision) === '제외' ? '제외' : '대상', /특별/.test(r.kind) ? '특별' : (/MSDS/i.test(r.kind) ? 'MSDS' : ''), String(r.chem || '').trim(), String(r.note || '').trim()].map(safeCell_))
