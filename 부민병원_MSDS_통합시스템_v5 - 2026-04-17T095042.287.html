@@ -32,6 +32,9 @@
       (직원 찾기 · 동명이인 · 중복 · 날짜 확인) → 교육이력대장에 '수기(종이) 일지'로 등록 → 바로 이수
     - 개별 포함: 규칙 · 신규입사 회신으로 제외된 사람도 [대상으로 포함] (개인 결정 > 규칙), [포함 해제]로 되돌림
     - 연동: 제외 · 포함 · 수기 등록 → 신규입사 알림 상태(미취급 / 취급-교육대기)까지 같이 바꾸고 대시보드 · 홈 할 일 · 규칙 표 다시 계산
+    - 직원목록 ↔ 인사 사이트 합치기 (서버): 사번 '#N/A' · 빈칸은 사번 없음으로 보고 인사 사이트 사번으로 채움, 입사일 표기가 달라도(9/1)
+      같은 부서 같은 이름 한 명이면 같은 사람, 같은 사번 두 줄은 한 줄로 합침 — 직원정보관리 ① [인사 사이트와 합치기] 미리보기 → 적용,
+      ② 엑셀 업데이트도 적용 전 같은 미리보기. 매일 아침 자동 확인에도 같은 규칙
 
   ★★★ v20.2 (2026-10-21) — 화면 비율 · 연락처 띠 고정 · 관리자 결재 A-8:
     - 연락처 띠: PC는 화면 맨 아래 고정 한 줄(40px), 휴대폰은 각 페이지 끝
@@ -3045,7 +3048,10 @@ input.apv-in[type=text]{width:110px}
       '<div style="' + BOX + '">' +
         '<div style="font-weight:800;color:#1c3557;margin-bottom:8px">① 인사 사이트에서 가져오기</div>' +
         (st.hrConnector
-          ? (st.hrAuto ? '<div style="margin-bottom:8px"><button id="staff-hr-saved" style="' + BTN_P + '">저장된 계정으로 가져오기</button>' +
+          ? (st.hrAuto ? '<div style="margin-bottom:8px;padding:10px;border:1px solid #C5E2AB;border-radius:6px;background:#F7FAF4"><button id="staff-merge" style="' + BTN_P + '">인사 사이트와 합치기 (인사 사이트 우선)</button>' +
+                         ' <span style="font-size:12px;color:#475569">사번 #N/A · 빈칸 자동 채움 · 같은 사번 두 줄 합침 · 이름 · 부서 · 입사일 · 직위는 인사 사이트 값으로 — 미리보기 후 적용</span>' +
+                         '<div id="staff-merge-out" style="margin-top:8px"></div></div>' +
+                         '<div style="margin-bottom:8px"><button id="staff-hr-saved" style="' + BTN_P + '">저장된 계정으로 가져오기</button>' +
                          ' <span style="font-size:12px;color:#64748b">아이디·비밀번호 입력 없이 (시트 메뉴 ④에 저장된 계정)</span></div>' +
                          '<div style="font-size:12px;color:#64748b;margin-bottom:4px">다른 계정으로 가져오기:</div>' : '') +
             '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
@@ -3092,6 +3098,26 @@ input.apv-in[type=text]{width:110px}
         showPreview();
       }finally{ btn.disabled = false; btn.textContent = label; }
     };
+    var mergeBtn = document.getElementById('staff-merge');
+    if(mergeBtn) mergeBtn.onclick = async function(){
+      var out = document.getElementById('staff-merge-out');
+      mergeBtn.disabled = true; out.innerHTML = '<div style="font-size:12px;color:#64748b">인사 사이트에서 가져와 비교하는 중…</div>';
+      var r = await post('emp.merge', { dry: true });
+      mergeBtn.disabled = false;
+      if(!r.success && r.warnings && confirm(r.error + '\n\n그래도 미리보기를 볼까요?')) r = await post('emp.merge', { dry: true, force: true });
+      if(!r.success){ out.innerHTML = '<div style="font-size:12px;color:#b91c1c">' + esc(r.error || '실패') + '</div>'; return; }
+      out.innerHTML = mergeSummary(r) + '<div style="margin-top:8px"><button id="staff-merge-go" style="' + BTN_P + '">이대로 적용</button> <button id="staff-merge-x" style="' + BTN + '">취소</button></div>';
+      document.getElementById('staff-merge-x').onclick = function(){ out.innerHTML = ''; };
+      document.getElementById('staff-merge-go').onclick = async function(){
+        this.disabled = true;
+        var x = await post('emp.merge', { force: !!r.warnings });
+        if(!x.success){ say(x.error || '적용 실패', 'err'); this.disabled = false; return; }
+        say('✅ 합치기 완료 · 추가 ' + x.added + ' · 변경 ' + x.updated + ' · 사번 채움 ' + x.filledNo.length + ' · 중복 합침 ' + x.deleted + ' · 퇴사표시 ' + x.resigned, 'ok');
+        try{ if(typeof loadEmps === 'function') loadEmps(); }catch(_){}
+        try{ if(window.bmEduChanged) bmEduChanged(); }catch(_){}
+        open();
+      };
+    };
     var hrSaved = document.getElementById('staff-hr-saved');
     if(hrSaved) hrSaved.onclick = function(){ hrFetch(hrSaved, '', null); };
     var hrGo = document.getElementById('staff-hr-go');
@@ -3108,6 +3134,11 @@ input.apv-in[type=text]{width:110px}
       var full = document.getElementById('staff-full').checked;
       if(full && !confirm('명단에 없는 재직자를 모두 "퇴사"로 표시합니다. 전체 직원 명단이 맞나요?')) return;
       var btn = this; btn.disabled = true;
+      var pv = await post('emp.sync', { headers: parsed.headers, rows: parsed.rows, fullList: full, dry: true });
+      if(pv.success && pv.dry){
+        document.getElementById('staff-preview-out').insertAdjacentHTML('beforeend', mergeSummary(pv));
+        if(!confirm('추가 ' + pv.added + ' · 변경 ' + pv.updated + ' · 사번 채움 ' + pv.filledNo.length + ' · 중복 합침 ' + pv.deleted + ' · 퇴사표시 ' + pv.resigned + '\n\n이대로 직원목록에 반영할까요? (자세한 내용은 화면 미리보기)')){ btn.disabled = false; return; }
+      }
       var r = await post('emp.sync', { headers: parsed.headers, rows: parsed.rows, fullList: full });
       btn.disabled = false;
       if(!r.success){ say(r.error || '업데이트 실패', 'err'); return; }
@@ -3237,6 +3268,21 @@ input.apv-in[type=text]{width:110px}
       say(x.success ? '부서 매칭 ' + x.changed + '건 저장 · 교육 대상을 다시 계산했습니다' : (x.error || '저장 실패'), x.success ? 'ok' : 'err');
       if(x.success) rulesUI();
     };
+  }
+
+  // v20.3 합치기 미리보기 요약
+  function mergeSummary(r){
+    var li = function(a, f){ return a.slice(0, 40).map(f).join(' · ') + (a.length > 40 ? ' 외 ' + (a.length - 40) + '명' : ''); };
+    var row = function(label, n, body, color){ return '<div style="margin:3px 0"><b style="color:' + (color || '#1c3557') + '">' + label + ' ' + n + '</b>' + (body ? ' <span style="color:#475569">' + body + '</span>' : '') + '</div>'; };
+    return '<div style="font-size:12px;border:1px solid #e2e8f0;border-radius:6px;padding:8px 10px;background:#fff">' +
+      (r.hrCount ? '<div style="color:#64748b;margin-bottom:4px">인사 사이트 ' + r.hrCount + '명 · 명단에 없는 재직자 퇴사 표시: ' + (r.fullList ? '함' : '안 함') + '</div>' : '') +
+      row('새 직원', r.added + '명', li(r.newEmployees || [], function(e){ return esc(e.dept) + ' ' + esc(e.name); })) +
+      row('바뀌는 직원', r.updated + '명') +
+      row('사번 채움', r.filledNo.length + '명', li(r.filledNo, function(e){ return esc(e.name) + '(' + esc(e.dept) + ') ' + esc(e.was || '빈칸') + ' → ' + esc(e.no); }), '#2D581B') +
+      row('같은 사번 두 줄 합침', r.deleted + '줄', li(r.merged, function(e){ return esc(e.name) + ' ' + esc(e.no); })) +
+      row('퇴사 표시', r.resigned + '명', '', r.resigned ? '#A3302A' : '') +
+      (r.missingNo.length ? row('합친 뒤에도 사번 없음', r.missingNo.length + '명', li(r.missingNo, function(e){ return esc(e.dept) + ' ' + esc(e.name); }) + ' — 인사 사이트에서 못 찾음 (퇴사 · 이름 다름 확인)', '#A3302A') : '') +
+    '</div>';
   }
 
   function deptCheckTable(list){

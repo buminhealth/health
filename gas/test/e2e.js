@@ -880,6 +880,20 @@ function check(name, cond, extra) {
   });
   check('관리자 화면: 현황판에서 체크 → 수기 등록 미리보기 · 규칙 제외자는 [대상으로 포함] 버튼', /등록 가능 1명/.test(ui2.sum) && ui2.go && ui2.inc, ui2);
   led.rows.splice(ledN);
+  // v20.3 직원목록 ↔ 인사 사이트 합치기: #N/A · 빈 사번 채움, 입사일 표기 달라도(9/1) 같은 부서 같은 이름이면 같은 사람, 같은 사번 두 줄 합침
+  const r1 = empRow('#N/A', '엔에이', '71병동', '재직', ''); empSh.appendRow(r1);
+  const r2 = empRow('', '빈사번', '71병동', '재직', ''); r2[EH.indexOf('입사일')] = '9/1'; empSh.appendRow(r2);
+  const empN0 = empSh.rows.length;
+  const mrgRows = [['126000051', '엔에이', '71병동', '2020-01-01'], ['126000052', '빈사번', '71병동', '2026-09-01']];
+  const dryM = await page.evaluate(rows => BMAUTH.post('emp.sync', { headers: ['사번', '이름', '부서', '입사일'], rows, dry: true }), mrgRows);
+  check('합치기 미리보기: 사번 채움 2 · 같은 사번 두 줄 합침(중복가) · 시트는 그대로', dryM.success && dryM.dry && dryM.filledNo.length === 2 && dryM.added === 0 && dryM.merged.some(m => m.name === '중복가') && dryM.deleted >= 1 && empSh.rows.length === empN0 && empSh.rows.some(r => r[0] === '#N/A'), dryM);
+  const realM = await page.evaluate(rows => BMAUTH.post('emp.sync', { headers: ['사번', '이름', '부서', '입사일'], rows }), mrgRows);
+  const rowOfName = nm => empSh.rows.filter(r => r[EH.indexOf('이름')] === nm);
+  check('합치기 적용: #N/A → 인사 사번, 빈 사번 + 입사일 9/1 → 사번 · 입사일 채움 (새 줄 없음)', realM.success && realM.added === 0 && rowOfName('엔에이').length === 1 && rowOfName('엔에이')[0][0] === '126000051' && rowOfName('빈사번').length === 1 && rowOfName('빈사번')[0][0] === '126000052' && rowOfName('빈사번')[0][EH.indexOf('입사일')] === '2026-09-01', [rowOfName('엔에이'), rowOfName('빈사번')]);
+  check('합치기 적용: 같은 사번 두 줄 → 한 줄 (빈 칸은 다른 줄 값)', rowOfName('중복가').length === 1 && rowOfName('중복가')[0][EH.indexOf('직위')] === '간호사5급' && rowOfName('중복가')[0][EH.indexOf('재직상태')] === '재직', rowOfName('중복가'));
+  const mergeWarn = await page.evaluate(() => BMAUTH.post('emp.merge', { dry: true }));
+  const mergeAuto = await page.evaluate(() => BMAUTH.post('emp.merge', { dry: true, force: true }));
+  check('인사 사이트와 합치기: 인원이 크게 줄면 경고 후 멈춤 → 확인하면 미리보기', !mergeWarn.success && mergeWarn.warnings.length > 0 && mergeAuto.success && mergeAuto.dry && mergeAuto.hrCount > 0 && Array.isArray(mergeAuto.missingNo), [mergeWarn.error, mergeAuto.error || mergeAuto.hrCount]);
   const info = await page.evaluate(() => BMAUTH.post('edu.rules', {}));
   check('규칙 화면 정보: 규칙 · 적용 인원 · 부서별 직종 · 부서 매칭', info.success && info.rules.length === 2 && info.hits[0] === 1 && info.jobs['61병동']['간호조무사'] === 1 && info.deptMap.some(m => m.raw === '진검실' && m.app === '61병동' && m.staff === 1), info.jobs);
   const msv = await page.evaluate(() => BMAUTH.post('dept.saveMap', { rows: [{ raw: '진검실', app: '71병동' }, { raw: '새부서명', app: '71병동' }] }));

@@ -170,7 +170,7 @@ function doPost(e) {
       case 'fs.get':    result = requireLogin_(s) || fsGet_(req, s); break;
       case 'fs.put':    result = requireLogin_(s) || fsPut_(req, s); break;
       case 'rec.has':   result = requireLogin_(s) || recHas_(req, s); break;
-      case 'emp.status': case 'emp.sync': case 'hr.fetch':
+      case 'emp.status': case 'emp.sync': case 'emp.merge': case 'hr.fetch':
       case 'nh.list': case 'nh.answer': case 'nh.resend': case 'nh.run':
                         result = staffOp_(req, s); break;
       case 'chem.audit': case 'chem.seedLaw': case 'chem.apply': case 'chem.lawImport':
@@ -1135,7 +1135,12 @@ function normDate_(v) {
   return m ? m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2) : s;
 }
 
-function syncEmployees_(incoming, fullList) {
+/* v20.3 직원목록 ↔ 인사 사이트 합치기 (인사 사이트 우선)
+   · 사번은 숫자 6자리 이상만 사번으로 봄 — '#N/A' · 빈칸 · '-'는 사번 없음 → 인사 사이트 사번으로 자동 채움
+   · 찾는 순서: 사번 → 이름+입사일 → (시트 쪽 사번이 없을 때) 이름+부서가 한 명
+   · 시트에 같은 사번 줄이 여러 개면 한 줄로 합침 (빈 칸은 다른 줄 값으로 채우고 나머지 줄 삭제)
+   · dry: 시트를 바꾸지 않고 바뀔 내용만 돌려줌 (화면 미리보기) */
+function syncEmployees_(incoming, fullList, dry) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) throw new Error('서버가 바쁩니다. 잠시 후 다시 시도하세요.');
   try {
@@ -1154,15 +1159,36 @@ function syncEmployees_(incoming, fullList) {
     const data = last > 1 ? sheet.getRange(2, 1, last - 1, width).getValues() : [];
 
     const today = todayKst_();
-    // 사번으로 찾고, 사번이 없으면 이름+입사일로 찾음
-    const noKey = v => String(v || '').trim() ? 'no:' + String(v).trim() : '';
+    const validNo = v => /^\d{6,}$/.test(String(v == null ? '' : v).trim());
+    const noKey = v => validNo(v) ? 'no:' + String(v).trim() : '';
     const nmKey = (name, joinDate) => 'nm:' + String(name).trim() + '|' + normDate_(fmtDate_(joinDate));
-    const pos = {};
+    const ndKey = (name, dept) => 'nd:' + String(name).trim() + '|' + baseDept_(fmtDate_(dept));
+    const details = { filledNo: [], merged: [], deleted: 0 };
+    // ① 같은 사번 여러 줄 → 한 줄 (가장 많이 채워진 줄을 남기고 빈 칸은 다른 줄 값으로)
+    const groups = {};
+    data.forEach((r, i) => { const k = noKey(r[idx.empNo]); if (k) (groups[k] = groups[k] || []).push(i); });
+    const drop = new Set();
+    Object.keys(groups).forEach(k => {
+      const g = groups[k];
+      if (g.length < 2) return;
+      const filled = i => data[i].filter(v => String(v == null ? '' : v).trim()).length;
+      const keep = g.slice().sort((a, b) => filled(b) - filled(a) || b - a)[0];
+      g.forEach(i => {
+        if (i === keep) return;
+        data[i].forEach((v, c) => { if (!String(data[keep][c] == null ? '' : data[keep][c]).trim() && String(v == null ? '' : v).trim()) data[keep][c] = v; });
+        drop.add(i);
+      });
+      details.merged.push({ no: String(data[keep][idx.empNo]), name: String(data[keep][idx.name]), rows: g.length });
+    });
+    const origLen = data.length;
+    if (drop.size) { const kept = data.filter((_, i) => !drop.has(i)); data.length = 0; kept.forEach(r => data.push(r)); details.deleted = drop.size; }
+    const pos = {}, ndCount = {};
     data.forEach((r, i) => {
       const kn = noKey(r[idx.empNo]);
       if (kn) pos[kn] = i;
       const km = nmKey(r[idx.name], r[idx.joinDate]);
       if (pos[km] === undefined) pos[km] = i;
+      if (!kn && String(r[idx.name]).trim()) { const kd = ndKey(r[idx.name], r[idx.dept]); ndCount[kd] = (ndCount[kd] || 0) + 1; pos[kd] = i; }
     });
     const rowKey = r => noKey(r[idx.empNo]) || nmKey(r[idx.name], r[idx.joinDate]);
 
@@ -1179,7 +1205,7 @@ function syncEmployees_(incoming, fullList) {
       if (!(n in dmap)) unknown[n] = raw;
     });
     const unknownNames = Object.keys(unknown).map(k => unknown[k]).sort();
-    if (unknownNames.length) {
+    if (unknownNames.length && !dry) {
       const msh = deptMapSheet_();
       unknownNames.forEach(raw => msh.appendRow([safeCell_(raw), '', '확인 필요: 부서인증·chemicals에 없는 이름 (같은 부서면 앱 부서명 입력, 새 부서면 비워 두기)']));
     }
@@ -1187,12 +1213,20 @@ function syncEmployees_(incoming, fullList) {
     const seen = new Set();
     const summary = { added: 0, updated: 0, resigned: 0, unchanged: 0, newEmployees: [], unknownDepts: unknownNames };
     incoming.forEach(e => {
-      const kn = noKey(e.empNo), km = nmKey(e.name, e.joinDate);
+      const kn = noKey(e.empNo), km = nmKey(e.name, e.joinDate), kd = ndKey(e.name, e.dept);
       let at = kn ? pos[kn] : undefined;
       if (at === undefined && pos[km] !== undefined) {
         // 이름+입사일이 같아도 양쪽 사번이 다르면 다른 사람
         const other = noKey(data[pos[km]][idx.empNo]);
         if (!kn || !other) at = pos[km];
+      }
+      // 시트 쪽 사번이 #N/A · 빈칸이고 입사일 표기가 달라도(예: 9/1) 같은 부서에 같은 이름이 한 명이면 같은 사람
+      if (at === undefined && kn && ndCount[kd] === 1 && !noKey(data[pos[kd]][idx.empNo])) at = pos[kd];
+      if (at !== undefined && kn && !noKey(data[at][idx.empNo])) {
+        details.filledNo.push({ name: e.name, dept: e.dept, no: e.empNo, was: String(data[at][idx.empNo] || '') });
+        data[at][idx.empNo] = e.empNo;
+        pos[kn] = at;
+        e._filled = true;
       }
       if (at !== undefined) seen.add(rowKey(data[at]));
       if (at === undefined) {
@@ -1217,7 +1251,7 @@ function syncEmployees_(incoming, fullList) {
       });
       if (!e.status && isResigned_({ status: fmtDate_(row[idx.status]) })) { row[idx.status] = '재직'; changed = true; }   // 재입사
       row[idx.lastSeen] = today;
-      if (changed) summary.updated++; else summary.unchanged++;
+      if (changed || e._filled) summary.updated++; else summary.unchanged++;
     });
 
     if (fullList) {
@@ -1228,10 +1262,19 @@ function syncEmployees_(incoming, fullList) {
         summary.resigned++;
       });
     }
+    summary.filledNo = details.filledNo;
+    summary.merged = details.merged;
+    summary.deleted = details.deleted;
+    summary.missingNo = data.filter(r => String(r[idx.name]).trim() && !noKey(r[idx.empNo]) && !isResigned_({ status: fmtDate_(r[idx.status]) }))
+      .map(r => ({ name: String(r[idx.name]), dept: fmtDate_(r[idx.dept]), no: String(r[idx.empNo] || '') }));
+    if (dry) return Object.assign(summary, { dry: true });
+    if (idx.empNo >= 0 && data.length) sheet.getRange(2, idx.empNo + 1, data.length, 1).setNumberFormat('@');   // 사번 앞자리 0 · 숫자 변환 방지
     if (data.length) {
       sheet.getRange(2, 1, data.length, width).setValues(data.map(r => r.map(v => v instanceof Date ? v : safeCell_(v))));
     }
-    setAdminCfg({ key: 'emp_last_sync', value: nowKst_() + ' (추가 ' + summary.added + ' · 변경 ' + summary.updated + ' · 퇴사표시 ' + summary.resigned + ')' });
+    if (origLen > data.length) sheet.deleteRows(data.length + 2, origLen - data.length);   // 합친 중복 줄 (아래쪽 남은 줄) 삭제
+    setAdminCfg({ key: 'emp_last_sync', value: nowKst_() + ' (추가 ' + summary.added + ' · 변경 ' + summary.updated + ' · 퇴사표시 ' + summary.resigned +
+      (details.filledNo.length ? ' · 사번채움 ' + details.filledNo.length : '') + (details.deleted ? ' · 중복합침 ' + details.deleted : '') + ')' });
     return summary;
   } finally {
     lock.releaseLock();
@@ -1823,8 +1866,18 @@ function staffOp_(req, s) {
       if (deny) return deny;
       const list = rowsToEmployees_(req.headers || [], req.rows || []);
       if (!list.length) return { success: false, error: '올릴 직원이 없습니다' };
-      const summary = syncEmployees_(list, req.fullList === true);   // 수동 업데이트: 알림 메일 없음
+      const summary = syncEmployees_(list, req.fullList === true, req.dry === true);   // 수동 업데이트: 알림 메일 없음
       return Object.assign({ success: true }, summary);
+    }
+    case 'emp.merge': {   // v20.3 인사 사이트(저장된 계정)와 합치기 — dry면 미리보기
+      if (deny) return deny;
+      if (!hrAutoReady_()) return { success: false, error: '인사 사이트 자동 로그인이 설정되어야 합니다 (시트 메뉴 ④). 그동안은 ② 엑셀 붙여넣기로 합치세요.' };
+      const r = hrFetchEmployees_(PROPS.getProperty('HR_ID') || '', PROPS.getProperty('HR_PW') || '');
+      const list = rowsToEmployees_(r.headers, r.rows);
+      const chk = hrSanity_(list);
+      if (!chk.ok && !req.force) return { success: false, warnings: chk.problems, error: '인사 사이트 데이터가 평소와 다릅니다: ' + chk.problems.join(' / ') };
+      const full = req.fullList === undefined ? !!fbCfg_().fullList : req.fullList === true;
+      return Object.assign({ success: true, fullList: full, hrCount: list.length }, syncEmployees_(list, full, req.dry === true));
     }
     case 'hr.fetch': {
       if (deny) return deny;
