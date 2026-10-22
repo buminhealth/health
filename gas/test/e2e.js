@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v20\.6/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v20\.7/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
   const other = await page.evaluate(async () => {
@@ -504,7 +504,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v20.6'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v20.7'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -639,6 +639,16 @@ function check(name, cond, extra) {
   check('법령 불러오기: 별표22 원문(CAS 3개) · 서식 22는 무시 · 되는 OC(bumin3131)만 남김 · OC는 가려서 표시', so.success && /^clo\*+, bum\*+$/.test(so.oc) && lf1.success && lf1.no === 22 && lf1.casCount === 3 && /7647-01-0/.test(lf1.text) && lf1.value === '12개월' && /별표22/.test(lf1.src) && g.props.LAW_OC === 'bumin3131', [so.oc, lf1, g.props.LAW_OC]);
   const lf2 = await page.evaluate(() => BMAUTH.post('chem.lawFetch', { kind: 'cycle' }));
   check('법령 불러오기: 별표23(주기) 보기', lf2.success && /24개월/.test(lf2.text), lf2.title);
+  // v20.7 별표23 주기 자동 고침: 12개월 → 6개월 (원문에서 이름 확인된 것만) · 다른 값은 건너뜀 · 미리보기는 시트 안 바꿈
+  const lsh = g.sheets['법령대조표'];
+  lsh.appendRow(['71-43-2', '벤젠', '12개월', '', '', '', '별표22', '', '']);
+  lsh.appendRow(['56-23-5', '사염화탄소', '미대상', '', '', '', '', '', '']);
+  lsh.appendRow(['', '광물성 분진(운모)', '12개월', '', '', '', '', '', '']);
+  const cy0 = await page.evaluate(() => BMAUTH.post('chem.lawCycle', { dry: true }));
+  const benz = () => lsh.rows.find(r => r[0] === '71-43-2');
+  check('별표23 주기 고치기 미리보기: 벤젠 12→6 · 사염화탄소(미대상) 건너뜀 · 염화비닐(원문에 없음) 건너뜀 · 시트 그대로', cy0.success && cy0.checked && cy0.changes.some(x => /벤젠/.test(x)) && cy0.skip.some(x => /사염화탄소/.test(x)) && cy0.skip.some(x => /염화비닐/.test(x)) && benz()[2] === '12개월' && cy0.dust.length === 1, cy0);
+  const cy1 = await page.evaluate(() => BMAUTH.post('chem.lawCycle', {}));
+  check('별표23 주기 고치기 반영: 벤젠 6개월 · 출처에 별표23 · 없던 물질은 6개월로 추가', cy1.success && benz()[2] === '6개월' && /별표23/.test(benz()[6]) && lsh.rows.some(r => r[0] === '68-12-2' && r[2] === '6개월'), [benz(), cy1.added]);
   g.props.LAW_OC = 'wrongoc';
   const lf3 = await page.evaluate(() => BMAUTH.post('chem.lawFetch', { kind: 'hc' }));
   check('법령 불러오기: 인증 실패면 사유 안내', !lf3.success && /검증에 실패/.test(lf3.error), lf3.error);
