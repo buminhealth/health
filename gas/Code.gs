@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.0 (2026-10-22)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.1 (2026-10-23)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -48,6 +48,7 @@ function onOpen() {
     .addItem('⑤-1 매일 아침 자동 확인 끄기', 'disableDailyCheck')
     .addSeparator()
     .addItem('⑥ AI(Gemini) 키 저장', 'saveGeminiKey')
+    .addItem('⑦ 안전보건공단 API 인증키 저장', 'saveKoshaKey')
     .addToUi();
 }
 
@@ -179,6 +180,8 @@ function doPost(e) {
                         result = aiOp_(req, s); break;
       case 'ra.meta': case 'ra.analyze': case 'ra.submit': case 'ra.mine': case 'ra.photo': case 'ra.list': case 'ra.update':
                         result = raOp_(req, s); break;
+      case 'help.ask': case 'help.meta': case 'help.lawRefresh': case 'kosha.status': case 'kosha.setKey': case 'kosha.saveApis': case 'kosha.test':
+                        result = helpOp_(req, s); break;
       case 'edu.dupes': case 'edu.dedupe': case 'edu.status': case 'edu.exclude': case 'edu.askMail': case 'edu.newChem':
       case 'edu.rules': case 'edu.saveRules': case 'dept.saveMap': case 'edu.manual': case 'edu.unit': case 'edu.manualDelete':
                         result = eduOp_(req, s); break;
@@ -3509,7 +3512,7 @@ function raLawArticles_() {
   return cur && cur.items ? cur.items : null;   // API가 안 되면 예전 목록(있으면)
 }
 
-function raPrompt_(place, task, laws) {
+function raPrompt_(place, task, laws, refs) {
   const lawList = laws ? Object.keys(laws).map(k => k + ' ' + laws[k]).join('\n') : '';
   return [
     '너는 병원(의료기관) 산업안전보건 위험성평가 전문가다. 근로자가 찍은 현장 사진과 설명을 보고',
@@ -3535,6 +3538,9 @@ function raPrompt_(place, task, laws) {
     '"hazards":[{"category":"","hazard":"유해·위험요인","situation":"위험 발생 상황 및 결과","evidence":"사진에서 본 근거","freq":3,"sev":2,',
     '"controls":[{"type":"제거|대체|공학적|관리적|보호구","text":"대책","who":"근로자 즉시|관리자"}],"afterFreq":1,"afterSev":2,"laws":["제3조"]}],',
     '"goodPractice":"잘 되어 있는 점(없으면 빈 문자열)"}',
+    '',
+    '[참고: 우리 병원에서 처리된 비슷한 평가 · 안전보건공단 재해사례 — 판단에 참고만 하고 사진에 보이는 것을 우선하라]',
+    refs || '(없음)',
     '',
     '[산업안전보건기준에 관한 규칙 조문 목록]',
     lawList || '(없음)'
@@ -3587,7 +3593,7 @@ function raAnalyze_(req, s) {
   const mime = /^image\/(png|webp)$/.test(String(req.mime || '')) ? String(req.mime) : 'image/jpeg';
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(aiModel_()) + ':generateContent';
   const body = { contents: [{ parts: [{ inline_data: { mime_type: mime, data: b64 } },
-                                      { text: raPrompt_(String(req.place || '').slice(0, 100), String(req.task || '').slice(0, 300), laws) }] }],
+                                      { text: raPrompt_(String(req.place || '').slice(0, 100), String(req.task || '').slice(0, 300), laws, raRefs_(String(req.place || ''), String(req.task || ''))) }] }],
                  generationConfig: { temperature: 0.2, responseMimeType: 'application/json' } };
   let res;
   try {
@@ -3717,4 +3723,351 @@ function raOp_(req, s) {
     }
   }
   return { success: false, error: 'unknown op: ' + req.op };
+}
+
+// ════════════════════════════════════════════════════════════════
+// v21.1 AI 도우미 (묻고 답하기) · 안전보건공단 OPEN API · 법령 본문 검색
+//  · 신규입사자 · 부서 · 관리자가 앱 사용법 · 교육내용 · MSDS · 법령을 바로 물어봄
+//  · 답의 근거: ① 앱 사용 안내(아래 HELP_GUIDE + 시트 'AI도우미_FAQ') ② 화면이 보낸 MSDS 요약 ③ 법령 조문 본문(국가법령정보 OPEN API)
+//              ④ 안전보건공단 자료 · 재해사례(공공데이터포털 OPEN API) — 출처를 함께 돌려줌
+//  · 개인정보: 질문의 전화번호 · 주민번호 모양은 가려서 보냄 · 사람 이름 · 환자 정보는 적지 않도록 화면에서 안내
+//  · 공단 API 키: 스크립트 속성 KOSHA_KEY (관리자 화면 설정 또는 시트 메뉴 ⑦) — 화면에는 저장하지 않음
+//  · API 기록: 스크립트 속성 DATA_APIS (신청한 API 이름 · End Point · 변수 · 활용기간 · 메모, 관리자 화면 설정 → API 기록에서 추가 · [시험 조회])
+// ════════════════════════════════════════════════════════════════
+const HELP_ANON_LIMIT = 150;   // 로그인 없이 하루 전체 질문 수
+const HELP_DEPT_LIMIT = 60;    // 부서별 하루 질문 수
+// 공공데이터포털 API 기록 (스크립트 속성 DATA_APIS): 신청한 API를 줄마다 기록 · 켜진 것만 AI 도우미 · 위험성평가에 씀
+//  kind: 자료 | 재해사례 | 법령 | 기타 — 인증키는 포털 계정 하나에 하나(KOSHA_KEY)라 모든 줄이 같이 씀
+const DATA_API_KINDS = ['자료', '재해사례', '법령', '기타'];
+const DATA_API_DEFAULTS = [
+  { id: 'media', name: '한국산업안전보건공단_안전보건자료 링크서비스', url: 'https://apis.data.go.kr/B552468/selectMediaList01', kw: 'keyword', extra: '',
+    kind: '자료', use: true, from: '2026-10-23', to: '2028-10-23', memo: '참고문서: 13. 안전보건자료 링크서비스_오픈API활용가이드.docx' },
+  { id: 'disaster', name: '한국산업안전보건공단_국내재해사례 게시판 정보 조회서비스', url: '', kw: 'keyword', extra: 'callApiId=',
+    kind: '재해사례', use: false, from: '', to: '', memo: '활용신청 후 요청주소 · callApiId 넣기' }
+];
+const HELP_GUIDE = [
+  ['로그인 · PIN', '오른쪽 위 [부서 / 관리자 로그인]을 누르고 [부서]에서 부서를 고른 뒤 부서 PIN을 넣습니다. 로그인은 12시간 유지되고 5회 틀리면 15분 잠깁니다. PIN을 모르면 보건관리실 내선 3293 · 3034로 문의합니다. 보건관리자는 같은 창에서 [관리자]를 눌러 비밀번호로 들어갑니다.'],
+  ['MSDS 관리', 'MSDS 관리는 로그인 없이 볼 수 있습니다. 왼쪽에서 부서를 고르거나 물질명 · 제조사 · CAS 번호로 찾고, 물질을 누르면 경고표지 그림문자, 관리대상 여부, 구성성분, 응급처치 요령, PDF 원본을 볼 수 있습니다.'],
+  ['교육일지 작성', '부서 로그인 후 [교육일지]를 누르면 부서 물질에 맞게 특별안전보건교육일지(관리대상 · 특별관리 물질이 있을 때) 또는 MSDS 교육일지가 자동으로 고릅니다. 순서: ① 대상자 검색(이름을 넣고 고르면 부서 · 입사일 자동) → ② 취급물질 · 일정 → ③ 교육내용 → ④ 근로자 서명 → ⑤ 확인 · PDF 저장. 결재는 보건관리자가 관리자 화면에서 합니다.'],
+  ['신규입사자 교육', '새로 들어온 직원은 부서에서 취급하는 화학물질에 대해 배치 전 MSDS 교육(관리대상 · 특별관리 물질이 있으면 특별안전보건교육)을 받아야 합니다. 새 물질 교육 기한은 14일이고, 특별교육은 16시간(현장 + 공통 온라인 8시간)입니다. 부서장이 교육일지를 작성해 제출합니다.'],
+  ['교육내용 (MSDS 교육)', '취급물질의 명칭 · 물리화학적 특성, 인체 및 환경에 미치는 영향, 취급상 주의사항, 착용할 보호구와 착용방법, 위급상황 시 대처방법과 응급조치 요령, 물질안전보건자료(MSDS)와 경고표지를 이해하는 방법을 교육합니다.'],
+  ['보호구 지급', '부서 로그인 후 [보호구 지급]에서 이름을 검색해 수령자를 추가하고, 지급물품을 고른 뒤 수령자가 본인 서명란에 서명합니다. 수령자 전원이 한 장의 지급수령증에 기록되어 PDF로 저장됩니다 (산업안전보건법 제38조).'],
+  ['화학물질 보고서', '새 화학물질을 쓰기 시작하거나 쓰지 않게 되면 [화학물질 보고서]에서 신규사용 · 사용중단을 고르고 제품명 · 부서 · 용량 · 보관장소 · 공급업체 · MSDS 파일을 넣어 제출합니다. 보건관리실이 검토해 관리대상 여부를 판정하고 승인되면 MSDS 목록에 반영됩니다.'],
+  ['AI 위험성평가', '[AI 위험성평가]에서 현장 사진을 찍고 장소를 적은 뒤 [AI로 위험 분석]을 누르면 AI가 유해 · 위험요인, 가능성 × 중대성 점수, 개선 대책, 관련 법령을 제안합니다. 내 판단에 맞게 고친 뒤 [보건관리실에 제출]합니다. 사진에 얼굴 · 이름표 · 환자 정보가 나오지 않게 찍어 주세요. 위험성 = 가능성(1~5) × 중대성(1~4), 낮음 1~3 · 보통 4~6 · 높음 8~12 · 매우높음 15~20.'],
+  ['부서현황 · 결재', '부서 로그인 후 [부서현황]에서 우리 부서가 제출한 교육일지 · 보호구 · 보고서와 결재 · 반려 상태, PDF를 볼 수 있습니다. 반려되면 사유를 보고 다시 작성합니다.'],
+  ['문의처', '보건관리실 내선 3293 · 3034. 화면 오류나 PIN 분실, 교육 대상 여부는 보건관리실로 문의합니다.']
+];
+
+function helpMask_(t) {
+  return String(t || '')
+    .replace(/\d{6}\s*-\s*[1-4]\d{6}/g, '[주민번호 가림]')
+    .replace(/01[016789][-\s.]?\d{3,4}[-\s.]?\d{4}/g, '[전화번호 가림]');
+}
+// 질문에서 찾을 말 (두 글자 이상, 흔한 말 빼고)
+function helpTokens_(q) {
+  const stop = /^(어떻게|무엇|뭐야|뭐예요|뭔가요|있나요|하나요|되나요|인가요|합니까|입니까|알려|주세요|해줘|해주세요|그리고|그런데|어디|언제|누가|이거|저거|그거|하는|되는|있는|없는|대해|관련|방법|경우)$/;
+  const words = String(q || '').replace(/[^0-9A-Za-z가-힣\-\s]/g, ' ').split(/\s+/).map(w => w.replace(/(은|는|이|가|을|를|에|의|로|으로|와|과|도|만|에서|에게|까지|부터|이나|나|요)$/, '')).filter(w => w.length >= 2 && !stop.test(w));
+  return words.filter((w, i) => words.indexOf(w) === i).slice(0, 8);
+}
+function helpScore_(text, toks) {
+  const t = String(text || '');
+  return toks.reduce((n, w) => n + (t.indexOf(w) >= 0 ? 1 : 0), 0);
+}
+
+// 법령 조문 본문 (산업안전보건법 · 산업안전보건기준에 관한 규칙) — 드라이브에 30일 보관
+const LAW_BODY_LAWS = ['산업안전보건법', '산업안전보건기준에 관한 규칙'];
+function lawBodies_() {
+  const path = 'law/조문본문.json';
+  const f = getFile_(path);
+  let cur = null;
+  if (f) { try { cur = JSON.parse(f.getBlob().getDataAsString('UTF-8')); } catch (_) {} }
+  if (cur && cur.items && cur.items.length && (Date.now() - new Date(cur.date).getTime()) < 30 * 86400000) return cur.items;
+  const ocs = String(PROPS.getProperty('LAW_OC') || '').split(',').filter(Boolean);
+  const base = 'https://www.law.go.kr/DRF/';
+  for (const oc of ocs) {
+    try {
+      const out = [];
+      LAW_BODY_LAWS.forEach(name => {
+        const q = lawGetJson_(base + 'lawSearch.do?OC=' + encodeURIComponent(oc) + '&target=law&type=JSON&display=20&query=' + encodeURIComponent(name));
+        const items = [].concat(((q.json || {}).LawSearch || {}).law || []);
+        const hit = items.find(x => String(x['법령명한글'] || '').replace(/\s/g, '') === name.replace(/\s/g, ''));
+        if (!hit) return;
+        const b = lawGetJson_(base + 'lawService.do?OC=' + encodeURIComponent(oc) + '&target=law&type=JSON&MST=' + encodeURIComponent(hit['법령일련번호'] || ''));
+        (function walk(n) {
+          if (!n || typeof n !== 'object') return;
+          if (Array.isArray(n)) { n.forEach(walk); return; }
+          if (n['조문번호'] !== undefined && String(n['조문여부'] || '조문') === '조문' && n['조문내용']) {
+            const no = '제' + parseInt(n['조문번호'], 10) + '조' + (n['조문가지번호'] ? '의' + parseInt(n['조문가지번호'], 10) : '');
+            const body = [lawFlat_(n['조문내용']), lawFlat_(n['항'] || '')].join('\n').replace(/<[^>]+>/g, '').replace(/\n{2,}/g, '\n').trim();
+            out.push({ law: name, no: no, title: String(n['조문제목'] || '').trim(), text: body.slice(0, 1500) });
+            return;
+          }
+          Object.keys(n).forEach(k => { if (typeof n[k] === 'object') walk(n[k]); });
+        })(b.json);
+      });
+      if (out.length > 50) {
+        writeFile_(path, Utilities.newBlob(JSON.stringify({ date: new Date().toISOString(), items: out })).getBytes(), 'application/json', '');
+        return out;
+      }
+    } catch (_) {}
+  }
+  return cur && cur.items ? cur.items : [];
+}
+function lawSearch_(toks, n) {
+  let items = [];
+  try { items = lawBodies_(); } catch (_) {}
+  return items.map(a => ({ a: a, s: helpScore_(a.title, toks) * 3 + helpScore_(a.text, toks) }))
+    .filter(x => x.s >= 2).sort((x, y) => y.s - x.s).slice(0, n || 4).map(x => x.a);
+}
+
+// ── 안전보건공단 OPEN API (공공데이터포털) ──
+function dataApis_() {
+  let a = null;
+  try { a = JSON.parse(PROPS.getProperty('DATA_APIS') || 'null'); } catch (_) {}
+  return (Array.isArray(a) ? a : DATA_API_DEFAULTS).map(x => Object.assign({ kw: '', extra: '', kind: '기타', use: false, from: '', to: '', memo: '' }, x));
+}
+function dataApiClean_(x, i) {
+  const u = String(x.url || '').trim();
+  if (u && !/^https:\/\/apis\.data\.go\.kr\/[\w\/.-]+$/.test(u)) throw new Error((x.name || (i + 1) + '번째 줄') + ': 요청주소는 https://apis.data.go.kr/ 로 시작해야 합니다');
+  const d = v => { v = String(v || ''); const t = new Date(v + 'T00:00:00Z'); return /^\d{4}-\d{2}-\d{2}$/.test(v) && !isNaN(t) && t.toISOString().slice(0, 10) === v ? v : ''; };
+  return { id: String(x.id || '').replace(/[^\w-]/g, '').slice(0, 30) || ('api' + Date.now().toString(36) + i),
+           name: String(x.name || '').trim().slice(0, 80) || '이름 없는 API', url: u,
+           kw: String(x.kw || '').trim().replace(/[^\w]/g, '').slice(0, 40), extra: String(x.extra || '').trim().slice(0, 300),
+           kind: DATA_API_KINDS.indexOf(x.kind) >= 0 ? x.kind : '기타', use: !!x.use && !!u,
+           from: d(x.from), to: d(x.to), memo: String(x.memo || '').trim().slice(0, 300) };
+}
+// 응답 JSON 어디에 있든 '목록(배열 속 묶음)'을 찾음 — 응답 구조가 서비스마다 달라도 동작하도록
+function koshaItems_(node) {
+  let best = [];
+  (function walk(n) {
+    if (!n || typeof n !== 'object') return;
+    if (Array.isArray(n)) {
+      if (n.length && n.every(x => x && typeof x === 'object' && !Array.isArray(x)) && n.length > best.length) best = n;
+      n.forEach(walk); return;
+    }
+    if (n.item && typeof n.item === 'object' && !Array.isArray(n.item) && !best.length) best = [n.item];
+    Object.keys(n).forEach(k => walk(n[k]));
+  })(node);
+  return best;
+}
+function koshaPick_(o, re) {
+  const k = Object.keys(o).find(k => re.test(k) && o[k] != null && String(o[k]).trim());
+  return k ? String(o[k]).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '';
+}
+// 링크: url · link · path 이름의 칸 중 http로 시작하는 값, 없으면 아무 칸에서나 http 값
+function koshaUrl_(o) {
+  const ks = Object.keys(o);
+  const ok = v => /^https?:\/\//i.test(String(v || '').trim());
+  const k = ks.find(k => /url|link|href|path/i.test(k) && ok(o[k])) || ks.find(k => ok(o[k]));
+  return k ? String(o[k]).trim() : '';
+}
+function koshaCall_(c, keyword, rows) {
+  if (!c) return { success: false, error: 'API를 찾지 못했습니다' };
+  if (!/^https:\/\/apis\.data\.go\.kr\//.test(c.url || '')) return { success: false, error: c.name + ': 요청주소가 없습니다 (관리자 화면 설정 → API 기록에서 넣기)' };
+  const r = koshaCall1_(c, c.url, keyword, rows);
+  const seg = c.url.replace(/^https:\/\/apis\.data\.go\.kr\//, '').split('/').filter(Boolean);
+  if (!r.success && !r.noKey && seg.length === 2) {   // 포털의 End Point가 서비스 이름까지만일 때: …/selectMediaList01/getselectMediaList01
+    const r2 = koshaCall1_(c, c.url.replace(/\/$/, '') + '/get' + seg[1], keyword, rows);
+    if (r2.success) { r2.urlUsed = c.url.replace(/\/$/, '') + '/get' + seg[1]; return r2; }
+  }
+  return r;
+}
+function koshaCall1_(c, base, keyword, rows) {
+  const key = PROPS.getProperty('KOSHA_KEY');
+  if (!key) return { success: false, noKey: true, error: '공공데이터포털 인증키가 없습니다' };
+  let url = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'serviceKey=' + encodeURIComponent(key) + '&pageNo=1&numOfRows=' + (rows || 5);
+  if (keyword && c.kw) url += '&' + encodeURIComponent(c.kw) + '=' + encodeURIComponent(keyword);
+  String(c.extra || '').split('&').map(x => x.trim()).filter(x => /^[A-Za-z_][\w]*=/.test(x)).forEach(x => {
+    const i = x.indexOf('='); const v = x.slice(i + 1);
+    if (v !== '') url += '&' + encodeURIComponent(x.slice(0, i)) + '=' + encodeURIComponent(v);
+  });
+  if (!/[?&](type|_type|resultType|returnType|dataType)=/i.test(url)) url += '&type=json';
+  const ck = 'ks_' + sha256Hex_(url).slice(0, 24);
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get(ck);
+  if (hit) { try { return JSON.parse(hit); } catch (_) {} }
+  let res;
+  try { res = UrlFetchApp.fetch(url, { muteHttpExceptions: true }); }
+  catch (e) { return { success: false, error: '공단 API 연결 실패: ' + e.message }; }
+  const code = res.getResponseCode(), text = res.getContentText() || '';
+  let j = null;
+  try { j = JSON.parse(text); } catch (_) {}
+  if (code !== 200 || !j) {
+    const msg = (text.match(/<returnAuthMsg>([^<]+)/) || text.match(/<errMsg>([^<]+)/) || text.match(/<resultMsg>([^<]+)/) || [])[1] || text.slice(0, 160);
+    return { success: false, error: c.name + ' 오류 (' + code + '): ' + msg };
+  }
+  const raw = koshaItems_(j);
+  const items = raw.slice(0, rows || 5).map(o => ({
+    title: koshaPick_(o, /title|subject|제목|nm$|name/i) || koshaPick_(o, /keyword|kwrd/i),
+    url: koshaUrl_(o),
+    text: koshaPick_(o, /content|contents|cn$|cntnt|내용|summary|smry|desc/i).slice(0, 600),
+    date: koshaPick_(o, /date|dt$|regdt|일자/i)
+  })).filter(x => x.title || x.text);
+  const out = { success: true, id: c.id, kind: c.kind, name: c.name, items: items, keys: raw[0] ? Object.keys(raw[0]).slice(0, 30) : [] };
+  try { cache.put(ck, JSON.stringify(out), 6 * 3600); } catch (_) {}
+  return out;
+}
+function koshaMask_() {
+  const v = PROPS.getProperty('KOSHA_KEY') || '';
+  return v ? v.slice(0, 4) + '…' + v.slice(-3) : '';
+}
+
+// FAQ 시트 (보건관리실이 질문 · 답을 줄마다 추가): A 질문, B 답
+const HELP_FAQ_SHEET = 'AI도우미_FAQ';
+function helpFaq_() {
+  let sh = SS.getSheetByName(HELP_FAQ_SHEET);
+  if (!sh) { sh = SS.insertSheet(HELP_FAQ_SHEET); sh.appendRow(['질문', '답', '메모']); sh.setFrozenRows(1); }
+  const last = sh.getLastRow();
+  if (last < 2) return [];
+  return sh.getRange(2, 1, last - 1, 2).getDisplayValues().filter(r => r[0] && r[1]).map(r => [String(r[0]).trim(), String(r[1]).trim()]);
+}
+
+function helpPrompt_(q, history, src) {
+  return [
+    '너는 부산부민병원 보건관리실의 "안전보건 AI 도우미"다. 신규입사자 · 부서 직원 · 관리자가 MSDS 통합관리 시스템 사용법, 안전보건교육 내용, 화학물질(MSDS), 산업안전보건 법령, 위험성평가를 물어본다.',
+    '',
+    '[규칙]',
+    '- 아래 [자료]에 있는 내용만 근거로, 쉬운 우리말로 짧게(5~8문장 또는 단계 목록) 답하라. 자료에 없는 것은 지어내지 말고 "자료에서 찾지 못했습니다 — 보건관리실(내선 3293 · 3034)에 문의하세요"라고 하라.',
+    '- 근거로 쓴 자료 번호를 used 배열에 적어라. 법령을 말할 때는 법령 이름과 조문 번호를 함께 적어라.',
+    '- 응급상황(눈 · 피부 노출, 흡입, 섭취)은 응급조치를 먼저 짧게 말하고, 증상이 있으면 바로 진료를 받으라고 안내하라.',
+    '- 사람 이름 · 환자 정보 · 개인정보를 묻거나 추정하지 마라. 법적 판단이 필요한 것은 "참고용이며 최종 판단은 보건관리실"이라고 덧붙여라.',
+    '- 이어서 물어볼 만한 짧은 질문 2~3개를 followups에 적어라.',
+    '',
+    '[이전 대화]',
+    (history || []).map(h => (h.role === 'user' ? '질문: ' : '답: ') + h.text).join('\n') || '(없음)',
+    '',
+    '[자료]',
+    src.map((x, i) => '[' + (i + 1) + '] (' + x.kind + ') ' + x.title + '\n' + x.text).join('\n\n') || '(없음)',
+    '',
+    '[질문] ' + q,
+    '',
+    '[응답 형식] {"answer":"답","used":[1,2],"followups":["",""]}'
+  ].join('\n');
+}
+
+function helpAsk_(req, s) {
+  const key = PROPS.getProperty('GEMINI_API_KEY');
+  if (!key) return { success: false, noKey: true, error: 'AI 키가 아직 없습니다. 보건관리실(내선 3293 · 3034)에 문의하세요.' };
+  const q = helpMask_(String(req.q || '').trim()).slice(0, 500);
+  if (q.length < 2) return { success: false, error: '질문을 적어 주세요' };
+  // 하루 사용 횟수 (로그인 없이 = 전체 합산, 부서 = 부서별, 관리자 = 제한 없음)
+  const ck = 'help_n_' + todayKst_() + '_' + (s ? sha256Hex_(s.dept || 'admin').slice(0, 12) : 'anon');
+  const cache = CacheService.getScriptCache();
+  const n = parseInt(cache.get(ck) || '0', 10);
+  const lim = !s ? HELP_ANON_LIMIT : (s.role === 'admin' ? 1e9 : HELP_DEPT_LIMIT);
+  if (n >= lim) return { success: false, error: '오늘 AI 도우미 질문 횟수를 다 썼습니다. 내일 다시 이용하거나 보건관리실(내선 3293 · 3034)에 문의하세요.' };
+  cache.put(ck, String(n + 1), 86400);
+
+  const history = (Array.isArray(req.history) ? req.history : []).slice(-6)
+    .map(h => ({ role: h.role === 'user' ? 'user' : 'ai', text: helpMask_(String(h.text || '')).slice(0, 400) }));
+  const toks = helpTokens_(q + ' ' + history.filter(h => h.role === 'user').map(h => h.text).slice(-1).join(' '));
+  const src = [];
+  // ① 앱 사용 안내 + FAQ 시트
+  let faq = [];
+  try { faq = helpFaq_(); } catch (_) {}
+  HELP_GUIDE.concat(faq).map(g => ({ g: g, s: helpScore_(g[0], toks) * 3 + helpScore_(g[1], toks) }))
+    .sort((a, b) => b.s - a.s).slice(0, 4).filter((x, i) => x.s > 0 || i < 2)
+    .forEach(x => src.push({ kind: '사용 안내', title: x.g[0], text: x.g[1] }));
+  // ② 화면이 보낸 MSDS 요약 (공개 정보)
+  (Array.isArray(req.msds) ? req.msds : []).slice(0, 3).forEach(m => {
+    src.push({ kind: 'MSDS', title: String(m.name || '').slice(0, 100), text: String(m.text || '').slice(0, 1200) });
+  });
+  // ③ 법령 본문
+  lawSearch_(toks, 4).forEach(a => src.push({ kind: '법령', title: a.law + ' ' + a.no + (a.title ? '(' + a.title + ')' : ''), text: a.text.slice(0, 900),
+                                             url: 'https://www.law.go.kr/법령/' + encodeURIComponent(a.law) + '/' + encodeURIComponent(a.no) }));
+  // ④ 안전보건공단 자료 · 재해사례 (키가 있을 때)
+  const kw = toks.slice(0, 2).join(' ');
+  if (kw && PROPS.getProperty('KOSHA_KEY')) {
+    dataApis_().filter(a => a.use && a.url).slice(0, 4).forEach(a => {
+      const r = koshaCall_(a, toks[0], 3);
+      if (r.success) r.items.forEach(it => src.push({ kind: a.kind === '재해사례' ? '공단 재해사례' : (a.kind === '자료' ? '공단 자료' : a.kind), title: it.title, text: it.text || it.title, url: it.url }));
+    });
+  }
+
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(aiModel_()) + ':generateContent';
+  const body = { contents: [{ parts: [{ text: helpPrompt_(q, history, src) }] }], generationConfig: { temperature: 0.2, responseMimeType: 'application/json' } };
+  let res;
+  try { res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify(body), headers: { 'x-goog-api-key': key }, muteHttpExceptions: true }); }
+  catch (e) { return { success: false, error: 'AI 연결 실패: ' + e.message }; }
+  const code = res.getResponseCode();
+  let j = null;
+  try { j = JSON.parse(res.getContentText()); } catch (_) {}
+  if (code === 429) return { success: false, error: 'AI 무료 사용 한도를 넘었습니다. 잠시 후 다시 시도하세요.' };
+  if (code !== 200 || !j) return { success: false, error: 'AI 오류 (' + code + ')' };
+  const text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(p => p.text || '').join('');
+  let d;
+  try { d = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch (_) { d = { answer: text.slice(0, 1500), used: [] }; }
+  const used = (d.used || []).map(Number).filter(i => i >= 1 && i <= src.length);
+  const sources = used.map(i => src[i - 1]).filter((x, i, a) => a.indexOf(x) === i)
+    .map(x => ({ kind: x.kind, title: x.title, url: x.url || '' }));
+  return { success: true, answer: String(d.answer || '').slice(0, 2500), sources: sources,
+           followups: (d.followups || []).map(String).filter(Boolean).slice(0, 3).map(x => x.slice(0, 60)), model: aiModel_() };
+}
+
+function helpOp_(req, s) {
+  switch (req.op) {
+    case 'help.ask': return helpAsk_(req, s);
+    case 'help.meta': return { success: true, hasKey: !!PROPS.getProperty('GEMINI_API_KEY'), kosha: !!PROPS.getProperty('KOSHA_KEY'), apis: dataApis_().filter(a => a.use).length };
+  }
+  const deny = requireAdmin_(s);
+  if (deny) return deny;
+  switch (req.op) {
+    case 'kosha.status': return { success: true, hasKey: !!PROPS.getProperty('KOSHA_KEY'), key: koshaMask_(), apis: dataApis_(), kinds: DATA_API_KINDS, today: todayKst_() };
+    case 'kosha.setKey': {
+      const k = String(req.key || '').trim();
+      if (k && !/^[A-Za-z0-9%+\/=]{20,200}$/.test(k)) return { success: false, error: '인증키 모양이 아닙니다 (공공데이터포털 마이페이지 → 활용신청 상세의 일반 인증키를 붙여넣기)' };
+      if (k) PROPS.setProperty('KOSHA_KEY', decodeURIComponent(k)); else PROPS.deleteProperty('KOSHA_KEY');
+      return { success: true, hasKey: !!k, key: koshaMask_() };
+    }
+    case 'kosha.saveApis': {
+      const list = (Array.isArray(req.apis) ? req.apis : []).slice(0, 20).map(dataApiClean_);
+      const ids = {};
+      list.forEach(a => { while (ids[a.id]) a.id += 'x'; ids[a.id] = 1; });
+      PROPS.setProperty('DATA_APIS', JSON.stringify(list));
+      return { success: true, apis: dataApis_() };
+    }
+    case 'kosha.test': {
+      const a = req.api ? dataApiClean_(req.api, 0) : dataApis_().find(x => x.id === req.id);
+      return koshaCall_(a, String(req.keyword || '화학물질').slice(0, 40), 5);
+    }
+    case 'help.lawRefresh': {
+      const f = getFile_('law/조문본문.json');
+      if (f) f.setTrashed(true);
+      const n = lawBodies_().length;
+      return { success: n > 0, count: n, error: n ? '' : '법령 본문을 받지 못했습니다 (국가법령정보 OC 확인)' };
+    }
+  }
+  return { success: false, error: 'unknown op: ' + req.op };
+}
+
+// 시트 메뉴 ⑦: 안전보건공단 API 인증키
+function saveKoshaKey() {
+  const ui = SpreadsheetApp.getUi();
+  const r = ui.prompt('안전보건공단 API 인증키 저장', '공공데이터포털 마이페이지 → 데이터활용 → Open API → 활용신청 현황에서\n일반 인증키(Decoding)를 붙여넣으세요. 비워 두고 확인하면 지웁니다.', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  const k = r.getResponseText().trim();
+  if (k) PROPS.setProperty('KOSHA_KEY', decodeURIComponent(k)); else PROPS.deleteProperty('KOSHA_KEY');
+  ui.alert(k ? '저장했습니다. 관리자 화면 → 설정에서 [시험 조회]로 확인하세요.' : '지웠습니다.');
+}
+
+// 위험성평가 참고자료: 우리 병원에서 처리된 비슷한 평가 + 공단 재해사례 (AI 프롬프트에 덧붙임)
+function raRefs_(place, task) {
+  const toks = helpTokens_(place + ' ' + task);
+  const out = [];
+  try {
+    raRows_().filter(o => ['검토중', '개선중', '개선완료'].indexOf(o['상태']) >= 0)
+      .map(o => ({ o: o, s: helpScore_(o['장소'] + ' ' + o['작업·상황'] + ' ' + o['위험요인 요약'], toks) }))
+      .filter(x => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 3)
+      .forEach(x => out.push('· 우리 병원 평가 (' + x.o['장소'] + ', 상태 ' + x.o['상태'] + '): ' + String(x.o['위험요인 요약']).replace(/\n/g, ' / ').slice(0, 400) +
+                             (x.o['관리자의견'] ? ' / 보건관리실 의견: ' + String(x.o['관리자의견']).slice(0, 200) : '')));
+  } catch (_) {}
+  if (toks.length && PROPS.getProperty('KOSHA_KEY')) {
+    try {
+      dataApis_().filter(a => a.use && a.url && a.kind === '재해사례').slice(0, 2).forEach(a => {
+        const r = koshaCall_(a, toks[0], 3);
+        if (r.success) r.items.forEach(it => out.push('· 공단 재해사례: ' + it.title + (it.text ? ' — ' + it.text.slice(0, 300) : '')));
+      });
+    } catch (_) {}
+  }
+  return out.join('\n');
 }
