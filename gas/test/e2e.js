@@ -53,7 +53,7 @@ function check(name, cond, extra) {
   await page.waitForTimeout(2500);
 
   // 1. 비로그인 상태
-  check('비로그인: 배지 표시', (await page.textContent('#bm-auth-badge')).includes('부서 로그인'));
+  check('비로그인: 배지 표시', (await page.textContent('#bm-auth-badge')).includes('부서 / 관리자 로그인'));
   check('비로그인: 실제 GitHub 토큰 없음', await page.evaluate(() => CFG.ghToken === 'gas-proxy' && localStorage.getItem('bm_ghToken') === 'gas-proxy'));
   check('비로그인: 직원목록 미로드', await page.evaluate(() => empList.length === 0));
   const anonEmp = await page.evaluate(async () => (await fetch('https://script.google.com/macros/s/X/exec?action=emp&callback=cb')).text());
@@ -121,10 +121,10 @@ function check(name, cond, extra) {
     foot: (document.querySelector('#pg-home > .bm-foot') || {}).textContent || '',
   }));
   check('홈: 처음 화면은 홈', home0.vis && home0.msdsHidden && home0.tabOn, home0);
-  check('홈: 타일 6개 (AI 위험성평가 포함)', JSON.stringify(home0.tiles) === JSON.stringify(['MSDS 관리', '교육일지 작성', '보호구 지급', '화학물질 보고서', 'AI 위험성평가', '관리자 모드']), home0.tiles);
+  check('홈: 타일 5개 (v21.1 관리자 모드 타일 삭제)', JSON.stringify(home0.tiles) === JSON.stringify(['MSDS 관리', '교육일지 작성', '보호구 지급', '화학물질 보고서', 'AI 위험성평가']), home0.tiles);
   check('홈(로그인 전): 작성 타일 버튼은 부서 로그인', home0.ems.slice(1, 4).every(x => x === '부서 로그인'), home0.ems);
-  check('홈(로그인 전): 로그인하면 할 수 있는 일 + 로그인 버튼', home0.todo.includes('할 수 있는 일') && home0.login, home0.todo);
-  check('홈: 연락처는 보건관리실만', home0.foot.includes('보건관리실 내선 3293') && !home0.foot.includes('['), home0.foot);
+  check('홈(로그인 전): 로그인하면 할 수 있는 일 (v21.1 로그인 줄 삭제 · 오른쪽 위 버튼 하나)', home0.todo.includes('할 수 있는 일') && !home0.login, home0.todo);
+  check('홈: 아래 띠 문구 (v21.1)', home0.foot.includes('안전보건 통합관리 시스템') && home0.foot.includes('3293') && !home0.foot.includes('['), home0.foot);
   await page.click('#hm-tiles .hm-tile[data-go="msds"]');
   check('홈: MSDS 타일 → MSDS 화면', await page.evaluate(() => document.getElementById('pg-msds').style.display === 'flex'));
   await page.click('.bm-logo');
@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.0/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.1/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
   const other = await page.evaluate(async () => {
@@ -504,7 +504,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.0'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.1'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -1356,6 +1356,67 @@ function check(name, cond, extra) {
     return { rows: document.querySelectorAll('#ra-adm-body tr.hit').length, kpi: document.querySelector('#ra-adm-body .ra-kpi').textContent, img: !!document.querySelector('#ra-adm-body img'), save: !!document.querySelector('#ra-adm-body [data-save]') };
   });
   check('위험성평가 관리자 화면: 목록 · 지표 · 사진 · 처리 저장 칸', raAdm.rows >= 1 && /높음 이상 미완료/.test(raAdm.kpi) && raAdm.img && raAdm.save, raAdm);
+
+  // 19. v21.1 AI 도우미 · 안전보건공단 OPEN API · 법령 본문
+  const ks = g.env.KOSHA;
+  const tka = (await page.evaluate(() => BMAUTH.post('login', { kind: 'admin', password: 'admin-pass-1' }))).token;
+  const tkd = (await page.evaluate(() => BMAUTH.post('login', { kind: 'dept', dept: '61병동', pin: '4321' }))).token;
+  const ksDeny = await page.evaluate(a => BMAUTH.post('kosha.setKey', { key: 'koshaKey1234567890abcdefXYZ', t: a }), tkd);
+  check('공단 API: 부서는 키 저장 불가', !ksDeny.success && ksDeny.status === 403, ksDeny);
+  const ksBad = await page.evaluate(a => BMAUTH.post('kosha.saveApis', { apis: [{ name: '나쁜 주소', url: 'http://evil.example.com/x' }], t: a }), tka);
+  check('공단 API: 요청주소는 apis.data.go.kr 만', !ksBad.success && /apis\.data\.go\.kr/.test(ksBad.error), ksBad);
+  g.props.KOSHA_KEY = 'wrong-key';
+  const ksSt0 = await page.evaluate(a => BMAUTH.post('kosha.status', { t: a }), tka);
+  check('API 기록: 처음엔 기본 2줄 (안전보건자료 링크 · 활용기간 2026-10-23~2028-10-23 / 재해사례 꺼짐)', ksSt0.success && ksSt0.apis.length === 2 && ksSt0.apis[0].to === '2028-10-23' && ksSt0.apis[0].use && !ksSt0.apis[1].use, ksSt0);
+  const ksWrong = await page.evaluate(a => BMAUTH.post('kosha.test', { id: 'media', keyword: '포르말린', t: a }), tka);
+  check('공단 API 시험: 틀린 키 → 공단 오류 문구', !ksWrong.success && /SERVICE_KEY/.test(ksWrong.error), ksWrong);
+  const ksSet = await page.evaluate(a => Promise.all([
+    BMAUTH.post('kosha.setKey', { key: 'koshaKey1234567890abcdefXYZ', t: a }),
+    BMAUTH.post('kosha.saveApis', { apis: [
+      { id: 'media', name: '안전보건자료 링크서비스', url: 'https://apis.data.go.kr/B552468/selectMediaList01', kw: 'keyword', kind: '자료', use: true, from: '2026-10-23', to: '2028-10-23', memo: '참고문서 13' },
+      { id: 'disaster', name: '국내재해사례', url: 'https://apis.data.go.kr/B552468/disaster_api02/getdisaster_api02', kw: 'keyword', extra: 'callApiId=1060', kind: '재해사례', use: true },
+      { name: '새 API', url: '', kind: '없는종류', use: true, to: '2027-13-99' }], t: a })]), tka);
+  ks.okKey = 'koshaKey1234567890abcdefXYZ';
+  const apRec = ksSet[1].apis || [];
+  check('공단 API: 키 · API 기록 저장 (키 가림 · 주소 없는 줄은 사용 꺼짐 · 종류 · 날짜 바로잡음 · id 부여)', ksSet[0].success && ksSet[0].key === 'kosh…XYZ' && ksSet[1].success && apRec.length === 3 && apRec[1].extra === 'callApiId=1060' && !apRec[2].use && apRec[2].kind === '기타' && apRec[2].to === '' && !!apRec[2].id && g.props.KOSHA_KEY === 'koshaKey1234567890abcdefXYZ', ksSet);
+  const ksMedia = await page.evaluate(a => BMAUTH.post('kosha.test', { id: 'media', keyword: '화학물질', t: a }), tka);
+  check('공단 API 시험: End Point가 서비스 이름까지만이어도 get+서비스이름으로 다시 시도', ksMedia.success || /selectMediaList01/.test(ks.calls[ks.calls.length - 1]), [ksMedia, ks.calls.slice(-2)]);
+  const ksOk = await page.evaluate(a => BMAUTH.post('kosha.test', { id: 'disaster', keyword: '포르말린', t: a }), tka);
+  const ksUrl = ks.calls[ks.calls.length - 1] || '';
+  check('공단 API 시험: 목록 · 제목 · 링크 읽기 + 고정 변수 · 검색어 붙임', ksOk.success && ksOk.items.length === 2 && /포르말린 취급/.test(ksOk.items[0].title) && /kosha/.test(ksOk.items[0].url) && /callApiId=1060/.test(ksUrl) && /keyword=%ED%8F%AC/.test(ksUrl), [ksOk, ksUrl]);
+  const meta = await page.evaluate(() => BMAUTH.post('help.meta', {}));
+  check('AI 도우미: 로그인 없이 상태 확인', meta.success && meta.hasKey && meta.kosha, meta);
+  const gmN = gm.calls.length;
+  gm.status = 200;
+  gm.reply = { answer: '포르말린이 눈에 들어가면 즉시 15분 이상 흐르는 물로 씻고 진료를 받으세요.', used: [1, 99], followups: ['포르말린 보호구는?'] };
+  const help1 = await page.evaluate(() => BMAUTH.post('help.ask', { q: '포르말린 넘어짐 바닥 미끄러지는 위험 010-1234-5678', history: [{ role: 'user', text: '안녕' }],
+    msds: [{ name: '10% 포르말린', text: '응급조치: [눈] 15분 이상 씻기' }] }));
+  const hp = gm.calls.length > gmN ? gm.calls[gm.calls.length - 1].body.contents[0].parts[0].text : '';
+  check('AI 도우미: 답 · 출처(번호 범위 확인) · 이어서 물을 질문', help1.success && /15분/.test(help1.answer) && help1.sources.length === 1 && help1.followups.length === 1, help1);
+  check('AI 도우미: AI에 보낸 자료 = 사용 안내 · MSDS · 법령 본문(제3조) · 공단 자료, 전화번호는 가림', /\(사용 안내\)/.test(hp) && /\(MSDS\) 10% 포르말린/.test(hp) && /전도의 방지/.test(hp) && /공단 (자료|재해사례)/.test(hp) && !/010-1234-5678/.test(hp) && /전화번호 가림/.test(hp), hp.slice(0, 600));
+  g.props.GEMINI_API_KEY = '';
+  const helpNo = await page.evaluate(() => BMAUTH.post('help.ask', { q: '교육일지 작성법' }));
+  g.props.GEMINI_API_KEY = 'gem-key';
+  check('AI 도우미: AI 키 없으면 안내 문구', !helpNo.success && helpNo.noKey, helpNo);
+  const helpUi = await page.evaluate(async () => {
+    const b = document.getElementById('bm-help-btn'); if(!b) return { btn: false };
+    b.click(); await new Promise(z => setTimeout(z, 100));
+    const box = document.getElementById('bm-help');
+    const v = { btn: true, open: box.classList.contains('on'), chips: box.querySelectorAll('.bh-chip').length };
+    box.querySelector('textarea').value = '포르말린 눈에 들어가면?';
+    box.querySelector('.bh-in button').click();
+    await new Promise(z => setTimeout(z, 1500));
+    v.answer = (box.querySelectorAll('.bh-m.a')[box.querySelectorAll('.bh-m.a').length - 1] || {}).textContent || '';
+    BMHELP.close();
+    return v;
+  });
+  check('AI 도우미 화면: 버튼 · 창 · 빠른 질문 · 답과 출처 표시', helpUi.btn && helpUi.open && helpUi.chips >= 4 && /15분/.test(helpUi.answer) && /출처/.test(helpUi.answer), helpUi);
+  const lawPrompt = gm.calls[gm.calls.length - 1].body.contents[0].parts[0].text;
+  check('AI 도우미 화면: 질문한 물질의 MSDS 요약을 화면 목록에서 찾아 보냄', /\(MSDS\)/.test(lawPrompt), lawPrompt.slice(0, 300));
+  gm.reply = { scene: '처치실', hazards: [{ category: '작업환경', hazard: '바닥 물기', situation: '넘어짐', freq: 3, sev: 2, controls: [], laws: [] }] };
+  await page.evaluate(a => BMAUTH.post('ra.analyze', { image: a.jpg, place: '61병동 처치실', task: '청소 후', t: a.t }), { jpg, t: tkd });
+  const raP = gm.calls[gm.calls.length - 1].body.contents[0].parts[1].text;
+  check('위험성평가 AI: 우리 병원 처리된 평가(관리자 의견) · 공단 재해사례를 참고자료로 보냄', /우리 병원 평가/.test(raP) && /매트 구매 요청함/.test(raP) && /공단 재해사례/.test(raP), raP.slice(raP.indexOf('[참고'), raP.indexOf('[참고') + 400));
 
   check('페이지 스크립트 오류 없음', errors.length === 0, errors.slice(0, 5));
   await ctx.unrouteAll({ behavior: 'ignoreErrors' });

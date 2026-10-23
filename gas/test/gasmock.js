@@ -86,6 +86,7 @@ function makeEnv() {
     // 가짜 Firebase: signInWithPassword + Firestore 목록 (FIREBASE.users / FIREBASE.docs 로 데이터 지정)
     FIREBASE: { users: {}, docs: [], calls: [] },
     GEMINI: { status: 200, reply: {}, calls: [] },
+    KOSHA: { okKey: 'koshaKey1234567890abcdefXYZ', calls: [] },
     LAW: { okOc: 'bumin3131', calls: [], byl: {
       '100': [
         { '별표번호': '0022', '별표구분': '별표', '별표제목': '특수건강진단 대상 유해인자(제201조 관련)', '별표내용': [['1. 화학적 인자', '가. 유기화합물', '1) 가솔린(Gasoline; 8006-61-9)', '2) 글루타르알데히드(Glutaraldehyde; 111-30-8)', '라. 산 및 알칼리류', '1) 염화수소(Hydrogen chloride; 7647-01-0)']] },
@@ -114,9 +115,21 @@ function makeEnv() {
             return resp(200, { LawSearch: { law: [{ '법령명한글': q, '법령일련번호': q.indexOf('기준') >= 0 ? '200' : '100', '시행일자': '20250101' }] } });
           }
           const mst = (u.match(/MST=(\d+)/) || [])[1];
-          const jo = mst === '200' ? [{ '조문번호': '3', '조문여부': '조문', '조문제목': '전도의 방지' }, { '조문번호': '1', '조문여부': '전문', '조문제목': '' },
-            { '조문번호': '597', '조문여부': '조문', '조문제목': '혈액노출 예방 조치' }].concat(Array.from({ length: 60 }, (_, i) => ({ '조문번호': String(100 + i), '조문여부': '조문', '조문제목': '시험조문' + i }))) : [];
+          const jo = mst === '200' ? [{ '조문번호': '3', '조문여부': '조문', '조문제목': '전도의 방지', '조문내용': '제3조(전도의 방지) 사업주는 근로자가 작업장에서 넘어지거나 미끄러지는 등의 위험이 없도록 작업장 바닥 등을 안전하고 청결한 상태로 유지하여야 한다.' },
+            { '조문번호': '1', '조문여부': '전문', '조문제목': '' },
+            { '조문번호': '597', '조문여부': '조문', '조문제목': '혈액노출 예방 조치', '조문내용': '제597조(혈액노출 예방 조치) 사업주는 혈액노출 위험이 있는 작업을 하는 근로자에게 주사침 등 날카로운 도구를 안전하게 처리하도록 하여야 한다.' }]
+            .concat(Array.from({ length: 60 }, (_, i) => ({ '조문번호': String(100 + i), '조문여부': '조문', '조문제목': '시험조문' + i, '조문내용': '시험 내용 ' + i }))) : [];
           return resp(200, { '법령': { '조문': { '조문단위': jo }, '별표': { '별표단위': (lw.byl[mst] || []) } } });
+        }
+        // 가짜 안전보건공단 OPEN API (공공데이터포털): KOSHA.okKey 인 serviceKey만 통과
+        if (u.startsWith('https://apis.data.go.kr/B552468/')) {
+          const ks = env.KOSHA; ks.calls.push(u);
+          const key = decodeURIComponent((u.match(/serviceKey=([^&]+)/) || [])[1] || '');
+          if (key !== ks.okKey) return { getResponseCode: () => 401, getContentText: () => '<OpenAPI_ServiceResponse><cmmMsgHeader><returnAuthMsg>SERVICE_KEY_IS_NOT_REGISTERED_ERROR</returnAuthMsg></cmmMsgHeader></OpenAPI_ServiceResponse>' };
+          const kw = decodeURIComponent((u.match(/keyword=([^&]+)/) || [])[1] || '');
+          return resp(200, { response: { header: { resultCode: '00' }, body: { items: { item: [
+            { title: kw + ' 취급 안전 가이드', filepath: 'https://portal.kosha.or.kr/media/1', regDate: '2026-01-02' },
+            { title: kw + ' 노출 재해 사례', contents: kw + '을(를) 다루다 눈에 튀어 각막 손상', filepath: 'https://portal.kosha.or.kr/media/2' }] }, totalCount: 2 } } });
         }
         // 가짜 Gemini: GEMINI.status / GEMINI.reply 로 응답 지정, 받은 요청은 GEMINI.calls
         if (u.startsWith('https://generativelanguage.googleapis.com/v1beta/models/')) {
