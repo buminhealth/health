@@ -46,6 +46,7 @@ class Range {
   setValues(v) { v.forEach((row, i) => row.forEach((x, j) => this.sh.set(this.r + i, this.c + j, x))); return this; }
   setValue(x) { this.sh.set(this.r, this.c, x); return this; }
   setNumberFormat() { return this; }
+  clearContent() { for (let i = 0; i < this.nr; i++) for (let j = 0; j < this.nc; j++) if (this.sh.rows[this.r + i - 1]) this.sh.set(this.r + i, this.c + j, ''); return this; }
 }
 class Sheet {
   constructor(name) { this.name = name; this.rows = []; }
