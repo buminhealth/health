@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.1/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.2/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
   const other = await page.evaluate(async () => {
@@ -504,7 +504,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.1'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.2'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -873,7 +873,7 @@ function check(name, cond, extra) {
   const nc = await page.evaluate(() => BMAUTH.post('edu.newChem', { chem: '신물질X', depts: ['61병동'] }));
   const est5 = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
   const ncA = (Q(est5, '교육가').newChem || []).find(n => n.chem === '신물질X') || {};
-  check('새 물질 교육: 등록 → 부서 직원 대상 (기한 14일)', nc.success && ncA.done === false && ncA.due > ncA.date, ncA);
+  check('새 물질 교육: 등록 → 부서 직원 대상 (기한 = 취급 전 · 등록일)', nc.success && ncA.done === false && ncA.due === ncA.date, ncA);
   led.rows.push(['3', '2026-10-21T01:00Z', 'MSDS교육', '61병동', '신물질X, 기타', est5.today, est5.today, '1', '1시간', '126000001', '교육가', '', '✓ 서명완료']);
   const est6 = await page.evaluate(() => BMAUTH.post('edu.status', { fresh: true }));
   check('새 물질 교육: 그 물질이 든 일지를 쓰면 완료', ((Q(est6, '교육가').newChem || []).find(n => n.chem === '신물질X') || {}).done === true, Q(est6, '교육가').newChem);
@@ -1417,6 +1417,39 @@ function check(name, cond, extra) {
   await page.evaluate(a => BMAUTH.post('ra.analyze', { image: a.jpg, place: '61병동 처치실', task: '청소 후', t: a.t }), { jpg, t: tkd });
   const raP = gm.calls[gm.calls.length - 1].body.contents[0].parts[1].text;
   check('위험성평가 AI: 우리 병원 처리된 평가(관리자 의견) · 공단 재해사례를 참고자료로 보냄', /우리 병원 평가/.test(raP) && /매트 구매 요청함/.test(raP) && /공단 재해사례/.test(raP), raP.slice(raP.indexOf('[참고'), raP.indexOf('[참고') + 400));
+
+  // 20. v21.2 AI 도우미 질문 · 답 관리 · MSDS 한글/영어/CAS 찾기
+  const fq0 = await page.evaluate(a => BMAUTH.post('help.faqList', { t: a }), tka);
+  const d3 = (fq0.rows || []).find(r => /신규입사자/.test(r.q)) || {};
+  check('질문 · 답: 처음엔 기본값 12개 · 신규입사자 교육 기한 = 입사 후 3일 · 빠른 질문 표시', fq0.success && fq0.rows.length === 12 && /3일/.test(d3.a) && d3.quick && g.sheets['AI도우미_FAQ'].rows.length === 13, fq0.rows && fq0.rows.map(r => r.q));
+  const fqDeny = await page.evaluate(a => BMAUTH.post('help.faqSave', { rows: [], t: a }), tkd);
+  check('질문 · 답: 부서는 저장 불가', !fqDeny.success && fqDeny.status === 403, fqDeny);
+  const newRows = fq0.rows.map(r => /신규입사자/.test(r.q) ? Object.assign({}, r, { a: '사내 규정: 입사 후 3일 안에 MSDS 교육 (부서장 작성)' }) : r)
+    .concat([{ q: '야간 근무자 교육은?', a: '야간 근무자는 다음 주간 근무일에 교육합니다.', quick: true, memo: '2026-10 보건관리실' }, { q: '', a: '빈 질문은 버림' }]);
+  const fqSave = await page.evaluate(a => BMAUTH.post('help.faqSave', { rows: a.rows, t: a.t }), { rows: newRows, t: tka });
+  const meta2 = await page.evaluate(() => BMAUTH.post('help.meta', {}));
+  check('질문 · 답 저장: 시트에 반영 · 빈 줄 버림 · 빠른 질문 목록 = 체크한 것', fqSave.success && fqSave.count === 13 && meta2.quick.indexOf('야간 근무자 교육은?') >= 0 && meta2.quick.length <= 8, [fqSave, meta2.quick]);
+  gm.reply = { answer: '야간 근무자는 다음 주간 근무일에 교육합니다.', used: [1] };
+  await page.evaluate(() => BMAUTH.post('help.ask', { q: '야간 근무자 교육은 언제 하나요?' }));
+  const fp = gm.calls[gm.calls.length - 1].body.contents[0].parts[0].text;
+  check('AI 도우미: 관리자가 고친 질문 · 답을 근거로 보냄 (메모는 안 보냄)', /다음 주간 근무일/.test(fp) && !/2026-10 보건관리실/.test(fp), fp.slice(fp.indexOf('[자료]'), fp.indexOf('[자료]') + 300));
+  const msF = await page.evaluate(() => (CHEMS.some(p => p.name === 'STERI-GAS BRAND CARTRIDGES') || CHEMS.push({ name: 'STERI-GAS BRAND CARTRIDGES', manufacturer: '한국쓰리엠', departments: ['공급실'], icons: [],
+      components: [{ compName: 'ETHYLENE OXIDE', casNumber: '75-21-8' }], emergency: '[피부,눈] 다량의 미온수로 15분 이상 세척하시오.' }), { eo: BMHELP_MSDS('산화에틸렌에 노출이 됐어'), cas: BMHELP_MSDS('75-21-8 응급조치'), none: BMHELP_MSDS('교육일지 작성법') }));
+  check('MSDS 찾기: 한글 "산화에틸렌" → 영어 성분 ETHYLENE OXIDE(75-21-8) 제품 · CAS로도 찾음 · 물질 없는 질문은 안 보냄',
+    msF.eo.length >= 1 && /ETHYLENE OXIDE/.test(msF.eo[0].text) && /응급조치: \[피부,눈\]/.test(msF.eo[0].text) && msF.cas.length >= 1 && msF.none.length === 0, msF);
+  const faqUi = await page.evaluate(async () => {
+    await BMAUTH.adminLogin('admin-pass-1');
+    goTab('admin'); admSwitchPane('cfg'); BMDASH.settings(); await new Promise(z => setTimeout(z, 800));
+    const v = { rows: document.querySelectorAll('#cfg-faq-list [data-faq]').length };
+    document.querySelector('[data-c="faqadd"]').click();
+    const first = document.querySelector('#cfg-faq-list [data-faq="0"]');
+    first.querySelector('[data-f="q"]').value = '화면에서 추가한 질문'; first.querySelector('[data-f="a"]').value = '화면에서 추가한 답';
+    document.querySelector('[data-c="faqsave"]').click(); await new Promise(z => setTimeout(z, 800));
+    v.after = document.querySelectorAll('#cfg-faq-list [data-faq]').length;
+    v.msg = document.getElementById('cfg-faq-msg').textContent;
+    return v;
+  });
+  check('설정 화면: 질문 · 답 목록 · [+ 질문 추가] · 저장', faqUi.rows === 13 && faqUi.after === 14 && /14개를 저장/.test(faqUi.msg), faqUi);
 
   check('페이지 스크립트 오류 없음', errors.length === 0, errors.slice(0, 5));
   await ctx.unrouteAll({ behavior: 'ignoreErrors' });
