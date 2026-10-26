@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.1 (2026-10-23)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.2 (2026-10-23)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -180,7 +180,7 @@ function doPost(e) {
                         result = aiOp_(req, s); break;
       case 'ra.meta': case 'ra.analyze': case 'ra.submit': case 'ra.mine': case 'ra.photo': case 'ra.list': case 'ra.update':
                         result = raOp_(req, s); break;
-      case 'help.ask': case 'help.meta': case 'help.lawRefresh': case 'kosha.status': case 'kosha.setKey': case 'kosha.saveApis': case 'kosha.test':
+      case 'help.ask': case 'help.meta': case 'help.lawRefresh': case 'help.faqList': case 'help.faqSave': case 'kosha.status': case 'kosha.setKey': case 'kosha.saveApis': case 'kosha.test':
                         result = helpOp_(req, s); break;
       case 'edu.dupes': case 'edu.dedupe': case 'edu.status': case 'edu.exclude': case 'edu.askMail': case 'edu.newChem':
       case 'edu.rules': case 'edu.saveRules': case 'dept.saveMap': case 'edu.manual': case 'edu.unit': case 'edu.manualDelete':
@@ -2820,11 +2820,11 @@ function eduDupes_() {
 //  · 제외: 관리자 또는 부서장이 '취급 안 함'으로 확인한 사람만 (교육제외 시트, 신규입사 '아니오' 회신 포함)
 //          단, 교육일지를 작성한 사람은 제외 확인이 있어도 대상으로 봄
 //  · 특별교육: 현장 교육 시간 + 공통 온라인 8시간 ≥ 16시간이면 이수, 남은 시간은 첫 교육일부터 3개월 안에
-//  · 새 물질: AI MSDS 검토에서 새 제품 · 성분을 승인하면 사용 부서에 교육 대상 생성 (기한 14일)
+//  · 새 물질: AI MSDS 검토에서 새 제품 · 성분을 승인하면 사용 부서에 교육 대상 생성 (기한: 취급 전 = 등록일)
 // ════════════════════════════════════════════════════════════════
 const EXCL_SHEET = '교육제외', EXCL_HEADER = ['사번', '이름', '부서', '사유', '확인자', '확인일', '경로', '해제일'];
 const NEWCHEM_SHEET = '새물질교육', NEWCHEM_HEADER = ['등록일', '물질', '부서', '기한', '출처', '비고'];
-const SPECIAL_HOURS = 16, SPECIAL_ONLINE = 8, SPECIAL_MONTHS = 3, NEWCHEM_DAYS = 14, NEWHIRE_WINDOW = 90;
+const SPECIAL_HOURS = 16, SPECIAL_ONLINE = 8, SPECIAL_MONTHS = 3, NEWCHEM_DAYS = 0, NEWHIRE_WINDOW = 90;   // v21.2: 새 물질은 취급 전 교육 (사내 규정) → 기한 = 등록일
 
 function eduSheet_(name, header) {
   let sh = SS.getSheetByName(name);
@@ -3728,7 +3728,7 @@ function raOp_(req, s) {
 // ════════════════════════════════════════════════════════════════
 // v21.1 AI 도우미 (묻고 답하기) · 안전보건공단 OPEN API · 법령 본문 검색
 //  · 신규입사자 · 부서 · 관리자가 앱 사용법 · 교육내용 · MSDS · 법령을 바로 물어봄
-//  · 답의 근거: ① 앱 사용 안내(아래 HELP_GUIDE + 시트 'AI도우미_FAQ') ② 화면이 보낸 MSDS 요약 ③ 법령 조문 본문(국가법령정보 OPEN API)
+//  · 답의 근거: ① 질문 · 답 (시트 'AI도우미_FAQ' — 관리자 화면 설정에서 고침, 처음엔 HELP_GUIDE 기본값) ② 화면이 보낸 MSDS 요약 ③ 법령 조문 본문(국가법령정보 OPEN API)
 //              ④ 안전보건공단 자료 · 재해사례(공공데이터포털 OPEN API) — 출처를 함께 돌려줌
 //  · 개인정보: 질문의 전화번호 · 주민번호 모양은 가려서 보냄 · 사람 이름 · 환자 정보는 적지 않도록 화면에서 안내
 //  · 공단 API 키: 스크립트 속성 KOSHA_KEY (관리자 화면 설정 또는 시트 메뉴 ⑦) — 화면에는 저장하지 않음
@@ -3745,17 +3745,21 @@ const DATA_API_DEFAULTS = [
   { id: 'disaster', name: '한국산업안전보건공단_국내재해사례 게시판 정보 조회서비스', url: '', kw: 'keyword', extra: 'callApiId=',
     kind: '재해사례', use: false, from: '', to: '', memo: '활용신청 후 요청주소 · callApiId 넣기' }
 ];
+// 기본 질문 · 답 (시트 'AI도우미_FAQ'가 비어 있을 때 처음 한 번 채워 넣음 → 그 뒤로는 관리자 화면에서 고침)
+//  [질문, 답, 빠른질문(화면 단추로 보여 줄지)]
 const HELP_GUIDE = [
-  ['로그인 · PIN', '오른쪽 위 [부서 / 관리자 로그인]을 누르고 [부서]에서 부서를 고른 뒤 부서 PIN을 넣습니다. 로그인은 12시간 유지되고 5회 틀리면 15분 잠깁니다. PIN을 모르면 보건관리실 내선 3293 · 3034로 문의합니다. 보건관리자는 같은 창에서 [관리자]를 눌러 비밀번호로 들어갑니다.'],
-  ['MSDS 관리', 'MSDS 관리는 로그인 없이 볼 수 있습니다. 왼쪽에서 부서를 고르거나 물질명 · 제조사 · CAS 번호로 찾고, 물질을 누르면 경고표지 그림문자, 관리대상 여부, 구성성분, 응급처치 요령, PDF 원본을 볼 수 있습니다.'],
-  ['교육일지 작성', '부서 로그인 후 [교육일지]를 누르면 부서 물질에 맞게 특별안전보건교육일지(관리대상 · 특별관리 물질이 있을 때) 또는 MSDS 교육일지가 자동으로 고릅니다. 순서: ① 대상자 검색(이름을 넣고 고르면 부서 · 입사일 자동) → ② 취급물질 · 일정 → ③ 교육내용 → ④ 근로자 서명 → ⑤ 확인 · PDF 저장. 결재는 보건관리자가 관리자 화면에서 합니다.'],
-  ['신규입사자 교육', '새로 들어온 직원은 부서에서 취급하는 화학물질에 대해 배치 전 MSDS 교육(관리대상 · 특별관리 물질이 있으면 특별안전보건교육)을 받아야 합니다. 새 물질 교육 기한은 14일이고, 특별교육은 16시간(현장 + 공통 온라인 8시간)입니다. 부서장이 교육일지를 작성해 제출합니다.'],
-  ['교육내용 (MSDS 교육)', '취급물질의 명칭 · 물리화학적 특성, 인체 및 환경에 미치는 영향, 취급상 주의사항, 착용할 보호구와 착용방법, 위급상황 시 대처방법과 응급조치 요령, 물질안전보건자료(MSDS)와 경고표지를 이해하는 방법을 교육합니다.'],
-  ['보호구 지급', '부서 로그인 후 [보호구 지급]에서 이름을 검색해 수령자를 추가하고, 지급물품을 고른 뒤 수령자가 본인 서명란에 서명합니다. 수령자 전원이 한 장의 지급수령증에 기록되어 PDF로 저장됩니다 (산업안전보건법 제38조).'],
-  ['화학물질 보고서', '새 화학물질을 쓰기 시작하거나 쓰지 않게 되면 [화학물질 보고서]에서 신규사용 · 사용중단을 고르고 제품명 · 부서 · 용량 · 보관장소 · 공급업체 · MSDS 파일을 넣어 제출합니다. 보건관리실이 검토해 관리대상 여부를 판정하고 승인되면 MSDS 목록에 반영됩니다.'],
-  ['AI 위험성평가', '[AI 위험성평가]에서 현장 사진을 찍고 장소를 적은 뒤 [AI로 위험 분석]을 누르면 AI가 유해 · 위험요인, 가능성 × 중대성 점수, 개선 대책, 관련 법령을 제안합니다. 내 판단에 맞게 고친 뒤 [보건관리실에 제출]합니다. 사진에 얼굴 · 이름표 · 환자 정보가 나오지 않게 찍어 주세요. 위험성 = 가능성(1~5) × 중대성(1~4), 낮음 1~3 · 보통 4~6 · 높음 8~12 · 매우높음 15~20.'],
-  ['부서현황 · 결재', '부서 로그인 후 [부서현황]에서 우리 부서가 제출한 교육일지 · 보호구 · 보고서와 결재 · 반려 상태, PDF를 볼 수 있습니다. 반려되면 사유를 보고 다시 작성합니다.'],
-  ['문의처', '보건관리실 내선 3293 · 3034. 화면 오류나 PIN 분실, 교육 대상 여부는 보건관리실로 문의합니다.']
+  ['로그인은 어떻게 하나요? 부서 PIN을 모르면?', '오른쪽 위 [부서 / 관리자 로그인]을 누르고 [부서]에서 부서를 고른 뒤 부서 PIN을 넣습니다. 로그인은 12시간 유지되고 5회 틀리면 15분 잠깁니다. PIN을 모르면 보건관리실 내선 3293 · 3034로 문의합니다. 보건관리자는 같은 창에서 [관리자]를 눌러 비밀번호로 들어갑니다.', true],
+  ['MSDS(물질안전보건자료)는 어디서 보나요?', 'MSDS 관리는 로그인 없이 볼 수 있습니다. 왼쪽에서 부서를 고르거나 물질명 · 제조사 · CAS 번호로 찾고, 물질을 누르면 경고표지 그림문자, 관리대상 여부, 구성성분, 응급처치 요령, PDF 원본을 볼 수 있습니다.', false],
+  ['교육일지는 어떻게 작성하나요?', '부서 로그인 후 [교육일지]를 누르면 부서 물질에 맞게 특별안전보건교육일지(관리대상 · 특별관리 물질이 있을 때) 또는 MSDS 교육일지가 자동으로 골라집니다. 순서: ① 대상자 검색(이름을 넣고 고르면 부서 · 입사일 자동) → ② 취급물질 · 일정 → ③ 교육내용 → ④ 근로자 서명 → ⑤ 확인 · PDF 저장. 결재는 보건관리자가 관리자 화면에서 합니다.', true],
+  ['신규입사자는 언제까지 어떤 교육을 받아야 하나요?', '신규입사자는 사내 규정에 따라 입사일로부터 ' + EDU_PERIOD_DAYS + '일 안에, 부서에서 취급하는 화학물질에 대한 MSDS 교육(관리대상 · 특별관리 물질을 취급하면 특별안전보건교육)을 받아야 합니다. 입사가 확인되면 부서장에게 확인 요청 메일이 가고, 부서장이 교육일지를 작성해 제출합니다.', true],
+  ['새 화학물질을 쓰게 되면 교육은 언제까지 하나요?', '새 화학물질은 사내 규정에 따라 그 물질을 취급하기 전에 교육을 받아야 합니다. 부서에서 [화학물질 보고서]로 신규사용을 보고하고 보건관리실이 승인하면, 취급할 직원이 사용 전에 MSDS 교육(관리대상 · 특별관리 물질이면 특별안전보건교육)을 받고 부서장이 교육일지를 작성합니다.', false],
+  ['특별안전보건교육은 몇 시간이고 어떻게 이수하나요?', '특별안전보건교육은 ' + SPECIAL_HOURS + '시간입니다. 현장 교육 시간과 공통 온라인 교육 ' + SPECIAL_ONLINE + '시간을 합해 ' + SPECIAL_HOURS + '시간이 되면 이수이고, 남은 시간은 첫 교육일부터 ' + SPECIAL_MONTHS + '개월 안에 채웁니다.', true],
+  ['MSDS 교육 내용은 무엇인가요?', '취급물질의 명칭 · 물리화학적 특성, 인체 및 환경에 미치는 영향, 취급상 주의사항, 착용할 보호구와 착용방법, 위급상황 시 대처방법과 응급조치 요령, 물질안전보건자료(MSDS)와 경고표지를 이해하는 방법을 교육합니다.', true],
+  ['보호구 지급 기록은 어떻게 하나요?', '부서 로그인 후 [보호구 지급]에서 이름을 검색해 수령자를 추가하고, 지급물품을 고른 뒤 수령자가 본인 서명란에 서명합니다. 수령자 전원이 한 장의 지급수령증에 기록되어 PDF로 저장됩니다 (산업안전보건법 제38조).', false],
+  ['새 화학물질을 쓰거나 그만 쓸 때는 어떻게 하나요?', '[화학물질 보고서]에서 신규사용 · 사용중단을 고르고 제품명 · 부서 · 용량 · 보관장소 · 공급업체 · MSDS 파일을 넣어 제출합니다. 보건관리실이 검토해 관리대상 여부를 판정하고, 승인되면 MSDS 목록에 반영됩니다.', false],
+  ['AI 위험성평가는 어떻게 하나요?', '[AI 위험성평가]에서 현장 사진을 찍고 장소를 적은 뒤 [AI로 위험 분석]을 누르면 AI가 유해 · 위험요인, 가능성 × 중대성 점수, 개선 대책, 관련 법령을 제안합니다. 내 판단에 맞게 고친 뒤 [보건관리실에 제출]합니다. 사진에 얼굴 · 이름표 · 환자 정보가 나오지 않게 찍어 주세요. 위험성 = 가능성(1~5) × 중대성(1~4), 낮음 1~3 · 보통 4~6 · 높음 8~12 · 매우높음 15~20.', true],
+  ['교육일지 작성 후 결재 상태는 어디서 확인하나요?', '부서 로그인 후 [부서현황]에서 우리 부서가 제출한 교육일지 · 보호구 · 보고서와 결재 · 반려 상태, PDF를 볼 수 있습니다. 반려되면 사유를 보고 다시 작성합니다.', false],
+  ['문의는 어디로 하나요?', '보건관리실 내선 3293 · 3034. 화면 오류, PIN 분실, 교육 대상 여부는 보건관리실로 문의합니다.', false]
 ];
 
 function helpMask_(t) {
@@ -3914,12 +3918,37 @@ function koshaMask_() {
 
 // FAQ 시트 (보건관리실이 질문 · 답을 줄마다 추가): A 질문, B 답
 const HELP_FAQ_SHEET = 'AI도우미_FAQ';
-function helpFaq_() {
+const HELP_FAQ_HEADER = ['질문', '답', '빠른질문', '메모'];
+function helpFaqSheet_() {
   let sh = SS.getSheetByName(HELP_FAQ_SHEET);
-  if (!sh) { sh = SS.insertSheet(HELP_FAQ_SHEET); sh.appendRow(['질문', '답', '메모']); sh.setFrozenRows(1); }
+  if (!sh) { sh = SS.insertSheet(HELP_FAQ_SHEET); sh.appendRow(HELP_FAQ_HEADER); sh.setFrozenRows(1); }
+  if (sh.getLastRow() < 2) {   // 처음: 기본 질문 · 답을 채워 넣음 (그 뒤로는 관리자가 고친 값이 기준)
+    HELP_GUIDE.forEach(g => sh.appendRow([g[0], g[1], g[2] ? 'Y' : '', '기본값'].map(safeCell_)));
+  }
+  return sh;
+}
+// [{q, a, quick, memo}]
+function helpFaq_() {
+  const sh = helpFaqSheet_();
   const last = sh.getLastRow();
   if (last < 2) return [];
-  return sh.getRange(2, 1, last - 1, 2).getDisplayValues().filter(r => r[0] && r[1]).map(r => [String(r[0]).trim(), String(r[1]).trim()]);
+  return sh.getRange(2, 1, last - 1, 4).getDisplayValues().filter(r => String(r[0]).trim() && String(r[1]).trim())
+    .map(r => ({ q: String(r[0]).trim(), a: String(r[1]).trim(), quick: /^(y|yes|o|예|ㅇ|true|1)$/i.test(String(r[2]).trim()), memo: String(r[3] || '').trim() }));
+}
+function helpFaqSave_(rows) {
+  const list = (Array.isArray(rows) ? rows : []).slice(0, 300)
+    .map(r => ({ q: String(r.q || '').trim().slice(0, 300), a: String(r.a || '').trim().slice(0, 3000), quick: !!r.quick, memo: String(r.memo || '').trim().slice(0, 300) }))
+    .filter(r => r.q && r.a);
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
+  try {
+    const sh = helpFaqSheet_();
+    const last = sh.getLastRow();
+    if (last >= 2) sh.getRange(2, 1, last - 1, Math.max(4, sh.getLastColumn())).clearContent();
+    if (list.length) sh.getRange(2, 1, list.length, 4).setValues(list.map(r => [r.q, r.a, r.quick ? 'Y' : '', r.memo].map(safeCell_)));
+    else sh.getRange(2, 1, 1, 4).setValues([['(비어 있음)', '', '', '']]);
+  } finally { lock.releaseLock(); }
+  return { success: true, count: list.length };
 }
 
 function helpPrompt_(q, history, src) {
@@ -3963,11 +3992,12 @@ function helpAsk_(req, s) {
   const toks = helpTokens_(q + ' ' + history.filter(h => h.role === 'user').map(h => h.text).slice(-1).join(' '));
   const src = [];
   // ① 앱 사용 안내 + FAQ 시트
-  let faq = [];
+  let faq = null;
   try { faq = helpFaq_(); } catch (_) {}
-  HELP_GUIDE.concat(faq).map(g => ({ g: g, s: helpScore_(g[0], toks) * 3 + helpScore_(g[1], toks) }))
-    .sort((a, b) => b.s - a.s).slice(0, 4).filter((x, i) => x.s > 0 || i < 2)
-    .forEach(x => src.push({ kind: '사용 안내', title: x.g[0], text: x.g[1] }));
+  if (!faq) faq = HELP_GUIDE.map(g => ({ q: g[0], a: g[1] }));   // 시트를 못 읽으면 기본값
+  faq.map(g => ({ g: g, s: helpScore_(g.q, toks) * 3 + helpScore_(g.a, toks) }))
+    .sort((a, b) => b.s - a.s).slice(0, 5).filter((x, i) => x.s > 0 || i < 2)
+    .forEach(x => src.push({ kind: '사용 안내', title: x.g.q, text: x.g.a }));
   // ② 화면이 보낸 MSDS 요약 (공개 정보)
   (Array.isArray(req.msds) ? req.msds : []).slice(0, 3).forEach(m => {
     src.push({ kind: 'MSDS', title: String(m.name || '').slice(0, 100), text: String(m.text || '').slice(0, 1200) });
@@ -4007,11 +4037,17 @@ function helpAsk_(req, s) {
 function helpOp_(req, s) {
   switch (req.op) {
     case 'help.ask': return helpAsk_(req, s);
-    case 'help.meta': return { success: true, hasKey: !!PROPS.getProperty('GEMINI_API_KEY'), kosha: !!PROPS.getProperty('KOSHA_KEY'), apis: dataApis_().filter(a => a.use).length };
+    case 'help.meta': {
+      let quick = [];
+      try { quick = helpFaq_().filter(r => r.quick).map(r => r.q).slice(0, 8); } catch (_) {}
+      return { success: true, hasKey: !!PROPS.getProperty('GEMINI_API_KEY'), kosha: !!PROPS.getProperty('KOSHA_KEY'), apis: dataApis_().filter(a => a.use).length, quick: quick };
+    }
   }
   const deny = requireAdmin_(s);
   if (deny) return deny;
   switch (req.op) {
+    case 'help.faqList': return { success: true, rows: helpFaq_(), defaults: HELP_GUIDE.map(g => ({ q: g[0], a: g[1], quick: !!g[2], memo: '기본값' })) };
+    case 'help.faqSave': return helpFaqSave_(req.rows);
     case 'kosha.status': return { success: true, hasKey: !!PROPS.getProperty('KOSHA_KEY'), key: koshaMask_(), apis: dataApis_(), kinds: DATA_API_KINDS, today: todayKst_() };
     case 'kosha.setKey': {
       const k = String(req.key || '').trim();
