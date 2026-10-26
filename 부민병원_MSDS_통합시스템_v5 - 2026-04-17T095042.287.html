@@ -10,7 +10,14 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v21.1 (2026-10-23)
+  부민병원 MSDS 통합시스템 v21.2 (2026-10-23)
+
+  ★★★ v21.2 (2026-10-23) — AI 도우미 질문 · 답 관리 (서버 v21.2):
+    - 관리자 → 설정 → 'AI 도우미 질문 · 답': 찾기 · 추가 · 삭제 · 빠른 질문(창 단추) · 메모 → 시트 AI도우미_FAQ에 저장, 바로 적용
+    - 처음엔 기본 질문 · 답 12개를 채워 넣음 (신규입사자 교육 기한 = 입사 후 3일 · 새 물질 = 취급 전 · 특별교육 16시간 등 사내 규정 숫자)
+    - AI 도우미 창의 빠른 질문 단추 = 관리자가 [빠른 질문]에 체크한 것
+    - 새 물질 교육 기한: 14일 → 취급 전 (사내 규정, 서버 NEWCHEM_DAYS = 0 → 기한 = 등록일) · 대시보드 '취급 전 교육'
+    - AI 도우미 MSDS 찾기: 한글 · 영어 · 흔한 이름 · CAS (산화에틸렌 → ETHYLENE OXIDE 75-21-8)
 
   ★★★ v21.1 (2026-10-23) — 화면 리디자인 (확정 시안: 병원 그린 #67AF28 · 새 로고 · 로그인 하나로):
     - 색: 병원 그린 #67AF28 계열로 통일 (버튼 · 선택 메뉴 · 진행 막대 · 표 머리), 진한 초록 #345C12 · 글자 초록 #3F7518
@@ -4669,7 +4676,7 @@ input.apv-in[type=text]{width:110px}
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">' +
         kpi('교육 대상', T.total, '제외 ' + T.excluded + '명') + kpi('이수', T.done, T.total ? Math.round(T.done / T.total * 100) + '%' : '', '#345C12') +
         kpi('특별교육 진행중', T.progress, '16시간 미달', '#2B4C7E') + kpi('미이수', T.missing, '기한 초과 ' + T.overdue + '명', T.missing ? '#A3302A' : '') +
-        kpi('새 물질 교육 대기', T.newChem, r.rules.newChemDays + '일 안에', T.newChem ? '#6E4A00' : '') + '</div>' +
+        kpi('새 물질 교육 대기', T.newChem, r.rules.newChemDays ? r.rules.newChemDays + '일 안에' : '취급 전 교육', T.newChem ? '#6E4A00' : '') + '</div>' +
       '<div style="font-size:13px;color:#5A5650;margin-bottom:8px">대상: 화학물질 사용 부서 재직자 (기본 모두 대상, <b>관리자 · 부서장이 \'취급 안 함\'으로 확인한 사람만 제외</b>, 일지를 쓴 사람은 대상). 특별교육은 현장 교육 + 공통 온라인 8시간 ≥ 16시간이면 이수, 남은 시간은 첫 교육일부터 3개월 안에.</div>' +
       '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%"><tr>' +
         ['부서', '교육', '대상', '이수율', '진행중', '미이수', '기한 초과', '새 물질', '제외'].map(function(h){ return '<th style="text-align:left;padding:8px;background:#E2F0D5;color:#345C12;font-size:13px;white-space:nowrap">' + h + '</th>'; }).join('') + '</tr>' +
@@ -4696,7 +4703,7 @@ input.apv-in[type=text]{width:110px}
       var chem = (prompt('새로 들인 물질(제품) 이름') || '').trim(); if(!chem) return;
       var deps = (prompt('사용 부서 (쉼표로 구분, 병동 전체는 "병동")') || '').split(',').map(function(x){ return x.trim(); }).filter(Boolean); if(!deps.length) return;
       var x = await BMAUTH.post('edu.newChem', { chem: chem, depts: deps });
-      say(x.success ? deps.join(', ') + '에 새 물질 교육 대상을 만들었습니다 (기한 ' + r.rules.newChemDays + '일)' : (x.error || '실패'), x.success ? 'ok' : 'err');
+      say(x.success ? deps.join(', ') + '에 새 물질 교육 대상을 만들었습니다 (' + (r.rules.newChemDays ? '기한 ' + r.rules.newChemDays + '일' : '취급 전 교육') + ')' : (x.error || '실패'), x.success ? 'ok' : 'err');
       board();
     };
   }
@@ -4733,7 +4740,7 @@ input.apv-in[type=text]{width:110px}
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.1';
+  var SERVER_EXPECT = 'v21.2';
   var esc = function(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
   var recs = function(k){ try{ return JSON.parse(localStorage.getItem(k) || '[]') || []; }catch(_){ return []; } };
   var post = function(op, b){ return window.BMAUTH ? BMAUTH.post(op, b || {}).catch(function(e){ return { success: false, error: e.message }; }) : Promise.resolve({ success: false, error: '로그인 필요' }); };
@@ -4902,6 +4909,11 @@ input.apv-in[type=text]{width:110px}
         '<div id="cfg-api-list" style="display:flex;flex-direction:column;gap:8px">불러오는 중…</div>' +
         '<span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button type="button" class="cfg-b" data-c="apiadd">+ API 추가</button><button type="button" class="cfg-b p" data-c="apisave">기록 저장</button></span>' +
         '<div id="cfg-ks-test" style="margin-top:6px;font-size:13px;white-space:pre-wrap;word-break:break-all"></div></section>' +
+      '<section class="cfg-c" style="grid-column:1/-1"><h4>AI 도우미 질문 · 답 <small style="font-weight:500;color:#5A5650">AI가 가장 먼저 근거로 쓰는 답 — 사내 규정 · 기한 · 연락처를 여기서 고침</small></h4>' +
+        '<p>질문 · 답은 구글 시트 <b>AI도우미_FAQ</b>에 저장됩니다. [빠른 질문]에 체크하면 AI 도우미 창에 단추로 보입니다 (최대 8개). 답은 짧고 정확하게 — 숫자(기한 · 시간 · 내선)는 사내 규정과 같게.</p>' +
+        '<span style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input id="cfg-faq-q" type="search" placeholder="질문 · 답에서 찾기" aria-label="질문 찾기" style="height:34px;padding:0 8px;border:1px solid #C6C3BB;border-radius:4px;font:inherit;width:240px">' +
+          '<button type="button" class="cfg-b" data-c="faqadd">+ 질문 추가</button><button type="button" class="cfg-b" data-c="faqdef">기본값 중 빠진 것 넣기</button><button type="button" class="cfg-b p" data-c="faqsave">질문 · 답 저장</button><span id="cfg-faq-msg" style="font-size:13px"></span></span>' +
+        '<div id="cfg-faq-list" style="display:flex;flex-direction:column;gap:8px;margin-top:10px">불러오는 중…</div></section>' +
       '<section class="cfg-c"><h4>이 PC 저장 공간 · 계정</h4><dl><dt>사용량</dt><dd>' + Math.round(used / 1024).toLocaleString() + 'KB / 약 5MB</dd>' +
         '<dt>파일 저장소</dt><dd>구글 드라이브 (서버 경유) · 옛 파일은 ' + esc(C.ghRepo || D.ghRepo || 'buminhealth/health') + '</dd></dl>' +
         '<span style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="cfg-b" data-c="storage">저장 공간 안내</button><button type="button" class="cfg-b" data-c="sheet">구글 시트 열기</button><button type="button" class="cfg-b" data-c="logout" style="color:#A3302A">로그아웃</button></span></section>' +
@@ -4924,6 +4936,21 @@ input.apv-in[type=text]{width:110px}
                   document.getElementById('cfg-ks').innerHTML = x.success && x.hasKey ? '<span class="cfg-ok">저장됨</span> ' + esc(x.key) : '<span class="cfg-bad">없음</span>';
                   document.getElementById('cfg-ks-key').value = '';
                 },
+                faqadd: function(){ faqRead(); faqRows.unshift({ q: '', a: '', quick: false, memo: '' }); faqFilter = ''; var f = document.getElementById('cfg-faq-q'); if(f) f.value = ''; faqDraw(); var t = document.querySelector('#cfg-faq-list [data-faq="0"] [data-f="q"]'); if(t) t.focus(); },
+                faqdef: function(){
+                  faqRead();
+                  var have = {}; faqRows.forEach(function(r){ have[r.q] = 1; });
+                  var add = faqDefaults.filter(function(d){ return !have[d.q]; });
+                  faqRows = faqRows.concat(add); faqDraw();
+                  document.getElementById('cfg-faq-msg').innerHTML = add.length ? '<span class="cfg-ok">기본값 ' + add.length + '개를 아래에 넣었습니다 — [질문 · 답 저장]을 눌러야 반영</span>' : '빠진 기본값이 없습니다';
+                },
+                faqsave: async function(){
+                  faqRead();
+                  var m = document.getElementById('cfg-faq-msg'); m.textContent = '저장하는 중…';
+                  var x = await post('help.faqSave', { rows: faqRows });
+                  m.innerHTML = x.success ? '<span class="cfg-ok">질문 · 답 ' + x.count + '개를 저장했습니다 — AI 도우미에 바로 적용</span>' : '<span class="cfg-bad">' + esc(x.error || '실패') + '</span>';
+                  if(x.success){ var r = await post('help.faqList', {}); if(r.success){ faqRows = r.rows; faqDraw(); } }
+                },
                 apiadd: function(){ apiRows.push({ id: '', name: '', url: '', kw: 'keyword', extra: '', kind: '자료', use: true, from: '', to: '', memo: '' }); apiDraw(); },
                 apisave: async function(){
                   apiRead();
@@ -4941,6 +4968,39 @@ input.apv-in[type=text]{width:110px}
                 sheet: function(){ window.open('https://docs.google.com/spreadsheets/d/1kFRIyXZX8aTgQR2w5MC0Ty66B9ltKrWj3Wz96D0mKIs/edit', '_blank'); }, logout: function(){ adminLogout(); } };
     host.querySelectorAll('[data-c]').forEach(function(b){ b.onclick = function(){ try{ act[b.getAttribute('data-c')](); }catch(e){ console.warn(e); } }; });
     var ocIn = document.getElementById('cfg-law-oc'); if(ocIn) ocIn.onkeydown = function(e){ if(e.key === 'Enter') act.lawoc(); };
+    // v21.2 AI 도우미 질문 · 답 (시트 AI도우미_FAQ) — 찾기 · 추가 · 삭제 · 빠른 질문 · 저장
+    var faqRows = [], faqDefaults = [], faqFilter = '';
+    function faqRead(){
+      document.querySelectorAll('#cfg-faq-list [data-faq]').forEach(function(r){
+        var a = faqRows[+r.getAttribute('data-faq')]; if(!a) return;
+        r.querySelectorAll('[data-f]').forEach(function(el){ var f = el.getAttribute('data-f'); a[f] = el.type === 'checkbox' ? el.checked : el.value.trim(); });
+      });
+    }
+    function faqDraw(){
+      var box = document.getElementById('cfg-faq-list'); if(!box) return;
+      var fl = faqFilter.toLowerCase(), shown = 0;
+      var ta = 'width:100%;box-sizing:border-box;padding:8px;border:1px solid #C6C3BB;border-radius:4px;font:inherit;font-size:13px;line-height:1.55';
+      var html = faqRows.map(function(r, i){
+        if(fl && (r.q + ' ' + r.a + ' ' + r.memo).toLowerCase().indexOf(fl) < 0) return '';
+        shown++;
+        return '<div data-faq="' + i + '" style="border:1px solid #DCEBCD;border-radius:6px;padding:10px;background:#FAFCF7;display:flex;flex-direction:column;gap:6px">' +
+          '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b style="color:#345C12;min-width:22px">Q</b><input data-f="q" value="' + esc(r.q) + '" placeholder="질문 (예: 신규입사자 교육 기한은?)" aria-label="질문" style="' + ta + ';flex:1 1 360px;width:auto;height:36px">' +
+            '<label style="display:flex;gap:4px;align-items:center;font-size:13px"><input data-f="quick" type="checkbox"' + (r.quick ? ' checked' : '') + ' style="accent-color:#67AF28"> 빠른 질문</label>' +
+            '<button type="button" class="cfg-b" data-faq-del="' + i + '" style="color:#A3302A">삭제</button></div>' +
+          '<div style="display:flex;gap:6px"><b style="color:#345C12;min-width:22px">A</b><textarea data-f="a" rows="3" placeholder="답 (사내 규정 · 기한 · 연락처는 정확하게)" aria-label="답" style="' + ta + '">' + esc(r.a) + '</textarea></div>' +
+          '<div style="display:flex;gap:6px;align-items:center"><span style="min-width:22px"></span><input data-f="memo" value="' + esc(r.memo) + '" placeholder="메모 (근거 규정 · 고친 날짜 등, AI에는 안 보냄)" aria-label="메모" style="' + ta + ';height:32px"></div></div>';
+      }).join('');
+      box.innerHTML = html || '<span style="color:#5A5650">' + (faqRows.length ? '찾는 질문이 없습니다' : '질문 · 답이 없습니다 — [+ 질문 추가] 또는 [기본값 중 빠진 것 넣기]') + '</span>';
+      box.insertAdjacentHTML('afterbegin', '<span style="font-size:13px;color:#5A5650">전체 ' + faqRows.length + '개' + (fl ? ' · 찾은 것 ' + shown + '개' : '') + ' · 빠른 질문 ' + faqRows.filter(function(r){ return r.quick; }).length + '개</span>');
+      box.querySelectorAll('[data-faq-del]').forEach(function(b){ b.onclick = function(){ faqRead(); var i = +b.getAttribute('data-faq-del'); if(confirm('이 질문 · 답을 지울까요? ([질문 · 답 저장]을 눌러야 반영)')){ faqRows.splice(i, 1); faqDraw(); } }; });
+    }
+    var faqQ = document.getElementById('cfg-faq-q');
+    if(faqQ) faqQ.oninput = function(){ faqRead(); faqFilter = faqQ.value.trim(); faqDraw(); };
+    post('help.faqList', {}).then(function(r){
+      var box = document.getElementById('cfg-faq-list'); if(!box) return;
+      if(!r.success){ box.innerHTML = '<span class="cfg-bad">' + esc(/unknown op/.test(r.error || '') ? '서버 v21.2 이상 필요 (Code.gs 배포)' : (r.error || '불러오지 못했습니다')) + '</span>'; return; }
+      faqRows = r.rows || []; faqDefaults = r.defaults || []; faqDraw();
+    });
     // v21.1 공공데이터포털 API: 인증키 상태 · API 기록 (줄마다 이름 · End Point · 변수 · 활용기간 · 메모 · 사용)
     var apiRows = [], apiKinds = ['자료', '재해사례', '법령', '기타'], apiToday = '';
     var inp = 'height:32px;padding:0 8px;border:1px solid #C6C3BB;border-radius:4px;font:inherit;font-size:13px;box-sizing:border-box';
@@ -18502,27 +18562,95 @@ self.addEventListener('fetch',e=>{
   var hist = [], busy = false, box, log, ta, go;
   function post(op, b){ return window.BMAUTH ? BMAUTH.post(op, b || {}).catch(function(e){ return { success: false, error: '서버 연결 실패: ' + e.message }; }) : Promise.resolve({ success: false, error: '서버 연결 준비 중입니다' }); }
   // 질문에 나온 물질을 화면의 MSDS 목록에서 찾아 요약을 함께 보냄 (공개 정보만)
+  // v21.2: 한글 · 영어 이름 · 흔히 부르는 이름 → CAS 번호 사전 (MSDS 자료에 영어로만 적힌 성분도 한글 질문으로 찾음)
+  var SYN = [
+    ['75-21-8', '산화에틸렌 에틸렌옥사이드 에틸렌옥시드 이오가스 eo가스 eogas 멸균가스 ethyleneoxide oxirane'],
+    ['50-00-0', '포름알데히드 포름알데하이드 프롬알데히드 포르말린 포르마린 formaldehyde formalin 포말린'],
+    ['64-17-5', '에탄올 에틸알코올 에틸알콜 알코올 알콜 소독용알코올 주정 ethanol ethylalcohol alcohol'],
+    ['67-56-1', '메탄올 메틸알코올 메틸알콜 methanol methylalcohol'],
+    ['67-63-0', '이소프로필알코올 이소프로판올 아이소프로필알코올 ipa isopropanol isopropylalcohol 2-propanol'],
+    ['7722-84-1', '과산화수소 hydrogenperoxide 과수'],
+    ['79-21-0', '과산화아세트산 과초산 과아세트산 peraceticacid peroxyaceticacid'],
+    ['64-19-7', '아세트산 초산 빙초산 aceticacid'],
+    ['7681-52-9', '차아염소산나트륨 차아염소산 락스 유한락스 염소소독제 sodiumhypochlorite hypochlorite bleach'],
+    ['1310-73-2', '수산화나트륨 가성소다 양잿물 sodiumhydroxide causticsoda naoh'],
+    ['1310-58-3', '수산화칼륨 수산화포타슘 가성칼리 potassiumhydroxide koh'],
+    ['7647-01-0', '염산 염화수소 hydrochloricacid hydrogenchloride hcl'],
+    ['7664-41-7', '암모니아 ammonia'],
+    ['1336-21-6', '암모니아수 수산화암모늄 ammoniumhydroxide'],
+    ['67-64-1', '아세톤 acetone'],
+    ['1330-20-7', '자일렌 크실렌 키실렌 xylene'],
+    ['108-88-3', '톨루엔 toluene'],
+    ['100-41-4', '에틸벤젠 ethylbenzene'],
+    ['107-21-1', '에틸렌글리콜 부동액 ethyleneglycol ethanediol'],
+    ['57-55-6', '프로필렌글리콜 propyleneglycol'],
+    ['111-76-2', '부톡시에탄올 뷰톡시에탄올 에틸렌글리콜모노부틸에테르 butoxyethanol'],
+    ['112-34-5', '디에틸렌글리콜모노부틸에테르 디에틸렌글리콜모노뷰틸에테르 부틸카비톨'],
+    ['111-90-0', '디에틸렌글리콜모노에틸에테르 카비톨 diethyleneglycolmonoethylether'],
+    ['7553-56-2', '요오드 아이오딘 iodine'],
+    ['7681-11-0', '요오드화칼륨 아이오딘화칼륨 potassiumiodide'],
+    ['101-68-8', '메틸렌디페닐디이소시아네이트 mdi 이소시아네이트 diphenylmethanediisocyanate'],
+    ['106-97-8', '부탄 뷰테인 butane'],
+    ['74-98-6', '프로판 프로페인 propane'],
+    ['108-94-1', '사이클로헥사논 시클로헥사논 cyclohexanone'],
+    ['78-83-1', '이소부탄올 아이소뷰탄올 isobutanol'],
+    ['64-18-6', '개미산 포름산 formicacid'],
+    ['7440-02-0', '니켈 nickel'],
+    ['7439-96-5', '망간 manganese'],
+    ['7440-47-3', '크롬 chromium'],
+    ['14807-96-6', '활석 탤크 talc'],
+    ['7631-86-9', '실리카 이산화규소 silica silicondioxide'],
+    ['13463-67-7', '이산화티타늄 titaniumdioxide'],
+    ['1317-65-3', '석회석 limestone 탄산칼슘'],
+    ['1305-62-0', '수산화칼슘 소석회 calciumhydroxide'],
+    ['497-19-8', '탄산나트륨 소다회 sodiumcarbonate'],
+    ['7647-14-5', '염화나트륨 소금 sodiumchloride'],
+    ['100-51-6', '벤질알코올 benzylalcohol'],
+    ['56-81-5', '글리세린 글리세롤 glycerin glycerol']
+  ];
+  var norm = function(t){ return String(t || '').toLowerCase().replace(/[\s·,()\[\]{}'"\/\-_.]+/g, ''); };
+  var STOP = /^(노출|흡입|접촉|피부|어떻게|무엇|응급|조치|방법|증상|됐어|되었|했어|있어|알려|주세요|해줘|물질|화학|화학물질|제품|성분|부서|사용|취급|교육|보호구)/;
+  function qTokens(q){
+    return String(q || '').toLowerCase().replace(/[^0-9a-z가-힣\s-]/g, ' ').split(/\s+/)
+      .map(function(w){ return w.replace(/(에서|에게|으로|이랑|하고|까지|부터|이나|에|이|가|을|를|은|는|의|로|와|과|도|만|나|요)$/, ''); })
+      .filter(function(w){ return w.length >= 2 && !STOP.test(w); });
+  }
   function msdsFor(q){
     var list = (typeof CHEMS !== 'undefined' && Array.isArray(CHEMS)) ? CHEMS : [];
-    var t = String(q || '').toLowerCase().replace(/\s+/g, '');
+    var raw = String(q || ''), t = norm(q), toks = qTokens(q).map(norm).filter(function(w){ return w.length >= 2; });
     if(!t) return [];
+    var want = {};   // 질문에 나온 이름 → CAS
+    SYN.forEach(function(e){
+      if(raw.indexOf(e[0]) >= 0) want[e[0]] = 1;
+      e[1].split(' ').forEach(function(n){ n = norm(n); if(n.length >= 2 && t.indexOf(n) >= 0) want[e[0]] = 1; });
+    });
+    var casClean = function(c){ return String(c || '').replace(/[^0-9-]/g, '').replace(/^-+|-+$/g, ''); };
+    var hitTok = function(name){
+      var n = norm(name); if(n.length < 2) return 0;
+      if(t.indexOf(n) >= 0) return 3;
+      return toks.some(function(w){ return w.length >= 3 && n.indexOf(w) >= 0; }) ? 2 : 0;
+    };
     return list.map(function(p){
-      var name = String(p.name || ''), n = name.toLowerCase().replace(/\s+/g, '');
-      var comps = (p.components || []).map(function(c){ return { n: String(c.compName || c.name || ''), cas: String(c.casNumber || c.cas || '') }; });
-      var hit = (n.length >= 2 && (t.indexOf(n) >= 0 || (n.length >= 3 && n.indexOf(t) >= 0))) ? 3 : 0;
-      comps.forEach(function(c){ var cn = c.n.toLowerCase().replace(/\s+/g, ''); if((cn.length >= 2 && t.indexOf(cn) >= 0) || (c.cas && t.indexOf(c.cas) >= 0)) hit = Math.max(hit, 2); });
-      return { p: p, s: hit, comps: comps };
-    }).filter(function(x){ return x.s > 0; }).sort(function(a, b){ return b.s - a.s; }).slice(0, 3).map(function(x){
+      var comps = (p.components || []).map(function(c){ return { n: String(c.compName || c.name || ''), cas: casClean(c.casNumber || c.cas) }; });
+      var s = Math.max(hitTok(p.name) ? hitTok(p.name) + 1 : 0, 0);
+      comps.forEach(function(c){
+        if(c.cas && (want[c.cas] || (c.cas.length >= 5 && raw.indexOf(c.cas) >= 0))) s = Math.max(s, 5);
+        s = Math.max(s, hitTok(c.n));
+      });
+      return { p: p, s: s, comps: comps };
+    }).filter(function(x){ return x.s >= 2; }).sort(function(a, b){ return b.s - a.s; }).slice(0, 3).map(function(x){
       var p = x.p;
       return { name: p.name, text: [
         '제조사: ' + (p.manufacturer || '-') + ' / 용도: ' + (p.usage || '-') + ' / 취급부서: ' + (p.departments || []).join(', '),
         '그림문자: ' + (p.icons || []).map(function(i){ return i.label; }).join(', '),
-        '관리대상: ' + (p.targetManage ? '해당' : '미해당') + ' / 특별관리: ' + (p.specialManage ? '해당' : '미해당') + ' / 작업환경측정: ' + (p.workEnv || '-') + ' / 특수건강진단: ' + (p.healthCheck || '-'),
+        '관리대상: ' + (bmTruthyS(p.targetManage) ? '해당' : '미해당') + ' / 특별관리: ' + (bmTruthyS(p.specialManage) ? '해당' : '미해당') + ' / 작업환경측정: ' + (p.workEnv || '-') + ' / 특수건강진단: ' + (p.healthCheck || '-'),
         '구성성분: ' + x.comps.map(function(c){ return c.n + (c.cas ? '(' + c.cas + ')' : ''); }).join(', '),
         '응급조치: ' + String(p.emergency || '').replace(/\s+/g, ' ')
       ].join('\n') };
     });
   }
+  function bmTruthyS(v){ try{ if(typeof bmTruthy === 'function') return bmTruthy(v); }catch(_){} return v === true || /^(true|해당|o|●|y)$/i.test(String(v || '').trim()); }
+  window.BMHELP_MSDS = msdsFor;   // 시험 · 점검용
   function add(kind, html){
     var d = document.createElement('div'); d.className = 'bh-m ' + kind; d.innerHTML = html; log.appendChild(d); log.scrollTop = log.scrollHeight; return d;
   }
@@ -18565,7 +18693,12 @@ self.addEventListener('fetch',e=>{
     go.onclick = function(){ ask(ta.value); };
     ta.onkeydown = function(e){ if(e.key === 'Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); ask(ta.value); } if(e.key === 'Escape') close(); };
     add('a', '안녕하세요. 부민병원 안전보건 <b>AI 도우미</b>입니다.\n시스템 사용법, 교육 내용, 화학물질(MSDS), 산업안전보건 법령, 위험성평가를 물어보세요.');
-    chips(QUICK);
+    var first = document.createElement('div'); log.appendChild(first);
+    post('help.meta', {}).then(function(r){   // 빠른 질문: 관리자가 설정에서 고른 것 (없으면 기본)
+      var list = r && r.success && r.quick && r.quick.length ? r.quick : QUICK;
+      var tmp = log; log = document.createElement('div'); chips(list); var w = log.firstChild; log = tmp;
+      if(w) first.replaceWith(w); else first.remove();
+    });
   }
   function open(){ if(!box) build(); box.classList.add('on'); btn.setAttribute('aria-expanded', 'true'); setTimeout(function(){ ta.focus(); }, 50); }
   function close(){ if(box) box.classList.remove('on'); btn.setAttribute('aria-expanded', 'false'); btn.focus(); }
