@@ -205,7 +205,52 @@ function slide5C() {
   });
 }
 
-if (MODE === 'variants') { slide5B('시안 B — 누락(좌) · 시간(우) 두 패널'); slide5C(); }
+
+// 5장 시안 D — 월별 이행률(목표선) + 파레토
+function slide5D() {
+  const s = slide();
+  chrome(s, 'PLAN · 현황 분석', 0, H5, '시안 D — 월별 이행률(좌) · 행정시간 파레토(우)', 5);
+  card(s, 64, 176, 660, 480); card(s, 744, 176, 472, 480);
+  // 왼쪽: 월별 이행률 + 100% 목표선
+  T(s, '83%', 96, 200, 200, 70, { fontFace: NUM, fontSize: 52, bold: true });
+  T(s, '2025년 법정교육 이행률 (106건 중 88건)\n12개월 중 8개월에서 누락 발생', 280, 212, 420, 50, { fontSize: 13, color: K.sub, lineSpacingMultiple: 1.35 });
+  const ox = 132, oy = 580, ch = 250, cw = 560, slot = cw / 12, bw = slot * 0.6;
+  [0, 50, 100].forEach(v => { const y = oy - v / 100 * ch; hl(s, ox, y, cw, K.line); T(s, v + '%', ox - 40, y - 8, 34, 16, { fontFace: NUM, fontSize: 9, color: K.sub, align: 'right' }); });
+  s.addShape(pres.shapes.LINE, { ...B(ox, oy - ch, cw, 0), line: { color: K.navy, width: 1, dashType: 'dash' }, objectName: nm() });
+  T(s, '목표 100%', ox + cw - 80, oy - ch - 20, 80, 16, { fontSize: 10, bold: true, color: K.navy, align: 'right' });
+  DONE.forEach((d, i) => {
+    const t = d + MISS[i], r = d / t, h = r * ch, x = ox + i * slot + (slot - bw) / 2, gap = MISS[i] > 0;
+    bar(s, x, oy - h, bw, h, gap ? K.orange : K.grey);
+    if (gap) T(s, Math.round(r * 100) + '', x - 8, oy - h - 18, bw + 16, 14, { fontFace: NUM, fontSize: 9, bold: true, color: K.orangeT, align: 'center' });
+    T(s, MONTHS[i], x - 8, oy + 6, bw + 16, 14, { fontSize: 9, color: K.sub, align: 'center' });
+  });
+  T(s, '주황 = 누락이 있었던 달 — 특정 시기가 아니라 1년 내내 반복됐다', 96, 616, 600, 20, { fontSize: 12, bold: true, color: K.orangeT });
+  // 오른쪽: 파레토
+  T(s, '78%', 776, 200, 170, 70, { fontFace: NUM, fontSize: 52, bold: true, color: K.navy });
+  T(s, '두 단계(결재 · 직접 제출)가\n33:48 중 26:24를 차지', 946, 212, 250, 50, { fontSize: 13, color: K.sub, lineSpacingMultiple: 1.35 });
+  const P = [['결재', 1164], ['직접 제출', 420], ['초안', 138], ['파일링', 126], ['출력·서명', 90], ['전송', 60], ['사진', 30]];
+  const px = 800, py = 580, ph = 250, pw = 380, ps = pw / 7, pb = ps * 0.62, max = 1164;
+  hl(s, px, py, pw, K.line);
+  let cum = 0; const pts = [];
+  P.forEach((r, i) => {
+    const h = r[1] / max * ph, x = px + i * ps + (ps - pb) / 2, key = i < 2;
+    bar(s, x, py - h, pb, h, key ? K.navy : K.grey);
+    T(s, fmt(r[1]), x - 10, py - h - 16, pb + 20, 14, { fontFace: NUM, fontSize: 9, bold: true, color: key ? K.navy : K.sub, align: 'center' });
+    T(s, r[0], x - 12, py + 6, pb + 24, 14, { fontSize: 8, color: K.sub, align: 'center' });
+    cum += r[1]; pts.push([x + pb / 2, py - cum / 2028 * ph]);
+  });
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [x1, y1] = pts[i], [x2, y2] = pts[i + 1];
+    s.addShape(pres.shapes.LINE, { ...B(x1, Math.min(y1, y2), x2 - x1, Math.abs(y2 - y1)), flipV: y2 < y1, line: { color: K.blue, width: 1.5 }, objectName: nm() });
+  }
+  pts.forEach((pt, i) => dot(s, pt[0] - 4, pt[1] - 4, 8, K.blue));
+  T(s, '누적 78%', pts[1][0] + 10, pts[1][1] + 8, 80, 16, { fontFace: NUM, fontSize: 10, bold: true, color: K.blue });
+  T(s, '누적 100% = 33:48', px + pw - 120, py - ph - 20, 120, 16, { fontFace: NUM, fontSize: 9, color: K.sub, align: 'right' });
+  T(s, '파레토: 상위 2단계 개선 = 행정시간 78% 해결', 776, 616, 420, 20, { fontSize: 12, bold: true, color: K.navy });
+}
+
+if (MODE === 'v2') { slide5B('시안 B — 현행 (월별 건수 · 공정 순서 막대)'); slide5D(); }
+else if (MODE === 'variants') { slide5B('시안 B — 누락(좌) · 시간(우) 두 패널'); slide5C(); }
 else { deck14(); }
 
 (async () => { await pres.writeFile({ fileName: OUT }); await applyTheme(OUT, THEME); console.log('ok', MODE); })();
