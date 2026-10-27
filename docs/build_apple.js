@@ -82,8 +82,8 @@ function deck14() {
     const s = slide();
     chrome(s, 'CONTENTS', -1, '목차', 'PDCA 4단계 순서로 말씀드립니다', 2);
     const cw = (1152 - 3 * 20) / 4;
-    [['P', 'Plan', '주제 선정 배경\n현황 분석\n지표 정의 · 목표\n원인 분석 · 개선 전략', 'Slide 04 – 07'], ['D', 'Do', '6대 모듈 구축\n플랫폼 시연', 'Slide 08'],
-      ['C', 'Check', '법정교육 준수율\n페이퍼리스 전환율\n행정 소요시간', 'Slide 09 – 10'], ['A', 'Act', '표준화\nAI 통합 플랫폼 고도화\n결론 및 제언', 'Slide 11 – 12']].forEach((c, i) => {
+    [['P', 'Plan', '주제 선정 배경\n팀 구성\n지표 정의 · 자료수집\n현황 분석\n원인 분석 · 개선 전략', 'Slide 03 – 08'], ['D', 'Do', '6대 모듈 구축\n플랫폼 시연', 'Slide 09'],
+      ['C', 'Check', '법정교육 준수율\n페이퍼리스 전환율\n행정 소요시간', 'Slide 10 – 11'], ['A', 'Act', '표준화\nAI 통합 플랫폼 고도화\n결론 및 제언', 'Slide 12 – 13']].forEach((c, i) => {
       const x = 64 + i * (cw + 20);
       card(s, x, 176, cw, 470);
       T(s, c[0], x + 32, 206, 120, 90, { fontFace: NUM, fontSize: 64, bold: true, color: K.navy });
@@ -93,10 +93,31 @@ function deck14() {
     });
     s.addNotes('- "PDCA 순서로 말씀드리겠습니다." (5초, 바로 넘김)');
   }
-  // ───── 03 팀 · 일정 (확정 구성: 팀원 카드 + 간트)
+  // ───── 03 배경 (확정 구성: 3카드 + 결론 바)
   {
     const s = slide();
-    chrome(s, 'TEAM', -1, '3명의 팀이 외부 개발 없이 기획부터 표준화까지 직접 수행했다', '팀 구성 · 1–10월 활동 일정', 3);
+    chrome(s, 'PLAN · 주제 선정 배경', 0, '법은 실시간 증빙을 요구했지만, 안전보건 기록은 100% 종이였다', '주제 선정 배경 — 법 · 현장 · 경영 세 측면', 3);
+    const cw = (1152 - 2 * 20) / 3;
+    [['01', '법 · 인증', '산업안전보건법 제29조\n중대재해처벌법\n의료기관 인증기준 10.7 · 11.3', '실시간 증빙 요구'],
+      ['02', '현장', '교육일지 100% 수기 작성\n대면 서명 · 오프라인 결재\n바인더 편철 보관', '건당 최대 33:48'],
+      ['03', '경영 (ESG)', '연 94건 종이 출력 · 보관\n친환경 경영 방향과 불일치\nMSDS 개정본 비치 확인 어려움', '연 94건 출력']].forEach((c, i) => {
+      const x = 64 + i * (cw + 20);
+      card(s, x, 176, cw, 340);
+      T(s, c[0], x + 32, 204, 80, 24, { fontFace: NUM, fontSize: 16, bold: true, color: K.navy });
+      T(s, c[1], x + 32, 236, cw - 64, 34, { fontSize: 22, bold: true });
+      T(s, c[2], x + 32, 292, cw - 64, 120, { fontSize: 15, color: '3A3A3C', lineSpacingMultiple: 1.65 });
+      hl(s, x + 32, 430, cw - 64);
+      T(s, c[3], x + 32, 448, cw - 64, 40, { fontFace: NUM, fontSize: 22, bold: true, color: i === 1 ? K.navy : K.ink });
+    });
+    card(s, 64, 540, 1152, 116, K.navy, 22);
+    T(s, '모바일 기반 통합 디지털 안전보건 체계가 필요했습니다', 108, 540, 960, 116, { fontSize: 24, bold: true, color: K.w, valign: 'middle' });
+    T(s, '→', 1120, 540, 60, 116, { fontFace: NUM, fontSize: 26, bold: true, color: '4DA3FF', valign: 'middle', align: 'right' });
+    s.addNotes('- 교육 미이행 시 과태료, 중대재해 시 교육 이행 기록이 핵심 증빙\n- 인증 조사 때 바인더를 넘기며 누락자를 찾던 경험\n- 근거: 산안법 제29조, 인증기준 10.7 · 11.3');
+  }
+  // ───── 04 팀 · 일정 (확정 구성: 팀원 카드 + 간트)
+  {
+    const s = slide();
+    chrome(s, 'PLAN · 팀 구성', 0, '3명의 팀이 외부 개발 없이 기획부터 표준화까지 직접 수행했다', '팀 구성 · 1–10월 활동 일정', 4);
     const cw = (1152 - 2 * 20) / 3;
     [['김', '김광현', '팀장', '활동 총괄'], ['장', '장은선', '팀원 · 보건관리자', '플랫폼 기획 · 직접 개발'], ['장', '장종문', '팀원 · 안전관리자', 'MSDS · AI 위험성평가']].forEach((m, i) => {
       const x = 64 + i * (cw + 20);
@@ -122,26 +143,94 @@ function deck14() {
     });
     s.addNotes('- 김광현: 총괄 / 장은선(보건관리자): 플랫폼 기획 · 직접 코딩 / 장종문(안전관리자): MSDS · AI 위험성평가\n- 4월 1주 프로토타입 → 고위험 부서 우선 → 전 부서 확대\n- 8~10월 표준화 이후 AI 고도화 (Slide 11)');
   }
-  // ───── 04 배경 (확정 구성: 3카드 + 결론 바)
+
+  // ───── 05 지표 정의 · 자료수집
   {
     const s = slide();
-    chrome(s, 'PLAN · 주제 선정 배경', 0, '법은 실시간 증빙을 요구했지만, 안전보건 기록은 100% 종이였다', '주제 선정 배경 — 법 · 현장 · 경영 세 측면', 4);
-    const cw = (1152 - 2 * 20) / 3;
-    [['01', '법 · 인증', '산업안전보건법 제29조\n중대재해처벌법\n의료기관 인증기준 10.7 · 11.3', '실시간 증빙 요구'],
-      ['02', '현장', '교육일지 100% 수기 작성\n대면 서명 · 오프라인 결재\n바인더 편철 보관', '건당 최대 33:48'],
-      ['03', '경영 (ESG)', '연 94건 종이 출력 · 보관\n친환경 경영 방향과 불일치\nMSDS 개정본 비치 확인 어려움', '연 94건 출력']].forEach((c, i) => {
-      const x = 64 + i * (cw + 20);
-      card(s, x, 176, cw, 340);
-      T(s, c[0], x + 32, 204, 80, 24, { fontFace: NUM, fontSize: 16, bold: true, color: K.navy });
-      T(s, c[1], x + 32, 236, cw - 64, 34, { fontSize: 22, bold: true });
-      T(s, c[2], x + 32, 292, cw - 64, 120, { fontSize: 15, color: '3A3A3C', lineSpacingMultiple: 1.65 });
-      hl(s, x + 32, 430, cw - 64);
-      T(s, c[3], x + 32, 448, cw - 64, 40, { fontFace: NUM, fontSize: 22, bold: true, color: i === 1 ? K.navy : K.ink });
+    chrome(s, 'PLAN · 지표 정의 · 자료수집', 0, '4개 지표를 정하고, 전수조사와 시간 실측으로 측정했다', '무엇으로 개선을 판단할지 먼저 정했습니다', 5);
+    const cw = (1152 - 20) / 2;
+    [['과정지표', '법정 의무교육 준수율', '기한 내 이행 완료 ÷ 법정 교육 대상', '100%', '현황 06'],
+     ['결과지표', '페이퍼리스 전환율', '종이 없이 DB 저장 완결 ÷ 대상 업무', '100%', '현황 06'],
+     ['효율지표', '행정 소요시간 단축률', '(수기 시간 − 플랫폼 시간) ÷ 수기 시간', '70% 이상', '현황 07'],
+     ['인프라지표', '플랫폼 구축 완성도', '정상 작동 기능 ÷ 계획 기능', '6 / 6', '전략 08']].forEach((k, i) => {
+      const x = 64 + (i % 2) * (cw + 20), y = 168 + Math.floor(i / 2) * 140;
+      card(s, x, y, cw, 124);
+      T(s, k[0], x + 28, y + 20, 200, 18, { fontSize: 11, bold: true, color: K.navy });
+      T(s, k[4], x + cw - 128, y + 20, 100, 18, { fontFace: NUM, fontSize: 10, color: K.sub, align: 'right' });
+      T(s, k[1], x + 28, y + 42, 360, 30, { fontSize: 19, bold: true });
+      T(s, k[2], x + 28, y + 80, 360, 20, { fontSize: 12, color: K.sub });
+      T(s, '목표', x + cw - 168, y + 48, 140, 16, { fontSize: 11, color: K.sub, align: 'right' });
+      T(s, k[3], x + cw - 228, y + 66, 200, 40, { fontFace: NUM, fontSize: 26, bold: true, color: K.navy, align: 'right' });
     });
-    card(s, 64, 540, 1152, 116, K.navy, 22);
-    T(s, '모바일 기반 통합 디지털 안전보건 체계가 필요했습니다', 108, 540, 960, 116, { fontSize: 24, bold: true, color: K.w, valign: 'middle' });
-    T(s, '→', 1120, 540, 60, 116, { fontFace: NUM, fontSize: 26, bold: true, color: '4DA3FF', valign: 'middle', align: 'right' });
-    s.addNotes('- 교육 미이행 시 과태료, 중대재해 시 교육 이행 기록이 핵심 증빙\n- 인증 조사 때 바인더를 넘기며 누락자를 찾던 경험\n- 근거: 산안법 제29조, 인증기준 10.7 · 11.3');
+    T(s, '자료수집', 64, 460, 300, 20, { fontSize: 13, bold: true, color: K.sub });
+    const kw = (1152 - 40) / 3;
+    [['개선 전 · 대조 전수조사', '2025.01–12', '입사자 명단 ↔ 교육일지 106명 · 출력 업무 94건'], ['개선 전 · 직접 관찰', '2025.01', '세부 행동 단위별 소요시간 실측 (Time Study)'], ['개선 후 · 플랫폼 DB', '2026.05–07', '교육 33건 · 디지털 업무 52건 자동 집계']].forEach((k, i) => {
+      const x = 64 + i * (kw + 20);
+      card(s, x, 488, kw, 168);
+      T(s, k[0], x + 28, 510, kw - 56, 18, { fontSize: 12, color: K.sub });
+      T(s, k[1], x + 28, 536, kw - 56, 44, { fontFace: NUM, fontSize: 30, bold: true });
+      T(s, k[2], x + 28, 596, kw - 56, 40, { fontSize: 12, color: K.sub, lineSpacingMultiple: 1.35 });
+    });
+    s.addNotes('- 연결: "가장 먼저, 무엇으로 개선을 판단할지 정했습니다."\n- 행정시간은 실제 교육 시간 제외 — 작성 · 서명 · 취합 · 결재만\n- 다음 장 연결: "재 보니, 먼저 누락과 종이였습니다." (20초)');
+  }
+  // ───── 06 현황 ① 누락 + 종이 100%
+  {
+    const s = slide();
+    chrome(s, 'PLAN · 현황 분석 ①', 0, '모든 기록이 종이에 있어, 교육 6건 중 1건이 누락됐다', '2025년 1–12월 신규 입사자 106명 교육일지 대조 전수조사', 6);
+    card(s, 64, 168, 744, 488);
+    T(s, '월별 법정교육 이행률', 96, 192, 400, 22, { fontSize: 15, bold: true });
+    T(s, '주황 = 누락이 있었던 달', 500, 194, 280, 20, { fontSize: 11, bold: true, color: K.orangeT, align: 'right' });
+    const ox = 140, oy = 586, ch = 300, cw = 640, slot = cw / 12, bw = slot * 0.58;
+    [0, 50, 100].forEach(v => { const y = oy - v / 100 * ch; hl(s, ox, y, cw, K.line); T(s, v + '%', ox - 44, y - 8, 36, 16, { fontFace: NUM, fontSize: 9, color: K.sub, align: 'right' }); });
+    s.addShape(pres.shapes.LINE, { ...B(ox, oy - ch, cw, 0), line: { color: K.navy, width: 1, dashType: 'dash' }, objectName: nm() });
+    T(s, '목표 100%', ox + cw - 90, oy - ch - 22, 90, 16, { fontSize: 10, bold: true, color: K.navy, align: 'right' });
+    DONE.forEach((d, i) => {
+      const t = d + MISS[i], r = d / t, h = r * ch, x = ox + i * slot + (slot - bw) / 2, gap = MISS[i] > 0;
+      bar(s, x, oy - h, bw, h, gap ? K.orange : K.grey);
+      if (gap) T(s, Math.round(r * 100) + '', x - 8, oy - h - 18, bw + 16, 14, { fontFace: NUM, fontSize: 10, bold: true, color: K.orangeT, align: 'center' });
+      T(s, MONTHS[i], x - 8, oy + 8, bw + 16, 14, { fontSize: 10, color: K.sub, align: 'center' });
+    });
+    T(s, '12개월 중 8개월에서 누락 — 특정 시기가 아니라 1년 내내 반복됐다', 96, 618, 700, 20, { fontSize: 13, bold: true, color: K.orangeT });
+    // 오른쪽: 누락 · 종이
+    card(s, 828, 168, 388, 232);
+    T(s, '법정교육 누락', 860, 192, 320, 18, { fontSize: 13, color: K.sub });
+    T(s, '18건', 860, 218, 320, 70, { fontFace: NUM, fontSize: 52, bold: true, color: K.orangeT });
+    T(s, '106명 중 17% · 이행률 83%', 860, 300, 320, 20, { fontSize: 13, bold: true });
+    T(s, '지표: 준수율 83% → 목표 100%', 860, 352, 320, 18, { fontSize: 12, color: K.sub });
+    card(s, 828, 420, 388, 236, K.navy, 20);
+    T(s, '종이 기반 처리', 860, 444, 320, 18, { fontSize: 13, color: K.onNavy });
+    T(s, '100%', 860, 470, 320, 70, { fontFace: NUM, fontSize: 52, bold: true, color: K.w });
+    T(s, '연 94건 출력 · 서명 · 바인더 보관', 860, 552, 320, 20, { fontSize: 13, bold: true, color: K.w });
+    T(s, '지표: 페이퍼리스 0% → 목표 100%', 860, 604, 320, 18, { fontSize: 12, color: K.onNavy });
+    s.addNotes('- 연결: "재 보니, 먼저 누락과 종이였습니다."\n- "교육 106건 중 18건이 기록 없이 지나갔습니다. 바쁜 달의 문제가 아니라 12개월 중 8개월에서 반복됐습니다."\n- "모든 기록이 종이에 있으니, 누가 아직 안 했는지 볼 방법이 없었습니다."\n- (입사 규모와 누락률 상관 0.03 — 질문 대비)\n- 다음 장 연결: "그리고 시간이었습니다." (30초)');
+  }
+  // ───── 07 현황 ② 행정 소요시간
+  {
+    const s = slide();
+    chrome(s, 'PLAN · 현황 분석 ②', 0, '교육 1건에 33분 48초, 그중 78%는 기다림과 이동이었다', '2025년 1월 세부 행동 단위별 소요시간 실측 (교육 진행 시간 제외)', 7);
+    const cw = (1152 - 40) / 3;
+    [['특별안전보건교육 1건', '33분 48초', '작성 · 서명 · 제출 · 결재 · 보관', true], ['기다림 + 이동', '78%', '결재 대기 19:24 + 직접 제출 7:00', false], ['MSDS 교육 1건', '4분 18초', '자료 검색이 절반 (2:09)', false]].forEach((k, i) => {
+      const x = 64 + i * (cw + 20);
+      card(s, x, 168, cw, 220, k[3] ? K.navy : K.surf, 24);
+      T(s, k[0], x + 32, 194, cw - 64, 20, { fontSize: 13, color: k[3] ? K.onNavy : K.sub });
+      T(s, k[1], x + 32, 226, cw - 40, 80, { fontFace: NUM, fontSize: 44, bold: true, color: k[3] ? K.w : K.navy });
+      T(s, k[2], x + 32, 330, cw - 64, 36, { fontSize: 12, color: k[3] ? K.onNavy : K.sub });
+    });
+    card(s, 64, 408, 1152, 248, K.surf, 24);
+    T(s, '33분 48초는 어디에 쓰였나', 100, 432, 600, 24, { fontSize: 16, bold: true });
+    T(s, '두 단계만 없애면 78% → 개선 우선순위', 700, 432, 480, 24, { fontSize: 13, bold: true, color: K.navy, align: 'right' });
+    const segs = [['57%', '아날로그 내부 결재 대기', '19분 24초', 1164, K.navy, K.w], ['21%', '직접 제출 (이동)', '7분 00초', 420, K.n2, K.w], ['22%', '작성 · 출력 · 서명 등', '7분 24초', 444, 'C9D3E3', K.navy]];
+    let x = 100; const W = 1080;
+    segs.forEach((g, i) => {
+      const w = g[3] / 2028 * W - (i < 2 ? 6 : 0);
+      s.addShape(pres.shapes.ROUNDED_RECTANGLE, { ...B(x, 476, w, 64), fill: { color: g[4] }, line: { type: 'none' }, rectRadius: p(10), objectName: nm() });
+      T(s, g[0], x + 18, 476, w - 30, 64, { fontFace: NUM, fontSize: 22, bold: true, color: g[5], valign: 'middle' });
+      T(s, g[1], x, 554, w, 20, { fontSize: 13, bold: true });
+      T(s, g[2], x, 578, w, 18, { fontFace: NUM, fontSize: 12, color: K.sub });
+      x += w + 6;
+    });
+    T(s, '지표: 행정 소요시간 70% 이상 단축 — 기다림과 이동만 없애도 78%', 100, 618, 1080, 20, { fontSize: 12, color: K.sub });
+    s.addNotes('- 연결: "그리고 시간이었습니다."\n- "교육 1건에 33분 48초. 그중 57%는 결재를 기다린 시간, 21%는 보건관리실까지 걸어온 시간입니다."\n- "이 두 단계는 노력으로 줄일 수 없고, 체계를 바꿔야만 없어집니다 — 그래서 목표를 70%로 잡았습니다."\n- 다음 장 연결: "왜 이렇게 됐는지 원인을 따라가 봤습니다." (25초)');
   }
 }
 
