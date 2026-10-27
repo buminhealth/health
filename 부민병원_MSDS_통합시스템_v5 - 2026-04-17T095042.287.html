@@ -10,7 +10,23 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v21.4 (2026-10-27)
+  부민병원 MSDS 통합시스템 v21.5 (2026-10-27)
+
+  ★★★ v21.5 (2026-10-27) — 결재 관리: 한 건 삭제 · 결재본 도장 미리보기:
+    - 목록 줄마다 🗑 · 미리보기 [삭제] (선택 삭제와 같은 확인 · 삭제 표시라 다른 PC가 다시 올리지 않음)
+    - 결재완료 일지를 누르면 교육 현황 미리보기처럼 결재란에 관리자 도장이 찍힌 PDF, 결재 전이면 도장 없는 원본
+  ★★★ v21.5 (2026-10-27) — 결재 관리에 부서 교육일지가 안 나오던 문제 (서버 v21.5):
+    - 원인: 서버는 교육 · 화학물질 기록 파일을 [ … ] 로 보관하는데, 브라우저는 { records: [ … ] } 로 읽고 보냄
+      → 서버가 '빈 목록'으로 보아 부서가 제출한 교육일지 · 화학물질 보고서를 서버 파일에 넣지 않았음 (v18 이후)
+      · 시트(교육이력대장) 저장은 따로라 정상 → 신규입사 알림은 '교육일지 확인', 결재 관리에는 안 보임
+    - 서버: 두 모양 모두 읽고, 저장은 파일마다 정한 모양 하나로 (교육 · 화학물질 [ … ], 보호구 { records })
+    - 브라우저: bmRecList()로 두 모양 모두 읽음 (교육일지 제출 · 자동 동기화 · 보호구 · 화학물질)
+    - 미전송 기록 다시 올림: 각 PC가 다음 접속 때 1번, 그 PC에만 남은 자기 부서 기록을 서버에 합침 (관리자가 지운 것은 제외)
+
+  ★★★ v21.5 (2026-10-27) — AI 오류(503) 대응 (서버 v21.5):
+    - Google AI가 붐빌 때(503) · 한도(429) · 서버 오류(500/504): 서버가 잠깐 기다렸다 2번 더 시도 → 그래도 안 되면 예비 모델(gemini-2.5-flash-lite)로
+      (AI 도우미 · AI 위험성평가 · AI MSDS 검토 모두) · 예비 모델은 시트 관리자설정 'AI예비모델'로 바꿀 수 있음
+    - AI 도우미: 오류 문구를 쉽게 ("AI 서버가 지금 붐벼서…") + [↻ 다시 묻기] 단추 · 답을 못 받은 질문은 하루 횟수에서 빼 줌
 
   ★★★ v21.4 (2026-10-27) — PDF 용량 줄이기 (서버 v21.4):
     - 원인: 교육일지 · 수령증 · 보고서 PDF의 페이지 그림을 PNG로 넣어 jsPDF가 압축 없이(원본 RGB + 투명도) 저장 → 한 장 8~10MB
@@ -1191,7 +1207,7 @@ input.apv-in[type=text]{width:110px}
 .apv-menu label{padding:8px 10px;border-top:1px solid #ECEBE7;margin-top:4px;font-weight:600}
 .apv-menu #apv-archive-status{padding:0 10px 6px;font-size:12px;color:#5A5650}
 #apv-list{max-height:calc(100vh - var(--bm-top) - var(--bm-bot) - 330px);min-height:240px;overflow-y:auto}
-#apv-list .apv-row{display:grid;grid-template-columns:22px 70px minmax(110px,1.1fr) minmax(90px,1fr) 44px 74px 36px;gap:10px;align-items:center;padding:9px 12px 9px 12px;border-bottom:1px solid #ECEBE7;font-size:14px;cursor:pointer}
+#apv-list .apv-row{display:grid;grid-template-columns:22px 70px minmax(110px,1.1fr) minmax(90px,1fr) 44px 74px 72px;gap:10px;align-items:center;padding:9px 12px 9px 12px;border-bottom:1px solid #ECEBE7;font-size:14px;cursor:pointer}
 #apv-list .apv-head{position:sticky;top:0;z-index:5;background:#E2F0D5!important;color:var(--bm-g8);font-size:13px;font-weight:800;cursor:default;border-left:4px solid #E2F0D5}
 #apv-list .apv-row input{width:16px;height:16px;accent-color:var(--bm-g6)}
 .apv-kind{font-size:12px;font-weight:800;padding:3px 6px;border-radius:2px;text-align:center;white-space:nowrap}
@@ -2904,10 +2920,16 @@ input.apv-in[type=text]{width:110px}
   }
 
   // 1단계 전환 1회 병합: 이 PC 브라우저에만 남아 있는 기록을 서버로 올림 (서버에 이미 있으면 건너뜀)
+  // ★ v21.4: 한 번 더 실행 — v18~v21.3 동안 부서가 제출한 교육일지 · 화학물질 보고서가 서버 파일에 안 들어갔음
+  //   (모양 불일치로 서버가 버림) → 그 PC에 남아 있는 것을 다시 올려 결재 관리에 나오게 함
   async function upgradeMergeOnce(){
     if(!session || typeof readGitHubJSON !== 'function' || typeof writeGitHubJSON !== 'function') return;
-    var flag = 'bm_v18_merged_' + (session.role === 'admin' ? 'admin' : session.dept);
+    var flag = 'bm_v214_merged_' + (session.role === 'admin' ? 'admin' : session.dept);
     if(localStorage.getItem(flag)) return;
+    try{   // 관리자가 지운 기록은 다시 올리지 않게 삭제 표시 먼저 받기
+      if(typeof BM !== 'undefined' && BM.syncTombstonesFromGitHub)
+        await Promise.all(['edu', 'ppe', 'chem'].map(function(c){ return BM.syncTombstonesFromGitHub(c).catch(function(){}); }));
+    }catch(_){}
     var cats = [['edu', 'records/edu_records.json', 'bm_edu_records'],
                 ['ppe', 'records/ppe_records.json', 'bm_ppe_records'],
                 ['chem', 'records/chem_records.json', 'bm_chem_records']];
@@ -2937,7 +2959,7 @@ input.apv-in[type=text]{width:110px}
         var cur = await readGitHubJSON(path);
         var next = build(cur.data);
         if(build.count > 0){
-          await writeGitHubJSON(path, next, cur.sha, 'v18 전환 병합', build);
+          await writeGitHubJSON(path, next, cur.sha, 'v21.4 미전송 기록 병합', build);
           added += build.count;
         }
       }catch(e){
@@ -2946,7 +2968,7 @@ input.apv-in[type=text]{width:110px}
       }
     }
     localStorage.setItem(flag, new Date().toISOString());
-    if(added > 0){ try{ toast('☁ 이 PC에만 있던 기록 ' + added + '건을 서버에 합쳤습니다', 'ok'); }catch(_){} }
+    if(added > 0){ try{ toast('☁ 서버에 안 올라갔던 기록 ' + added + '건을 다시 올렸습니다 (결재 관리에 표시)', 'ok'); }catch(_){} }
   }
 
   window.BMAUTH = {
@@ -2957,7 +2979,7 @@ input.apv-in[type=text]{width:110px}
     mergeLocal: async function(){
       if(!session) return false;
       await upgradeMergeOnce();
-      return !!localStorage.getItem('bm_v18_merged_' + (session.role === 'admin' ? 'admin' : session.dept));
+      return !!localStorage.getItem('bm_v214_merged_' + (session.role === 'admin' ? 'admin' : session.dept));
     },
     adminLogin: async function(pw){
       var r;
@@ -4906,7 +4928,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.4';
+  var SERVER_EXPECT = 'v21.5';
   var esc = function(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
   var recs = function(k){ try{ return JSON.parse(localStorage.getItem(k) || '[]') || []; }catch(_){ return []; } };
   var post = function(op, b){ return window.BMAUTH ? BMAUTH.post(op, b || {}).catch(function(e){ return { success: false, error: e.message }; }) : Promise.resolve({ success: false, error: '로그인 필요' }); };
@@ -6282,6 +6304,9 @@ function applyDeptEdu(prefix, dept){
 // ════════════════════════════════════════════════════
 
 // GitHub 파일 읽기
+// ★ v21.4: 기록 파일 목록 꺼내기 — [ … ] · { records: [ … ] } 어느 모양이든
+//   (서버는 교육 · 화학물질 기록을 [ … ] 로 보관 → 전에는 { records } 만 읽어 부서 제출이 서버 파일에 안 들어갔음)
+function bmRecList(d){ return Array.isArray(d) ? d : ((d && Array.isArray(d.records)) ? d.records : []); }
 async function readGitHubJSON(filePath){
   if(!CFG.ghToken||!CFG.ghRepo) throw new Error('GitHub 설정 없음');
   const url=`https://api.github.com/repos/${CFG.ghRepo}/contents/${filePath}?_t=${Date.now()}`;
@@ -6423,7 +6448,7 @@ async function appendEduRecordsToGitHub(newRecs){
 
     const {data, sha} = await readGitHubJSON('records/edu_records.json');
     const getRebuilt = (freshData) => {
-      let existing = (freshData&&Array.isArray(freshData.records)) ? freshData.records : [];
+      let existing = bmRecList(freshData);
       if(typeof BM!=='undefined') BM.ensureIds(existing);
       if(typeof BM!=='undefined' && BM.filterTombstoned) existing = BM.filterTombstoned(existing,'edu');
       const map = new Map(existing.map(r => [r.recordId, r]));
@@ -6460,7 +6485,7 @@ async function appendPpeRecordToGitHub(rec){
 
     const {data, sha} = await readGitHubJSON('records/ppe_records.json');
     const getRebuilt = (freshData) => {
-      let existing = (freshData&&Array.isArray(freshData.records)) ? freshData.records : [];
+      let existing = bmRecList(freshData);
       if(typeof BM!=='undefined') BM.ensureIds(existing);
       if(typeof BM!=='undefined' && BM.filterTombstoned) existing = BM.filterTombstoned(existing,'ppe');
       const map = new Map(existing.map(r => [r.recordId, r]));
@@ -7574,7 +7599,7 @@ function chemSaveRecord(d, fname){
         try{
           const {data, sha} = await readGitHubJSON('records/chem_records.json');
           const getRebuilt = (freshData) => {
-            const remote = (freshData && Array.isArray(freshData.records)) ? freshData.records : [];
+            const remote = bmRecList(freshData);
             const map = new Map(remote.map(r => [r.recordId, r]));
             const prev = map.get(rec.recordId);
             if(!prev || (rec.updatedAt||rec.submitted||'') >= (prev.updatedAt||prev.submitted||''))
@@ -9480,7 +9505,7 @@ function apvRender(){
       <span class="apv-who">${memberStr}</span>
       <span class="apv-sig ${sigCount>=g.members.length?'ok':'warn'}">${sigCount}/${g.members.length}</span>
       <span>${apvStatusChip(g)}</span>
-      <span class="apv-ra"><button onclick="apvDownloadPdf('${g.groupKey}')" title="${g.approved?'결재 도장 합성 PDF 내려받기':'원본 PDF 내려받기'}" aria-label="PDF 내려받기">📥</button></span>
+      <span class="apv-ra"><button onclick="apvDownloadPdf('${g.groupKey}')" title="${g.approved?'결재 도장 합성 PDF 내려받기':'원본 PDF 내려받기'}" aria-label="PDF 내려받기">📥</button><button onclick="apvDeleteOne('${g.groupKey}')" title="이 일지 삭제 (잘못 올라온 · 중복 기록)" aria-label="일지 삭제" style="margin-left:4px;color:#A3302A">🗑</button></span>
     </div>`;
   }).join('');
 
@@ -9824,14 +9849,14 @@ async function apvViewPdf(groupKey){
 }
 
 /* ── 결재 도장 합성된 PDF Blob 반환 (다운로드 안 함, 미리보기용) ── */
-async function _getStampedPdfBlob(group, stampPngDataUrl){
+async function _getStampedPdfBlob(group, stampPngDataUrl, preBytes){
   try{
     if(typeof PDFLib === 'undefined' || !PDFLib.PDFDocument){
       console.error('pdf-lib 미로드');
       return null;
     }
     // ★ v17.20: 공용 리졸버 (다중 ym 후보 + GitHub API 폴백)
-    const pdfBytes = await apvResolvePdfBytes(group);
+    const pdfBytes = preBytes || await apvResolvePdfBytes(group);   // v21.5: 이미 받은 원본이 있으면 그대로
     if(!pdfBytes){
       console.warn('미리보기용 PDF 다운로드 실패:', group.pdfFileName);
       return null;
@@ -10324,6 +10349,16 @@ async function apvBatchDelete(){
   }
 }
 
+/* v21.5 한 건 삭제 (목록 🗑 · 미리보기 [삭제]) — 선택 삭제와 같은 확인('삭제' 입력) · 같은 처리(삭제 표시 → 다른 PC 재업로드 막음) */
+async function apvDeleteOne(key){
+  const prev = new Set(apvState.selected);
+  apvState.selected = new Set([key]);
+  try{ await apvBatchDelete(); }
+  finally{
+    if(apvState.selected.size){ apvState.selected = prev; }   // 취소하면 원래 선택으로
+    if(apvViewKey === key && !apvState.groups.some(g => g.groupKey === key)) apvCloseViewer();
+  }
+}
 /* ── 영구 삭제 확인 모달 (PWA 안전 자체 모달) ── */
 function apvConfirmDelete(groups, recordCount){
   return new Promise(resolve => {
@@ -10497,7 +10532,7 @@ async function apvOpenViewer(key){
     : `${g.rejected?`<div class="apv-v-st rj">반려 · ${apvEsc(g.rejectReason)} <small>${apvEsc((g.rejectedAt||'').slice(0,10))}</small></div>`:''}
        <div class="apv-v-ac"><button type="button" class="apv-v-b" data-v="reject">${g.rejected?'사유 고쳐 다시 반려':'반려'}</button><button type="button" class="apv-v-b p" data-v="approve">이 문서 결재</button></div>`;
   v.innerHTML = `<div class="apv-v-hd"><div><b>PDF 원본 · ${title}</b><span>${apvEsc(g.dateStart)}${g.dateEnd&&g.dateEnd!==g.dateStart?' ~ '+apvEsc(g.dateEnd):''} · ${apvEsc(who.slice(0,3).join(', '))}${who.length>3?' 외 '+(who.length-3)+'명':''}</span></div><button type="button" class="apv-v-x" data-v="close" aria-label="닫기">✕</button></div>
-    <div class="apv-v-bar"><button type="button" data-v="open" disabled>새 창으로 열기</button><button type="button" data-v="down">내려받기</button><button type="button" data-v="print" disabled>인쇄</button></div>
+    <div class="apv-v-bar"><button type="button" data-v="open" disabled>새 창으로 열기</button><button type="button" data-v="down">내려받기</button><button type="button" data-v="print" disabled>인쇄</button><button type="button" data-v="del" style="margin-left:auto;background:rgba(214,56,56,.55)" title="잘못 올라온 · 중복 기록 삭제">삭제</button></div>
     <div class="apv-v-body" id="apv-v-body"><div class="apv-v-msg">PDF 원본 불러오는 중…</div></div>
     <div class="apv-v-ft">${ft}</div>`;
   const on = (name, fn) => { const b = v.querySelector(`[data-v="${name}"]`); if(b) b.onclick = fn; };
@@ -10505,9 +10540,20 @@ async function apvOpenViewer(key){
   on('down', () => apvDownloadPdf(key));
   on('approve', () => { apvState.selected = new Set([key]); apvBatchApprove().then(()=>{ if(apvViewKey===key) apvOpenViewer(key); }); });
   on('reject', () => apvBatchReject([key]));
+  on('del', () => apvDeleteOne(key));
   let bytes = null;
   try{ bytes = await apvResolvePdfBytes(g); }catch(e){ console.warn('apvOpenViewer:', e); }
+  // v21.5: 결재완료면 교육 현황 미리보기와 같이 결재란에 관리자 도장을 찍은 PDF를 보여 줌 (결재 전은 도장 없는 원본)
+  if(bytes && g.approved){
+    try{
+      const stampPng = await apvStampToImage(g.approvedAt);
+      const blob = stampPng ? await _getStampedPdfBlob(g, stampPng, bytes) : null;
+      if(blob) bytes = await blob.arrayBuffer();
+    }catch(e){ console.warn('apvOpenViewer 도장:', e); }
+  }
   if(apvViewKey !== key) return;   // 그 사이 다른 줄을 누름
+  const hd = v.querySelector('.apv-v-hd b');
+  if(hd) hd.textContent = (g.approved ? '결재본(도장) · ' : 'PDF 원본(결재 전) · ') + hd.textContent.replace(/^PDF 원본 · /, '');
   const body = document.getElementById('apv-v-body');
   if(!bytes){
     body.innerHTML = `<div class="apv-v-msg">저장된 PDF 원본을 찾지 못했습니다.<br><button type="button" class="apv-v-b" id="apv-v-data">기록으로 일지 화면 보기</button></div>`;
@@ -13592,7 +13638,7 @@ function _scheduleEduSave(){
 
         // ★ GitHub와 Upsert 병합 (로컬 신규 + GitHub 기존 유지)
         const {data, sha} = await readGitHubJSON('records/edu_records.json');
-        let ghRecs = (data&&Array.isArray(data.records)) ? data.records : [];
+        let ghRecs = bmRecList(data);
         BM.ensureIds(ghRecs);
         ghRecs = BM.filterTombstoned(ghRecs,'edu');
 
@@ -14018,7 +14064,7 @@ function _schedulePpeSave(){
         local = BM.filterTombstoned(local,'ppe');
 
         const {data, sha} = await readGitHubJSON('records/ppe_records.json');
-        let ghRecs = (data&&Array.isArray(data.records)) ? data.records : [];
+        let ghRecs = bmRecList(data);
         BM.ensureIds(ghRecs);
         ghRecs = BM.filterTombstoned(ghRecs,'ppe');
 
@@ -15500,7 +15546,7 @@ function _scheduleChemSave(){
         local = BM.filterTombstoned(local,'chem');
 
         const {data, sha} = await readGitHubJSON('records/chem_records.json');
-        let ghRecs = (data&&Array.isArray(data.records)) ? data.records : [];
+        let ghRecs = bmRecList(data);
         BM.ensureIds(ghRecs);
         ghRecs = BM.filterTombstoned(ghRecs,'chem');
 
@@ -18943,6 +18989,12 @@ self.addEventListener('fetch',e=>{
     wait.remove();
     if(!r.success){
       add('e', esc(/unknown op/.test(r.error || '') ? 'AI 도우미는 서버 v21.1 배포 후 사용할 수 있습니다. 보건관리실(내선 3293 · 3034)에 문의하세요.' : (r.error || '답을 받지 못했습니다')));
+      if(r.busy || /\(503\)|\(500\)|\(429\)|붐벼/.test(r.error || '')){   // v21.4: AI 서버가 붐빌 때 같은 질문 다시 묻기
+        var again = document.createElement('div'); again.className = 'bh-chips';
+        var rb = document.createElement('button'); rb.type = 'button'; rb.className = 'bh-chip'; rb.textContent = '↻ 다시 묻기';
+        rb.onclick = function(){ again.remove(); ask(q); };
+        again.appendChild(rb); log.appendChild(again); log.scrollTop = log.scrollHeight;
+      }
     }else{
       var src = (r.sources || []).map(function(s){
         return '<span>' + esc(s.kind) + '</span>' + (s.url ? '<a href="' + esc(s.url) + '" target="_blank" rel="noopener">' + esc(s.title) + '</a>' : esc(s.title));

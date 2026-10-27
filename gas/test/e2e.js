@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.4/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.5/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
   const other = await page.evaluate(async () => {
@@ -504,7 +504,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.4'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.5'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -1450,6 +1450,26 @@ function check(name, cond, extra) {
     return v;
   });
   check('설정 화면: 질문 · 답 목록 · [+ 질문 추가] · 저장', faqUi.rows === 13 && faqUi.after === 14 && /14개를 저장/.test(faqUi.msg), faqUi);
+
+  // 18-1. v21.5 (가져온 수정) 부서가 { records } 모양으로 올려도 서버의 [ … ] 교육 기록 파일에 들어감 · Gemini 503 → 다시 시도 → 예비 모델
+  {
+    const post = (b) => JSON.parse(g.api.doPost({ postData: { contents: JSON.stringify(b) } }).text);
+    const cur = post({ op: 'fs.get', path: 'records/edu_records.json', t: tk.d });
+    const rec = { recordId: 'shape61', name: '모양시험', dept: '61병동', type: 'MSDS교육', dateStart: '2026-10-27', submitted: '2026-10-27T01:00:00Z' };
+    const curList = JSON.parse(Buffer.from(cur.content || '', 'base64').toString('utf8') || '[]');
+    const mine = (Array.isArray(curList) ? curList : curList.records).concat([rec]);
+    const put = post({ op: 'fs.put', path: 'records/edu_records.json', sha: cur.sha, content: Buffer.from(JSON.stringify({ records: mine })).toString('base64'), t: tk.d });
+    const adm = post({ op: 'fs.get', path: 'records/edu_records.json', t: tk.a });
+    const all = JSON.parse(Buffer.from(adm.content, 'base64').toString('utf8'));
+    check('결재 관리 누락 수정: 부서가 { records } 로 올려도 서버 교육 기록([ … ])에 들어감', put.success && Array.isArray(all) && all.some(r => r.recordId === 'shape61'), [put, Array.isArray(all)]);
+    const calls0 = gm.calls.length;
+    gm.failModel = 'gemini-2.5-flash'; gm.reply = { scene: 'x', hazards: [{ category: '작업환경', hazard: '물기', situation: '넘어짐', freq: 2, sev: 2, controls: [] }] };
+    const b1 = post({ op: 'ra.analyze', image: 'data:image/jpeg;base64,' + Buffer.from('x').toString('base64'), place: '복도', t: tk.a });
+    gm.failModel = '';
+    check('AI 503: 같은 모델 3번 시도 → 예비 모델(gemini-2.5-flash-lite)로 답', b1.success && b1.model === 'gemini-2.5-flash-lite' && gm.calls.length - calls0 === 4, [b1.success, b1.model, b1.error, gm.calls.length - calls0]);
+    const ui = await page.evaluate(() => typeof apvDeleteOne === 'function' && typeof _getStampedPdfBlob === 'function');
+    check('결재 관리: 한 건 삭제 · 결재본 도장 미리보기 함수', ui);
+  }
 
   // 18-2. v21.4 PDF 용량: 예전 방식(PNG → 압축 없는 RGB) PDF를 드라이브에 두고 → 큰 PDF 찾기 → 그림만 JPEG로 바꿔 다시 저장
   {
