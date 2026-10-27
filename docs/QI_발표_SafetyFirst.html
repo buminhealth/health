@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Safety First QI 발표</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+:root{
+  --green:#67AF28; --green-d:#3F7A12; --green-l:#EEF6E6;
+  --ink:#1D1D1F; --ink2:#424245; --mute:#86868B; --line:#E5E5EA;
+  --bg:#F5F5F7; --paper:#FFFFFF; --warn:#E8644A; --warn-l:#FDEDE8; --blue:#2F6FDE;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#111;color:var(--ink);
+  font-family:Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  -webkit-font-smoothing:antialiased;word-break:keep-all}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#deck{width:1600px;height:900px;position:relative;transform-origin:center center}
+.slide{position:absolute;inset:0;background:var(--paper);padding:84px 104px 72px;display:none;flex-direction:column;overflow:hidden}
+.slide.active{display:flex}
+.slide.dark{background:#0E1A06;color:#fff}
+/* typography */
+.eyebrow{font-size:20px;font-weight:700;letter-spacing:.08em;color:var(--green);text-transform:uppercase;margin-bottom:14px}
+h1{font-size:76px;font-weight:800;letter-spacing:-.03em;line-height:1.12}
+h2{font-size:50px;font-weight:800;letter-spacing:-.025em;line-height:1.18;margin-bottom:10px}
+h3{font-size:25px;font-weight:700;letter-spacing:-.01em;margin-bottom:10px}
+.lead{font-size:24px;color:var(--ink2);line-height:1.55;font-weight:500}
+p,li{font-size:20px;line-height:1.6;color:var(--ink2)}
+.small{font-size:16px;color:var(--mute);line-height:1.5}
+.src{position:absolute;left:104px;bottom:30px;font-size:14px;color:var(--mute)}
+.pg{position:absolute;right:104px;bottom:30px;font-size:14px;color:var(--mute);font-variant-numeric:tabular-nums}
+.dark .lead,.dark p{color:#C9D6BE}.dark .src,.dark .pg{color:#7E8C73}
+.hl{color:var(--green)} .warn{color:var(--warn)}
+/* layout */
+.grow{flex:1;min-height:0}
+.row{display:flex;gap:28px}.col{display:flex;flex-direction:column;gap:20px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:22px}
+.card{background:var(--bg);border-radius:24px;padding:30px 32px}
+.card.w{background:#fff;border:1px solid var(--line)}
+.card.g{background:var(--green-l)}
+.kpi .num{font-size:64px;font-weight:800;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.kpi .num small{font-size:28px;font-weight:700;margin-left:4px}
+.kpi .lab{font-size:18px;color:var(--mute);margin-top:12px;font-weight:600}
+.tag{display:inline-block;font-size:15px;font-weight:700;padding:5px 12px;border-radius:99px;background:var(--green-l);color:var(--green-d)}
+.tag.r{background:var(--warn-l);color:#B23E26}
+.tag.k{background:#ECECF0;color:var(--ink2)}
+table{border-collapse:collapse;width:100%}
+th,td{font-size:17px;padding:11px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;line-height:1.45}
+th{font-size:15px;color:var(--mute);font-weight:700;letter-spacing:.02em}
+td b{color:var(--ink)}
+/* cover */
+.cover{justify-content:space-between;background:radial-gradient(1200px 700px at 85% 110%,#E3F1D5 0,#fff 60%)}
+.cover h1{font-size:68px;max-width:1250px}
+.cover .meta{display:flex;gap:48px;font-size:20px;color:var(--ink2)}
+.cover .meta b{display:block;font-size:15px;color:var(--mute);font-weight:700;margin-bottom:6px;letter-spacing:.06em}
+/* toc */
+.toc{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;margin-top:44px}
+.toc .it{border-top:3px solid var(--ink);padding-top:18px}
+.toc .it .n{font-size:16px;font-weight:800;color:var(--green)}
+.toc .it .t{font-size:26px;font-weight:800;margin:8px 0 6px;letter-spacing:-.01em}
+.toc .it .d{font-size:16px;color:var(--mute);line-height:1.5}
+/* flow */
+.flow{display:flex;align-items:stretch;gap:10px;flex-wrap:nowrap}
+.flow .st{flex:1;background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 14px;font-size:16px;font-weight:600;line-height:1.35;position:relative;min-height:86px}
+.flow .st small{display:block;font-size:14px;color:var(--mute);font-weight:600;margin-top:6px}
+.flow .st.bad{border-color:#F3B4A6;background:var(--warn-l)}
+.flow .st.good{border-color:#BFDDA4;background:var(--green-l)}
+.flow .ar{align-self:center;color:var(--mute);font-size:20px}
+/* gantt */
+.gantt{display:grid;grid-template-columns:200px repeat(10,1fr);gap:6px 4px;align-items:center}
+.gantt .h{font-size:14px;color:var(--mute);font-weight:700;text-align:center}
+.gantt .l{font-size:17px;font-weight:700}
+.gantt .b{height:22px;border-radius:6px;background:var(--green)}
+.gantt .b.p{background:#B9DB9A}.gantt .b.c{background:#2B5A0B}.gantt .b.x{background:#DDE5D6}
+/* chart */
+.chart{position:relative;width:100%}
+.chart svg{width:100%;height:100%;display:block;overflow:visible}
+.legend{display:flex;gap:18px;font-size:15px;color:var(--ink2);font-weight:600}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+/* video */
+.video{background:#000;border-radius:24px;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center}
+.video video{width:100%;height:100%;object-fit:contain;background:#000}
+.video .ph{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#9AA;font-size:20px;text-align:center;padding:30px}
+.video .ph .play{width:84px;height:84px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center}
+.video.has .ph{display:none}
+.feat{display:flex;flex-direction:column;gap:12px}
+.feat .f{display:flex;gap:14px;align-items:flex-start;padding:14px 18px;border-radius:16px;background:var(--bg)}
+.feat .f .k{font-size:15px;font-weight:800;color:var(--green);min-width:34px}
+.feat .f div{font-size:18px;line-height:1.45;color:var(--ink2)} .feat .f b{color:var(--ink)}
+/* notes */
+.notes{display:none}
+#notesPanel{position:fixed;left:0;right:0;bottom:0;max-height:34vh;overflow:auto;background:rgba(20,20,22,.96);color:#EEE;padding:18px 28px 22px;font-size:17px;line-height:1.6;display:none;z-index:30;border-top:1px solid #333}
+#notesPanel b{color:#A6D67A}
+body.shownotes #notesPanel{display:block}
+/* toolbar */
+#bar{position:fixed;top:14px;right:14px;display:flex;gap:8px;z-index:40;opacity:.25;transition:opacity .2s}
+#bar:hover,body.editing #bar{opacity:1}
+#bar button{font:600 14px Pretendard,sans-serif;border:0;border-radius:99px;padding:9px 15px;background:#fff;color:#111;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.2)}
+#bar button.on{background:var(--green);color:#fff}
+#nav{position:fixed;bottom:14px;left:14px;display:flex;gap:6px;z-index:40;opacity:.25;transition:opacity .2s}
+#nav:hover{opacity:1}
+#nav button{border:0;border-radius:99px;width:40px;height:40px;background:#fff;font-size:18px;cursor:pointer}
+#prog{position:fixed;left:0;top:0;height:3px;background:var(--green);z-index:41;transition:width .25s}
+body.editing [data-ed]{outline:1px dashed rgba(103,175,40,.55);outline-offset:3px;border-radius:4px;cursor:text}
+body.editing [data-ed]:focus{outline:2px solid var(--green);background:rgba(103,175,40,.06)}
+.cedit{display:none;position:absolute;top:-6px;right:0;font:700 13px Pretendard,sans-serif;border:0;border-radius:99px;padding:6px 12px;background:var(--ink);color:#fff;cursor:pointer;z-index:5}
+body.editing .cedit{display:block}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:60}
+#modal.open{display:flex}
+#modal .box{background:#fff;border-radius:20px;padding:26px;width:min(720px,92vw)}
+#modal h4{font-size:20px;margin-bottom:6px}
+#modal p{font-size:14px;color:var(--mute);margin-bottom:12px}
+#modal textarea{width:100%;height:260px;font:14px/1.5 ui-monospace,Menlo,Consolas,monospace;border:1px solid var(--line);border-radius:12px;padding:12px}
+#modal .btns{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+#modal button{font:600 15px Pretendard,sans-serif;border:0;border-radius:99px;padding:10px 18px;cursor:pointer;background:#ECECF0}
+#modal button.ok{background:var(--green);color:#fff}
+#toast{position:fixed;top:64px;right:14px;background:#111;color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;z-index:70;display:none}
+@media print{
+  @page{size:1600px 900px;margin:0}
+  html,body{background:#fff}
+  #bar,#nav,#prog,#notesPanel,.cedit{display:none!important}
+  #stage{position:static;display:block}
+  #deck{transform:none!important;width:1600px;height:auto}
+  .slide{position:relative;display:flex!important;width:1600px;height:900px;page-break-after:always;break-after:page}
+}
+</style>
+</head>
+<body>
+<div id="prog"></div>
+<div id="bar">
+  <button id="bEdit" title="E">✎ 편집</button>
+  <button id="bNotes" title="N">발표 원고</button>
+  <button id="bSave" title="Ctrl+S">💾 저장(HTML)</button>
+  <button id="bPdf">PDF</button>
+  <button id="bFull" title="F">⛶ 전체화면</button>
+</div>
+<div id="nav"><button id="pv">‹</button><button id="nx">›</button></div>
+
+<div id="stage"><div id="deck">
+
+<!-- 1 표지 -->
+<section class="slide cover">
+  <div>
+    <div class="eyebrow" data-ed>2026 QI 학술대회 · 행정지원업무개선</div>
+    <h1 data-ed>모바일 안전보건 통합관리 플랫폼 구축을 통한<br><span class="hl">교육 누락 예방</span>과 <span class="hl">행정시간 단축</span></h1>
+    <p class="lead" style="margin-top:26px" data-ed>종이 일지 · 대면 결재에서 전자서명 · 비대면 결재 · AI 통합관리로 — 2단계 PDCA</p>
+  </div>
+  <div class="meta">
+    <div><b>팀</b><span data-ed>총무-안전보건팀 Safety First</span></div>
+    <div><b>발표</b><span data-ed>보건관리자 장은선</span></div>
+    <div><b>활동 기간</b><span data-ed>2026. 1 – 10</span></div>
+    <div><b>기관</b><span data-ed>부민병원</span></div>
+  </div>
+  <aside class="notes"><b>0:00–0:20</b> 안녕하십니까. 총무-안전보건팀 Safety First입니다. 종이로 관리하던 안전보건교육을 모바일 플랫폼으로 바꾸어 교육 누락을 막고 행정시간을 줄인 활동을 발표하겠습니다.</aside>
+</section>
+
+<!-- 2 목차 -->
+<section class="slide">
+  <div class="eyebrow" data-ed>Contents</div>
+  <h2 data-ed>발표 순서</h2>
+  <div class="toc">
+    <div class="it"><div class="n">01</div><div class="t" data-ed>배경 · 팀</div><div class="d" data-ed>주제 선정 근거<br>팀 구성과 일정</div></div>
+    <div class="it"><div class="n">02</div><div class="t" data-ed>지표 · 현황</div><div class="d" data-ed>지표 정의<br>자료 수집 · 시간 측정</div></div>
+    <div class="it"><div class="n">03</div><div class="t" data-ed>원인 · 전략</div><div class="d" data-ed>원인 분석 · 우선순위<br>단계별 개선 전략 · 시연</div></div>
+    <div class="it"><div class="n">04</div><div class="t" data-ed>효과 · 제언</div><div class="d" data-ed>지표별 성과<br>표준화 · 한계 · 제언</div></div>
+  </div>
+  <div class="grow"></div>
+  <div class="card" style="display:flex;gap:40px;align-items:center">
+    <div class="kpi"><div class="num hl" data-ed>83→100<small>%</small></div><div class="lab" data-ed>신규입사자 교육 이행률</div></div>
+    <div class="kpi"><div class="num" data-ed>33:48→2:23</div><div class="lab" data-ed>특별교육 건당 행정 작업시간(분:초)</div></div>
+    <div class="kpi"><div class="num" data-ed>0→100<small>%</small></div><div class="lab" data-ed>신규 업무 전자 처리율</div></div>
+  </div>
+  <div class="pg"></div>
+  <aside class="notes"><b>0:20–0:30</b> 배경, 지표와 현황, 원인과 전략, 효과와 제언 순서로 말씀드리겠습니다. 결과를 먼저 말씀드리면 이 세 숫자입니다.</aside>
+</section>
+
+<!-- 3 배경 -->
+<section class="slide">
+  <div class="eyebrow" data-ed>01 · 주제 선정 근거</div>
+  <h2 data-ed>교육은 했지만, 아무도 확인할 수 없었습니다</h2>
+  <div class="g2 grow" style="margin-top:26px">
+    <div class="col">
+      <div class="card w">
+        <span class="tag r" data-ed>MSDS 교육</span>
+        <h3 style="margin-top:12px" data-ed>부서가 일지를 찾아 출력 · 서명 · 부서 보관</h3>
+        <p data-ed>게시판·PC에서 양식 검색 → 출력 → 서명 → 부서 파일철. <b>결재 없음.</b> 보건관리자는 신규직원 교육 여부를 알 수 없어 <b class="warn">누락 발생</b>, 연말 일지 부실.</p>
+      </div>
+      <div class="card w">
+        <span class="tag k" data-ed>특별안전보건교육</span>
+        <h3 style="margin-top:12px" data-ed>사진 전달 → 일지 작성 → 재전달 → 출력 · 서명 → 제출</h3>
+        <p data-ed>누락은 없었으나 파일 재전달 · 보건실 방문 · <b>총무팀장 → 행정부원장 → 병원장 3단계 대면 결재.</b></p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="g2">
+        <div class="card kpi"><div class="num warn" data-ed>18<small>건</small></div><div class="lab" data-ed>2025년 신규입사자 교육 누락</div></div>
+        <div class="card kpi"><div class="num" data-ed>83.0<small>%</small></div><div class="lab" data-ed>교육 이행률 (88/106)</div></div>
+        <div class="card kpi"><div class="num" data-ed>33:48</div><div class="lab" data-ed>특별교육 1건 행정 작업시간</div></div>
+        <div class="card kpi"><div class="num" data-ed>3<small>단계</small></div><div class="lab" data-ed>대면 결재 (팀장·부원장·원장)</div></div>
+      </div>
+      <div class="card g">
+        <h3 data-ed>왜 지금인가</h3>
+        <p data-ed>① 산업안전보건법 제29조 교육 의무 · 중대재해처벌법 이행 증빙 &nbsp;② 의료기관 인증 직원안전 · 위험물질 관리 기준 &nbsp;③ 병원 ESG · 행정 효율화 과제</p>
+      </div>
+    </div>
+  </div>
+  <div class="src" data-ed>자료: 2025.1–12 신규입사자 교육일지 전수조사, 행위별 시간 측정</div><div class="pg"></div>
+  <aside class="notes"><b>0:30–1:20</b> 이전에는 MSDS 교육을 마치면 부서가 양식을 찾아 출력하고 서명받아 부서에 보관했습니다. 결재가 없으니 보건관리자는 신규직원이 교육을 받았는지 알 수 없었고, 2025년 한 해 18건이 누락됐습니다. 특별교육은 누락은 없었지만 사진과 파일이 몇 번씩 오가고 세 단계 결재를 모두 대면으로 받았습니다.</aside>
+</section>
+
+<!-- 4 팀 구성 · 일정 -->
+<section class="slide">
+  <div class="eyebrow" data-ed>01 · 팀 구성과 활동 일정</div>
+  <h2 data-ed>작은 팀, 두 번의 개선 사이클</h2>
+  <div class="row" style="margin-top:28px;gap:28px">
+    <div class="g3" style="flex:1.1">
+      <div class="card"><span class="tag k" data-ed>팀장</span><h3 style="margin-top:12px" data-ed>김광현</h3><p data-ed>총무팀장 · 의사결정 · 결재 체계 개편</p></div>
+      <div class="card g"><span class="tag" data-ed>보건관리자</span><h3 style="margin-top:12px" data-ed>장은선</h3><p data-ed>현황 조사 · 시간 측정 · 플랫폼 설계·개발</p></div>
+      <div class="card"><span class="tag k" data-ed>안전관리자</span><h3 style="margin-top:12px" data-ed>장종문</h3><p data-ed>보호구 · 위험성평가 · 현장 적용</p></div>
+    </div>
+    <div class="card w" style="flex:.9"><h3 data-ed>협력</h3><p data-ed>61병동(시범 부서) · 화학물질 사용 부서장 · 의료정보팀 · 인사 담당</p></div>
+  </div>
+  <div class="card w grow" style="margin-top:24px;padding:28px 32px">
+    <div class="gantt">
+      <div></div><div class="h">1월</div><div class="h">2월</div><div class="h">3월</div><div class="h">4월</div><div class="h">5월</div><div class="h">6월</div><div class="h">7월</div><div class="h">8월</div><div class="h">9월</div><div class="h">10월</div>
+      <div class="l" style="grid-row:2;grid-column:1" data-ed>Plan 현황·원인</div><div class="b p" style="grid-row:2;grid-column:2/5"></div>
+      <div class="l" style="grid-row:3;grid-column:1" data-ed>Do 1차 구축·시범</div><div class="b" style="grid-row:3;grid-column:4/6"></div>
+      <div class="l" style="grid-row:4;grid-column:1" data-ed>Check 효과 측정</div><div class="b c" style="grid-row:4;grid-column:6/9"></div>
+      <div class="l" style="grid-row:5;grid-column:1" data-ed>Act 표준화</div><div class="b c" style="grid-row:5;grid-column:8/9"></div>
+      <div class="l" style="grid-row:6;grid-column:1" data-ed>CQI 2차 확장·AI</div><div class="b x" style="grid-row:6;grid-column:9/12"></div>
+    </div>
+    <p class="small" style="margin-top:16px" data-ed>1차: 교육일지 모바일 · 전자서명 · MSDS 조회 · 결재/조회 &nbsp;|&nbsp; 2차(CQI): 이수 현황판 · 신규입사 자동 알림 · 보호구 · 신규/중단 보고서 · AI 기능</p>
+  </div>
+  <div class="pg"></div>
+  <aside class="notes"><b>1:20–1:50</b> 총무팀장, 보건관리자, 안전관리자 세 명이 팀을 이뤘습니다. 한 번에 다 할 수 없어서 1차에는 교육일지와 MSDS 조회에 집중하고, 효과를 확인한 뒤 2차로 보호구, 보고서, AI 기능을 붙였습니다.</aside>
+</section>
+
+<!-- 5 지표 정의 -->
+<section class="slide">
+  <div class="eyebrow" data-ed>02 · 지표의 정의</div>
+  <h2 data-ed>네 개의 지표, 하나의 목표</h2>
+  <table style="margin-top:22px">
+    <thead><tr><th style="width:18%">구분 · 지표</th><th style="width:38%">산출식</th><th style="width:14%">기준값</th><th style="width:14%">목표</th><th>자료원</th></tr></thead>
+    <tbody>
+      <tr><td><span class="tag">결과</span><br><b data-ed>교육 이행률</b></td><td data-ed>기한 내 교육일지 완결 건수 ÷ 신규입사 교육 대상 건수 × 100<br><span class="small">기한: 입사 후 3일 이내 작성</span></td><td data-ed><b>83.0%</b><br><span class="small">2025 (88/106)</span></td><td data-ed><b class="hl">100%</b></td><td data-ed>교육일지 전수, 인사 명단 대조</td></tr>
+      <tr><td><span class="tag">결과</span><br><b data-ed>행정 작업시간 단축률</b></td><td data-ed>(개선 전 − 개선 후 건당 작업시간) ÷ 개선 전 × 100<br><span class="small">교육 진행 시간 제외, 문서 작성·서명·제출·결재만</span></td><td data-ed><b>33분 48초</b><br><span class="small">특별교육 1건</span></td><td data-ed><b class="hl">70%↑</b><br><span class="small">10분 이내</span></td><td data-ed>행위별 시간 측정</td></tr>
+      <tr><td><span class="tag k">과정</span><br><b data-ed>전자 처리율</b></td><td data-ed>종이 출력 없이 전자서명·DB 저장으로 완결된 건수 ÷ 신규 발생 안전보건 업무 건수 × 100</td><td data-ed><b>0%</b></td><td data-ed><b class="hl">100%</b></td><td data-ed>플랫폼 기록</td></tr>
+      <tr><td><span class="tag k">구조</span><br><b data-ed>플랫폼 구축률</b></td><td data-ed>운영 중인 기능 수 ÷ 개선계획 기능 수(1차 4 + 2차 4) × 100</td><td data-ed><b>0 / 8</b></td><td data-ed><b class="hl">8 / 8</b></td><td data-ed>버전 이력</td></tr>
+    </tbody>
+  </table>
+  <div class="pg"></div>
+  <aside class="notes"><b>1:50–2:30</b> 핵심 결과지표는 교육 이행률과 행정 작업시간입니다. 전자 처리율과 플랫폼 구축률은 그 결과를 만든 과정과 구조를 보여주는 지표입니다. 기준값은 모두 2025년 실측입니다.</aside>
+</section>
+
+<!-- 6 자료수집 1: 이행률 -->
+<section class="slide">
+  <div class="eyebrow" data-ed>02 · 자료 수집 ① 교육 이행</div>
+  <h2 data-ed>2025년, 열두 달 중 세 달은 이행률 60% 안팎</h2>
+  <div class="row grow" style="margin-top:20px">
+    <div class="card w" style="flex:2.2;display:flex;flex-direction:column">
+      <div class="legend"><span><i style="background:var(--green)"></i>교육 완료</span><span><i style="background:var(--warn)"></i>누락</span><span><i style="background:var(--ink)"></i>이행률(%)</span></div>
+      <div class="chart grow" style="margin-top:8px" data-type="stack"
+        data-labels="1월,2월,3월,4월,5월,6월,7월,8월,9월,10월,11월,12월"
+        data-a="5,8,16,7,6,9,11,6,4,1,10,5"
+        data-b="3,1,2,0,1,0,2,0,1,1,7,0"></div>
+    </div>
+    <div class="col" style="flex:1">
+      <div class="card kpi"><div class="num" data-ed>106<small>건</small></div><div class="lab" data-ed>교육 대상 (신규입사)</div></div>
+      <div class="card kpi"><div class="num warn" data-ed>18<small>건</small></div><div class="lab" data-ed>누락 · 11월에 7건 집중</div></div>
+      <div class="card g"><p data-ed><b>수집 방법</b><br>2025.1–12 월별 신규입사자 명단과 부서 보관 교육일지 대조 전수조사</p></div>
+    </div>
+  </div>
+  <div class="src" data-ed>이행률 = 완료 ÷ (완료 + 누락). 누락은 모두 MSDS 교육, 특별교육은 누락 0건</div><div class="pg"></div>
+  <aside class="notes"><b>2:30–3:05</b> 2025년 신규입사자 106건을 명단과 대조했습니다. 18건이 누락되어 이행률은 83%였고, 11월 한 달에만 7건이 몰렸습니다. 누락은 모두 결재가 없던 MSDS 교육에서 나왔습니다.</aside>
+</section>
+
+<!-- 7 자료수집 2: 시간 -->
+<section class="slide">
+  <div class="eyebrow" data-ed>02 · 자료 수집 ② 행위별 시간 측정</div>
+  <h2 data-ed>33분 중 26분은 ‘이동과 대면 결재’</h2>
+  <div class="row grow" style="margin-top:20px">
+    <div class="card w" style="flex:1.6;display:flex;flex-direction:column">
+      <h3 data-ed>특별안전보건교육 1건 (7단계)</h3>
+      <div class="chart grow" data-type="hbar" data-unit="s"
+        data-labels="① 대상자 확인·일지 초안,② 메신저로 부서장 전송,③ 다운로드·출력·서명,④ 보건실 직접 제출(이동),⑤ 사진 촬영·전송,⑥ 사진·일지 취합·파일링,⑦ 대면 결재 3단계"
+        data-a="138,60,90,420,30,126,1164"
+        data-hi="3,6"></div>
+    </div>
+    <div class="col" style="flex:1">
+      <div class="card kpi"><div class="num" data-ed>33:48</div><div class="lab" data-ed>특별교육 1건 합계</div></div>
+      <div class="card kpi"><div class="num warn" data-ed>78<small>%</small></div><div class="lab" data-ed>이동(7:00) + 대면 결재(19:24)</div></div>
+      <div class="card kpi"><div class="num" data-ed>4:19</div><div class="lab" data-ed>MSDS 1건 (검색 2:09 · 출력 1:19 · 서명 0:19 · 파일철 0:32), 결재 없음</div></div>
+    </div>
+  </div>
+  <div class="src" data-ed>측정: 2025.1 행위 단위 직접 관찰(Time Study), 단계별 평균 · n = [측정 건수 입력]</div><div class="pg"></div>
+  <aside class="notes"><b>3:05–3:40</b> 행위 단위로 시간을 쟀습니다. 특별교육 한 건에 33분 48초, 그중 보건실 방문 7분과 세 단계 대면 결재 19분이 78%를 차지했습니다. MSDS는 4분 정도였지만 결재 자체가 없었습니다.</aside>
+</section>
+
+<!-- 8 원인분석 -->
+<section class="slide">
+  <div class="eyebrow" data-ed>03 · 원인 분석</div>
+  <h2 data-ed>근본 원인은 ‘보이지 않는 기록’</h2>
+  <div class="row grow" style="margin-top:18px">
+    <div class="card w" style="flex:1.5;display:flex;flex-direction:column">
+      <div class="chart grow" data-type="fish"
+        data-effect="교육 누락 · 행정 지연"
+        data-top="방법|대면 결재 3단계|MSDS 결재 절차 없음;환경|보건실 이동 평균 7분|파일 재전달 반복"
+        data-bottom="시스템|양식이 게시판·PC에 분산|입사자-교육 대조 불가;재료|MSDS 개정본 확인 미흡|종이 일지 부서 보관·분실"></div>
+    </div>
+    <div class="col" style="flex:1">
+      <h3 data-ed>우선순위 (영향도 × 실행 용이성)</h3>
+      <div class="card g"><span class="tag" data-ed>핵심 1</span><p style="margin-top:8px" data-ed><b>교육 이수 현황을 실시간으로 볼 수 없음</b> → 누락 18건의 직접 원인</p></div>
+      <div class="card g"><span class="tag" data-ed>핵심 2</span><p style="margin-top:8px" data-ed><b>종이 · 대면 중심 결재와 이동</b> → 작업시간의 78%</p></div>
+      <div class="card"><span class="tag k" data-ed>핵심 3</span><p style="margin-top:8px" data-ed><b>양식 · MSDS 자료 분산</b> → 검색 · 출력 반복, 최신본 관리 어려움</p></div>
+    </div>
+  </div>
+  <div class="pg"></div>
+  <aside class="notes"><b>3:40–4:15</b> 원인을 네 갈래로 나눠 보니, 핵심은 기록이 종이로 흩어져 있어 아무도 실시간으로 볼 수 없다는 것이었습니다. 영향이 크고 바로 손댈 수 있는 세 가지를 우선 원인으로 정했습니다.</aside>
+</section>
+
+<!-- 9 개선 전략 -->
+<section class="slide">
+  <div class="eyebrow" data-ed>03 · 개선 전략</div>
+  <h2 data-ed>원인마다 기능 하나, 단계적으로</h2>
+  <div style="margin-top:22px">
+    <p class="small" style="margin-bottom:8px" data-ed>개선 전 · 특별교육</p>
+    <div class="flow">
+      <div class="st bad" data-ed>사진 받기<small>부서장 → 보건관리자</small></div><span class="ar">→</span>
+      <div class="st bad" data-ed>일지 작성·전송<small>보건관리자</small></div><span class="ar">→</span>
+      <div class="st bad" data-ed>출력·수기 서명<small>부서</small></div><span class="ar">→</span>
+      <div class="st bad" data-ed>보건실 방문 제출<small>평균 7분</small></div><span class="ar">→</span>
+      <div class="st bad" data-ed>대면 결재 3단계<small>평균 19분 24초</small></div>
+    </div>
+    <p class="small" style="margin:16px 0 8px" data-ed>개선 후 · 모든 교육</p>
+    <div class="flow">
+      <div class="st good" data-ed>직원 검색 → 자동 입력<small>인사 명단 연동</small></div><span class="ar">→</span>
+      <div class="st good" data-ed>현장 사진 촬영 첨부<small>앱 안에서</small></div><span class="ar">→</span>
+      <div class="st good" data-ed>모바일 전자서명<small>근로자</small></div><span class="ar">→</span>
+      <div class="st good" data-ed>제출 → PDF 자동 생성<small>시각 자동 기록</small></div><span class="ar">→</span>
+      <div class="st good" data-ed>비대면 결재 · 보관<small>관리자 화면</small></div>
+    </div>
+  </div>
+  <table style="margin-top:22px">
+    <thead><tr><th style="width:24%">원인</th><th style="width:38%">대응 기능</th><th>단계</th></tr></thead>
+    <tbody>
+      <tr><td data-ed><b>현황이 보이지 않음</b></td><td data-ed>교육 조회 → 이수 현황판 · 신규입사 자동 알림</td><td data-ed><span class="tag">1차</span> 조회 &nbsp;<span class="tag k">2차</span> 현황판·알림</td></tr>
+      <tr><td data-ed><b>종이·대면 결재, 이동</b></td><td data-ed>모바일 일지 · 전자서명 · 비대면 결재</td><td data-ed><span class="tag">1차</span></td></tr>
+      <tr><td data-ed><b>자료 분산</b></td><td data-ed>MSDS 목록화 · 조회 · 원본 PDF, 서식 통합(보호구 · 신규/중단 보고서)</td><td data-ed><span class="tag">1차</span> MSDS &nbsp;<span class="tag k">2차</span> 서식 통합</td></tr>
+    </tbody>
+  </table>
+  <div class="pg"></div>
+  <aside class="notes"><b>4:15–4:50</b> 원인마다 기능을 하나씩 대응시켰습니다. 종이 다섯 단계가 모바일 다섯 단계로 바뀌었고, 이동과 대면 결재가 없어졌습니다. 1차는 교육일지와 MSDS에, 2차는 현황판과 알림, 서식 통합에 집중했습니다.</aside>
+</section>
+
+<!-- 10 시연 -->
+<section class="slide dark">
+  <div class="eyebrow" data-ed>03 · 프로그램 시연</div>
+  <h2 data-ed>1분 30초 시연</h2>
+  <div class="row grow" style="margin-top:20px">
+    <div class="video" id="vbox" style="flex:1.75">
+      <video id="vid" controls playsinline preload="metadata"></video>
+      <div class="ph"><div class="play"><svg width="34" height="34" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></div>
+        <div>편집 모드에서 이 영역을 눌러 시연 영상(mp4)을 선택하세요<br><span style="font-size:15px;color:#778">저장 후에는 HTML과 같은 폴더에 같은 이름의 영상 파일을 두면 재생됩니다</span></div></div>
+      <input type="file" id="vfile" accept="video/*" hidden>
+    </div>
+    <div class="feat" style="flex:1">
+      <div class="f"><span class="k">01</span><div data-ed><b>모바일 교육일지</b><br>직원 검색 · 사진 · 서명 · 제출</div></div>
+      <div class="f"><span class="k">02</span><div data-ed><b>MSDS 라이브러리</b><br>부서별 목록 · 경고표지 · 원본 PDF</div></div>
+      <div class="f"><span class="k">03</span><div data-ed><b>관리자 결재 · 현황판</b><br>미이수자 확인 · 부서 알림</div></div>
+      <div class="f"><span class="k">04</span><div data-ed><b>AI 기능 (2차)</b><br>MSDS 검토 · 위험성평가 · 도우미</div></div>
+    </div>
+  </div>
+  <div class="pg"></div>
+  <aside class="notes"><b>4:50–6:20</b> (영상 재생) 신규직원을 검색하면 인적사항이 자동으로 들어가고, 현장 사진과 서명을 받아 제출하면 PDF가 만들어지고 관리자 화면에 바로 올라옵니다.</aside>
+</section>
+
+<!-- 11 효과 1 -->
+<section class="slide">
+  <div class="eyebrow" data-ed>04 · 활동의 효과 ① 이행률 · 전자 처리율</div>
+  <h2 data-ed>3개월간 교육 대상 33건, 누락 0건</h2>
+  <div class="row grow" style="margin-top:20px">
+    <div class="card w" style="flex:1.3;display:flex;flex-direction:column">
+      <h3 data-ed>교육 이행률 (%)</h3>
+      <div class="chart grow" data-type="bars" data-unit="%" data-max="100"
+        data-labels="2025 평균,2026.05,2026.06,2026.07"
+        data-a="83,100,100,100" data-note="n=106,n=8,n=15,n=10"></div>
+    </div>
+    <div class="card w" style="flex:1.3;display:flex;flex-direction:column">
+      <h3 data-ed>전자 처리 건수 (건/월)</h3>
+      <div class="chart grow" data-type="bars" data-unit="건"
+        data-labels="2026.05,2026.06,2026.07"
+        data-a="9,24,19" data-note="100%,100%,100%"></div>
+    </div>
+    <div class="col" style="flex:1">
+      <div class="card kpi g"><div class="num hl" data-ed>+17<small>%p</small></div><div class="lab" data-ed>이행률 83.0 → 100 %</div></div>
+      <div class="card kpi"><div class="num" data-ed>52<small>건</small></div><div class="lab" data-ed>신규 업무 전량 전자 처리</div></div>
+      <div class="card"><p class="small" data-ed>관찰 기간이 3개월(33건)로 짧아 누락 위험이 완전히 사라졌다고 보기는 어려움 → 2차 현황판으로 상시 추적</p></div>
+    </div>
+  </div>
+  <div class="src" data-ed>자료: 플랫폼 교육 기록 2026.05–07 · 전자 처리 건수는 교육일지 · 보호구 · 보고서 포함</div><div class="pg"></div>
+  <aside class="notes"><b>6:20–6:55</b> 개선 후 3개월 동안 교육 대상 33건을 누락 없이 모두 마쳤고, 이행률은 83%에서 100%가 됐습니다. 새로 생긴 52건의 업무는 모두 종이 없이 처리됐습니다. 다만 기간이 짧아서 현황판으로 계속 추적하고 있습니다.</aside>
+</section>
+
+<!-- 12 효과 2 -->
+<section class="slide">
+  <div class="eyebrow" data-ed>04 · 활동의 효과 ② 행정 작업시간</div>
+  <h2 data-ed>특별교육 93% · MSDS 81% 단축</h2>
+  <div class="row grow" style="margin-top:20px">
+    <div class="card w" style="flex:1.7;display:flex;flex-direction:column">
+      <div class="legend"><span><i style="background:#C7C7CC"></i>개선 전</span><span><i style="background:var(--green)"></i>개선 후</span></div>
+      <div class="chart grow" style="margin-top:6px" data-type="hbar2" data-unit="s"
+        data-labels="① 대상자 확인·초안,② 부서장 전송,③ 출력·서명,④ 보건실 제출(이동),⑤ 사진,⑥ 취합·파일링,⑦ 결재"
+        data-a="138,60,90,420,30,126,1164"
+        data-b="18,50,9,0,6,0,60"></div>
+    </div>
+    <div class="col" style="flex:1">
+      <div class="card kpi g"><div class="num hl" data-ed>2:23</div><div class="lab" data-ed>특별교육 1건 (33:48 → 2:23, −93%)</div></div>
+      <div class="card kpi"><div class="num" data-ed>0:49</div><div class="lab" data-ed>MSDS 1건 (4:19 → 0:49, −81%) · 결재 단계 새로 추가</div></div>
+      <div class="card"><p class="small" data-ed><b>결재 리드타임</b>(제출→승인, 시스템 자동 기록) 중앙값: MSDS 53분 · 특별교육 140분 — 기다리는 동안 직원은 이동·재방문하지 않음</p></div>
+    </div>
+  </div>
+  <div class="src" data-ed>작업시간: 2026.07 행위별 측정, n = [입력] · 리드타임: 2026.05–07 플랫폼 기록 (MSDS n=28, 특별교육 n=5)</div><div class="pg"></div>
+  <aside class="notes"><b>6:55–7:30</b> 사람이 손으로 하는 작업시간은 특별교육 93%, MSDS 81% 줄었습니다. MSDS는 결재 단계를 새로 넣었는데도 줄었습니다. 결재가 완료되기까지 걸린 시간은 시스템에 자동으로 남는데, 중앙값이 한두 시간입니다. 그동안 현장 직원은 기다리거나 다시 방문할 필요가 없습니다.</aside>
+</section>
+
+<!-- 13 결론 및 제언 -->
+<section class="slide">
+  <div class="eyebrow" data-ed>04 · 결론 및 제언</div>
+  <h2 data-ed>보이게 만들었더니, 빠지지 않았습니다</h2>
+  <div class="g3" style="margin-top:24px">
+    <div class="card g"><h3 data-ed>결론</h3><p data-ed>교육 이행률 83 → 100%, 특별교육 작업시간 −93%, 신규 업무 전자 처리 100%. 핵심은 속도보다 <b>기록이 실시간으로 보이게 된 것.</b></p></div>
+    <div class="card"><h3 data-ed>표준화 (Act)</h3><p data-ed>‘안전보건교육 전자 관리 지침’ 제정 · 종이 바인더 · 대면 결재 폐지 · 월 1회 이행률 · 전자 처리율 모니터링 · 정·부 담당자 지정</p></div>
+    <div class="card"><h3 data-ed>2차 확장 (CQI)</h3><p data-ed>이수 현황판 · 신규입사 자동 알림 · 보호구 · 신규/중단 보고서 · AI MSDS 검토 · AI 위험성평가 · AI 도우미 — 8/8 기능 운영</p></div>
+  </div>
+  <div class="g2" style="margin-top:22px">
+    <div class="card w"><h3 data-ed>한계</h3><p data-ed>개선 후 관찰 3개월 · 작업시간 측정 표본이 작음 · 2차 AI 기능의 성과 지표는 아직 수집 중</p></div>
+    <div class="card w"><h3 data-ed>제언</h3><p data-ed>① 6개월 이상 추적 관찰 &nbsp;② 기록 저장소 비공개 이전 · 개인정보 보호 강화 &nbsp;③ AI 위험성평가 참여 부서·개선완료율 지표화 &nbsp;④ 타 법정교육으로 확대</p></div>
+  </div>
+  <div class="grow"></div>
+  <p class="lead" style="text-align:center" data-ed>감사합니다 · 총무-안전보건팀 Safety First</p>
+  <div class="pg"></div>
+  <aside class="notes"><b>7:30–8:00</b> 기록이 보이게 되자 교육이 빠지지 않았습니다. 이 절차를 지침으로 만들어 정식 업무로 전환했고, 지금은 보호구와 AI 위험성평가까지 확장했습니다. 다만 관찰 기간이 짧아 추적을 계속하겠습니다. 감사합니다.</aside>
+</section>
+
+</div></div>
+
+<div id="notesPanel"></div>
+<div id="modal"><div class="box"><h4>차트 데이터 수정</h4><p>쉼표로 구분해 입력하세요. labels = 항목, a·b = 값, hi = 강조할 항목 번호(0부터)</p><textarea id="mta"></textarea><div class="btns"><button id="mcancel">취소</button><button class="ok" id="mok">적용</button></div></div></div>
+<div id="toast"></div>
+
+<script>
+(function(){
+const deck=document.getElementById('deck');
+const KEY='qi-safetyfirst-deck-v1';
+let savedDeck=null;
+try{savedDeck=localStorage.getItem(KEY);if(savedDeck&&localStorage.getItem(KEY+'-restore')){localStorage.removeItem(KEY+'-restore');deck.innerHTML=savedDeck;savedDeck=null}}catch(e){}
+deck.querySelectorAll('.cedit,svg.chart-svg').forEach(x=>x.remove());
+const slides=[...document.querySelectorAll('.slide')];
+let cur=0;
+const C={g:'#67AF28',gd:'#3F7A12',w:'#E8644A',k:'#1D1D1F',m:'#86868B',l:'#E5E5EA',gray:'#C7C7CC'};
+function toast(t){const e=document.getElementById('toast');e.textContent=t;e.style.display='block';clearTimeout(e._t);e._t=setTimeout(()=>e.style.display='none',2200)}
+function fit(){const s=Math.min(innerWidth/1600,innerHeight/900);deck.style.transform='scale('+s+')'}
+addEventListener('resize',fit);fit();
+function show(i){cur=Math.max(0,Math.min(slides.length-1,i));slides.forEach((s,j)=>s.classList.toggle('active',j===cur));
+  document.getElementById('prog').style.width=((cur+1)/slides.length*100)+'%';
+  const n=slides[cur].querySelector('.notes');document.getElementById('notesPanel').innerHTML=n?n.innerHTML:'';
+  try{history.replaceState(null,'','#'+(cur+1))}catch(e){}
+  requestAnimationFrame(()=>slides[cur].querySelectorAll('.chart').forEach(render));}
+slides.forEach((s,i)=>{const p=s.querySelector('.pg');if(p)p.textContent=(i+1)+' / '+slides.length});
+/* ---------- charts ---------- */
+const nums=s=>(s||'').split(',').map(x=>parseFloat(x)||0), strs=s=>(s||'').split(',').map(x=>x.trim());
+const mmss=v=>{v=Math.round(v);return Math.floor(v/60)+':'+String(v%60).padStart(2,'0')};
+function svg(w,h,inner){return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="xMidYMid meet" class="chart-svg">'+inner+'</svg>'}
+const T=(x,y,t,o)=>'<text x="'+x+'" y="'+y+'" font-family="Pretendard,sans-serif" '+(o||'')+'>'+t+'</text>';
+function render(el){
+  const r=el.getBoundingClientRect(); if(!r.width) return;
+  const W=Math.max(300,el.clientWidth), H=Math.max(200,el.clientHeight), d=el.dataset, t=d.type; let s='';
+  if(t==='stack'){
+    const L=strs(d.labels),A=nums(d.a),B=nums(d.b),n=L.length,top=40,bot=40,ch=H-top-bot,mx=Math.max(...A.map((a,i)=>a+B[i]))*1.1,bw=(W-40)/n;
+    for(let k=0;k<=4;k++){const y=top+ch-ch*k/4;s+='<line x1="30" x2="'+W+'" y1="'+y+'" y2="'+y+'" stroke="'+C.l+'"/>'}
+    let pts=[];
+    L.forEach((l,i)=>{const x=40+i*bw+bw*.2,w=bw*.6,ha=ch*A[i]/mx,hb=ch*B[i]/mx,y0=top+ch;
+      s+='<rect x="'+x+'" y="'+(y0-ha)+'" width="'+w+'" height="'+ha+'" rx="4" fill="'+C.g+'"/>';
+      if(B[i])s+='<rect x="'+x+'" y="'+(y0-ha-hb)+'" width="'+w+'" height="'+hb+'" rx="4" fill="'+C.w+'"/>'+T(x+w/2,y0-ha-hb/2+5,B[i],'font-size="14" font-weight="700" fill="#fff" text-anchor="middle"');
+      s+=T(x+w/2,H-12,l,'font-size="15" fill="'+C.m+'" text-anchor="middle"');
+      const rate=Math.round(A[i]/(A[i]+B[i]||1)*100);pts.push([x+w/2,top+ch-ch*rate/100,rate]);});
+    s+='<polyline fill="none" stroke="'+C.k+'" stroke-width="2.5" points="'+pts.map(p=>p[0]+','+p[1]).join(' ')+'"/>';
+    pts.forEach(p=>{const low=p[2]<80;s+='<circle cx="'+p[0]+'" cy="'+p[1]+'" r="5" fill="'+(low?C.w:C.k)+'"/>'+T(p[0],p[1]-12,p[2],'font-size="15" font-weight="800" text-anchor="middle" stroke="#fff" stroke-width="4" paint-order="stroke" fill="'+(low?C.w:C.k)+'"')});
+    s+='<line x1="30" x2="'+W+'" y1="'+(top+ch*.2)+'" y2="'+(top+ch*.2)+'" stroke="'+C.w+'" stroke-dasharray="5 5"/>'+T(W,top+ch*.2-8,'80%','font-size="13" fill="'+C.w+'" text-anchor="end"');
+  }
+  if(t==='hbar'||t==='hbar2'){
+    const L=strs(d.labels),A=nums(d.a),B=t==='hbar2'?nums(d.b):null,hi=strs(d.hi).map(Number),n=L.length,lw=Math.min(300,W*.36),gap=6,rh=(H-10)/n,mx=Math.max(...A)*1.12;
+    L.forEach((l,i)=>{const y=5+i*rh,bh=B?(rh-gap)/2-2:rh-gap*2,sc=(W-lw-90)/mx;
+      s+=T(lw-14,y+rh/2+6,l,'font-size="16" fill="'+C.k+'" text-anchor="end" font-weight="600"');
+      const isH=hi.includes(i);
+      s+='<rect x="'+lw+'" y="'+(y+gap)+'" width="'+Math.max(2,A[i]*sc)+'" height="'+bh+'" rx="5" fill="'+(B?C.gray:(isH?C.w:C.gray))+'"/>'+T(lw+A[i]*sc+8,y+gap+bh/2+5,mmss(A[i]),'font-size="14" fill="'+C.m+'" font-weight="700"');
+      if(B){const y2=y+gap+bh+3;s+='<rect x="'+lw+'" y="'+y2+'" width="'+Math.max(2,B[i]*sc)+'" height="'+bh+'" rx="5" fill="'+C.g+'"/>'+T(lw+B[i]*sc+8,y2+bh/2+5,mmss(B[i]),'font-size="14" fill="'+C.gd+'" font-weight="700"')}
+    });
+  }
+  if(t==='bars'){
+    const L=strs(d.labels),A=nums(d.a),N=strs(d.note),n=L.length,top=44,bot=56,ch=H-top-bot,mx=parseFloat(d.max)||Math.max(...A)*1.15,bw=W/n,u=d.unit||'';
+    s+='<line x1="0" x2="'+W+'" y1="'+(top+ch)+'" y2="'+(top+ch)+'" stroke="'+C.l+'"/>';
+    L.forEach((l,i)=>{const w=Math.min(110,bw*.55),x=i*bw+(bw-w)/2,h=ch*A[i]/mx,base=i===0&&n>3;
+      s+='<rect x="'+x+'" y="'+(top+ch-h)+'" width="'+w+'" height="'+h+'" rx="8" fill="'+(base?C.gray:C.g)+'"/>'+
+      T(x+w/2,top+ch-h-12,A[i]+'<tspan font-size="15">'+u+'</tspan>','font-size="26" font-weight="800" text-anchor="middle" fill="'+(base?C.m:C.k)+'"')+
+      T(x+w/2,H-28,l,'font-size="16" fill="'+C.k+'" text-anchor="middle" font-weight="600"')+(N[i]?T(x+w/2,H-6,N[i],'font-size="13" fill="'+C.m+'" text-anchor="middle"'):'');});
+  }
+  if(t==='fish'){
+    const top=(d.top||'').split(';').map(x=>x.split('|')),bot=(d.bottom||'').split(';').map(x=>x.split('|')),cy=H/2,hx=W-190;
+    s+='<line x1="20" x2="'+hx+'" y1="'+cy+'" y2="'+cy+'" stroke="'+C.k+'" stroke-width="3"/>';
+    s+='<rect x="'+hx+'" y="'+(cy-46)+'" width="180" height="92" rx="16" fill="'+C.g+'"/>';
+    (d.effect||'').split(' · ').forEach((e,k,a)=>s+=T(hx+90,cy+8+(k-(a.length-1)/2)*28,e,'font-size="20" font-weight="800" fill="#fff" text-anchor="middle"'));
+    const draw=(arr,dir)=>arr.forEach((b,i)=>{const x2=60+i*(hx-80)/2+(hx-80)/2*.62,x1=x2-110,y1=cy+dir*(cy-40);
+      s+='<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+cy+'" stroke="'+C.m+'" stroke-width="2"/>';
+      s+='<rect x="'+(x1-60)+'" y="'+(y1+(dir<0?-34:0))+'" width="120" height="34" rx="17" fill="'+C.k+'"/>'+T(x1,y1+(dir<0?-11:23),b[0],'font-size="16" font-weight="700" fill="#fff" text-anchor="middle"');
+      b.slice(1).forEach((c,k)=>{const ry=dir<0?y1+40+k*38:y1-24-k*38, rx=x1+((ry-y1)/(cy-y1))*(x2-x1);
+        s+='<circle cx="'+rx+'" cy="'+ry+'" r="4" fill="'+C.w+'"/>'+T(rx+12,ry+5,c,'font-size="15" fill="'+C.k+'" font-weight="600"');});
+    });
+    draw(top,-1);draw(bot,1);
+  }
+  el.querySelectorAll('svg.chart-svg').forEach(x=>x.remove());
+  el.insertAdjacentHTML('beforeend',svg(W,H,s));
+}
+/* chart edit */
+let mEl=null;
+document.querySelectorAll('.chart').forEach(el=>{const b=document.createElement('button');b.className='cedit';b.textContent='차트 데이터 수정';
+  b.onclick=()=>{mEl=el;const keys=Object.keys(el.dataset).filter(k=>k!=='type');document.getElementById('mta').value=keys.map(k=>k+' = '+el.dataset[k]).join('\n');document.getElementById('modal').classList.add('open')};el.appendChild(b)});
+document.getElementById('mcancel').onclick=()=>document.getElementById('modal').classList.remove('open');
+document.getElementById('mok').onclick=()=>{document.getElementById('mta').value.split('\n').forEach(line=>{const i=line.indexOf('=');if(i>0){mEl.dataset[line.slice(0,i).trim()]=line.slice(i+1).trim()}});
+  document.getElementById('modal').classList.remove('open');render(mEl);autosave();};
+/* edit mode */
+const body=document.body;
+function setEdit(on){body.classList.toggle('editing',on);document.querySelectorAll('[data-ed]').forEach(e=>e.contentEditable=on?'true':'false');document.getElementById('bEdit').classList.toggle('on',on);if(!on)autosave();toast(on?'편집 모드: 글자를 눌러 바로 고치세요':'편집 끝 · 자동 저장됨')}
+function autosave(){try{const c=deck.cloneNode(true);c.querySelectorAll('.cedit,svg.chart-svg').forEach(x=>x.remove());c.querySelectorAll('[contenteditable]').forEach(x=>x.removeAttribute('contenteditable'));localStorage.setItem(KEY,c.innerHTML)}catch(e){}}
+deck.addEventListener('input',()=>{clearTimeout(deck._t);deck._t=setTimeout(autosave,600)});
+if(savedDeck&&savedDeck!==deck.innerHTML){const b=document.createElement('button');b.textContent='↺ 이전 편집 불러오기';
+  b.onclick=()=>{try{localStorage.setItem(KEY+'-restore','1')}catch(e){}location.reload()};document.getElementById('bar').prepend(b)}
+/* save html */
+function saveHtml(){const was=body.classList.contains('editing');if(was)setEdit(false);
+  const clone=document.documentElement.cloneNode(true);clone.querySelectorAll('svg.chart-svg').forEach(x=>x.remove());
+  clone.querySelectorAll('.slide').forEach(s=>s.classList.remove('active'));clone.querySelector('body').className='';
+  clone.querySelectorAll('[contenteditable]').forEach(x=>x.removeAttribute('contenteditable'));
+  const v=clone.querySelector('#vid');if(v){const f=document.getElementById('vid').dataset.file;if(f){v.setAttribute('src',f);v.setAttribute('data-file',f)}else v.removeAttribute('src')}
+  clone.querySelector('#notesPanel').innerHTML='';clone.querySelector('#toast').style.display='none';
+  const html='<!doctype html>\n'+clone.outerHTML,a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([html],{type:'text/html'}));a.download='QI_발표_SafetyFirst.html';a.click();
+  try{localStorage.removeItem(KEY)}catch(e){}toast('HTML 파일로 저장했습니다');if(was)setEdit(true)}
+/* video */
+const vid=document.getElementById('vid'),vbox=document.getElementById('vbox'),vf=document.getElementById('vfile');
+if(vid.getAttribute('src')){vbox.classList.add('has');vid.dataset.file=vid.getAttribute('data-file')||vid.getAttribute('src')}
+vbox.addEventListener('click',e=>{if(body.classList.contains('editing')&&e.target!==vid)vf.click()});
+vf.onchange=()=>{const f=vf.files[0];if(!f)return;vid.src=URL.createObjectURL(f);vid.dataset.file=f.name;vbox.classList.add('has');toast('영상: '+f.name+' (저장 시 같은 폴더에 두세요)')};
+vid.addEventListener('error',()=>vbox.classList.remove('has'));
+/* controls */
+document.getElementById('bEdit').onclick=()=>setEdit(!body.classList.contains('editing'));
+document.getElementById('bNotes').onclick=()=>{body.classList.toggle('shownotes');document.getElementById('bNotes').classList.toggle('on')};
+document.getElementById('bSave').onclick=saveHtml;
+document.getElementById('bPdf').onclick=()=>{slides.forEach(s=>{s.style.display='flex'});setTimeout(()=>{document.querySelectorAll('.chart').forEach(render);print();slides.forEach(s=>s.style.display='');show(cur)},100)};
+document.getElementById('bFull').onclick=()=>{document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen().catch(()=>{})};
+document.getElementById('pv').onclick=()=>show(cur-1);document.getElementById('nx').onclick=()=>show(cur+1);
+addEventListener('keydown',e=>{const ed=body.classList.contains('editing')&&document.activeElement&&document.activeElement.isContentEditable;
+  if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();saveHtml();return}
+  if(ed||document.getElementById('modal').classList.contains('open'))return;
+  if(['ArrowRight','PageDown',' '].includes(e.key)){e.preventDefault();show(cur+1)}
+  if(['ArrowLeft','PageUp'].includes(e.key)){e.preventDefault();show(cur-1)}
+  if(e.key==='Home')show(0);if(e.key==='End')show(slides.length-1);
+  if(e.key==='e'||e.key==='E')setEdit(!body.classList.contains('editing'));
+  if(e.key==='n'||e.key==='N')document.getElementById('bNotes').click();
+  if(e.key==='f'||e.key==='F')document.getElementById('bFull').click();});
+let tx=null;addEventListener('touchstart',e=>tx=e.touches[0].clientX,{passive:true});
+addEventListener('touchend',e=>{if(tx===null||body.classList.contains('editing'))return;const dx=e.changedTouches[0].clientX-tx;if(Math.abs(dx)>50)show(cur+(dx<0?1:-1));tx=null});
+addEventListener('resize',()=>slides[cur].querySelectorAll('.chart').forEach(render));
+show((parseInt(location.hash.slice(1))||1)-1);
+})();
+</script>
+</body>
+</html>
