@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.5/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.6/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
   const other = await page.evaluate(async () => {
@@ -504,7 +504,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.5'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.6'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -1467,6 +1467,18 @@ function check(name, cond, extra) {
     const b1 = post({ op: 'ra.analyze', image: 'data:image/jpeg;base64,' + Buffer.from('x').toString('base64'), place: '복도', t: tk.a });
     gm.failModel = '';
     check('AI 503: 같은 모델 3번 시도 → 예비 모델(gemini-2.5-flash-lite)로 답', b1.success && b1.model === 'gemini-2.5-flash-lite' && gm.calls.length - calls0 === 4, [b1.success, b1.model, b1.error, gm.calls.length - calls0]);
+    // v21.6 신규입사: 인사 사이트에 늦게 올라온 입사자(10일 전 입사)도 [누락 찾기]로 알림 · [직접 보내기] · 중복 막기
+    const kday = n => new Date(Date.now() + 9 * 3600e3 - n * 86400e3).toISOString().slice(0, 10);
+    const er = empRow('126999001', '늦은등록', '61병동', '재직', '간호사6급'); er[col('입사일')] = kday(10); empSh.appendRow(er);
+    const er2 = empRow('126999002', '직접대상', '61병동', '재직', '간호사6급'); er2[col('입사일')] = kday(90); empSh.appendRow(er2);
+    const m0 = mail.sent.length;
+    const det = post({ op: 'nh.detect', t: tk.a });
+    const nhOf = nm => g.api.nhRows_().find(o => o['이름'] === nm);
+    check('신규입사 누락 찾기: 10일 전 입사(7일 기준 밖)도 교육 대상 · 미이수면 알림 + 부서장 메일', det.success && det.created.some(c => c.name === '늦은등록') && nhOf('늦은등록') && mail.sent.slice(m0).some(m => /늦은등록/.test(m.subject)) && !det.created.some(c => c.name === '직접대상'), det);
+    const add1 = post({ op: 'nh.add', name: '직접대상', dept: '61병동', t: tk.a });
+    const add2 = post({ op: 'nh.add', name: '직접대상', dept: '61병동', t: tk.a });
+    const addD = post({ op: 'nh.add', name: '직접대상', dept: '61병동', t: tk.d });
+    check('신규입사 직접 보내기: 고른 직원 알림 · 메일 · 같은 사람 두 번은 막음 · 부서 계정 불가', add1.success && add1.status === '회신대기' && nhOf('직접대상') && !add2.success && add2.exists && addD.status === 403, [add1, add2.error, addD.status]);
     const ui = await page.evaluate(() => typeof apvDeleteOne === 'function' && typeof _getStampedPdfBlob === 'function');
     check('결재 관리: 한 건 삭제 · 결재본 도장 미리보기 함수', ui);
   }
