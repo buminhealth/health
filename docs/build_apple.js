@@ -249,7 +249,49 @@ function slide5D() {
   T(s, '파레토: 상위 2단계 개선 = 행정시간 78% 해결', 776, 616, 420, 20, { fontSize: 12, bold: true, color: K.navy });
 }
 
-if (MODE === 'v2') { slide5B('시안 B — 현행 (월별 건수 · 공정 순서 막대)'); slide5D(); }
+// 5장 — 새 제목 + 도표 ② (이행률 · 파레토) / ③ (KPI + 100% 구성 막대)
+const H5N = '교육 1건에 33분 48초, 그중 78%는 기다림과 이동이었습니다';
+const S5N = '2025년 1–12월 신규 입사자 106명 교육일지 전수조사 · 세부 행동 단위별 소요시간 실측';
+function slide5E() { // 사진 ② 도표
+  slide5D();
+  const s = pres._slides[pres._slides.length - 1];
+  // 제목/부제만 교체: 새 슬라이드로 다시 그리는 대신 마지막 슬라이드의 텍스트 객체 수정
+  for (const o of s._slideObjects) {
+    if (o._type === 'text' && Array.isArray(o.text) && o.text[0] && o.text[0].text === H5) o.text[0].text = H5N;
+    if (o._type === 'text' && Array.isArray(o.text) && o.text[0] && /^시안 D/.test(o.text[0].text)) o.text[0].text = S5N;
+  }
+}
+function slide5F() { // 사진 ③ 도표
+  const s = slide();
+  chrome(s, 'PLAN · 현황 분석', 0, H5N, S5N, 5);
+  const cw = (1152 - 2 * 20) / 3;
+  [['법정교육 누락', '18건', '106명 중 17% · 12개월 중 8개월 발생', false],
+   ['특별안전보건교육 행정시간', '33분 48초', '교육 1건당 · 교육 진행 시간 제외', true],
+   ['종이 기반 처리', '100%', '교육일지 · MSDS 출력 후 바인더 보관', false]].forEach((k, i) => {
+    const x = 64 + i * (cw + 20);
+    card(s, x, 176, cw, 220, k[3] ? K.navy : K.surf, 24);
+    T(s, k[0], x + 32, 204, cw - 64, 20, { fontSize: 13, color: k[3] ? K.onNavy : K.sub });
+    T(s, k[1], x + 32, 240, cw - 40, 80, { fontFace: NUM, fontSize: 44, bold: true, color: k[3] ? K.w : K.navy });
+    T(s, k[2], x + 32, 340, cw - 64, 36, { fontSize: 12, color: k[3] ? K.onNavy : K.sub });
+  });
+  card(s, 64, 416, 1152, 240, K.surf, 24);
+  T(s, '33분 48초는 어디에 쓰였나', 100, 440, 600, 24, { fontSize: 16, bold: true });
+  T(s, '결재 대기 + 직접 제출 = 78%  →  개선 우선순위', 700, 440, 480, 24, { fontSize: 13, bold: true, color: K.navy, align: 'right' });
+  const segs = [['57%', '아날로그 내부 결재 대기', '19분 24초', 1164, K.navy, K.w], ['21%', '직접 제출 (이동)', '7분 00초', 420, K.n2, K.w], ['22%', '작성 · 출력 · 서명 등', '7분 24초', 444, 'C9D3E3', K.navy]];
+  let x = 100; const W = 1080;
+  segs.forEach((g, i) => {
+    const w = g[3] / 2028 * W - (i < 2 ? 6 : 0);
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { ...B(x, 484, w, 64), fill: { color: g[4] }, line: { type: 'none' }, rectRadius: p(10), objectName: nm() });
+    T(s, g[0], x + 18, 484, w - 30, 64, { fontFace: NUM, fontSize: 22, bold: true, color: g[5], valign: 'middle' });
+    T(s, g[1], x, 562, w, 20, { fontSize: 13, bold: true });
+    T(s, g[2], x, 586, w, 18, { fontFace: NUM, fontSize: 12, color: K.sub });
+    x += w + 6;
+  });
+  s.addNotes('- "교육 1건에 33분 48초가 걸렸습니다. 그중 57%는 결재를 기다린 시간, 21%는 보건관리실까지 걸어온 시간입니다."\n- "두 단계만 없애면 78%가 줄어듭니다 — 이것이 개선 우선순위였습니다." (파레토 원리)\n- 누락: 106명 중 18건, 12개월 중 8개월에서 반복 → 확인 체계 문제');
+}
+
+if (MODE === 'v3') { slide5E(); slide5F(); }
+else if (MODE === 'v2') { slide5B('시안 B — 현행 (월별 건수 · 공정 순서 막대)'); slide5D(); }
 else if (MODE === 'variants') { slide5B('시안 B — 누락(좌) · 시간(우) 두 패널'); slide5C(); }
 else { deck14(); }
 
