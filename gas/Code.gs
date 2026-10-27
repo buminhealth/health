@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.3 (2026-10-27)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.4 (2026-10-27)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -178,6 +178,7 @@ function doPost(e) {
                         result = chemOp_(req, s); break;
       case 'ai.status': case 'ai.setKey': case 'ai.list': case 'ai.analyze': case 'ai.judge': case 'ai.apply': case 'ai.products': case 'ai.compare':
                         result = aiOp_(req, s); break;
+      case 'pdf.big':  result = requireAdmin_(s) || pdfBig_(req); break;
       case 'ra.meta': case 'ra.analyze': case 'ra.submit': case 'ra.mine': case 'ra.photo': case 'ra.list': case 'ra.update':
                         result = raOp_(req, s); break;
       case 'help.ask': case 'help.meta': case 'help.lawRefresh': case 'help.faqList': case 'help.faqSave': case 'kosha.status': case 'kosha.setKey': case 'kosha.saveApis': case 'kosha.test':
@@ -4111,4 +4112,31 @@ function raRefs_(place, task) {
     } catch (_) {}
   }
   return out.join('\n');
+}
+
+// ════════════════════════════════════════════════════════════════
+// v21.4 PDF 용량 줄이기 — 큰 PDF 목록 (관리자 화면이 받아서 그림만 JPEG로 바꿔 다시 저장)
+//  예전 PDF는 페이지 그림이 압축 없이(원본 RGB) 들어 있어 한 장에 8~10MB. 바꿔 저장하면 이전 판은 드라이브 휴지통(30일)에 남음
+// ════════════════════════════════════════════════════════════════
+function pdfBig_(req) {
+  const min = Math.max(300 * 1024, Number(req.min) || 1536 * 1024);
+  const out = [];
+  let total = 0, count = 0;
+  const walk = (folder, path, depth) => {
+    const it = folder.getFiles();
+    while (it.hasNext()) {
+      const f = it.next();
+      if (!/\.pdf$/i.test(f.getName())) continue;
+      count++;
+      const size = f.getSize();
+      total += size;
+      if (size >= min && out.length < 300) out.push({ path: path + '/' + f.getName(), size: size, sha: fileMeta_(f).sha });
+    }
+    if (depth > 3) return;
+    const fs = folder.getFolders();
+    while (fs.hasNext()) { const sub = fs.next(); walk(sub, path + '/' + sub.getName(), depth + 1); }
+  };
+  ['교육일지', '보호구', '화학물질'].forEach(top => getFolders_([top]).forEach(f => walk(f, top, 1)));
+  out.sort((a, b) => b.size - a.size);
+  return { success: true, data: out, count: count, totalBytes: total, bigBytes: out.reduce((a, x) => a + x.size, 0) };
 }

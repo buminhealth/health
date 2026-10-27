@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.3/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.4/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
   const other = await page.evaluate(async () => {
@@ -504,7 +504,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.3'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.4'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -1450,6 +1450,45 @@ function check(name, cond, extra) {
     return v;
   });
   check('설정 화면: 질문 · 답 목록 · [+ 질문 추가] · 저장', faqUi.rows === 13 && faqUi.after === 14 && /14개를 저장/.test(faqUi.msg), faqUi);
+
+  // 18-2. v21.4 PDF 용량: 예전 방식(PNG → 압축 없는 RGB) PDF를 드라이브에 두고 → 큰 PDF 찾기 → 그림만 JPEG로 바꿔 다시 저장
+  {
+    const LIB = process.env.PDF_LIBS || '/tmp/claude-0/-home-user-health/380d0980-4304-5ba9-83eb-14958bc872ed/scratchpad/pdfb/node_modules';
+    const fs = require('fs');
+    if (fs.existsSync(LIB + '/jspdf/dist/jspdf.umd.min.js')) {
+      await page.addScriptTag({ path: LIB + '/jspdf/dist/jspdf.umd.min.js' });
+      await page.addScriptTag({ path: LIB + '/pdf-lib/dist/pdf-lib.min.js' });
+      const pr = await page.evaluate(async () => {
+        await BMAUTH.adminLogin('admin-pass-1');
+        // 예전 방식 PDF 만들기: 900×1270 그림(글자 · 선 · 투명 영역)을 PNG로 넣음
+        const cv = document.createElement('canvas'); cv.width = 900; cv.height = 1270;
+        const x = cv.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 900, 1200);
+        x.fillStyle = '#123'; x.font = '28px sans-serif'; for (let i = 0; i < 30; i++) x.fillText('MSDS 교육일지 줄 ' + i + ' — 서명 확인', 40, 60 + i * 38);
+        x.strokeStyle = '#d63838'; x.lineWidth = 3; x.beginPath(); x.arc(780, 1100, 60, 0, 7); x.stroke();
+        const old = new jspdf.jsPDF('p', 'mm', 'a4');
+        old.addImage(cv.toDataURL('image/png'), 'PNG', 0, 0, 210, 296);
+        old.addPage(); old.addImage(cv.toDataURL('image/png'), 'PNG', 0, 0, 210, 296);
+        const bytes = new Uint8Array(old.output('arraybuffer'));
+        let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+        const path = '교육일지/2026-05/예전큰일지-61병동.pdf';
+        const api = 'https://api.github.com/repos/buminhealth/health/contents/' + path.split('/').map(encodeURIComponent).join('/');
+        const put = await fetch(api, { method: 'PUT', body: JSON.stringify({ message: 't', content: btoa(bin) }) });
+        const big = await BMAUTH.post('pdf.big', { min: 1 });
+        const f = (big.data || []).find(z => z.path === path);
+        const r = f ? await bmShrinkStoredPdf(f) : null;
+        const after = new Uint8Array(await (await fetch('https://raw.githubusercontent.com/buminhealth/health/main/' + path.split('/').map(encodeURIComponent).join('/'))).arrayBuffer());
+        const doc = await PDFLib.PDFDocument.load(after);
+        const imgs = [];
+        doc.getPages().forEach(pg => { const xo = pg.node.Resources().lookup(PDFLib.PDFName.of('XObject')); xo.keys().forEach(k => { const st = doc.context.lookup(xo.get(k)); imgs.push(String(st.dict.get(PDFLib.PDFName.of('Filter')))); }); });
+        // 새로 만드는 PDF는 JPEG
+        const nw = new jspdf.jsPDF('p', 'mm', 'a4'); nw.addImage(pdfPageImg(cv), 'JPEG', 0, 0, 210, 296, undefined, 'FAST');
+        const again = { skipped: (await bmShrinkPdf(after)) === null, listed: (await BMAUTH.post('pdf.big', { min: 1 })).data.some(z => z.path === path) };
+        return { putOk: put.ok, listed: !!f, before: bytes.length, after: after.length, r, pages: doc.getPageCount(), imgs, newKB: Math.round(nw.output('arraybuffer').byteLength / 1024), again };
+      });
+      check('PDF 용량: 예전 PDF 찾기 → 그림만 JPEG로 바꿔 같은 경로에 저장 (페이지 수 그대로 · 1/5 이하) · 다시 하면 건너뜀 · 새 PDF는 JPEG', pr.putOk && pr.listed && pr.pages === 2 && pr.imgs.every(f => f === '/DCTDecode') && pr.after < pr.before / 5 && pr.again.skipped && !pr.again.listed && pr.newKB < 400,
+        { before: pr.before, after: pr.after, imgs: pr.imgs, newKB: pr.newKB, again: pr.again, r: pr.r });
+    } else check('PDF 용량 시험: jspdf · pdf-lib 없음 (건너뜀)', true);
+  }
 
   // 19. v21.3 저장 공간 가득 참 (같은 주소 다른 앱이 5MB를 거의 다 씀) → 멈추지 않고 메모리 보관 · 앱별 사용량 표시
   const st = await page.evaluate(() => {
