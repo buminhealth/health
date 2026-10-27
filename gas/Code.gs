@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.2 (2026-10-23)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.3 (2026-10-27)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -2330,8 +2330,13 @@ function lawOcMask_() {
   const v = PROPS.getProperty('LAW_OC') || '';
   return v.split(',').filter(Boolean).map(x => x.slice(0, 3) + '*'.repeat(Math.max(1, x.length - 3))).join(', ');
 }
+// v21.3 법령 API에 보내는 등록 도메인: 관리자설정 '앱주소'(전용 주소로 옮기면 그 주소) — law.go.kr 신청정보에도 같은 도메인을 등록해야 함
+function lawReferer_() {
+  const m = String(sysCfg_().appUrl || '').match(/^https?:\/\/[^\/?#]+/);
+  return m ? m[0] + '/' : 'https://buminhealth.github.io/';
+}
 function lawGetJson_(url) {
-  const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { Referer: 'https://buminhealth.github.io/' } });
+  const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { Referer: lawReferer_() } });
   const t = res.getContentText() || '';
   let j = null;
   try { j = JSON.parse(t); } catch (_) {}

@@ -10,8 +10,14 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v21.2 (2026-10-23)
+  부민병원 MSDS 통합시스템 v21.3 (2026-10-27)
 
+  ★★★ v21.3 (2026-10-27) — 저장 공간 5MB 공유 문제 (서버 v21.3: 법령 API 등록 도메인 = 관리자설정 '앱주소'):
+    - 같은 주소(buminhealth.github.io)의 다른 앱이 5MB를 다 써도 멈추지 않음:
+      물질 목록 캐시부터 비우고 다시 시도 → 그래도 없으면 이번 창 메모리에 보관(원본은 서버) + 한 번 안내
+    - 관리자 → 설정 → 이 PC 저장 공간: 앱별 사용량(이 앱 · 건강검진 · 예전 위험성평가 · 기타) · 건강검진 민감정보 경고
+    - 전용 주소 이전 준비: BM_HOME(새 주소)을 적으면 예전 주소에서 로그인 → 이 PC에만 있던 기록을 서버에 합침
+      → 합친 만큼 PC에서 지움 → 새 주소로 이동 (메일 링크 ?nh= · ?dv= 유지, 로그인 정보는 넘기지 않음, 서버에 못 옮기면 지우지 않음)
   ★★★ v21.2 (2026-10-23) — AI 도우미 질문 · 답 관리 (서버 v21.2):
     - 관리자 → 설정 → 'AI 도우미 질문 · 답': 찾기 · 추가 · 삭제 · 빠른 질문(창 단추) · 메모 → 시트 AI도우미_FAQ에 저장, 바로 적용
     - 처음엔 기본 질문 · 답 12개를 채워 넣음 (신규입사자 교육 기한 = 입사 후 3일 · 새 물질 = 취급 전 · 특별교육 16시간 등 사내 규정 숫자)
@@ -2942,6 +2948,12 @@ input.apv-in[type=text]{width:110px}
     session: function(){ return session; },
     post: post,
     showLogin: showLogin,
+    // v21.3 주소 이전: 이 PC에만 있는 기록을 서버에 합친 뒤 true (실패면 false)
+    mergeLocal: async function(){
+      if(!session) return false;
+      await upgradeMergeOnce();
+      return !!localStorage.getItem('bm_v18_merged_' + (session.role === 'admin' ? 'admin' : session.dept));
+    },
     adminLogin: async function(pw){
       var r;
       try{ r = await post('login', { kind: 'admin', password: pw }); }
@@ -3198,6 +3210,89 @@ input.apv-in[type=text]{width:110px}
     return { total: total, limit: 5 * 1024 * 1024, groups: list, memoryOnly: Object.keys(mem) };
   }
   window.BMSTORE = { usage: usage, memoryOnly: function(){ return Object.keys(mem); } };
+})();
+
+/* ★★★ v21.3 — 전용 주소로 이전 (TODO 3 근본 해결)
+   buminhealth.github.io는 다른 앱(건강검진 등)과 저장 공간 5MB · 로그인 정보까지 함께 쓰는 주소라
+   이 앱만 쓰는 주소(BM_HOME)로 옮김. BM_HOME이 비어 있으면 아무 일도 하지 않음.
+   예전 주소로 열면: (로그인돼 있으면) 이 PC에만 있던 기록을 서버에 합침 → 합친 만큼 이 앱 데이터를 PC에서 지움
+                    → 새 주소로 이동 (?nh= · ?dv= 같은 메일 링크 값은 그대로 넘김, 로그인 정보는 넘기지 않음) */
+var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 준비되면 여기에 적고 두 곳(예전 · 새) 모두에 올림
+(function(){
+  if(!BM_HOME) return;
+  var to; try{ to = new URL(BM_HOME); }catch(_){ return; }
+  if(location.origin === to.origin) return;
+  var REC = ['bm_edu_records', 'bm_ppe_records', 'bm_chem_records'];
+  function listOf(k){ try{ var d = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(d) ? d : (d && Array.isArray(d.records) ? d.records : []); }catch(_){ return []; } }
+  function hasLocal(){ return REC.some(function(k){ return listOf(k).length > 0; }); }
+  function target(){ return to.origin + to.pathname + location.search + location.hash; }
+  // 서버에 합친 만큼만 이 PC에서 지움: 관리자 = 이 앱 데이터 전부, 부서 = 그 부서 기록만 (공용 PC의 다른 부서 기록 보호)
+  function clean(s){
+    if(s.role === 'admin'){
+      Object.keys(localStorage).filter(function(k){ return /^bm_/.test(k); }).forEach(function(k){ try{ localStorage.removeItem(k); }catch(_){} });
+      return;
+    }
+    REC.forEach(function(k){
+      var raw = localStorage.getItem(k); if(!raw) return;
+      try{
+        var d = JSON.parse(raw), arr = Array.isArray(d) ? d : (d && d.records) || [];
+        var rest = arr.filter(function(r){ return !r || r.dept !== s.dept; });
+        if(!rest.length) localStorage.removeItem(k);
+        else localStorage.setItem(k, JSON.stringify(Array.isArray(d) ? rest : Object.assign({}, d, { records: rest })));
+      }catch(_){}
+    });
+    ['bm_chems_cache', 'bm_session', 'bm_audit_log'].forEach(function(k){ try{ localStorage.removeItem(k); }catch(_){} });
+  }
+  function box(html){
+    var el = document.getElementById('bm-move');
+    if(!el){
+      el = document.createElement('div'); el.id = 'bm-move';
+      el.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(20,30,15,.55);display:flex;align-items:center;justify-content:center;padding:16px';
+      document.body.appendChild(el);
+    }
+    el.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:480px;width:100%;padding:22px;font-size:14px;line-height:1.6;box-shadow:0 10px 40px rgba(0,0,0,.25)">' +
+      '<div style="font-size:17px;font-weight:800;color:#2D581B;margin-bottom:8px">MSDS 통합관리 주소가 바뀌었습니다</div>' +
+      '<div style="margin-bottom:10px">새 주소: <a href="' + target() + '" style="color:#044B75;font-weight:700;word-break:break-all">' + to.origin + to.pathname + '</a><br>' +
+      '<span style="color:#5A5650;font-size:12px">다른 앱과 저장 공간을 나눠 쓰지 않도록 전용 주소로 옮겼습니다. 즐겨찾기 · 바탕화면 바로가기를 새 주소로 바꿔 주세요.</span></div>' +
+      html + '</div>';
+    var go = document.getElementById('bm-move-go'); if(go) go.onclick = function(){ location.replace(target()); };
+    var lg = document.getElementById('bm-move-login'); if(lg) lg.onclick = function(){ try{ BMAUTH.showLogin(); }catch(_){} wait(); };
+    return el;
+  }
+  var BTN = 'padding:9px 16px;border-radius:6px;font:inherit;font-weight:700;cursor:pointer;';
+  function goSoon(sec){
+    box('<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span style="color:#5A5650">' + sec + '초 뒤 새 주소로 이동합니다.</span>' +
+      '<button id="bm-move-go" style="' + BTN + 'background:#4A8F2C;border:1px solid #4A8F2C;color:#fff">지금 이동</button></div>');
+    setTimeout(function(){ location.replace(target()); }, sec * 1000);
+  }
+  var waiting = null;
+  function wait(){   // 로그인 창에서 로그인하면 이어서 진행
+    if(waiting) return;
+    waiting = setInterval(function(){ if(window.BMAUTH && BMAUTH.session()){ clearInterval(waiting); waiting = null; run(); } }, 700);
+  }
+  async function run(){
+    var s = window.BMAUTH && BMAUTH.session();
+    if(!hasLocal()){ goSoon(5); return; }
+    if(!s){
+      box('<div style="padding:10px;border-radius:8px;background:#FEF3C7;color:#92400E;font-size:13px;margin-bottom:10px">이 PC에 아직 서버로 옮기지 않았을 수 있는 기록이 있습니다. 부서 또는 관리자로 로그인하면 서버에 옮긴 뒤 이동합니다.</div>' +
+        '<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button id="bm-move-go" style="' + BTN + 'background:#fff;border:1px solid #C6C3BB;color:#333">그냥 이동</button>' +
+        '<button id="bm-move-login" style="' + BTN + 'background:#4A8F2C;border:1px solid #4A8F2C;color:#fff">로그인하고 옮기기</button></div>');
+      document.getElementById('bm-move').style.zIndex = '9990';   // 로그인 창이 위에 보이게
+      return;
+    }
+    box('<div style="color:#5A5650">이 PC에만 있던 기록을 서버에 옮기는 중…</div>');
+    var ok = false;
+    try{ ok = await BMAUTH.mergeLocal(); }catch(_){}
+    if(!ok){
+      box('<div style="padding:10px;border-radius:8px;background:#FBE5E2;color:#A3302A;font-size:13px;margin-bottom:10px">서버에 옮기지 못했습니다 (연결 확인). 이 PC 기록은 지우지 않았으니 잠시 뒤 다시 열어 주세요.</div>' +
+        '<div style="text-align:right"><button id="bm-move-go" style="' + BTN + 'background:#fff;border:1px solid #C6C3BB;color:#333">그냥 이동</button></div>');
+      return;
+    }
+    clean(s);
+    goSoon(3);
+  }
+  window.BMMOVE = { run: run, target: target };
+  window.addEventListener('DOMContentLoaded', function(){ setTimeout(run, 1200); });
 })();
 
 /* ★★★ v18.1 — 직원정보관리 (관리자) + 신규입사 확인 요청 (부서)
@@ -4806,7 +4901,7 @@ input.apv-in[type=text]{width:110px}
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.2';
+  var SERVER_EXPECT = 'v21.3';
   var esc = function(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
   var recs = function(k){ try{ return JSON.parse(localStorage.getItem(k) || '[]') || []; }catch(_){ return []; } };
   var post = function(op, b){ return window.BMAUTH ? BMAUTH.post(op, b || {}).catch(function(e){ return { success: false, error: e.message }; }) : Promise.resolve({ success: false, error: '로그인 필요' }); };
