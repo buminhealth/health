@@ -3134,6 +3134,72 @@ input.apv-in[type=text]{width:110px}
   });
 })();
 
+/* ★★★ v21.3 — 저장 공간이 가득 차도 멈추지 않게 (TODO 3 · 브라우저 5MB 공유 문제)
+   [문제] buminhealth.github.io 주소 아래 다른 앱(건강검진 · 위험성평가 등)이 같은 5MB를 나눠 써서
+          이 앱이 기록을 저장할 때 QuotaExceededError → 저장 · 화면 갱신이 중간에 멈출 수 있음
+   [방식] ① 공간이 없으면 다시 받을 수 있는 캐시(물질 목록)부터 비우고 다시 시도
+          ② 그래도 안 되면 이 창 메모리에 보관 (기록 원본은 서버에 있으므로 다음 접속 때 서버에서 다시 받음)
+             — 예전 PC 사본은 지우지 않음 (업로드 전 기록 보호)
+          ③ 한 번만 안내 + 관리자 설정에 앱별 사용량 표시 (BMSTORE.usage) */
+(function(){
+  if(window.BMSTORE) return;
+  var set0 = Storage.prototype.setItem, get0 = Storage.prototype.getItem, rm0 = Storage.prototype.removeItem;
+  var mem = {}, warned = false;
+  var DISPOSABLE = ['bm_chems_cache'];   // 서버에서 다시 받는 캐시
+  function isLocal(st){ try{ return st === window.localStorage; }catch(_){ return false; } }
+  function isQuota(e){ return e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22 || e.code === 1014); }
+  function warn(){
+    if(warned) return; warned = true;
+    var m = '이 PC 저장 공간이 가득 차 이번 창에서는 기록을 메모리에만 둡니다 (서버에는 저장됨). 관리자 → 설정 → 이 PC 저장 공간에서 원인을 확인하세요.';
+    try{ console.warn('[BMSTORE] ' + m); }catch(_){}
+    setTimeout(function(){ try{ if(typeof toast === 'function') toast('💾 ' + m, 'err'); }catch(_){} }, 0);
+  }
+  Storage.prototype.setItem = function(k, v){
+    if(!isLocal(this) || !/^bm_/.test(k)) return set0.call(this, k, v);   // 이 앱 키만 (다른 키는 원래대로)
+    try{
+      var r = set0.call(this, k, v);
+      delete mem[k];
+      return r;
+    }catch(e){
+      if(!isQuota(e)) throw e;
+      var self = this;
+      DISPOSABLE.forEach(function(d){ if(d !== k){ try{ rm0.call(self, d); }catch(_){} } });
+      try{ var r2 = set0.call(this, k, v); delete mem[k]; return r2; }catch(e2){ if(!isQuota(e2)) throw e2; }
+      mem[k] = String(v);
+      warn();
+    }
+  };
+  Storage.prototype.getItem = function(k){
+    if(isLocal(this) && Object.prototype.hasOwnProperty.call(mem, k)) return mem[k];
+    return get0.call(this, k);
+  };
+  Storage.prototype.removeItem = function(k){
+    if(isLocal(this)) delete mem[k];
+    return rm0.call(this, k);
+  };
+
+  // 앱별 사용량 (같은 주소의 다른 앱 몫까지) — UTF-16 2바이트 기준
+  var GROUPS = [
+    ['MSDS 통합관리 (이 앱)', /^bm_/],
+    ['건강검진', /^(hk_|hcs2_|healthCheckup)/],
+    ['위험성평가 (예전 앱)', /^bumin_chem_risk/],
+  ];
+  function usage(){
+    var g = {}, total = 0, keys = [];
+    try{ for(var i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i)); }catch(_){}
+    keys.forEach(function(k){
+      var v = ''; try{ v = get0.call(localStorage, k) || ''; }catch(_){}
+      var b = (k.length + v.length) * 2; total += b;
+      var name = '기타 (같은 주소의 다른 앱)';
+      for(var j = 0; j < GROUPS.length; j++){ if(GROUPS[j][1].test(k)){ name = GROUPS[j][0]; break; } }
+      (g[name] = g[name] || { name: name, bytes: 0, keys: 0 }).bytes += b; g[name].keys++;
+    });
+    var list = Object.keys(g).map(function(n){ return g[n]; }).sort(function(a, b){ return b.bytes - a.bytes; });
+    return { total: total, limit: 5 * 1024 * 1024, groups: list, memoryOnly: Object.keys(mem) };
+  }
+  window.BMSTORE = { usage: usage, memoryOnly: function(){ return Object.keys(mem); } };
+})();
+
 /* ★★★ v18.1 — 직원정보관리 (관리자) + 신규입사 확인 요청 (부서)
    - 관리자 모드 > 👥 직원정보관리: 인사 사이트 가져오기(비밀번호는 이번 요청에만 사용) · 엑셀 붙여넣기 ·
      신규입사 알림 현황(회신·미회신·미교육)과 재발송
@@ -4915,6 +4981,12 @@ input.apv-in[type=text]{width:110px}
           '<button type="button" class="cfg-b" data-c="faqadd">+ 질문 추가</button><button type="button" class="cfg-b" data-c="faqdef">기본값 중 빠진 것 넣기</button><button type="button" class="cfg-b p" data-c="faqsave">질문 · 답 저장</button><span id="cfg-faq-msg" style="font-size:13px"></span></span>' +
         '<div id="cfg-faq-list" style="display:flex;flex-direction:column;gap:8px;margin-top:10px">불러오는 중…</div></section>' +
       '<section class="cfg-c"><h4>이 PC 저장 공간 · 계정</h4><dl><dt>사용량</dt><dd>' + Math.round(used / 1024).toLocaleString() + 'KB / 약 5MB</dd>' +
+        (function(){   // v21.3: 같은 주소(buminhealth.github.io)의 앱별 사용량 — 5MB를 함께 씀
+          var u = window.BMSTORE ? BMSTORE.usage() : null; if(!u) return '';
+          return u.groups.map(function(g){ return '<dt>' + esc(g.name) + '</dt><dd>' + Math.round(g.bytes / 1024).toLocaleString() + 'KB' +
+              (/건강검진/.test(g.name) && g.bytes ? ' <span class="cfg-bad">민감정보가 이 PC에 있음</span>' : '') + '</dd>'; }).join('') +
+            (u.memoryOnly.length ? '<dt>상태</dt><dd><span class="cfg-bad">공간 부족 — 이번 창은 메모리에 보관 중 (' + esc(u.memoryOnly.join(', ')) + ')</span></dd>' : '');
+        })() +
         '<dt>파일 저장소</dt><dd>구글 드라이브 (서버 경유) · 옛 파일은 ' + esc(C.ghRepo || D.ghRepo || 'buminhealth/health') + '</dd></dl>' +
         '<span style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="cfg-b" data-c="storage">저장 공간 안내</button><button type="button" class="cfg-b" data-c="sheet">구글 시트 열기</button><button type="button" class="cfg-b" data-c="logout" style="color:#A3302A">로그아웃</button></span></section>' +
     '</div>';
