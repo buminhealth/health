@@ -3509,10 +3509,41 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
             '<option value="">전체</option><option>회신대기</option><option>이메일없음</option><option>취급-교육대기</option><option>취급-교육완료</option><option>미취급</option>' +
           '</select><button id="staff-nh-run" style="' + BTN + '"' + (st.hrAuto ? '' : ' disabled title="자동 로그인 설정 후 사용"') + '>지금 자동 확인</button></div>' +
         '</div>' +
-        '<div style="font-size:12px;color:#64748b;margin-bottom:8px">알림 메일은 <b>인사 사이트 자동 로그인</b>(매일 아침 7시 · 지금 자동 확인)일 때만 발송됩니다. 교육 기한: 입사일로부터 3일.</div>' +
+        '<div style="font-size:12px;color:#64748b;margin-bottom:8px">알림 메일은 <b>인사 사이트 자동 로그인</b>(매일 아침 7시 · 지금 자동 확인)일 때 자동 발송됩니다. 입사일이 30일 안이고 교육 현황에서 대상 · 미이수인 사람만 보냅니다(인사 사이트 등록이 늦어도 잡음). 교육 기한: 입사일로부터 3일.</div>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;padding:8px 10px;border:1px solid #E4E2DC;border-radius:8px;background:#F3F9ED">' +
+          '<b style="font-size:13px;color:#3F7518">수동 발송</b>' +
+          '<button id="staff-nh-detect" style="' + BTN + '" title="인사 사이트를 다시 읽지 않고 지금 직원목록으로 빠진 신규입사자를 찾아 메일 발송">누락 찾기</button>' +
+          '<input id="staff-nh-name" class="fc" list="staff-nh-emps" placeholder="직원 이름 (부서)" style="width:200px">' +
+          '<datalist id="staff-nh-emps"></datalist>' +
+          '<button id="staff-nh-add" style="' + BTN + '" title="고른 직원의 부서장에게 신규입사 확인 요청 메일을 바로 보냄">직접 보내기</button></div>' +
         '<div id="staff-nh-out" style="overflow-x:auto"></div>' +
       '</div>';
     document.getElementById('staff-nh-filter').onchange = renderNh;
+    // v21.6 수동 발송: 누락 찾기 · 직원 골라 직접 보내기
+    try{
+      var dl = document.getElementById('staff-nh-emps');
+      var emps = (typeof empList !== 'undefined' && empList.length) ? empList : [];
+      dl.innerHTML = emps.filter(function(e){ return !/퇴사/.test(e.status || ''); }).slice(0, 2000).map(function(e){ return '<option value="' + esc(e.name + ' (' + e.dept + ')') + '">'; }).join('');
+    }catch(_){}
+    document.getElementById('staff-nh-detect').onclick = async function(){
+      this.disabled = true;
+      var r = await post('nh.detect', {});
+      this.disabled = false;
+      if(!r.success){ say(/unknown op/.test(r.error || '') ? '서버(Code.gs)를 v21.6 이상으로 배포하면 사용할 수 있습니다' : (r.error || '실패'), 'err'); return; }
+      say(r.created.length ? '빠진 신규입사자 ' + r.created.length + '명 알림: ' + r.created.map(function(c){ return c.name + '(' + c.dept + ' · ' + c.status + ')'; }).join(', ') : '빠진 신규입사자가 없습니다', 'ok');
+      renderNh();
+    };
+    document.getElementById('staff-nh-add').onclick = async function(){
+      var v = document.getElementById('staff-nh-name').value.trim(), m = v.match(/^(.+?)\s*\((.+)\)$/);
+      var name = m ? m[1].trim() : v, dept = m ? m[2].trim() : '';
+      if(!name){ say('직원 이름을 고르세요', 'err'); return; }
+      if(!confirm(name + (dept ? ' (' + dept + ')' : '') + ' 부서장에게 신규입사 취급 확인 요청 메일을 보낼까요?')) return;
+      var r = await post('nh.add', { name: name, dept: dept });
+      if(!r.success){ say(/unknown op/.test(r.error || '') ? '서버(Code.gs)를 v21.6 이상으로 배포하면 사용할 수 있습니다' : (r.error || '실패'), 'err'); return; }
+      say(r.status === '회신대기' ? '보냈습니다 (회신대기)' : '알림을 만들었지만 부서장 이메일이 없습니다 — 부서인증 시트에 입력 후 [재발송]', r.status === '회신대기' ? 'ok' : 'err');
+      document.getElementById('staff-nh-name').value = '';
+      renderNh();
+    };
     document.getElementById('staff-nh-run').onclick = async function(){
       var r = await post('nh.run', {});
       if(!r.success){ say(r.error || '확인 실패', 'err'); return; }
@@ -4928,7 +4959,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.5';
+  var SERVER_EXPECT = 'v21.6';
   var esc = function(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
   var recs = function(k){ try{ return JSON.parse(localStorage.getItem(k) || '[]') || []; }catch(_){ return []; } };
   var post = function(op, b){ return window.BMAUTH ? BMAUTH.post(op, b || {}).catch(function(e){ return { success: false, error: e.message }; }) : Promise.resolve({ success: false, error: '로그인 필요' }); };

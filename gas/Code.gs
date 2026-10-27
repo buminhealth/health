@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.5 (2026-10-27)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.6 (2026-10-27)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -172,7 +172,7 @@ function doPost(e) {
       case 'fs.put':    result = requireLogin_(s) || fsPut_(req, s); break;
       case 'rec.has':   result = requireLogin_(s) || recHas_(req, s); break;
       case 'emp.status': case 'emp.sync': case 'emp.merge': case 'hr.fetch':
-      case 'nh.list': case 'nh.answer': case 'nh.resend': case 'nh.run':
+      case 'nh.list': case 'nh.answer': case 'nh.resend': case 'nh.run': case 'nh.detect': case 'nh.add':
                         result = staffOp_(req, s); break;
       case 'chem.audit': case 'chem.seedLaw': case 'chem.apply': case 'chem.lawImport': case 'chem.lawFetch': case 'chem.lawCycle': case 'law.status': case 'law.setOc':
                         result = chemOp_(req, s); break;
@@ -1784,12 +1784,21 @@ function deptEmail_(dept) {
   return row ? String(row[ci]).trim() : '';
 }
 
+const NH_LATE_DAYS = 30;   // 신규입사로 보는 최소 기간 (인사 사이트 등록이 늦어도 이 안이면 알림)
 function detectNewHires_() {
   const cfg = sysCfg_();
   const map = handlingDepts_();
   const existing = new Set(nhRows_().map(o => (o['사번'] || '') + '|' + o['이름'] + '|' + o['부서']));
   const today = new Date(todayKst_() + 'T00:00:00');
-  const from = new Date(today.getTime() - cfg.newHireDays * 86400000);
+  // v21.6: 인사 사이트에 늦게 올라온 입사자(예: 10-19 입사 → 10-27 등록)도 잡도록 최소 NH_LATE_DAYS일 전까지 봄
+  const from = new Date(today.getTime() - Math.max(cfg.newHireDays, NH_LATE_DAYS) * 86400000);
+  // 교육 현황과 같은 기준(교육대상규칙 · 근무지 · 개별 제외 · 이수 기록)으로 '교육 대상이면서 아직 안 받은 사람'만 알림
+  let todo = null;
+  try {
+    const st = eduStatus_({ role: 'admin' });
+    todo = {};
+    (st.people || []).forEach(p => { if (p.status === '미이수' || p.status === '진행중') { todo[(p.no || '') + '|' + p.name] = p; todo['|' + p.name + '|' + p.dept] = p; } });
+  } catch (_) { todo = null; }
   const created = [];
   (readEmployees_() || []).forEach(e => {
     if (isResigned_(e) || !e.joinDate) return;
@@ -1797,6 +1806,7 @@ function detectNewHires_() {
     if (isNaN(jd.getTime()) || jd < from) return;
     const chems = chemsForDept_(map, e.dept);
     if (!chems) return;
+    if (todo && !todo[(e.empNo || '') + '|' + e.name] && !todo['|' + e.name + '|' + e.dept]) return;   // 대상 아님 · 이미 이수
     const key = (e.empNo || '') + '|' + e.name + '|' + e.dept;
     if (existing.has(key)) return;
     existing.add(key);
@@ -1900,6 +1910,27 @@ function nhMarkEducated_(dept, names) {
   });
 }
 
+function nhAdd_(req) {
+  const name = String(req.name || '').trim(), dept = String(req.dept || '').trim(), no = String(req.no || '').trim();
+  if (!name) return { success: false, error: '직원 이름을 고르세요' };
+  const e = (readEmployees_() || []).find(x => x.name === name && (!dept || x.dept === dept) && (!no || x.empNo === no));
+  if (!e) return { success: false, error: '직원목록에서 찾지 못했습니다: ' + name + (dept ? ' (' + dept + ')' : '') };
+  const key = (e.empNo || '') + '|' + e.name + '|' + e.dept;
+  const dup = nhRows_().find(o => (o['사번'] || '') + '|' + o['이름'] + '|' + o['부서'] === key);
+  if (dup) return { success: false, exists: dup['알림ID'], error: '이미 알림이 있습니다 (' + dup['상태'] + ') — 목록에서 [재발송]을 누르세요' };
+  const chems = chemsForDept_(handlingDepts_(), e.dept) || [];
+  const jd = normDate_(e.joinDate) || todayKst_();
+  const o = { '알림ID': 'NH' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+              '생성일시': nowKst_(), '사번': e.empNo, '이름': e.name, '부서': e.dept, '입사일': jd,
+              '취급물질': chems.slice(0, 30).join(', '), '부서장이메일': deptEmail_(e.dept), '재알림횟수': '0',
+              '교육기한': addDays_(jd, EDU_PERIOD_DAYS), '회신메모': '관리자 직접 발송' };
+  nhSheet_().appendRow(NH_HEADER.map(h => safeCell_(o[h] || '')));
+  o._row = nhSheet_().getLastRow();
+  o['상태'] = nhSend_(o, false) ? '회신대기' : '이메일없음';
+  if (o['상태'] === '회신대기') o['최초발송'] = nowKst_();
+  nhWrite_(o);
+  return { success: true, status: o['상태'], id: o['알림ID'] };
+}
 function nhResend_(req) {
   const o = nhRows_().find(x => x['알림ID'] === req.id);
   if (!o) return { success: false, status: 404, error: '알림을 찾을 수 없습니다' };
@@ -2066,6 +2097,11 @@ function staffOp_(req, s) {
     case 'nh.list':   return requireLogin_(s) || nhList_(s);
     case 'nh.answer': return requireLogin_(s) || nhAnswer_(req, s);
     case 'nh.resend': return deny || nhResend_(req);
+    case 'nh.detect':   // v21.6 누락 찾기: 인사 사이트를 다시 읽지 않고 지금 직원목록으로 신규입사 확인 · 메일
+      if (deny) return deny;
+      return { success: true, created: detectNewHires_() };
+    case 'nh.add':      // v21.6 직접 보내기: 기간 · 자동 판정과 상관없이 고른 직원에게 신규입사 확인 요청
+      return deny || nhAdd_(req);
     case 'nh.run':    // '지금 확인' = 매일 자동 확인과 같은 동작 (자동 로그인 가능할 때만 메일)
       if (deny) return deny;
       if (!hrAutoReady_()) return { success: false, error: '인사 사이트 자동 로그인이 설정되어야 합니다 (시트 메뉴 ④). 알림 메일은 자동 로그인일 때만 발송됩니다.' };
