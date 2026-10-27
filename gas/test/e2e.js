@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.2/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.3/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
   const other = await page.evaluate(async () => {
@@ -504,7 +504,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.2'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.3'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -1472,6 +1472,46 @@ function check(name, cond, extra) {
   check('저장 공간 가득 참: 오류 없이 메모리 보관 · 캐시 먼저 비움 · 앱별 사용량(건강검진) · 공간 생기면 다시 PC 저장', !st.threw && st.back && st.cacheGone && st.mem.indexOf('bm_edu_records') >= 0 && st.groups.some(g => /건강검진/.test(g)) && st.hk > 4e6 && st.restored, st);
 
   check('페이지 스크립트 오류 없음', errors.length === 0, errors.slice(0, 5));
+  // 20. v21.3 전용 주소 이전: 예전 주소로 열면 이 PC 기록을 서버에 합치고(로그인 필요) 합친 부서 기록만 지운 뒤 새 주소로 (메일 링크 값 유지)
+  {
+    const NEW = 'https://new-msds.example/';
+    const moved = require('fs').readFileSync(HTML, 'utf8').replace("var BM_HOME = '';", "var BM_HOME = '" + NEW + "';");
+    const ctx2 = await browser.newContext();
+    let landed = '';
+    await ctx2.route('**/*', async route => {
+      const u = route.request().url();
+      if (u.startsWith('https://script.google.com/macros/')) {
+        const q = u.indexOf('?') >= 0 ? u.slice(u.indexOf('?')) : '';
+        try { const resp = await route.fetch({ url: MOCK + q }); return route.fulfill({ response: resp, headers: { ...resp.headers(), 'access-control-allow-origin': '*' } }); }
+        catch (e) { return route.abort().catch(() => {}); }
+      }
+      if (u.startsWith(`http://localhost:${PORT}/index.html`)) return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: moved });
+      if (u.startsWith(NEW)) { landed = u; return route.fulfill({ status: 200, contentType: 'text/html', body: '<p>new</p>' }); }
+      return route.abort();
+    });
+    await ctx2.addInitScript(() => {
+      if (sessionStorage.getItem('seeded')) return; sessionStorage.setItem('seeded', '1');
+      localStorage.setItem('bm_url', 'https://script.google.com/macros/s/x/exec');
+      localStorage.setItem('bm_edu_records', JSON.stringify([
+        { recordId: 'mv61', name: '이전시험', dept: '61병동', type: 'MSDS교육', dateStart: '2026-10-01' },
+        { recordId: 'mv71', name: '다른부서', dept: '71병동', type: 'MSDS교육', dateStart: '2026-10-01' }]));
+    });
+    const p2 = await ctx2.newPage();
+    await p2.goto(`http://localhost:${PORT}/index.html?nh=abc`);
+    await p2.waitForTimeout(2500);
+    const before = await p2.evaluate(() => ({ box: (document.getElementById('bm-move') || {}).textContent || '', url: location.href }));
+    check('주소 이전: 로그인 전엔 이동하지 않고 로그인해서 옮기라고 안내 (PC 기록 보호)', /로그인하고 옮기기/.test(before.box) && /localhost/.test(before.url) && !landed, before);
+    const tok = await p2.evaluate(async () => { const r = await BMAUTH.post('login', { kind: 'dept', dept: '61병동', pin: '4321' }); return r; });
+    await p2.evaluate(r => localStorage.setItem('bm_session', JSON.stringify({ token: r.token, role: 'dept', dept: '61병동', head: r.head || '', exp: r.exp })), tok);
+    await p2.reload();
+    for (let i = 0; i < 40 && !landed; i++) await p2.waitForTimeout(250);
+    const fg = JSON.parse(g.api.doPost({ postData: { contents: JSON.stringify({ op: 'fs.get', path: 'records/edu_records.json', t: tk.a }) } }).text);
+    const srv = JSON.parse(Buffer.from(fg.content || fg.data && fg.data.content || '', 'base64').toString('utf8') || '[]');
+    const srvList = Array.isArray(srv) ? srv : srv.records;
+    check('주소 이전: 로그인하면 이 PC 기록을 서버에 합친 뒤 새 주소로 (?nh 유지)', srvList.some(r => r.recordId === 'mv61') && landed === NEW + '?nh=abc', [landed, srvList.length]);
+    await ctx2.close();
+  }
+
   await ctx.unrouteAll({ behavior: 'ignoreErrors' });
   await browser.close();
   server.close();
