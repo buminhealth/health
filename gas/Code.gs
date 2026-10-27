@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.4 (2026-10-27)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.5 (2026-10-27)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -518,7 +518,7 @@ function deptView_(path, data, s) {
   const mine = id => typeof id === 'string' && id.indexOf('|' + s.dept + '|') >= 0;
   if (RECORD_FILES[path]) {
     const list = recordList_(data, RECORD_FILES[path]).filter(r => r && sameDept_(r.dept, s.dept));
-    return RECORD_FILES[path] === 'records' ? Object.assign({}, data, { records: list }) : list;
+    return recordShape_(data, list, RECORD_FILES[path]);
   }
   if (path === 'records/admin_cfg.json') {
     const out = {};
@@ -536,9 +536,17 @@ function deptView_(path, data, s) {
   return undefined;
 }
 
+// v21.4: 기록 파일은 [ … ] 와 { records: [ … ] } 두 모양이 섞여 들어옴 (브라우저 코드가 둘 다 씀)
+// → 어느 모양이든 목록을 꺼내고, 저장할 때는 파일마다 정해진 모양 하나로 맞춤
+//   (전에는 모양이 다르면 빈 목록으로 보아 부서가 올린 교육일지가 서버 파일에 안 들어갔음)
 function recordList_(data, shape) {
-  if (shape === 'records') return (data && Array.isArray(data.records)) ? data.records : [];
-  return Array.isArray(data) ? data : [];
+  if (Array.isArray(data)) return data;
+  return (data && Array.isArray(data.records)) ? data.records : [];
+}
+function recordShape_(data, list, shape) {
+  if (shape !== 'records') return list;
+  const base = (data && !Array.isArray(data) && typeof data === 'object') ? data : {};
+  return Object.assign({}, base, { records: list });
 }
 // 서명·사진 필드: 브라우저는 용량 때문에 이 값을 빼고 저장할 수 있음 → 서버는 원본을 절대 잃지 않게 보존
 const IMG_FIELDS = ['sigImg', 'sigsByDay', 'photos', 'newSig', 'stopSig'];
@@ -613,8 +621,13 @@ function fsPut_(req, s) {
         const curSha = file ? fileMeta_(file).sha : null;
         if (file && !req.sha) return { success: false, status: 422, error: 'sha 필요 (파일이 이미 있음)' };
         if (file && req.sha !== curSha) return { success: false, status: 409, error: 'is at ' + curSha + ' but expected ' + req.sha };
-        if (RECORD_FILES[path] && cur) preserveImages_(recordList_(cur, RECORD_FILES[path]), recordList_(incoming, RECORD_FILES[path]));
-        const text = JSON.stringify(incoming);
+        let body = incoming;
+        if (RECORD_FILES[path]) {
+          const shape = RECORD_FILES[path], list = recordList_(incoming, shape);
+          if (cur) preserveImages_(recordList_(cur, shape), list);
+          body = recordShape_(incoming, list, shape);
+        }
+        const text = JSON.stringify(body);
         const w = writeFile_(path, Utilities.newBlob(text).getBytes(), 'application/json', '');
         return { success: true, status: file ? 200 : 201, sha: w.sha, path: path };
       }
@@ -678,7 +691,7 @@ function mergeDeptWrite_(path, cur, incoming, s) {
         curList.push(keepAdminFields_(r, null));
       }
     });
-    return shape === 'records' ? Object.assign({}, cur || {}, { records: curList }) : curList;
+    return recordShape_(cur, curList, shape);
   }
   if (path === 'records/admin_cfg.json') {
     // 부서는 자기 부서 삭제표시(묘비)를 "지우는 것"만 가능 (같은 기록 재제출 시)
@@ -2507,6 +2520,41 @@ function saveGeminiKey() {
   ui.alert(k ? 'AI 키를 저장했습니다.' : 'AI 키를 지웠습니다.');
 }
 function aiModel_() { return (getAdminCfg().data || {})['AI모델'] || 'gemini-2.5-flash'; }
+function aiBackupModel_() { return (getAdminCfg().data || {})['AI예비모델'] || 'gemini-2.5-flash-lite'; }
+
+// v21.4 Gemini 호출: 잠시 붐빔(503) · 한도(429) · 서버 오류(500/504)면 잠깐 기다렸다 다시, 그래도 안 되면 예비 모델로
+//  반환: { code, j, model, tried } — code 200이면 j에 응답
+const AI_RETRY_CODES = [429, 500, 502, 503, 504];
+function geminiCall_(body, key) {
+  const models = [aiModel_(), aiBackupModel_()].filter((m, i, a) => m && a.indexOf(m) === i);
+  let last = { code: 0, j: null, model: models[0], tried: 0 };
+  for (const model of models) {
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent';
+    for (let k = 0; k < 3; k++) {
+      if (k) Utilities.sleep(k === 1 ? 1500 : 4000);
+      last.tried++;
+      let res;
+      try { res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify(body), headers: { 'x-goog-api-key': key }, muteHttpExceptions: true }); }
+      catch (e) { last = { code: -1, j: null, model: model, tried: last.tried, err: e.message }; continue; }
+      let j = null;
+      try { j = JSON.parse(res.getContentText()); } catch (_) {}
+      last = { code: res.getResponseCode(), j: j, model: model, tried: last.tried };
+      if (last.code === 200) return last;
+      if (last.code === 404 || last.code === 400) break;          // 모델 이름 문제 → 다음 모델
+      if (AI_RETRY_CODES.indexOf(last.code) < 0) return last;      // 키 오류 등은 다시 해도 같음
+    }
+  }
+  return last;
+}
+// 사용자에게 보여 줄 오류 문구
+function geminiErr_(r, tail) {
+  tail = tail || '';
+  if (r.code === 429) return 'AI 무료 사용 한도를 넘었습니다. 잠시(1분~내일) 후 다시 시도하세요.' + tail;
+  if (r.code === 503 || r.code === 500 || r.code === 502 || r.code === 504) return 'AI 서버(Google)가 지금 붐벼서 답하지 못했습니다. 1~2분 뒤 다시 물어봐 주세요.' + tail;
+  if (r.code === -1) return 'AI 연결 실패: ' + (r.err || '') + tail;
+  if (r.code === 401 || r.code === 403) return 'AI 키가 올바르지 않거나 막혔습니다 — 관리자 화면 설정에서 Gemini 키를 확인하세요.' + tail;
+  return 'AI 오류 (' + r.code + '): ' + (((r.j || {}).error || {}).message || '').slice(0, 160) + tail;
+}
 
 const AI_PROMPT = [
   '너는 산업보건 전문가다. 첨부한 한국어 물질안전보건자료(MSDS) PDF에서 아래 항목만 JSON으로 추출해라.',
@@ -2525,19 +2573,10 @@ function aiCallGemini_(bytes) {
   const key = PROPS.getProperty('GEMINI_API_KEY');
   if (!key) return { success: false, noKey: true, error: 'AI 키가 없습니다 — 시트 메뉴 ⑥ 또는 관리자 화면에서 Gemini 키를 저장하세요. (키 없이도 아래에 직접 입력해 등록할 수 있습니다)' };
   if (bytes.length > AI_MAX_BYTES) return { success: false, error: 'PDF가 너무 큽니다 (15MB 이하)' };
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(aiModel_()) + ':generateContent';
   const body = { contents: [{ parts: [{ inline_data: { mime_type: 'application/pdf', data: Utilities.base64Encode(bytes) } }, { text: AI_PROMPT }] }],
                  generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
-  let res;
-  try {
-    res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify(body),
-                                   headers: { 'x-goog-api-key': key }, muteHttpExceptions: true });
-  } catch (e) { return { success: false, error: 'AI 연결 실패: ' + e.message }; }
-  const code = res.getResponseCode();
-  let j = null;
-  try { j = JSON.parse(res.getContentText()); } catch (_) {}
-  if (code === 429) return { success: false, error: 'AI 무료 사용 한도를 넘었습니다. 잠시(1분~내일) 후 다시 시도하거나 직접 입력하세요.' };
-  if (code !== 200) return { success: false, error: 'AI 오류 (' + code + '): ' + ((j && j.error && j.error.message) || '').slice(0, 200) };
+  const r = geminiCall_(body, key), j = r.j;
+  if (r.code !== 200 || !j) return { success: false, error: geminiErr_(r, ' (직접 입력도 가능)') };
   const text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(p => p.text || '').join('');
   try { return { success: true, data: JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')) }; }
   catch (_) { return { success: false, error: 'AI 응답을 읽지 못했습니다 — 다시 시도하거나 직접 입력하세요' }; }
@@ -3597,24 +3636,16 @@ function raAnalyze_(req, s) {
   let laws = null;
   try { laws = raLawArticles_(); } catch (_) {}
   const mime = /^image\/(png|webp)$/.test(String(req.mime || '')) ? String(req.mime) : 'image/jpeg';
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(aiModel_()) + ':generateContent';
   const body = { contents: [{ parts: [{ inline_data: { mime_type: mime, data: b64 } },
                                       { text: raPrompt_(String(req.place || '').slice(0, 100), String(req.task || '').slice(0, 300), laws, raRefs_(String(req.place || ''), String(req.task || ''))) }] }],
                  generationConfig: { temperature: 0.2, responseMimeType: 'application/json' } };
-  let res;
-  try {
-    res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify(body), headers: { 'x-goog-api-key': key }, muteHttpExceptions: true });
-  } catch (e) { return { success: false, error: 'AI 연결 실패: ' + e.message }; }
-  const code = res.getResponseCode();
-  let j = null;
-  try { j = JSON.parse(res.getContentText()); } catch (_) {}
-  if (code === 429) return { success: false, error: 'AI 무료 사용 한도를 넘었습니다. 잠시 후 다시 시도하거나 [직접 입력]으로 제출하세요.' };
-  if (code !== 200) return { success: false, error: 'AI 오류 (' + code + '): ' + ((j && j.error && j.error.message) || '').slice(0, 200) };
+  const r = geminiCall_(body, key), j = r.j;
+  if (r.code !== 200 || !j) return { success: false, error: geminiErr_(r, ' [직접 입력]으로도 제출할 수 있습니다.') };
   const text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(p => p.text || '').join('');
   let d;
   try { d = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); }
   catch (_) { return { success: false, error: 'AI 응답을 읽지 못했습니다 — 다시 시도하거나 [직접 입력]으로 제출하세요' }; }
-  return Object.assign({ success: true, model: aiModel_(), lawChecked: !!laws }, raNormalize_(d, laws));
+  return Object.assign({ success: true, model: r.model, lawChecked: !!laws }, raNormalize_(d, laws));
 }
 
 function raSubmit_(req, s) {
@@ -4020,16 +4051,12 @@ function helpAsk_(req, s) {
     });
   }
 
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(aiModel_()) + ':generateContent';
   const body = { contents: [{ parts: [{ text: helpPrompt_(q, history, src) }] }], generationConfig: { temperature: 0.2, responseMimeType: 'application/json' } };
-  let res;
-  try { res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify(body), headers: { 'x-goog-api-key': key }, muteHttpExceptions: true }); }
-  catch (e) { return { success: false, error: 'AI 연결 실패: ' + e.message }; }
-  const code = res.getResponseCode();
-  let j = null;
-  try { j = JSON.parse(res.getContentText()); } catch (_) {}
-  if (code === 429) return { success: false, error: 'AI 무료 사용 한도를 넘었습니다. 잠시 후 다시 시도하세요.' };
-  if (code !== 200 || !j) return { success: false, error: 'AI 오류 (' + code + ')' };
+  const r = geminiCall_(body, key), j = r.j;
+  if (r.code !== 200 || !j) {
+    cache.put(ck, String(n), 86400);   // 답을 못 받은 질문은 하루 횟수에서 빼 줌
+    return { success: false, busy: AI_RETRY_CODES.indexOf(r.code) >= 0, error: geminiErr_(r, ' 급하면 보건관리실(내선 3293 · 3034)로 문의하세요.') };
+  }
   const text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(p => p.text || '').join('');
   let d;
   try { d = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch (_) { d = { answer: text.slice(0, 1500), used: [] }; }
@@ -4037,7 +4064,7 @@ function helpAsk_(req, s) {
   const sources = used.map(i => src[i - 1]).filter((x, i, a) => a.indexOf(x) === i)
     .map(x => ({ kind: x.kind, title: x.title, url: x.url || '' }));
   return { success: true, answer: String(d.answer || '').slice(0, 2500), sources: sources,
-           followups: (d.followups || []).map(String).filter(Boolean).slice(0, 3).map(x => x.slice(0, 60)), model: aiModel_() };
+           followups: (d.followups || []).map(String).filter(Boolean).slice(0, 3).map(x => x.slice(0, 60)), model: r.model };
 }
 
 function helpOp_(req, s) {

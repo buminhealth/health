@@ -136,6 +136,7 @@ function makeEnv() {
         if (u.startsWith('https://generativelanguage.googleapis.com/v1beta/models/')) {
           const gm = env.GEMINI;
           gm.calls.push({ url: u, key: opt.headers && opt.headers['x-goog-api-key'], body: JSON.parse(opt.payload) });
+          if (gm.failModel && u.indexOf('/models/' + gm.failModel + ':') >= 0) return resp(503, { error: { message: 'overloaded' } });   // 이 모델만 붐빔
           if (gm.status !== 200) return resp(gm.status, { error: { message: 'quota' } });
           return resp(200, { candidates: [{ content: { parts: [{ text: '```json\n' + JSON.stringify(gm.reply) + '\n```' }] } }] });
         }
@@ -171,6 +172,7 @@ function makeEnv() {
       createTextOutput: t => ({ text: t, setMimeType() { return this; } }),
     },
     Utilities: {
+      sleep: () => {},   // 재시도 대기 (시험에서는 기다리지 않음)
       Charset: { UTF_8: 'utf8' },
       DigestAlgorithm: { SHA_256: 'sha256', SHA_1: 'sha1' },
       getUuid: () => crypto.randomUUID(),
