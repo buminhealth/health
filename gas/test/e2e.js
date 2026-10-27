@@ -1451,6 +1451,26 @@ function check(name, cond, extra) {
   });
   check('설정 화면: 질문 · 답 목록 · [+ 질문 추가] · 저장', faqUi.rows === 13 && faqUi.after === 14 && /14개를 저장/.test(faqUi.msg), faqUi);
 
+  // 19. v21.3 저장 공간 가득 참 (같은 주소 다른 앱이 5MB를 거의 다 씀) → 멈추지 않고 메모리 보관 · 앱별 사용량 표시
+  const st = await page.evaluate(() => {
+    const keep = localStorage.getItem('bm_edu_records');
+    localStorage.setItem('bm_chems_cache', 'x'.repeat(1000));
+    let chunk = 'h'.repeat(512 * 1024), n = 0;
+    try{ for(; n < 40; n++) localStorage.setItem('hk_v2_data_' + n, chunk); }catch(e){}
+    try{ for(let m = 0; m < 200; m++) localStorage.setItem('hk_v2_fill_' + m, 'h'.repeat(4096)); }catch(e){}
+    const big = JSON.stringify([{ recordId: 'big', name: '용량시험', note: 'z'.repeat(300000) }]);
+    let threw = null;
+    try{ localStorage.setItem('bm_edu_records', big); }catch(e){ threw = e.name; }
+    const back = localStorage.getItem('bm_edu_records') === big;
+    const u = BMSTORE.usage();
+    const out = { threw, back, cacheGone: localStorage.getItem('bm_chems_cache') === null, mem: u.memoryOnly, groups: u.groups.map(g => g.name), hk: (u.groups.find(g => /건강검진/.test(g.name)) || {}).bytes };
+    Object.keys(localStorage).filter(k => /^hk_v2_/.test(k)).forEach(k => localStorage.removeItem(k));
+    localStorage.setItem('bm_edu_records', keep || '[]');
+    out.restored = BMSTORE.memoryOnly().length === 0;
+    return out;
+  });
+  check('저장 공간 가득 참: 오류 없이 메모리 보관 · 캐시 먼저 비움 · 앱별 사용량(건강검진) · 공간 생기면 다시 PC 저장', !st.threw && st.back && st.cacheGone && st.mem.indexOf('bm_edu_records') >= 0 && st.groups.some(g => /건강검진/.test(g)) && st.hk > 4e6 && st.restored, st);
+
   check('페이지 스크립트 오류 없음', errors.length === 0, errors.slice(0, 5));
   await ctx.unrouteAll({ behavior: 'ignoreErrors' });
   await browser.close();
