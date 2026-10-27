@@ -13,6 +13,11 @@ const K = { g5: '67AF28', g7: '4C8A1D', tg: '3F7518', g8: '345C12', g50: 'EEF6E6
   t1: '5A9E22', t2: '4C8A1D', t3: '3F7518', t4: '325F13', bg2: 'F5F6F2', ink: '1E1E1C', ink2: '45423D', sub: '5A5650',
   line: 'DDDBD5', card: 'E4E2DC', w: 'FFFFFF', red: 'A3302A', redBg: 'FBEDEA', before: 'C9C6BF' };
 
+// 시안: A = 글자만 흑백(그린 면은 유지) · B = 전체 흑백(학회 논문형)
+const VAR = process.argv[3] || '';
+if (VAR === 'A' || VAR === 'B') { K.tg = '1E1E1C'; K.red = '1E1E1C'; }
+if (VAR === 'B') Object.assign(K, { g5: '1E1E1C', g7: '4D4D4D', g8: '2B2B2B', g50: 'EFEFEF', g40: 'F7F7F7', gb: 'D4D4D4', gb2: 'E2E2E2', gb3: 'BDBDBD',
+  t1: '9E9E9E', t2: '6E6E6E', t3: '4A4A4A', t4: '1E1E1C', bg2: 'F5F5F5', before: 'C8C8C8', card: 'D9D9D9', line: 'D9D9D9' });
 const pres = new pptxgen();
 pres.layout = 'LAYOUT_WIDE';
 pres.theme = { headFontFace: KO, bodyFontFace: KO };
