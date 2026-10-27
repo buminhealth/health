@@ -10,8 +10,13 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v21.3 (2026-10-27)
+  부민병원 MSDS 통합시스템 v21.4 (2026-10-27)
 
+  ★★★ v21.4 (2026-10-27) — PDF 용량 줄이기 (서버 v21.4):
+    - 원인: 교육일지 · 수령증 · 보고서 PDF의 페이지 그림을 PNG로 넣어 jsPDF가 압축 없이(원본 RGB + 투명도) 저장 → 한 장 8~10MB
+    - 새로 만드는 PDF: 페이지 그림을 JPEG(품질 0.85)로 → 한 장 약 0.2~0.4MB (글자 · 서명 · 도장 화질 차이 거의 없음)
+    - 관리자 → 설정 → PDF 용량 줄이기: 드라이브의 1.5MB 넘는 PDF를 찾아 그림만 JPEG로 바꿔 같은 자리에 저장
+      (실제 일지 10.9MB → 219KB, 17.0MB → 347KB · 이전 판은 드라이브 휴지통 30일)
   ★★★ v21.3 (2026-10-27) — 저장 공간 5MB 공유 문제 (서버 v21.3: 법령 API 등록 도메인 = 관리자설정 '앱주소'):
     - 같은 주소(buminhealth.github.io)의 다른 앱이 5MB를 다 써도 멈추지 않음:
       물질 목록 캐시부터 비우고 다시 시도 → 그래도 없으면 이번 창 메모리에 보관(원본은 서버) + 한 번 안내
@@ -4901,7 +4906,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.3';
+  var SERVER_EXPECT = 'v21.4';
   var esc = function(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
   var recs = function(k){ try{ return JSON.parse(localStorage.getItem(k) || '[]') || []; }catch(_){ return []; } };
   var post = function(op, b){ return window.BMAUTH ? BMAUTH.post(op, b || {}).catch(function(e){ return { success: false, error: e.message }; }) : Promise.resolve({ success: false, error: '로그인 필요' }); };
@@ -5084,6 +5089,10 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
         })() +
         '<dt>파일 저장소</dt><dd>구글 드라이브 (서버 경유) · 옛 파일은 ' + esc(C.ghRepo || D.ghRepo || 'buminhealth/health') + '</dd></dl>' +
         '<span style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="cfg-b" data-c="storage">저장 공간 안내</button><button type="button" class="cfg-b" data-c="sheet">구글 시트 열기</button><button type="button" class="cfg-b" data-c="logout" style="color:#A3302A">로그아웃</button></span></section>' +
+      '<section class="cfg-c"><h4>PDF 용량 줄이기 (드라이브)</h4>' +
+        '<p>예전 일지 · 수령증 PDF는 페이지 그림이 압축 없이 들어 있어 한 장에 8~10MB입니다. 내용 · 서명 · 도장은 그대로 두고 그림만 JPEG로 바꿔 다시 저장합니다 (보통 1/20 크기). 바꾸기 전 파일은 드라이브 휴지통에 30일 남습니다.</p>' +
+        '<span style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="cfg-b" data-c="pdffind">큰 PDF 찾기</button><button type="button" class="cfg-b" data-c="pdfrun" id="cfg-pdf-run" disabled>줄이기 시작</button></span>' +
+        '<div id="cfg-pdf" style="font-size:12px;margin-top:6px;line-height:1.6"></div></section>' +
     '</div>';
     var act = { lawoc: async function(){
                   var v = document.getElementById('cfg-law-oc').value.trim();
@@ -5132,6 +5141,33 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
                   t.innerHTML = x.success ? '<span class="cfg-ok">조문 ' + x.count + '개를 받았습니다</span>' : '<span class="cfg-bad">' + esc(x.error || '실패') + '</span>';
                 },
                 open: function(){ openCfg(); }, ai: function(){ admSwitchPane('ai'); BMAI.open(); }, storage: function(){ apvShowStorageGuide(); },
+                pdffind: async function(){   // v21.4
+                  var el = document.getElementById('cfg-pdf'); el.textContent = '드라이브에서 찾는 중… (파일이 많으면 1분 정도)';
+                  var x = await post('pdf.big', {});
+                  if(!x.success){ el.innerHTML = '<span class="cfg-bad">' + esc(/unknown op/.test(x.error || '') ? '서버 v21.4 이상 필요 (Code.gs 배포)' : (x.error || '실패')) + '</span>'; return; }
+                  window._bmPdfBig = x.data;
+                  var mb = function(b){ return (b / 1048576).toFixed(1) + 'MB'; };
+                  el.innerHTML = 'PDF ' + x.count + '개 · 전체 ' + mb(x.totalBytes) + ' · <b>1.5MB 넘는 파일 ' + x.data.length + '개 (' + mb(x.bigBytes) + ')</b>' +
+                    (x.data.length ? '<br>' + x.data.slice(0, 5).map(function(f){ return esc(f.path.split('/').pop()) + ' ' + mb(f.size); }).join('<br>') + (x.data.length > 5 ? '<br>…' : '') : '');
+                  document.getElementById('cfg-pdf-run').disabled = !x.data.length;
+                },
+                pdfrun: async function(){
+                  var list = window._bmPdfBig || []; if(!list.length) return;
+                  if(!confirm('큰 PDF ' + list.length + '개의 그림을 JPEG로 바꿔 다시 저장할까요?\n내용 · 서명 · 도장은 그대로이고, 이전 파일은 드라이브 휴지통에 30일 남습니다.\n창을 닫지 말고 기다려 주세요.')) return;
+                  var el = document.getElementById('cfg-pdf'), btn = document.getElementById('cfg-pdf-run'); btn.disabled = true;
+                  var done = 0, saved = 0, skip = 0, fail = [];
+                  for(var i = 0; i < list.length; i++){
+                    var f = list[i];
+                    el.textContent = (i + 1) + ' / ' + list.length + ' — ' + f.path.split('/').pop();
+                    try{
+                      var r = await bmShrinkStoredPdf(f);
+                      if(r.skipped) skip++; else { done++; saved += r.before - r.after; }
+                    }catch(e){ fail.push(f.path.split('/').pop() + ': ' + e.message); }
+                  }
+                  el.innerHTML = '<span class="cfg-ok">완료</span> 줄임 ' + done + '개 · 줄어든 용량 ' + (saved / 1048576).toFixed(1) + 'MB' + (skip ? ' · 이미 작음 ' + skip : '') +
+                    (fail.length ? '<br><span class="cfg-bad">실패 ' + fail.length + '개</span><br>' + fail.slice(0, 5).map(esc).join('<br>') : '');
+                  window._bmPdfBig = [];
+                },
                 sheet: function(){ window.open('https://docs.google.com/spreadsheets/d/1kFRIyXZX8aTgQR2w5MC0Ty66B9ltKrWj3Wz96D0mKIs/edit', '_blank'); }, logout: function(){ adminLogout(); } };
     host.querySelectorAll('[data-c]').forEach(function(b){ b.onclick = function(){ try{ act[b.getAttribute('data-c')](); }catch(e){ console.warn(e); } }; });
     var ocIn = document.getElementById('cfg-law-oc'); if(ocIn) ocIn.onkeydown = function(e){ if(e.key === 'Enter') act.lawoc(); };
@@ -6587,13 +6623,84 @@ function getEmpNo(name, stored){
    페이지 경계가 서명 행 안에 떨어지면 그 행 시작점으로 cut을 당겨
    서명 그림이 잘리지 않고 다음 페이지에 통째로 들어가게 함
    ============================================================ */
+/* v21.4 PDF 용량: 페이지 그림은 JPEG(품질 0.85)로 넣음.
+   예전에는 PNG를 넣었고 jsPDF가 PNG를 압축 없이(원본 RGB + 투명도) 저장해 한 장에 8~10MB였음 → JPEG는 약 0.3~0.5MB.
+   투명한 부분은 흰색으로 채운 뒤 변환 (JPEG에는 투명도가 없어 검게 나오는 것 방지) */
+const BM_PDF_JPEG_Q = 0.85;
+function pdfPageImg(cv){
+  const w = document.createElement('canvas'); w.width = cv.width; w.height = cv.height;
+  const x = w.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, w.width, w.height); x.drawImage(cv, 0, 0);
+  return w.toDataURL('image/jpeg', BM_PDF_JPEG_Q);
+}
+/* v21.4 이미 저장된 PDF 줄이기: 압축 안 된(또는 Flate) RGB 그림만 JPEG로 바꿔 같은 자리에 넣음 — 글자 · 위치 · 페이지 구성은 그대로
+   투명도(SMask)는 흰 바탕에 합성. 이미 JPEG인 그림, RGB 8비트가 아닌 그림은 건드리지 않음 */
+async function bmShrinkPdf(bytes){
+  const { PDFDocument, PDFName, PDFRawStream } = PDFLib;
+  const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+  const ctx = doc.context, N = function(n){ return PDFName.of(n); };
+  const num = function(d, k){ const v = d.get(N(k)); return v && v.asNumber ? v.asNumber() : 0; };
+  const inflate = async function(u8){ const st = new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate')); return new Uint8Array(await new Response(st).arrayBuffer()); };
+  const rawOf = async function(st){
+    const f = st.dict.get(N('Filter'));
+    if(!f) return st.contents;
+    if(String(f) === '/FlateDecode' && !st.dict.get(N('DecodeParms'))) return inflate(st.contents);
+    return null;
+  };
+  const done = new Map(); let changed = 0;
+  for(const page of doc.getPages()){
+    const res = page.node.Resources(); const xo = res && res.lookup(N('XObject'));
+    if(!xo || !xo.keys) continue;
+    for(const key of xo.keys()){
+      const ref = xo.get(key);
+      if(done.has(String(ref))){ if(done.get(String(ref))) xo.set(key, done.get(String(ref))); continue; }
+      const st = ctx.lookup(ref);
+      done.set(String(ref), null);
+      if(!(st instanceof PDFRawStream) || String(st.dict.get(N('Subtype'))) !== '/Image') continue;
+      if(String(st.dict.get(N('ColorSpace'))) !== '/DeviceRGB' || num(st.dict, 'BitsPerComponent') !== 8) continue;
+      const w = num(st.dict, 'Width'), h = num(st.dict, 'Height');
+      const rgb = await rawOf(st);
+      if(!rgb || rgb.length < w * h * 3) continue;
+      let alpha = null; const smRef = st.dict.get(N('SMask'));
+      if(smRef){ const sm = ctx.lookup(smRef); const a = sm instanceof PDFRawStream ? await rawOf(sm) : null; if(a && a.length >= w * h) alpha = a; }
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+      const c2 = cv.getContext('2d'), img = c2.createImageData(w, h), px = img.data;
+      for(let i = 0, j = 0, k = 0; i < w * h; i++, j += 3, k += 4){
+        const a = alpha ? alpha[i] / 255 : 1;
+        px[k] = rgb[j] * a + 255 * (1 - a); px[k + 1] = rgb[j + 1] * a + 255 * (1 - a); px[k + 2] = rgb[j + 2] * a + 255 * (1 - a); px[k + 3] = 255;
+      }
+      c2.putImageData(img, 0, 0);
+      const jpg = new Uint8Array(await (await new Promise(function(ok){ cv.toBlob(ok, 'image/jpeg', BM_PDF_JPEG_Q); })).arrayBuffer());
+      if(jpg.length >= st.contents.length) continue;
+      const nref = ctx.register(ctx.stream(jpg, { Type: 'XObject', Subtype: 'Image', Width: w, Height: h, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'DCTDecode' }));
+      xo.set(key, nref); done.set(String(ref), nref);
+      ctx.delete(ref); if(smRef) ctx.delete(smRef);
+      changed++;
+    }
+  }
+  if(!changed) return null;
+  return await doc.save();
+}
+// 서버(드라이브)의 PDF 하나 줄이기: 받기 → 줄이기 → 70% 이하일 때만 같은 경로에 다시 저장 (sha 확인)
+async function bmShrinkStoredPdf(f){
+  const raw = 'https://raw.githubusercontent.com/buminhealth/health/main/' + f.path.split('/').map(encodeURIComponent).join('/');
+  const res = await fetch(raw);
+  if(!res.ok) throw new Error('받기 실패 (' + res.status + ')');
+  const before = new Uint8Array(await res.arrayBuffer());
+  const out = await bmShrinkPdf(before);
+  if(!out || out.length > before.length * 0.7) return { skipped: true, before: before.length, after: before.length };
+  let bin = ''; for(let i = 0; i < out.length; i += 0x8000) bin += String.fromCharCode.apply(null, out.subarray(i, i + 0x8000));
+  const api = 'https://api.github.com/repos/buminhealth/health/contents/' + f.path.split('/').map(encodeURIComponent).join('/');
+  const put = await fetch(api, { method: 'PUT', body: JSON.stringify({ message: 'PDF 용량 줄이기', content: btoa(bin), sha: f.sha }) });
+  if(!put.ok){ let m = ''; try{ m = (await put.json()).message; }catch(_){} throw new Error('저장 실패 ' + (m || put.status)); }
+  return { before: before.length, after: out.length };
+}
 async function pdfRenderPagesProtected(area, cv, pdf, pw, ph, scale, fillSinglePage){
   const ih = (cv.height/cv.width) * pw;
 
   // ── 한 페이지에 들어가면: A4 전체로 stretch (옵션) 또는 그대로
   if (ih <= ph) {
     const finalH = fillSinglePage ? ph : ih;
-    pdf.addImage(cv.toDataURL('image/png'), 'PNG', 0, 0, pw, finalH);
+    pdf.addImage(pdfPageImg(cv), 'JPEG', 0, 0, pw, finalH, undefined, 'FAST');
     return;
   }
 
@@ -6632,7 +6739,7 @@ async function pdfRenderPagesProtected(area, cv, pdf, pw, ph, scale, fillSingleP
     tmp.height = nextPos - pos;
     tmp.getContext('2d').drawImage(cv, 0, pos, cv.width, tmp.height, 0, 0, cv.width, tmp.height);
     if (pos > 0) pdf.addPage();
-    pdf.addImage(tmp.toDataURL('image/png'), 'PNG', 0, 0, pw, (tmp.height/cv.width) * pw);
+    pdf.addImage(pdfPageImg(tmp), 'JPEG', 0, 0, pw, (tmp.height/cv.width) * pw, undefined, 'FAST');
     pos = nextPos;
   }
 }
@@ -9819,7 +9926,7 @@ async function _regeneratePdfFromRecords(groupKey){
     const ratio = pw / cv.width;
     const imgH = cv.height * ratio;
     if(imgH <= ph){
-      pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, imgH);
+      pdf.addImage(pdfPageImg(cv), 'JPEG', 0, 0, pw, imgH);
     } else {
       let yPos = 0;
       while(yPos < cv.height){
@@ -9828,7 +9935,7 @@ async function _regeneratePdfFromRecords(groupKey){
         pageCv.height = Math.min(ph/ratio, cv.height - yPos);
         pageCv.getContext('2d').drawImage(cv, 0, -yPos);
         if(yPos > 0) pdf.addPage();
-        pdf.addImage(pageCv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, pageCv.height * ratio);
+        pdf.addImage(pdfPageImg(pageCv), 'JPEG', 0, 0, pw, pageCv.height * ratio);
         yPos += ph / ratio;
       }
     }
@@ -10838,7 +10945,7 @@ async function _apvRenderGroupPdf(group){
   const ratio = pw / cv.width;
   const imgH = cv.height * ratio;
   if(imgH <= ph){
-    pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, imgH);
+    pdf.addImage(pdfPageImg(cv), 'JPEG', 0, 0, pw, imgH);
   } else {
     let yPos = 0;
     while(yPos < cv.height){
@@ -10847,7 +10954,7 @@ async function _apvRenderGroupPdf(group){
       pageCv.height = Math.min(ph/ratio, cv.height - yPos);
       pageCv.getContext('2d').drawImage(cv, 0, -yPos);
       if(yPos > 0) pdf.addPage();
-      pdf.addImage(pageCv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, pageCv.height * ratio);
+      pdf.addImage(pdfPageImg(pageCv), 'JPEG', 0, 0, pw, pageCv.height * ratio);
       yPos += ph / ratio;
     }
   }
@@ -11085,7 +11192,7 @@ async function apvGenApprovalPdf(groups, stampPng){
     const pageW = 210, pageH = 297;
     const imgW = pageW - 20;
     const imgH = (cv.height / cv.width) * imgW;
-    const imgData = cv.toDataURL('image/jpeg', 0.92);
+    const imgData = pdfPageImg(cv);
     if(imgH <= pageH - 20){
       pdf.addImage(imgData, 'JPEG', 10, 10, imgW, imgH);
     }else{
@@ -12371,7 +12478,7 @@ async function _regenerateEduFromRecord(r){
     const ratio = pw / cv.width;
     const imgH = cv.height * ratio;
     if(imgH <= ph){
-      pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, imgH);
+      pdf.addImage(pdfPageImg(cv), 'JPEG', 0, 0, pw, imgH);
     } else {
       let yPos = 0;
       while(yPos < cv.height){
@@ -12380,7 +12487,7 @@ async function _regenerateEduFromRecord(r){
         pageCv.height = Math.min(ph/ratio, cv.height - yPos);
         pageCv.getContext('2d').drawImage(cv, 0, -yPos);
         if(yPos > 0) pdf.addPage();
-        pdf.addImage(pageCv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, pageCv.height * ratio);
+        pdf.addImage(pdfPageImg(pageCv), 'JPEG', 0, 0, pw, pageCv.height * ratio);
         yPos += ph / ratio;
       }
     }
@@ -12715,9 +12822,9 @@ async function issueCorrectionPdf(idx, opts){
     // html2canvas로 이미지 변환 (한글 정상 표시)
     const canvas = await html2canvas(correctionHtml, {scale: 2, backgroundColor: '#fff', useCORS: true});
     document.body.removeChild(correctionHtml);
-    const imgData = canvas.toDataURL('image/png', 0.95);
+    const imgData = pdfPageImg(canvas);   // v21.4: PNG → JPEG (용량)
     const imgBytes = Uint8Array.from(atob(imgData.split(',')[1]), c => c.charCodeAt(0));
-    const pngImage = await pdfDoc.embedPng(imgBytes);
+    const pngImage = await pdfDoc.embedJpg(imgBytes);
 
     // 새 페이지에 이미지 채우기 (A4 크기 맞춤)
     const pageWidth = 595;
@@ -13687,7 +13794,7 @@ async function _regeneratePpeFromRecord(r){
     const ratio = pw / cv.width;
     const imgH = cv.height * ratio;
     if(imgH <= ph){
-      pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, imgH);
+      pdf.addImage(pdfPageImg(cv), 'JPEG', 0, 0, pw, imgH);
     } else {
       let yPos = 0;
       while(yPos < cv.height){
@@ -13696,7 +13803,7 @@ async function _regeneratePpeFromRecord(r){
         pageCv.height = Math.min(ph/ratio, cv.height - yPos);
         pageCv.getContext('2d').drawImage(cv, 0, -yPos);
         if(yPos > 0) pdf.addPage();
-        pdf.addImage(pageCv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, pageCv.height * ratio);
+        pdf.addImage(pdfPageImg(pageCv), 'JPEG', 0, 0, pw, pageCv.height * ratio);
         yPos += ph / ratio;
       }
     }
