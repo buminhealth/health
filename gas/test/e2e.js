@@ -1522,6 +1522,33 @@ function check(name, cond, extra) {
     } else check('PDF 용량 시험: jspdf · pdf-lib 없음 (건너뜀)', true);
   }
 
+  // 18-3. v21.6 이모지 없음(디자인 기준) · PIN 보기
+  {
+    const emo = await page.evaluate(async () => {
+      const RE = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{2604}\u{2607}-\u{2712}\u{2714}\u{2716}-\u{27BF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
+      const found = [];
+      const look = (where) => { const t = document.body.innerText; const m = t.match(RE); if (m) found.push(where + ': ' + t.slice(Math.max(0, m.index - 20), m.index + 20)); };
+      for (const t of ['home', 'msds', 'edu2', 'ppe', 'chem', 'risk']) { try { goTab(t); } catch (_) {} await new Promise(z => setTimeout(z, 300)); look(t); }
+      goTab('admin'); await new Promise(z => setTimeout(z, 300));
+      for (const p of ['dash', 'apv', 'edu', 'ppe', 'chem', 'risk', 'chemm', 'ai', 'staff', 'nh', 'cfg']) {
+        try { const el = document.querySelector('.adm-nav-item[data-pane="' + p + '"]'); if (el) el.click(); } catch (_) {}
+        await new Promise(z => setTimeout(z, 700)); look('관리자 ' + p);
+      }
+      return found;
+    });
+    check('모든 화면에 이모지 없음 (✓ · ✕ 표시는 유지)', emo.length === 0, emo.slice(0, 5));
+    const eye = await page.evaluate(async () => {
+      BMAUTH.showLogin(); await new Promise(z => setTimeout(z, 300));
+      const pin = document.getElementById('bm-login-pin'); if (!pin) return { none: true };
+      const b = pin.parentNode.querySelector('.bm-pw-eye'); if (!b) return { noBtn: true };
+      const t0 = pin.type; b.click(); const t1 = pin.type, l1 = b.textContent; b.click();
+      const r = { t0, t1, l1, t2: pin.type, aria: b.getAttribute('aria-label') };
+      try { document.querySelector('#bm-login [data-x], #bm-login .bm-login-x, #bm-login button[aria-label="닫기"]').click(); } catch (_) { const m = document.getElementById('bm-login'); if (m) m.remove(); }
+      return r;
+    });
+    check('PIN 보기: [보기] 누르면 PIN이 보이고 [숨기기]로 다시 가림', eye.t0 === 'password' && eye.t1 === 'text' && eye.l1 === '숨기기' && eye.t2 === 'password' && /PIN/.test(eye.aria), eye);
+  }
+
   // 19. v21.3 저장 공간 가득 참 (같은 주소 다른 앱이 5MB를 거의 다 씀) → 멈추지 않고 메모리 보관 · 앱별 사용량 표시
   const st = await page.evaluate(() => {
     const keep = localStorage.getItem('bm_edu_records');
