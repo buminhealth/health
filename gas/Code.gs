@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.6 (2026-10-27)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.7 (2026-10-28)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -795,10 +795,51 @@ function getEmployees(s) {
   const list = readEmployees_();
   if (list === null) return { success: false, error: '직원목록 시트가 없습니다. 시트명을 "직원목록"으로 해주세요.' };
   const pick = e => ({ name: e.name, dept: e.dept, empNo: e.empNo, joinDate: e.joinDate, status: e.status });
-  const data = s && s.role === 'dept'
-    ? list.filter(e => (sameDept_(e.dept, s.dept) || sameDept_(deptAlias_(e.dept), s.dept)) && !isResigned_(e)).map(pick)
-    : list.map(pick);
+  let data = s && s.role === 'dept' ? deptEmployees_(list, s.dept).map(pick) : list.map(pick);
+  // v21.7: 부서 로그인인데 0명이면 이름이 비슷한 인사 사이트 부서를 알려 줌 (예: 진단검사의학과 ↔ 진단검사의학실)
+  if (s && s.role === 'dept' && !data.length) return { success: true, data: data, deptGuess: deptGuess_(s.dept, list) };
   return { success: true, data: data };
+}
+
+// 부서 로그인의 직원 명단: ① 같은 부서(부서매핑 반영) ② 근무지지정으로 이 부서에서 일하는 사람(예: 외래 → 인터벤션센터)
+//  ③ 그래도 없고 '외래(외과)'처럼 괄호 붙은 세부 부서면 앞 이름(외래) 직원 — 인사 사이트에는 세부 부서가 없음
+function deptEmployees_(list, dept) {
+  const act = (list || []).filter(e => !isResigned_(e));
+  const same = e => sameDept_(e.dept, dept) || sameDept_(deptAlias_(e.dept), dept);
+  let units = {};
+  try { units = unitMap_(); } catch (_) {}
+  const inUnit = e => { const u = units[eduKey_(e.empNo, e.name, e.dept)] || units['nm:' + e.name + '|' + normDept_(deptAlias_(e.dept))]; return !!u && sameDept_(u.unit, dept); };
+  let out = act.filter(e => same(e) || inUnit(e));
+  if (!out.length) {
+    const base = String(dept || '').replace(/\s*\(.*$/, '').trim();
+    if (base && base !== String(dept).trim()) out = act.filter(e => sameDept_(e.dept, base) || sameDept_(deptAlias_(e.dept), base));
+  }
+  return out;
+}
+// 앱 부서 이름과 비슷한 인사 사이트 부서 이름 (끝의 과 · 실 · 팀 · 센터 · 부 차이, 한쪽이 다른 쪽을 포함) — 부서매핑이 비어 있는 것만
+function deptGuess_(appDept, list) {
+  const core = d => normDept_(d).replace(/(과|실|팀|센터|부)$/, '');
+  const a = core(appDept);
+  if (!a) return [];
+  const map = DEPT_ALIAS_CACHE || readDeptMap_();
+  const cnt = {};
+  (list || []).forEach(e => {
+    if (isResigned_(e) || !e.dept) return;
+    const raw = String(e.dept).trim(), n = normDept_(raw);
+    if (map[n] || sameDept_(raw, appDept)) return;
+    const b = core(raw);
+    const pa = a.replace(/\(.*$/, ''), pb = b.replace(/\(.*$/, '');
+    if (b && (b === a || (a.length >= 3 && b.length >= 3 && (b.indexOf(a) >= 0 || a.indexOf(b) >= 0)) || (pa.length >= 3 && pa === pb))) cnt[raw] = (cnt[raw] || 0) + 1;
+  });
+  return Object.keys(cnt).sort((x, y) => cnt[y] - cnt[x]).slice(0, 3).map(d => ({ hr: d, count: cnt[d] }));
+}
+// 로그인할 수 있는 부서 중 직원이 0명인 부서 (부서매핑 누락) + 비슷한 인사 사이트 부서
+function zeroLoginDepts_(list) {
+  const active = (list || []).filter(e => !isResigned_(e));
+  return readAuthRows_().filter(r => r.active && r.pin).map(r => r.dept)
+    .filter((d, i, a) => a.findIndex(x => sameDept_(x, d)) === i)
+    .filter(d => !deptEmployees_(active, d).length)
+    .map(d => ({ dept: d, guess: deptGuess_(d, list) }));
 }
 
 function getEmployeeDepts_() {
@@ -1318,6 +1359,7 @@ function empStatus_() {
     hrReads: String(cfg.hr_reads || '').indexOf(todayKst_() + '|') === 0 ? parseInt(String(cfg.hr_reads).split('|')[1], 10) || 0 : 0,
     hrLastFull: cfg.hr_last_full || '', hrLastCheck: cfg.hr_last_check || '',
     deptCheck: deptCheck_(list),
+    zeroLogin: zeroLoginDepts_(list),
     serverVersion: SERVER_VERSION,
   };
 }
