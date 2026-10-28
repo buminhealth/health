@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.6/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.7/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
   const other = await page.evaluate(async () => {
@@ -504,7 +504,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.6'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.7'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -1479,6 +1479,28 @@ function check(name, cond, extra) {
     const add2 = post({ op: 'nh.add', name: '직접대상', dept: '61병동', t: tk.a });
     const addD = post({ op: 'nh.add', name: '직접대상', dept: '61병동', t: tk.d });
     check('신규입사 직접 보내기: 고른 직원 알림 · 메일 · 같은 사람 두 번은 막음 · 부서 계정 불가', add1.success && add1.status === '회신대기' && nhOf('직접대상') && !add2.success && add2.exists && addD.status === 403, [add1, add2.error, addD.status]);
+    // v21.7 부서 로그인 직원 0명: 인사 사이트 부서 이름이 다름(…실 ↔ …과) → 비슷한 이름 안내 · 관리자 화면 경고 · 한 번에 연결
+    g.sheets['부서인증'].appendRow(['검사의학과', '7777', '', 'Y', '', '']);
+    const ze = empRow('126999009', '이부민', '검사의학실', '재직', '임상병리사'); ze[col('입사일')] = kday(1); empSh.appendRow(ze);
+    const zt = post({ op: 'login', kind: 'dept', dept: '검사의학과', pin: '7777' }).token;
+    const empOf = () => JSON.parse(g.api.doGet({ parameter: { action: 'emp', t: zt, callback: 'cb' } }).text.replace(/^cb\(|\)$/g, ''));
+    const g0 = empOf();
+    const zs = post({ op: 'emp.status', t: tk.a });
+    const zz = (zs.zeroLogin || []).find(z => z.dept === '검사의학과');
+    check('직원 0명 부서: 비슷한 인사 사이트 부서 이름 안내 · 관리자 점검에 표시', g0.data.length === 0 && g0.deptGuess[0].hr === '검사의학실' && zz && zz.guess[0].hr === '검사의학실', [g0.deptGuess, zz]);
+    const zUi = await page.evaluate(async () => {
+      admSwitchPane('staff'); await BMSTAFF.open(); await new Promise(z => setTimeout(z, 300));
+      const b = document.querySelector('#staff-body [data-zmap="검사의학실"]'); if (!b) return { btn: false };
+      b.click(); await new Promise(z => setTimeout(z, 1500));
+      return { btn: true };
+    });
+    const g1 = empOf();
+    check('직원 0명 부서: [연결] 누르면 부서매핑 저장 → 부서 로그인에 직원이 보임', zUi.btn && g1.data.some(e => e.name === '이부민'), [zUi, g1.data.length]);
+    // 세부 부서 로그인: 괄호 붙은 이름(61병동(별관))이면 앞 부서(61병동) 직원 · 근무지지정 사람도 포함
+    g.sheets['부서인증'].appendRow(['61병동(별관)', '7778', '', 'Y', '', '']);
+    const zt2 = post({ op: 'login', kind: 'dept', dept: '61병동(별관)', pin: '7778' }).token;
+    const e2 = JSON.parse(g.api.doGet({ parameter: { action: 'emp', t: zt2, callback: 'cb' } }).text.replace(/^cb\(|\)$/g, ''));
+    check('세부 부서 로그인(괄호): 인사 사이트에 없는 세부 부서면 앞 부서 직원으로 검색', e2.data.length > 0 && e2.data.every(e => e.dept === '61병동'), e2.data.length);
     const ui = await page.evaluate(() => typeof apvDeleteOne === 'function' && typeof _getStampedPdfBlob === 'function');
     check('결재 관리: 한 건 삭제 · 결재본 도장 미리보기 함수', ui);
   }
