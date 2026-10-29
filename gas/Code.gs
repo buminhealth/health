@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.7 (2026-10-28)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.8 (2026-10-29)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -801,32 +801,45 @@ function getEmployees(s) {
   return { success: true, data: data };
 }
 
-// 부서 로그인의 직원 명단: ① 같은 부서(부서매핑 반영) ② 근무지지정으로 이 부서에서 일하는 사람(예: 외래 → 인터벤션센터)
-//  ③ 그래도 없고 '외래(외과)'처럼 괄호 붙은 세부 부서면 앞 이름(외래) 직원 — 인사 사이트에는 세부 부서가 없음
-function deptEmployees_(list, dept) {
-  const act = (list || []).filter(e => !isResigned_(e));
-  const same = e => sameDept_(e.dept, dept) || sameDept_(deptAlias_(e.dept), dept);
-  let units = {};
-  try { units = unitMap_(); } catch (_) {}
-  const inUnit = e => { const u = units[eduKey_(e.empNo, e.name, e.dept)] || units['nm:' + e.name + '|' + normDept_(deptAlias_(e.dept))]; return !!u && sameDept_(u.unit, dept); };
-  let out = act.filter(e => same(e) || inUnit(e));
-  if (!out.length) {
-    const base = String(dept || '').replace(/\s*\(.*$/, '').trim();
-    if (base && base !== String(dept).trim()) out = act.filter(e => sameDept_(e.dept, base) || sameDept_(deptAlias_(e.dept), base));
-  }
-  return out;
+// v21.8 부서 범위는 이 한 곳에서만 정함 — 부서 로그인 명단 · 교육 현황 · 근무지 지정 · 개별 제외가 같은 사람을 봄
+//  ① 같은 부서(부서매핑 반영) ② 근무지지정으로 이 부서에서 일하는 사람(예: 외래 → 인터벤션센터)
+//  ③ '외래(외과)'처럼 괄호 붙은 세부 부서인데 인사 사이트에 그 이름의 직원이 없으면: 앞 부서(외래) 직원 중
+//     다른 근무지로 지정되지 않은 사람 (한 명을 근무지지정해도 나머지가 사라지지 않음)
+function unitMapSafe_() { try { return unitMap_(); } catch (_) { return {}; } }
+function unitOf_(units, e) {
+  return units[eduKey_(e.empNo, e.name, e.dept)] || units['nm:' + e.name + '|' + normDept_(deptAlias_(e.dept))] || null;
 }
-// 앱 부서 이름과 비슷한 인사 사이트 부서 이름 (끝의 과 · 실 · 팀 · 센터 · 부 차이, 한쪽이 다른 쪽을 포함) — 부서매핑이 비어 있는 것만
-function deptGuess_(appDept, list) {
+function inDept_(e, dept) { return sameDept_(e.dept, dept) || sameDept_(deptAlias_(e.dept), dept); }
+function deptScope_(dept, list, units) {
+  const d = String(dept || '').trim();
+  units = units || unitMapSafe_();
+  const base = d.replace(/\s*\(.*$/, '').trim();
+  const sub = !!base && base !== d && !(list || []).some(e => !isResigned_(e) && inDept_(e, d));
+  return e => {
+    if (inDept_(e, d)) return true;
+    const u = unitOf_(units, e);
+    if (u) return sameDept_(u.unit, d);
+    return sub && inDept_(e, base);
+  };
+}
+function deptEmployees_(list, dept, units) {
+  const act = (list || []).filter(e => !isResigned_(e));
+  return act.filter(deptScope_(dept, act, units));
+}
+// 앱 부서 이름과 비슷한 인사 사이트 부서 이름 (끝의 과 · 실 · 팀 · 센터 · 부 차이, 한쪽이 다른 쪽을 포함)
+//  — 부서매핑이 비어 있고, 이미 로그인 부서 이름과 같은 것(잘 쓰고 있는 부서)은 빼고 안내
+function deptGuess_(appDept, list, appNames) {
   const core = d => normDept_(d).replace(/(과|실|팀|센터|부)$/, '');
   const a = core(appDept);
   if (!a) return [];
-  const map = DEPT_ALIAS_CACHE || readDeptMap_();
+  if (!DEPT_ALIAS_CACHE) DEPT_ALIAS_CACHE = readDeptMap_();
+  const map = DEPT_ALIAS_CACHE;
+  const names = appNames || readAuthRows_().map(r => r.dept).concat(WARDS);
   const cnt = {};
   (list || []).forEach(e => {
     if (isResigned_(e) || !e.dept) return;
     const raw = String(e.dept).trim(), n = normDept_(raw);
-    if (map[n] || sameDept_(raw, appDept)) return;
+    if (map[n] || names.some(d => sameDept_(raw, d))) return;
     const b = core(raw);
     const pa = a.replace(/\(.*$/, ''), pb = b.replace(/\(.*$/, '');
     if (b && (b === a || (a.length >= 3 && b.length >= 3 && (b.indexOf(a) >= 0 || a.indexOf(b) >= 0)) || (pa.length >= 3 && pa === pb))) cnt[raw] = (cnt[raw] || 0) + 1;
@@ -834,12 +847,14 @@ function deptGuess_(appDept, list) {
   return Object.keys(cnt).sort((x, y) => cnt[y] - cnt[x]).slice(0, 3).map(d => ({ hr: d, count: cnt[d] }));
 }
 // 로그인할 수 있는 부서 중 직원이 0명인 부서 (부서매핑 누락) + 비슷한 인사 사이트 부서
+//  근무지지정 · 부서매핑 · 부서인증은 한 번만 읽어 모든 부서에 같이 씀
 function zeroLoginDepts_(list) {
-  const active = (list || []).filter(e => !isResigned_(e));
-  return readAuthRows_().filter(r => r.active && r.pin).map(r => r.dept)
+  const units = unitMapSafe_();
+  const names = readAuthRows_().map(r => r.dept).concat(WARDS);
+  return listActiveDepts_()
     .filter((d, i, a) => a.findIndex(x => sameDept_(x, d)) === i)
-    .filter(d => !deptEmployees_(active, d).length)
-    .map(d => ({ dept: d, guess: deptGuess_(d, list) }));
+    .filter(d => !deptEmployees_(list, d, units).length)
+    .map(d => ({ dept: d, guess: deptGuess_(d, list, names) }));
 }
 
 function getEmployeeDepts_() {
@@ -1371,8 +1386,8 @@ function deptCheck_(list) {
   const chemMap = handlingDepts_();
   const counts = {};
   list.filter(e => !isResigned_(e) && e.dept).forEach(e => {
-    const k = normDept_(e.dept);
-    (counts[k] = counts[k] || { dept: e.dept, staff: 0 }).staff++;
+    const d = deptAlias_(e.dept), k = normDept_(d);   // v21.8: 부서매핑대로 (연결한 인사 부서명이 따로 남지 않게)
+    (counts[k] = counts[k] || { dept: d, staff: 0 }).staff++;
   });
   return Object.keys(counts).sort().map(k => {
     const c = counts[k];
@@ -3123,18 +3138,21 @@ function eduUnit_(req, s) {
   const sh = eduSheet_(UNIT_SHEET, UNIT_HEADER);
   const today = todayKst_(), by = s.role === 'admin' ? '보건관리자' : (s.dept + ' 부서장');
   const emps = (readEmployees_() || []).filter(e => !isResigned_(e)).map(e => Object.assign({}, e, { dept: deptAlias_(e.dept) }));
+  let units = unitMap_();   // v21.8: 줄마다 시트를 두 번 읽지 않음 (바꾼 뒤에만 다시 읽음)
+  const inScope = s.role === 'dept' ? deptScope_(s.dept, emps, units) : null;   // 부서 로그인 명단과 같은 범위
   let set = 0, cleared = 0;
   const miss = [];
   (req.rows || []).slice(0, 1000).forEach(x => {
     const name = String(x.name || '').trim(), no = String(x.no || '').trim(), dept = String(x.dept || '').trim();
-    const e = emps.find(v => v.name === name && sameDept_(v.dept, dept) && (!no || !v.empNo || v.empNo === no));
+    const e = emps.find(v => v.name === name && (sameDept_(v.dept, dept) || sameDept_(v.dept, deptAlias_(dept))) && (!no || !v.empNo || v.empNo === no));
     if (!e) { miss.push(name); return; }
-    if (s.role === 'dept' && !sameDept_(e.dept, s.dept)) { miss.push(name); return; }
-    const cur = unitMap_()[eduKey_(e.empNo, e.name, e.dept)] || unitMap_()['nm:' + e.name + '|' + normDept_(e.dept)];
+    if (inScope && !inScope(e)) { miss.push(name); return; }
+    const cur = unitOf_(units, e);
     if (cur) sh.getRange(cur.row, 8).setValue(today + ' ' + by);
     const unit = String(x.unit || '').trim();
     if (unit) { sh.appendRow([e.empNo || '', e.name, e.dept, unit, String(x.note || ''), today, by, ''].map(safeCell_)); set++; }
     else if (cur) cleared++;
+    if (cur || unit) units = unitMap_();
   });
   return { success: true, set: set, cleared: cleared, missing: miss };
 }
@@ -3206,8 +3224,9 @@ function eduStatus_(s) {
     .filter((e, i, a) => !/^\d{6,}$/.test(e.empNo) || a.map(x => x.empNo).lastIndexOf(e.empNo) === i);   // 직원목록에 같은 사번 줄이 두 번 → 아래(최근) 줄 한 명
   const own = ledgerOwners_(recs, emps);
   const people = [];
+  const inScope = s.role === 'dept' ? deptScope_(s.dept, emps, units) : null;   // v21.8: 부서 로그인 명단과 같은 범위
   emps.forEach(e => {
-    if (s.role === 'dept' && !sameDept_(e.dept, s.dept)) return;
+    if (inScope && !inScope(e)) return;
     const inc = incl[eduKey_(e.empNo, e.name, e.dept)] || incl['nm:' + e.name + '|' + normDept_(e.dept)];
     const un = units[eduKey_(e.empNo, e.name, e.dept)] || units['nm:' + e.name + '|' + normDept_(e.dept)];
     const eR = un ? Object.assign({}, e, { dept: un.unit }) : e;   // 근무지가 있으면 규칙도 근무지로 판단
@@ -3308,9 +3327,10 @@ function eduRulesInfo_() {
 function eduExclude_(req, s) {
   const name = String(req.name || '').trim(), dept = String(req.dept || '').trim(), no = String(req.no || '').trim();
   if (!name || !dept) return { success: false, error: '직원을 고르세요' };
-  if (s.role === 'dept' && !sameDept_(dept, s.dept)) return { success: false, status: 403, error: '다른 부서 직원입니다' };
-  const emp = (readEmployees_() || []).map(e => Object.assign({}, e, { dept: deptAlias_(e.dept) }))
-    .find(e => e.name === name && sameDept_(e.dept, dept) && (!no || !e.empNo || e.empNo === no));
+  const all = (readEmployees_() || []).map(e => Object.assign({}, e, { dept: deptAlias_(e.dept) }));
+  const emp = all.find(e => e.name === name && (sameDept_(e.dept, dept) || sameDept_(e.dept, deptAlias_(dept))) && (!no || !e.empNo || e.empNo === no));
+  // v21.8: 근무지지정 · 세부 부서로 이 부서 명단에 보이는 사람도 부서장이 처리 (부서 로그인 명단과 같은 범위)
+  if (s.role === 'dept' && !(emp ? deptScope_(s.dept, all)(emp) : sameDept_(dept, s.dept))) return { success: false, status: 403, error: '다른 부서 직원입니다' };
   if (!emp) return { success: false, error: '직원목록에서 찾지 못했습니다' };
   const sh = eduSheet_(EXCL_SHEET, EXCL_HEADER);
   const today = todayKst_();
@@ -3318,22 +3338,23 @@ function eduExclude_(req, s) {
   const route = s.role === 'admin' ? '관리자' : (req.fromMail ? '부서장(메일)' : '부서장(프로그램)');
   const key = eduKey_(emp.empNo, emp.name, emp.dept), nkey = 'nm:' + emp.name + '|' + normDept_(emp.dept);
   const close = o => { if (o && o.row) sh.getRange(o.row, 8).setValue(today + ' ' + by); return !!(o && o.row); };
+  const em = exclMap_(), im = inclMap_();   // v21.8: 시트를 한 번씩만 읽음 (예전엔 최대 네 번)
   if (req.undo) {   // 제외 해제 또는 개별 포함 해제 (그 사람의 열린 줄)
-    const a = close(exclMap_()[key] || exclMap_()[nkey]), b = close(inclMap_()[key] || inclMap_()[nkey]);
+    const a = close(em[key] || em[nkey]), b = close(im[key] || im[nkey]);
     if (!a && !b) return { success: false, error: '이 직원의 개별 제외 · 포함 기록이 없습니다. 규칙이나 신규입사 회신으로 제외된 사람은 [대상으로 포함]을 누르세요.' };
     nhSyncHandling_(emp, null, by);
     return { success: true, undone: true };
   }
   const reason = String(req.reason || '').trim();
   if (req.include) {   // 규칙 · 신규입사 회신 제외보다 우선
-    close(exclMap_()[key] || exclMap_()[nkey]);
-    close(inclMap_()[key] || inclMap_()[nkey]);
+    close(em[key] || em[nkey]);
+    close(im[key] || im[nkey]);
     sh.appendRow([emp.empNo || '', emp.name, emp.dept, reason || '개별 확인: 취급함', by, today, '대상 포함(' + route + ')', ''].map(safeCell_));
     nhSyncHandling_(emp, true, by);
     return { success: true, included: true };
   }
   if (!reason) return { success: false, error: '제외 사유를 적어 주세요 (예: 행정 업무만 · 물질 취급 안 함)' };
-  close(inclMap_()[key] || inclMap_()[nkey]);
+  close(im[key] || im[nkey]);
   sh.appendRow([emp.empNo || '', emp.name, emp.dept, reason, by, today, route, ''].map(safeCell_));
   nhSyncHandling_(emp, false, by);
   return { success: true };

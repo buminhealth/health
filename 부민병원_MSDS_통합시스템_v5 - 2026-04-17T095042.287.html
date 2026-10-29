@@ -10,7 +10,16 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v21.7 (2026-10-28)
+  부민병원 MSDS 통합시스템 v21.8 (2026-10-29)
+
+  ★★★ v21.8 (2026-10-29) — 부서 범위 한 곳으로 · 코드 리뷰 수정 (서버 v21.8):
+    - 부서 로그인 직원 명단 · 교육 현황 · 근무지 지정 · 개별 제외가 같은 사람을 봄 (서버 deptScope_ 하나)
+      → 근무지지정 · 세부 부서로 명단에 보이던 사람이 교육 현황 0명 · 제외 403으로 나오던 문제
+    - 세부 부서(외래(외과)): 한 명을 근무지지정해도 나머지 직원이 사라지지 않음, 다른 근무지로 지정된 사람은 뺌
+    - [연결] 추천에서 이미 잘 로그인하는 부서 이름은 뺌 (정형외과 ↔ 정형외과병동 잘못 연결 방지)
+    - ③ 부서 이름 점검 표도 부서매핑대로 묶음 · [연결] 실패하면 버튼 다시 켜고 이유 표시
+    - 관리자 직원정보 화면: 근무지지정 · 부서매핑 · 부서인증을 부서마다 다시 읽지 않고 한 번만 읽음
+    - 표 칸: 교육 대상 규칙 표가 1366 폭 모니터에서 오른쪽 버튼(↑↓ · 삭제)이 잘리던 것 · 부서 매칭 표 부서명 칸 50% → 30%
 
   ★★★ v21.7 (2026-10-28) — 부서 로그인 후 직원 검색 0명 (서버 v21.7):
     - 원인: 인사 사이트 부서 이름이 로그인 부서와 다름 (진단검사의학실 ↔ 진단검사의학과) + 부서매핑 비어 있음
@@ -3539,9 +3548,11 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
         var hr = b.getAttribute('data-zmap'), app = b.getAttribute('data-zapp');
         if(!confirm("인사 사이트 '" + hr + "' 직원을 앱 부서 '" + app + "'로 볼까요?\n(시트 부서매핑에 저장 — 로그인 · 교육 현황 · 신규입사 알림에 바로 반영)")) return;
         b.disabled = true;
-        var x = await post('dept.saveMap', { rows: [{ raw: hr, app: app }] });
+        var x;
+        try{ x = await post('dept.saveMap', { rows: [{ raw: hr, app: app }] }); }
+        catch(e){ x = { success: false, error: '서버 연결 실패: ' + (e && e.message || e) }; }   // v21.8: 실패해도 버튼이 꺼진 채 남지 않게
         say(x.success ? "연결했습니다: " + hr + " → " + app : (x.error || '저장 실패'), x.success ? 'ok' : 'err');
-        if(x.success) open();
+        if(x.success) open(); else b.disabled = false;
       };
     });
     rulesUI();
@@ -3628,13 +3639,13 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       '<div style="font-weight:800;color:#3F7518;margin:6px 0 4px">ⓐ 교육 대상 규칙 <span style="font-weight:400;font-size:12px;color:#5A5650">위 줄부터 보고 처음 맞는 줄 하나만 적용 · 맞는 줄이 없으면 chemicals 시트의 부서 기준</span></div>' +
       '<div style="font-size:12px;color:#5A5650;margin-bottom:6px;line-height:1.6">부서: 쉼표로 여러 개 · <b>병동</b> = 모든 병동 · <b>*</b> = 전체 &nbsp;|&nbsp; 직종: 직위에 들어 있는 글자 (간호사 · 간호조무사 · 의사 · 병동도우미 …), 비우면 그 부서 전체 &nbsp;|&nbsp; ' +
         '예외(좁은 조건)를 위에, 전체(넓은 조건)를 아래에 두세요. 예) 8병동 간호조무사 → 대상, 그 아래 8병동 전체 → 제외</div>' +
-      '<div style="overflow-x:auto"><table id="rl-tbl" style="border-collapse:collapse;width:100%;min-width:980px"><tr>' + th('순서', '44px') + th('사용', '44px') + th('부서') + th('직종') + th('판정', '84px') + th('교육', '96px') + th('물질 (대상 부서에 물질이 없을 때)') + th('비고') + th('적용', '56px') + th('', '96px') + '</tr></table></div>' +
+      '<div style="overflow-x:auto"><table id="rl-tbl" style="border-collapse:collapse;width:100%;min-width:900px"><tr>' + th('순서', '44px') + th('사용', '44px') + th('부서') + th('직종') + th('판정', '84px') + th('교육', '96px') + th('물질 (대상 부서에 물질이 없을 때)') + th('비고') + th('적용', '56px') + th('', '96px') + '</tr></table></div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button id="rl-add" style="' + BTN + '">+ 규칙 추가</button><button id="rl-save" style="' + BTN_P + '">저장하고 다시 계산</button>' +
         '<span style="margin-left:auto;display:flex;gap:6px;align-items:center;font-size:12px;color:#475569">부서별 직종 보기 <select id="rl-jd" style="' + IN + '"><option value="">부서 선택</option>' + Object.keys(r.jobs).sort().map(function(d){ return '<option>' + esc(d) + '</option>'; }).join('') + '</select></span></div>' +
       '<div id="rl-jobs-out" style="font-size:12px;color:#334155;margin-top:6px"></div>' +
       '<div style="font-weight:800;color:#3F7518;margin:16px 0 4px">ⓑ 부서 매칭 (인사 사이트 부서명 → 앱 부서명)</div>' +
       '<div style="font-size:12px;color:#5A5650;margin-bottom:6px">앱 부서명을 비워 두면 인사 사이트 이름 그대로 씁니다. 같은 부서인데 이름만 다르면(예: 진단검사의학실 → 진단검사의학과) 앱 부서명을 고르세요. 직종에 따라 갈리는 경우(응급센터 의사 · 응급실 간호사)는 매칭 대신 위 규칙으로 정하세요.</div>' +
-      '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%"><tr>' + th('인사 사이트 부서명') + th('재직', '56px') + th('앱 부서명') + th('비고') + '</tr>' +
+      '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%"><tr>' + th('인사 사이트 부서명', '30%') + th('재직', '56px') + th('앱 부서명', '220px') + th('비고') + '</tr>' +
         r.deptMap.slice().sort(function(a, b){ return (a.app ? 1 : 0) - (b.app ? 1 : 0) || b.staff - a.staff; }).map(function(m, i){
           return '<tr><td style="padding:5px 6px;border-bottom:1px solid #ECEBE7;font-size:13px"><b>' + esc(m.raw) + '</b></td><td style="padding:5px 6px;border-bottom:1px solid #ECEBE7;font-size:13px">' + m.staff + '</td>' +
             '<td style="padding:5px 6px;border-bottom:1px solid #ECEBE7"><input data-map="' + esc(m.raw) + '" list="rl-depts" value="' + esc(m.app) + '" placeholder="그대로" style="' + IN + ';width:200px"></td>' +
@@ -3650,12 +3661,12 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
         var td = 'padding:4px 6px;border-bottom:1px solid #ECEBE7;font-size:13px';
         tr.innerHTML = '<td style="' + td + '">' + (i + 1) + '</td>' +
           '<td style="' + td + '"><input type="checkbox" data-k="use"' + (x.use ? ' checked' : '') + '></td>' +
-          '<td style="' + td + '"><input data-k="dept" list="rl-depts" value="' + esc(x.dept) + '" style="' + IN + ';width:100%;min-width:140px"></td>' +
-          '<td style="' + td + '"><input data-k="job" list="rl-jobs" value="' + esc(x.job) + '" placeholder="전체" style="' + IN + ';width:100%;min-width:110px"></td>' +
+          '<td style="' + td + '"><input data-k="dept" list="rl-depts" value="' + esc(x.dept) + '" style="' + IN + ';width:100%;min-width:110px"></td>' +
+          '<td style="' + td + '"><input data-k="job" list="rl-jobs" value="' + esc(x.job) + '" placeholder="전체" style="' + IN + ';width:100%;min-width:80px"></td>' +
           '<td style="' + td + '"><select data-k="decision" style="' + IN + '"><option' + (x.decision === '대상' ? ' selected' : '') + '>대상</option><option' + (x.decision === '제외' ? ' selected' : '') + '>제외</option></select></td>' +
           '<td style="' + td + '"><select data-k="kind" style="' + IN + '"><option value="">자동</option><option' + (x.kind === 'MSDS' ? ' selected' : '') + '>MSDS</option><option' + (x.kind === '특별' ? ' selected' : '') + '>특별</option></select></td>' +
-          '<td style="' + td + '"><input data-k="chem" value="' + esc(x.chem) + '" placeholder="비우면 부서 물질" style="' + IN + ';width:100%;min-width:120px"></td>' +
-          '<td style="' + td + '"><input data-k="note" value="' + esc(x.note) + '" style="' + IN + ';width:100%;min-width:160px"></td>' +
+          '<td style="' + td + '"><input data-k="chem" value="' + esc(x.chem) + '" placeholder="비우면 부서 물질" style="' + IN + ';width:100%;min-width:100px"></td>' +
+          '<td style="' + td + '"><input data-k="note" value="' + esc(x.note) + '" style="' + IN + ';width:100%;min-width:100px"></td>' +
           '<td style="' + td + ';white-space:nowrap">' + (x.hit == null ? '-' : x.hit + '명') + '</td>' +
           '<td style="' + td + ';white-space:nowrap"><button data-up="' + i + '" title="위로" style="' + BTN + ';padding:3px 7px">↑</button> <button data-dn="' + i + '" title="아래로" style="' + BTN + ';padding:3px 7px">↓</button> <button data-del="' + i + '" title="삭제" style="' + BTN + ';padding:3px 7px;color:#A3302A">✕</button></td>';
         tr.querySelectorAll('[data-k]').forEach(function(el){
@@ -5013,7 +5024,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.7';
+  var SERVER_EXPECT = 'v21.8';
   var esc = function(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
   var recs = function(k){ try{ return JSON.parse(localStorage.getItem(k) || '[]') || []; }catch(_){ return []; } };
   var post = function(op, b){ return window.BMAUTH ? BMAUTH.post(op, b || {}).catch(function(e){ return { success: false, error: e.message }; }) : Promise.resolve({ success: false, error: '로그인 필요' }); };

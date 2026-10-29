@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.7/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.8/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
   const other = await page.evaluate(async () => {
@@ -504,7 +504,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.7'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.8'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -1501,6 +1501,38 @@ function check(name, cond, extra) {
     const zt2 = post({ op: 'login', kind: 'dept', dept: '61병동(별관)', pin: '7778' }).token;
     const e2 = JSON.parse(g.api.doGet({ parameter: { action: 'emp', t: zt2, callback: 'cb' } }).text.replace(/^cb\(|\)$/g, ''));
     check('세부 부서 로그인(괄호): 인사 사이트에 없는 세부 부서면 앞 부서 직원으로 검색', e2.data.length > 0 && e2.data.every(e => e.dept === '61병동'), e2.data.length);
+    // v21.8 부서 범위 하나(deptScope_): 근무지지정으로 온 사람은 부서 명단 · 교육 현황 · 개별 제외 모두에서 그 부서 직원
+    g.sheets['부서인증'].appendRow(['병리과', '7780', '', 'Y', '', '']);
+    g.sheets['부서인증'].appendRow(['외래(외과)', '7781', '', 'Y', '', '']);
+    empSh.appendRow(empRow('126999011', '외래하나', '외래', '재직', '간호사6급'));
+    empSh.appendRow(empRow('126999012', '외래둘', '외래', '재직', '간호사6급'));
+    empSh.appendRow(empRow('126999013', '외래셋', '외래', '재직', '간호사6급'));
+    g.sheets['근무지지정'].appendRow(['126999011', '외래하나', '외래', '병리과', '', kday(0), '보건관리자', '']);
+    g.sheets['근무지지정'].appendRow(['126999012', '외래둘', '외래', '외래(외과)', '', kday(0), '보건관리자', '']);
+    const namesOf = t => JSON.parse(g.api.doGet({ parameter: { action: 'emp', t: t, callback: 'cb' } }).text.replace(/^cb\(|\)$/g, '')).data.map(e => e.name);
+    const ts = post({ op: 'login', kind: 'dept', dept: '병리과', pin: '7780' }).token;
+    const sEdu = post({ op: 'edu.status', fresh: true, t: ts });
+    const sEx = post({ op: 'edu.exclude', name: '외래하나', dept: '외래', no: '126999011', reason: '시험: 행정 업무만', t: ts });
+    const sEx403 = post({ op: 'edu.exclude', name: '김가나', dept: '61병동', no: '126051302', reason: '시험', t: ts });
+    check('부서 범위 하나: 근무지지정(외래 → 병리과) 직원이 병리과 로그인의 명단 · 교육 현황 · 개별 제외에 모두 들어감, 다른 부서 직원은 403',
+      namesOf(ts).includes('외래하나') && sEdu.success && sEdu.people.some(p => p.name === '외래하나') && sEx.success && sEx403.status === 403,
+      [namesOf(ts), sEdu.success && sEdu.people.map(p => p.name), sEx, sEx403.status]);
+    post({ op: 'edu.exclude', name: '외래하나', dept: '외래', no: '126999011', undo: true, t: tk.a });
+    const tsub = post({ op: 'login', kind: 'dept', dept: '외래(외과)', pin: '7781' }).token;
+    const sub = namesOf(tsub);
+    check('세부 부서(외래(외과)): 한 명을 근무지지정해도 나머지 외래 직원은 보이고, 다른 근무지(병리과)로 지정된 사람은 빠짐',
+      sub.includes('외래둘') && sub.includes('외래셋') && !sub.includes('외래하나'), sub);
+    // v21.8 [연결] 추천: 이미 로그인에 잘 쓰는 부서 이름(정형외과병동)은 다른 부서(정형외과)의 추천에서 빠짐
+    g.sheets['부서인증'].appendRow(['정형외과', '7782', '', 'Y', '', '']);
+    g.sheets['부서인증'].appendRow(['정형외과병동', '7783', '', 'Y', '', '']);
+    empSh.appendRow(empRow('126999021', '정형병동가', '정형외과병동', '재직', '간호사6급'));
+    const zs2 = post({ op: 'emp.status', t: tk.a });
+    const zo = (zs2.zeroLogin || []).find(z => z.dept === '정형외과');
+    check('[연결] 추천: 잘 쓰고 있는 로그인 부서 이름은 추천하지 않음', zo && !zo.guess.some(x => x.hr === '정형외과병동'), zo);
+    // v21.8 ③ 부서 이름 점검: [연결]한 인사 부서명(검사의학실)은 앱 부서(검사의학과)로 묶여 따로 남지 않음
+    const dc = zs2.deptCheck || [];
+    check('부서 이름 점검 표: 부서매핑대로 묶음 (검사의학실 줄 없음 · 검사의학과에 직원 · 로그인 가능)',
+      !dc.some(r => r.dept === '검사의학실') && dc.some(r => r.dept === '검사의학과' && r.staff >= 1 && r.login), dc.filter(r => /검사/.test(r.dept)));
     const ui = await page.evaluate(() => typeof apvDeleteOne === 'function' && typeof _getStampedPdfBlob === 'function');
     check('결재 관리: 한 건 삭제 · 결재본 도장 미리보기 함수', ui);
   }
