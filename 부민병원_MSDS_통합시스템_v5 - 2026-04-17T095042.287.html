@@ -2261,11 +2261,12 @@ input.apv-in[type=text]{width:110px}
       <div class="apv-card-hd">
         <b>결재 목록</b>
         <span class="apv-acts"><button onclick="apvBatchReject()" id="apv-btn-reject" class="apv-btn-rj">선택 반려</button>
+        <button onclick="handleTabAction('apv','delete')" id="apv-btn-delete" class="apv-btn-rj" title="선택한 일지 삭제 (잘못 올라온 · 중복 기록)">선택 삭제</button>
         <button onclick="apvBatchApprove()" id="apv-btn-approve" class="apv-btn-ok">선택 결재</button></span>
       </div>
       <div class="apv-tools bm-std-filter-row" data-tab="apv">
-        <input type="text" class="apv-in" id="apv-name" placeholder="이름" aria-label="참석자 이름" onkeydown="if(event.key==='Enter')handleTabAction('apv','apply')">
-        <input type="text" class="apv-in" id="apv-dept" placeholder="부서" aria-label="부서" onkeydown="if(event.key==='Enter')handleTabAction('apv','apply')">
+        <input type="text" class="apv-in" id="apv-name" placeholder="이름 (퇴사자 포함)" aria-label="참석자 이름 (퇴사자 포함)" autocomplete="off" onkeydown="if(event.key==='Enter')handleTabAction('apv','apply')">
+        <select class="apv-in" id="apv-dept" aria-label="부서" onchange="handleTabAction('apv','apply')"><option value="">부서 전체</option></select>
         <select class="apv-in" id="apv-type" aria-label="교육종류" onchange="handleTabAction('apv','apply')">
           <option value="">교육 전체</option><option value="특별안전보건교육">특별안전보건교육</option><option value="MSDS교육">MSDS 교육</option>
         </select>
@@ -2286,7 +2287,6 @@ input.apv-in[type=text]{width:110px}
             <button type="button" onclick="handleTabAction('apv','csv')">CSV 출력</button>
             <button type="button" onclick="handleTabAction('apv','pdf')">목록 PDF 출력</button>
             <button type="button" onclick="handleTabAction('apv','dedupe')" title="recordId 기준 중복 자동 정리">중복정리</button>
-            <button type="button" onclick="handleTabAction('apv','delete')" class="danger" title="선택된 항목 영구 삭제">선택 삭제</button>
             <label><input type="checkbox" id="apv-archive-mode" onchange="apvToggleArchive()"> 옛 일지까지 전체 검색</label>
             <span id="apv-archive-status"></span>
           </div>
@@ -9610,12 +9610,13 @@ function apvRender(){
   const deptFlt  = document.getElementById('apv-dept').value.trim().toLowerCase();
   const nameFlt  = (document.getElementById('apv-name')?.value||'').trim();  // ★ 이름 검색
   const statFlt  = document.getElementById('apv-status').value;
+  apvFillDepts();
 
   const filtered = apvState.groups.filter(g => {
     if(dateFrom && g.dateStart && g.dateStart < dateFrom) return false;
     if(dateTo   && g.dateStart && g.dateStart > dateTo)   return false;
     if(typeFlt  && !((g.type||'').includes(typeFlt) || (typeFlt==='MSDS교육' && (g.type||'').includes('MSDS')))) return false;
-    if(deptFlt  && !(g.dept||'').toLowerCase().includes(deptFlt)) return false;
+    if(deptFlt  && (g.dept||'').toLowerCase() !== deptFlt) return false;
     if(nameFlt  && !g.members.some(m => (m.name||'').includes(nameFlt))) return false;  // ★ 이름 부분일치
     if(statFlt==='pending'  && (g.approved || g.rejected))  return false;
     if(statFlt==='rejected' && !g.rejected) return false;
@@ -9635,6 +9636,7 @@ function apvRender(){
   if(filtered.length===0){
     list.innerHTML = `<div style="padding:40px;text-align:center;color:#94a3b8;font-size:13px">
       ${apvState.groups.length===0 ? '저장된 교육일지가 없습니다.' : '검색 조건에 해당하는 일지가 없습니다.'}
+      ${nameFlt && !apvState.archiveMode ? `<div style="margin-top:10px;color:#5A5650">퇴사자 · 오래된 일지는 <button type="button" onclick="(function(){var c=document.getElementById('apv-archive-mode');if(c){c.checked=true;apvToggleArchive();}})()" style="padding:5px 10px;border:1px solid #CBD5C0;border-radius:4px;background:#fff;color:#3F7518;font-weight:700;cursor:pointer">옛 일지까지 찾기</button></div>` : ''}
     </div>`;
     apvUpdateSelCount();
     return;
@@ -10419,7 +10421,24 @@ function apvToggleAll(checked){
 
 /* ── 선택 카운트 갱신 ── */
 function apvUpdateSelCount(){
-  document.getElementById('apv-sel-count').textContent = apvState.selected.size;
+  const n = apvState.selected.size;
+  document.getElementById('apv-sel-count').textContent = n;
+  const db = document.getElementById('apv-btn-delete');
+  if(db) db.textContent = n ? '선택 삭제 ' + n : '선택 삭제';
+}
+/* 부서 목록: 결재 목록에 있는 부서 (가나다순) */
+function apvFillDepts(){
+  const sel = document.getElementById('apv-dept');
+  if(!sel || sel.tagName !== 'SELECT') return;
+  const set = new Set();
+  (apvState.groups||[]).forEach(g => { if(g.dept) set.add(String(g.dept).trim()); });
+  const list = [...set].filter(Boolean).sort((a,b)=>a.localeCompare(b,'ko',{numeric:true}));
+  const key = list.join('|');
+  if(sel.dataset.k === key) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">부서 전체</option>' + list.map(d => '<option value="'+d.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')+'">'+d.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</option>').join('');
+  sel.dataset.k = key;
+  sel.value = list.includes(cur) ? cur : '';
 }
 
 /* ── 필터 초기화 ── */
@@ -16136,7 +16155,7 @@ function exportApvCSV(){
     if(dateFrom && g.dateStart && g.dateStart < dateFrom) return false;
     if(dateTo   && g.dateStart && g.dateStart > dateTo)   return false;
     if(typeFlt  && !((g.type||'').includes(typeFlt) || (typeFlt==='MSDS교육' && (g.type||'').includes('MSDS')))) return false;
-    if(deptFlt  && !(g.dept||'').toLowerCase().includes(deptFlt)) return false;
+    if(deptFlt  && (g.dept||'').toLowerCase() !== deptFlt) return false;
     if(nameFlt  && !g.members.some(m => (m.name||'').includes(nameFlt))) return false;
     if(statFlt==='pending'  && (g.approved || g.rejected))  return false;
     if(statFlt==='rejected' && !g.rejected) return false;

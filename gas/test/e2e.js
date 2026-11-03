@@ -1638,6 +1638,32 @@ function check(name, cond, extra) {
     check('교육 명단 찾기: 기본 할 일만 · 상태 전체 · 이름으로 찾기(부서 표시) · 없는 이름은 퇴사자 기록 찾기 안내', fr.defaultTodo && fr.allN > 0 && fr.one >= 1 && fr.oneName && fr.former && fr.hasDeptCol, fr);
   }
 
+  // 18-2e. v21.10 결재 관리: 부서 고르기 · 위쪽 선택 삭제 버튼 · 이름(퇴사자 포함) 없으면 옛 일지 찾기 안내
+  {
+    const ap = await page.evaluate(async () => {
+      admSwitchPane('apv');
+      const saved = apvState.groups, savedSel = apvState.selected;
+      const mk = (k, dept, name) => ({ groupKey: k, dept, dateStart: '2026-11-02', dateEnd: '2026-11-02', type: 'MSDS교육', members: [{ name, signature: '' }], records: [], approved: false, rejected: false });
+      apvState.groups = [mk('k1', '6병동', '가'), mk('k2', '61병동', '나'), mk('k3', '중환자실', '다')];
+      apvState.selected = new Set();
+      apvRender();
+      const sel = document.getElementById('apv-dept');
+      const opts = [...sel.options].map(o => o.value);
+      sel.value = '6병동'; sel.dispatchEvent(new Event('change')); apvRender();
+      const shown = [...document.querySelectorAll('#apv-list .apv-dept b')].map(b => b.textContent);
+      sel.value = ''; apvRender();
+      const del = document.getElementById('apv-btn-delete');
+      apvState.selected = new Set(['k1', 'k2']); apvUpdateSelCount();
+      const delTxt = del.textContent;
+      document.getElementById('apv-name').value = '없는퇴사자'; apvRender();
+      const hint = /옛 일지까지 찾기/.test(document.getElementById('apv-list').textContent);
+      document.getElementById('apv-name').value = '';
+      apvState.groups = saved; apvState.selected = savedSel; apvRender();
+      return { isSel: sel.tagName, opts, shown, delTxt, visible: !!del.closest('.apv-card-hd') && !del.closest('details'), hint };
+    });
+    check('결재 관리: 부서 목록에서 고르기(6병동만, 61병동 제외) · 위쪽 선택 삭제 N · 퇴사자 이름 없으면 옛 일지 찾기', ap.isSel === 'SELECT' && ap.opts.join() === ',6병동,61병동,중환자실' && ap.shown.join() === '6병동' && ap.delTxt === '선택 삭제 2' && ap.visible && ap.hint, ap);
+  }
+
   // 18-3. v21.6 이모지 없음(디자인 기준) · PIN 보기
   {
     const emo = await page.evaluate(async () => {
