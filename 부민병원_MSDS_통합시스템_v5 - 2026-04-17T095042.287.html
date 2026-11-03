@@ -10,8 +10,12 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v21.8 (2026-11-03)
+  부민병원 MSDS 통합시스템 v21.9 (2026-11-03)
 
+  ★★★ v21.9 (2026-11-03) — 결재 삭제 시 이수 기록 보호 · 재직/퇴사 분리 · 교육 명단 찾기 (서버 v21.9):
+    - 결재 관리 삭제 · 중복 정리는 교육이력대장 이수 기록을 하나 남김(예전: 같은 사람 · 날짜 줄을 모두 지워 미이수로 바뀜) · 지운 줄은 '_삭제' 시트 보관
+    - 교육 현황 · 대시보드 = 지금 직원(재직 + 휴직) 기준, 부서별 '직원(휴직 포함)' 열 / 퇴사자 일지는 결재 관리 · 교육 기록에서 이름으로 찾음 (결재 목록에 '(퇴사)')
+    - 교육 명단 찾기: 이름 · 사번 / 부서 / 상태 / 교육 구분 / 최근 교육일 기간 / 휴직자만 — 기본은 전 부서 미이수 · 진행중
   ★★★ v21.8 (2026-11-03) — PDF 최종본 교체 · 보호구 최근 제출순 · 예전 사본 재업로드 막기 · 디자인 다듬기 (서버 v21.8):
     - 교육 · 보호구 기록을 고치면 [PDF 최종본 다시 만들기]: 고친 기록(서명 포함)으로 PDF 새로 만들어 고친 이름으로 저장 → 예전 PDF 휴지통
     - 정정 이력 붙이기: 원본 PDF를 여러 달 폴더에서 찾음 (교육일을 고치면 HTTP 404 나던 문제)
@@ -688,6 +692,9 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
 .adm-tbl .row-act button:hover{background:#f1f5f9}
 
 .abadge{padding:2px 7px;border-radius:20px;font-size:14px;font-weight:700}
+.ef-bar{display:flex;gap:10px 12px;flex-wrap:wrap;align-items:flex-end;padding:12px 0;border-top:1px solid #ECEBE7;border-bottom:1px solid #ECEBE7}
+.ef-f{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:#6B675F}.ef-f input,.ef-f select{min-height:36px}
+.ef-chk{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;min-height:36px}
 .ppe-new{display:inline-block;margin-left:4px;padding:1px 6px;border-radius:4px;background:#EEF6E6;color:#3F7518;font-size:11px;font-weight:800}
 .ab-s{background:#dbeafe;color:#1e40af}
 .ab-m{background:#dcfce7;color:#166534}
@@ -4664,7 +4671,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       (sel ? [''] : []).concat(['이름', '사번', '입사일', '교육', '상태', '최근 교육', '']).map(function(h){ return '<th style="text-align:left;padding:8px;background:#E2F0D5;color:#345C12;font-size:13px;white-space:nowrap">' + h + '</th>'; }).join('') + '</tr>' +
       list.map(function(p, i){
         return '<tr' + (p.status === '제외' ? ' style="background:#FAFAF8;color:#8A867E"' : '') + '>' +
-          (sel ? '<td style="' + td + '">' + ('<input type="checkbox" data-pick="' + edu.people.indexOf(p) + '" aria-label="' + esc(p.name) + ' 선택">') + '</td>' : '') + '<td style="' + td + '"><b>' + esc(p.name) + '</b>' + (p.job || p.unit ? '<div style="font-size:12px;color:#5A5650">' + esc(p.job || '') + (p.unit ? (p.job ? ' · ' : '') + '<b style="color:#2B4C7E">근무지 ' + esc(p.unit) + '</b>' : '') + '</div>' : '') + '</td><td style="' + td + '">' + esc(p.no) + '</td><td style="' + td + ';white-space:nowrap">' + esc(p.joinDate) + '</td>' +
+          (sel ? '<td style="' + td + '">' + ('<input type="checkbox" data-pick="' + edu.people.indexOf(p) + '" aria-label="' + esc(p.name) + ' 선택">') + '</td>' : '') + '<td style="' + td + '"><b>' + esc(p.name) + '</b>' + (p.onLeave ? ' <span style="font-size:11px;font-weight:800;color:#6B675F;background:#F1EFEA;padding:1px 6px;border-radius:4px">휴직</span>' : '') + '<div style="font-size:12px;color:#5A5650">' + esc(p.dept) + (p.job ? ' · ' + esc(p.job) : '') + (p.unit ? ' · <b style="color:#3F7518">근무지 ' + esc(p.unit) + '</b>' : '') + '</div></td><td style="' + td + '">' + esc(p.no) + '</td><td style="' + td + ';white-space:nowrap">' + esc(p.joinDate) + '</td>' +
           '<td style="' + td + ';white-space:nowrap">' + (p.need === '특별' ? '특별안전보건' : 'MSDS') + '</td><td style="' + td + '">' + statusCell(p) + '</td><td style="' + td + ';white-space:nowrap">' + esc(p.lastEdu || '-') + '</td>' +
           '<td style="' + td + ';white-space:nowrap">' + (sel && (p.manualRows || []).length ? '<button data-mdel="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:#A3302A;margin-right:4px" title="수기로 넣은 교육 기록 삭제 (백업 보관)">수기 기록 삭제</button>' : '') + (!canAct ? '' : (p.included
             ? '<button data-unx="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer">포함 해제</button>'
@@ -4829,7 +4836,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
     var todo = function(p){ return p.status === '미이수' || p.status === '진행중'; };
     var opt = function(v, l, c){ return '<option value="' + v + '"' + (eduFilter === v ? ' selected' : '') + '>' + l + ' ' + c + '</option>'; };
     return '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0;padding:8px 10px;border:1px solid #DDDBD5;border-radius:6px;background:#FAFAF8">' +
-      '<select id="eb-f" style="' + INs + '">' + opt('todo', '할 일(미이수 · 진행중)', n(todo)) + opt('', '전체', all.length) + opt('이수', '이수', n(function(p){ return p.status === '이수'; })) + opt('제외', '제외', n(function(p){ return p.status === '제외'; })) + '</select>' +
+
       '<label style="font-size:13px;font-weight:700"><input type="checkbox" id="eb-all"> 보이는 직원 전체 선택</label>' +
       '<span style="font-size:13px;color:#5A5650">선택 <b id="eb-n">0</b>명</span>' +
       '<span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
@@ -4840,11 +4847,11 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
         '<button id="eb-unit-go" style="' + BTNs + '">근무지 적용</button></span></div>';
   }
   function picked(){
-    return [].filter.call(document.querySelectorAll('#eb-people [data-pick]'), function(c){ return c.checked; }).map(function(c){ return edu.people[+c.getAttribute('data-pick')]; });
+    return [].filter.call(document.querySelectorAll('#eb-people [data-pick]'), function(c){ return c.checked; }).map(function(c){ return edu.people[+c.getAttribute('data-pick')]; });   // eb-list도 eb-people 안
   }
   function bindToolbar(){
     var cnt = function(){ document.getElementById('eb-n').textContent = picked().length; };
-    document.getElementById('eb-f').onchange = function(){ eduFilter = this.value; showDept(); };
+
     document.getElementById('eb-all').onchange = function(){ var on = this.checked; document.querySelectorAll('#eb-people [data-pick]').forEach(function(c){ c.checked = on; }); cnt(); };
     document.querySelectorAll('#eb-people [data-pick]').forEach(function(c){ c.addEventListener('change', cnt); });
     document.getElementById('eb-man-go').onclick = async function(){
@@ -4970,10 +4977,10 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
         '<button id="eb-manual-btn" style="padding:8px 12px;border:1px solid #67AF28;border-radius:4px;background:#fff;color:#345C12;font:inherit;font-weight:700;cursor:pointer">수기(종이) 일지 이수 등록</button>' +
         '<button id="eb-bulk-btn" style="padding:8px 12px;border:1px solid #67AF28;border-radius:4px;background:#67AF28;color:#fff;font:inherit;font-weight:700;cursor:pointer">전 부서 일괄 수기 이수</button></span></div><div id="eb-manual"></div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">' +
-        kpi('교육 대상', T.total, '제외 ' + T.excluded + '명') + kpi('이수', T.done, T.total ? Math.round(T.done / T.total * 100) + '%' : '', '#345C12') +
+        kpi('교육 대상', T.total, '재직 · 휴직 기준 · 제외 ' + T.excluded + '명') + kpi('이수', T.done, T.total ? Math.round(T.done / T.total * 100) + '%' : '', '#345C12') +
         kpi('특별교육 진행중', T.progress, '16시간 미달', '#2B4C7E') + kpi('미이수', T.missing, '기한 초과 ' + T.overdue + '명', T.missing ? '#A3302A' : '') +
         kpi('새 물질 교육 대기', T.newChem, r.rules.newChemDays ? r.rules.newChemDays + '일 안에' : '취급 전 교육', T.newChem ? '#6E4A00' : '') + '</div>' +
-      '<div style="font-size:13px;color:#5A5650;margin-bottom:8px">대상: 화학물질 사용 부서 재직자 (기본 모두 대상, <b>관리자 · 부서장이 \'취급 안 함\'으로 확인한 사람만 제외</b>, 일지를 쓴 사람은 대상). 특별교육은 현장 교육 + 공통 온라인 8시간 ≥ 16시간이면 이수, 남은 시간은 첫 교육일부터 3개월 안에.</div>' +
+      '<div style="font-size:13px;color:#5A5650;margin-bottom:8px">대상: 화학물질 사용 부서의 <b>지금 직원(재직 + 휴직)</b> — 퇴사자는 숫자에서 빠지고, 퇴사자 일지는 아래 교육 기록 · 결재 관리에서 이름으로 찾아 볼 수 있습니다. (기본 모두 대상, <b>관리자 · 부서장이 \'취급 안 함\'으로 확인한 사람만 제외</b>, 일지를 쓴 사람은 대상). 특별교육은 현장 교육 + 공통 온라인 8시간 ≥ 16시간이면 이수, 남은 시간은 첫 교육일부터 3개월 안에.</div>' +
       '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%"><tr>' +
         ['부서', '교육', '직원(휴직 포함)', '대상', '이수율', '진행중', '미이수', '기한 초과', '새 물질', '제외'].map(function(h){ return '<th style="text-align:left;padding:8px;background:#E2F0D5;color:#345C12;font-size:13px;white-space:nowrap">' + h + '</th>'; }).join('') + '</tr>' +
         r.depts.map(function(d){
@@ -4984,8 +4991,8 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
             '<td style="' + td + ';color:#6E4A00">' + (d.newChem || '') + '</td><td style="' + td + ';color:#5A5650">' + (d.excluded || '') + '</td></tr>';
         }).join('') + '</table></div>' +
       '<div id="eb-people" style="margin-top:12px"></div>';
-    host.querySelectorAll('[data-dept]').forEach(function(tr){ tr.onclick = function(){ eduDept = tr.getAttribute('data-dept'); showDept(); host.querySelectorAll('[data-dept]').forEach(function(x){ x.style.background = x === tr ? '#E2F0D5' : ''; }); }; });
-    if(eduDept) showDept();
+    host.querySelectorAll('[data-dept]').forEach(function(tr){ tr.onclick = function(){ eduDept = tr.getAttribute('data-dept'); ef.dept = eduDept; showDept(); host.querySelectorAll('[data-dept]').forEach(function(x){ x.style.background = x === tr ? '#E2F0D5' : ''; }); }; });
+    showDept();   // v21.9: 처음부터 명단(기본: 전 부서 미이수 · 진행중)과 찾기 칸을 보여 줌
     document.getElementById('eb-manual-btn').onclick = function(){ var h = document.getElementById('eb-manual'); if(h.getAttribute('data-mode') === 'bulk'){ h.innerHTML = ''; h.removeAttribute('data-mode'); } manualUI(); };
     document.getElementById('eb-bulk-btn').onclick = function(){ var h = document.getElementById('eb-manual'); if(h.getAttribute('data-mode') !== 'bulk') h.innerHTML = ''; bulkUI(); };
     document.getElementById('eb-mail').onclick = async function(){
@@ -5003,15 +5010,61 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       board();
     };
   }
+  /* v21.9 명단 찾기: 이름 · 사번 / 부서 / 상태 / 교육 구분 / 최근 교육일 기간 / 휴직자만 — 기본은 전 부서 할 일(미이수 · 진행중) */
+  var ef = { q: '', dept: '', st: 'todo', need: '', from: '', to: '', leave: false };
+  function filterBar(){
+    var depts = (edu.depts || []).map(function(d){ return d.dept; });
+    var o = function(v, l, cur){ return '<option value="' + esc(v) + '"' + (cur === v ? ' selected' : '') + '>' + esc(l) + '</option>'; };
+    var L = function(t, inner){ return '<label class="ef-f"><span>' + t + '</span>' + inner + '</label>'; };
+    return '<div class="ef-bar" role="search" aria-label="교육 명단 찾기">' +
+      L('이름 · 사번', '<input id="ef-q" type="search" placeholder="예: 채은향" value="' + esc(ef.q) + '" style="' + INs + '">') +
+      L('부서', '<select id="ef-dept" style="' + INs + '">' + o('', '전체 부서', ef.dept) + depts.map(function(d){ return o(d, d, ef.dept); }).join('') + '</select>') +
+      L('상태', '<select id="ef-st" style="' + INs + '">' + o('todo', '할 일 (미이수 · 진행중)', ef.st) + o('', '전체', ef.st) + o('미이수', '미이수', ef.st) + o('진행중', '진행중', ef.st) + o('이수', '이수', ef.st) + o('제외', '제외', ef.st) + '</select>') +
+      L('교육', '<select id="ef-need" style="' + INs + '">' + o('', '전체', ef.need) + o('MSDS', 'MSDS', ef.need) + o('특별', '특별', ef.need) + '</select>') +
+      L('최근 교육일', '<span style="display:flex;gap:4px;align-items:center"><input id="ef-from" type="date" value="' + esc(ef.from) + '" style="' + INs + '">~<input id="ef-to" type="date" value="' + esc(ef.to) + '" style="' + INs + '"></span>') +
+      '<label class="ef-chk"><input id="ef-leave" type="checkbox"' + (ef.leave ? ' checked' : '') + '> 휴직자만</label>' +
+      '<button type="button" id="ef-reset" style="' + BTNs + '">초기화</button></div>';
+  }
   function showDept(){
     var box = document.getElementById('eb-people');
     if(!box || !edu) return;
+    box.innerHTML = filterBar() + '<div id="eb-list"></div>';
+    var bind = function(id, ev, fn){ var el = document.getElementById(id); if(el) el[ev] = fn; };
+    var upd = function(k, v){ ef[k] = v; if(k === 'dept') eduDept = v; if(k === 'st') eduFilter = v; renderList(); };
+    bind('ef-q', 'oninput', function(){ upd('q', this.value.trim()); });
+    bind('ef-dept', 'onchange', function(){ upd('dept', this.value); });
+    bind('ef-st', 'onchange', function(){ upd('st', this.value); });
+    bind('ef-need', 'onchange', function(){ upd('need', this.value); });
+    bind('ef-from', 'onchange', function(){ upd('from', this.value); });
+    bind('ef-to', 'onchange', function(){ upd('to', this.value); });
+    bind('ef-leave', 'onchange', function(){ upd('leave', this.checked); });
+    bind('ef-reset', 'onclick', function(){ ef = { q: '', dept: '', st: 'todo', need: '', from: '', to: '', leave: false }; eduDept = ''; showDept(); });
+    renderList();
+  }
+  function renderList(){
+    var box = document.getElementById('eb-list');
+    if(!box || !edu) return;
     var order = { '미이수': 0, '진행중': 1, '이수': 2, '제외': 3 };
-    var all = edu.people.filter(function(p){ return p.dept === eduDept; });
-    var list = all.filter(function(p){ return !eduFilter || (eduFilter === 'todo' ? (p.status === '미이수' || p.status === '진행중') : p.status === eduFilter); }).sort(function(a, b){ return (order[a.status] - order[b.status]) || ((b.overdue ? 1 : 0) - (a.overdue ? 1 : 0)) || String(a.name).localeCompare(b.name, 'ko'); });
-    box.innerHTML = '<b style="font-size:15px">' + esc(eduDept) + ' ' + all.length + '명</b>' + deptToolbar(all) + peopleTable(list, true, true);
+    var q = ef.q.toLowerCase();
+    var all = edu.people.filter(function(p){ return !ef.dept || p.dept === ef.dept; });
+    var list = all.filter(function(p){
+      if(ef.st && (ef.st === 'todo' ? !(p.status === '미이수' || p.status === '진행중') : p.status !== ef.st)) return false;
+      if(q && String(p.name || '').toLowerCase().indexOf(q) < 0 && String(p.no || '').indexOf(q) < 0) return false;
+      if(ef.need && p.need !== ef.need) return false;
+      if(ef.from && !(p.lastEdu && p.lastEdu >= ef.from)) return false;
+      if(ef.to && !(p.lastEdu && p.lastEdu <= ef.to)) return false;
+      if(ef.leave && !p.onLeave) return false;
+      return true;
+    }).sort(function(a, b){ return (order[a.status] - order[b.status]) || ((b.overdue ? 1 : 0) - (a.overdue ? 1 : 0)) || String(a.dept).localeCompare(b.dept, 'ko') || String(a.name).localeCompare(b.name, 'ko'); });
+    var leave = all.filter(function(p){ return p.onLeave; }).length;
+    var title = '<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-top:10px"><b style="font-size:15px">' + esc(ef.dept || '전체 부서') + ' · 찾은 ' + list.length + '명</b>' +
+      '<span style="font-size:13px;color:#5A5650">이 범위 직원 ' + all.length + '명 (휴직 ' + leave + '명 포함)</span></div>';
+    var none = !list.length && q ? '<div style="padding:10px 12px;margin-top:8px;border:1px dashed #DDDBD5;border-radius:6px;font-size:13px;color:#5A5650">지금 직원(재직 · 휴직)에 \'' + esc(ef.q) + '\'가 없습니다. 퇴사자라면 <button type="button" id="ef-former" style="' + BTNs + '">교육 기록에서 찾기</button> 또는 결재 관리에서 이름으로 일지를 볼 수 있습니다.</div>' : '';
+    box.innerHTML = title + deptToolbar(all) + none + peopleTable(list, true, true);
     bindPeople(box, list, board);
     bindToolbar();
+    var fb = document.getElementById('ef-former');
+    if(fb) fb.onclick = function(){ var si = document.getElementById('adm-search'); if(si){ si.value = ef.q; try{ handleTabAction('edu', 'apply'); }catch(_){} si.scrollIntoView({ behavior: 'smooth', block: 'center' }); } };
   }
   // 부서현황(부서 로그인)의 '교육 대상 확인'
   async function deptSection(host){
@@ -8039,6 +8092,7 @@ function loadEmps(){
         dept:     e.dept    || '',
         empNo:    e.empNo   || '',
         joinDate: e.joinDate|| e.join || '',
+        status:   e.status  || '',   // v21.9 퇴사 표시용 (재직 · 휴직 · 퇴사)
       })).filter(e=>e.name);
       // GAS 디버그 정보 콘솔 출력
       if(res.debug) console.log('[직원목록 GAS 디버그]', res.debug);
@@ -9607,7 +9661,7 @@ function apvRender(){
     const typeShort = isMSDS ? 'MSDS' : '특별교육';
     const sideBar   = g.approved ? '#67AF28' : (g.rejected ? '#C23B32' : '#E8A33D');
     const rowBg     = apvViewKey === g.groupKey ? '#E2F0D5' : (isSelected ? '#F2F8EC' : (idx%2===0 ? '#fff' : '#fafbfc'));
-    const memberStr = g.members.slice(0,3).map(m=>m.name).join(', ') + (g.members.length>3?` 외 ${g.members.length-3}명`:'');
+    const memberStr = g.members.slice(0,3).map(m=>m.name + (bmIsFormer(m.name, g.dept) ? ' (퇴사)' : '')).join(', ') + (g.members.length>3?` 외 ${g.members.length-3}명`:'');
     const sigCount = g.members.filter(m=>(m.signed||'').includes('서명완료')).length;
     return `<div title="참석자: ${memberStr} · 물질: ${g.chem||'-'}" class="apv-row" data-key="${g.groupKey}" onclick="apvRowClick(event,'${g.groupKey}')" style="background:${rowBg};border-left:4px solid ${sideBar}">
       <input type="checkbox" ${isSelected?'checked':''} onchange="apvToggle('${g.groupKey}', this.checked)"
@@ -10553,6 +10607,15 @@ function apvConfirmDelete(groups, recordCount){
    - 줄을 누르면 오른쪽에 저장된 PDF 원본 (새 창으로 열기 · 내려받기 · 인쇄 · 반려 · 이 문서 결재)
    ════════════════════════════════════════════════════════ */
 let apvViewKey = '', apvViewUrl = '';
+/* v21.9 퇴사자 표시: 직원목록에 퇴사로만 있고 지금 직원(재직 · 휴직) 줄이 없으면 퇴사자 — 일지는 그대로 보이고 찾을 수 있음 */
+function bmIsFormer(name, dept){
+  try{
+    if(typeof empList === 'undefined' || !empList.length || !name) return false;
+    const same = empList.filter(e => e.name === name && (!dept || e.dept === dept || !e.dept));
+    if(!same.length) return false;
+    return same.every(e => /퇴사/.test(e.status || ''));
+  }catch(_){ return false; }
+}
 function apvEsc(v){ return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function apvStatusChip(g){
   if(g.approved) return '<span class="apv-st ok">결재완료</span>';

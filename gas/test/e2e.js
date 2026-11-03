@@ -985,7 +985,7 @@ function check(name, cond, extra) {
   await page.evaluate(async () => { admSwitchPane('edu'); await new Promise(r => setTimeout(r, 50)); await BMEDU.board(); document.querySelector('#edu-board [data-dept="61병동"]').click(); });
   await page.waitForFunction(() => !/계산 중/.test(document.getElementById('edu-board').textContent) && document.querySelector('#eb-people [data-pick]'), null, { timeout: 15000 });
   const ui2 = await page.evaluate(async () => {
-    const f = document.getElementById('eb-f'); f.value = ''; f.dispatchEvent(new Event('change'));
+    const f = document.getElementById('ef-st'); f.value = ''; f.dispatchEvent(new Event('change'));
     document.getElementById('eb-manual-btn').click();
     const box = [...document.querySelectorAll('#eb-people [data-pick]')].find(c => /미이수|진행중/.test(c.closest('tr').textContent));
     const inc = !!document.querySelector('#eb-people [data-inc]');
@@ -1616,6 +1616,26 @@ function check(name, cond, extra) {
     check('결재 관리 삭제(사본): 이수 기록은 하나 남기고 중복만 지움 · 서명 있는 줄을 남김 · 지운 줄 보관', r1.success && cnt('대장시험A') === 1 && cnt('대장시험B') === 1 && /서명완료/.test(keptSig[ci('서명여부')]) && bak && bak.rows.some(r => r.includes('대장시험A')), [r1, cnt('대장시험A'), cnt('대장시험B')]);
     const r2 = del(['x|대장시험B|y|6병동|MSDS교육|2026-01-02'], 'all');
     check('현황에서 직접 삭제(scope=all): 대장 줄도 지우고 보관 시트에 남김', r2.success && cnt('대장시험B') === 0 && bak.rows.some(r => r.includes('대장시험B')), r2);
+  }
+
+  // 18-2d. v21.9 교육 현황 명단 찾기: 기본 전 부서 할 일 · 이름 찾기 · 상태 · 없는 이름(퇴사자)은 교육 기록에서 찾기 안내
+  {
+    const fr = await page.evaluate(async () => {
+      admSwitchPane('edu'); await BMEDU.board();
+      const t0 = Date.now(); while (Date.now() - t0 < 8000 && !document.getElementById('ef-q')) await new Promise(z => setTimeout(z, 100));
+      const rows = () => [...document.querySelectorAll('#eb-list tbody tr, #eb-list tr')].filter(tr => tr.querySelector('[data-pick]')).map(tr => tr.textContent);
+      const first = rows();
+      const st = document.getElementById('ef-st'); st.value = ''; st.dispatchEvent(new Event('change'));
+      const allN = rows().length;
+      const nm = (document.querySelector('#eb-list tr [data-pick]').closest('tr').querySelector('b') || {}).textContent || '';
+      const q = document.getElementById('ef-q'); q.value = nm; q.dispatchEvent(new Event('input'));
+      const one = rows();
+      q.value = '없는사람퇴사'; q.dispatchEvent(new Event('input'));
+      const former = !!document.getElementById('ef-former');
+      document.getElementById('ef-reset').click();
+      return { defaultTodo: first.every(t => /미이수|진행중/.test(t)), allN, one: one.length, oneName: !!nm && one.every(t => t.indexOf(nm) >= 0), former, hasDeptCol: /병동/.test(one.join('')) };
+    });
+    check('교육 명단 찾기: 기본 할 일만 · 상태 전체 · 이름으로 찾기(부서 표시) · 없는 이름은 퇴사자 기록 찾기 안내', fr.defaultTodo && fr.allN > 0 && fr.one >= 1 && fr.oneName && fr.former && fr.hasDeptCol, fr);
   }
 
   // 18-3. v21.6 이모지 없음(디자인 기준) · PIN 보기
