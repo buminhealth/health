@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.8 (2026-11-03)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.9 (2026-11-03)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -1104,37 +1104,63 @@ function deleteSheetRecords(p) {
   let ids = [];
   try { ids = JSON.parse(p.ids || '[]'); } catch (_) {}
   const category = p.category || 'edu';
+  // v21.9: scope=dup(결재 관리 삭제 · 중복 정리)이면 그 교육의 대장 줄을 하나는 꼭 남김 — 결재 목록의 사본을 지웠는데
+  //        교육이력대장의 실제 이수 기록까지 지워져 '미이수'로 바뀌던 문제. scope=all(현황에서 직접 삭제)만 모두 지움.
+  //        지우는 줄은 모두 '{교육|보호구}이력_삭제' 시트에 먼저 옮겨 둠 (되살리기 가능)
+  const scope = p.scope === 'all' ? 'all' : 'dup';
   const targets = ids.map(id => String(id).split('|')).filter(a => a.length >= 6)
     .map(a => ({ name: a[1].replace(/\s+/g, ''), dept: a[3].replace(/\s+/g, ''), type: a[4], date: a[5].slice(0, 10) }));
-  if (!targets.length) return { success: true, deleted: 0 };
+  if (!targets.length) return { success: true, deleted: 0, kept: 0 };
 
   const sheetName = category === 'ppe' ? '보호구이력대장' : '교육이력대장';
   const sheet = SS.getSheetByName(sheetName);
-  if (!sheet || sheet.getLastRow() < 2) return { success: true, deleted: 0 };
+  if (!sheet || sheet.getLastRow() < 2) return { success: true, deleted: 0, kept: 0 };
 
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
-  let deleted = 0;
+  let deleted = 0, kept = 0;
   try {
     const data = sheet.getDataRange().getValues();
+    const head = data[0].map(h => String(h).trim());
     const col = {};
-    data[0].forEach((h, i) => col[String(h).trim()] = i);
+    head.forEach((h, i) => col[h] = i);
     const val = (row, k) => col[k] === undefined ? '' : cellStr_(row[col[k]]);
-    for (let r = data.length - 1; r >= 1; r--) {
-      const row = data[r];
-      const name = (category === 'ppe' ? val(row, '이름') : val(row, '성명')).replace(/\s+/g, '');
-      const dept = (category === 'ppe' ? val(row, '부서') : val(row, '교육부서')).replace(/\s+/g, '');
-      const date = (category === 'ppe' ? val(row, '지급일') : val(row, '교육시작일')).slice(0, 10);
-      const type = category === 'ppe' ? '보호구지급' : val(row, '교육구분').replace(/\s+/g, '');
-      const hit = targets.some(t => t.dept === dept && t.date === date &&
-        (category === 'ppe' ? name.split('|').indexOf(t.name) >= 0 || name === t.name : name === t.name) &&
-        (category === 'ppe' || type.indexOf(t.type) === 0 || t.type.indexOf(type) === 0));
-      if (hit) { sheet.deleteRow(r + 1); deleted++; }
+    const hitsOf = t => {
+      const out = [];
+      for (let r = 1; r < data.length; r++) {
+        const row = data[r];
+        const name = (category === 'ppe' ? val(row, '이름') : val(row, '성명')).replace(/\s+/g, '');
+        const dept = (category === 'ppe' ? val(row, '부서') : val(row, '교육부서')).replace(/\s+/g, '');
+        const date = (category === 'ppe' ? val(row, '지급일') : val(row, '교육시작일')).slice(0, 10);
+        const type = category === 'ppe' ? '보호구지급' : val(row, '교육구분').replace(/\s+/g, '');
+        if (t.dept === dept && t.date === date &&
+            (category === 'ppe' ? name.split('|').indexOf(t.name) >= 0 || name === t.name : name === t.name) &&
+            (category === 'ppe' || type.indexOf(t.type) === 0 || t.type.indexOf(type) === 0)) out.push(r);
+      }
+      return out;
+    };
+    const del = new Set();
+    targets.forEach(t => {
+      const rows = hitsOf(t).filter(r => !del.has(r));
+      if (!rows.length) return;
+      if (scope === 'dup') {
+        // 서명 있는 줄을 남기고 나머지(중복)만 지움
+        const sig = r => /서명완료|✓/.test(val(data[r], '서명여부')) ? 1 : 0;
+        const keep = rows.slice().sort((a, b) => sig(b) - sig(a) || a - b)[0];
+        rows.forEach(r => { if (r !== keep) del.add(r); });
+        kept++;
+      } else rows.forEach(r => del.add(r));
+    });
+    if (del.size) {
+      const bak = eduSheet_(sheetName.replace('대장', '_삭제'), head.concat(['삭제일시', '삭제자', '삭제사유']));
+      const when = nowKst_().replace('T', ' '), why = String(p.reason || (scope === 'dup' ? '결재 · 중복 정리' : '관리자 삭제')).slice(0, 100);
+      [...del].sort((a, b) => a - b).forEach(r => bak.appendRow(data[r].map(safeCell_).concat([when, '보건관리자', why])));
+      [...del].sort((a, b) => b - a).forEach(r => { sheet.deleteRow(r + 1); deleted++; });
     }
   } finally {
     lock.releaseLock();
   }
-  return { success: true, deleted: deleted };
+  return { success: true, deleted: deleted, kept: kept, scope: scope };
 }
 
 // ════════════════════════════════════════════════════════════════
