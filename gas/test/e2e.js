@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.8/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.9/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
   const other = await page.evaluate(async () => {
@@ -504,7 +504,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.8'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.9'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -1601,6 +1601,21 @@ function check(name, cond, extra) {
       const trD = post({ op: 'fs.trash', path: '교육일지/2026-05/x.pdf', t: tk.d });
       check('휴지통 보내기: 일지 · 보호구 · 화학물질 PDF만 · 관리자만', !tr.success && trD.status === 403, [tr.error, trD.status]);
     } else check('PDF 최종본 시험: html2canvas 없음 (건너뜀)', true);
+  }
+
+  // 18-2c. v21.9 결재 관리에서 사본을 지워도 교육이력대장 이수 기록은 하나 남김 · 지운 줄은 '_삭제' 시트에 보관
+  {
+    const L = g.sheets['교육이력대장'], LH = L.rows[0], ci = k => LH.indexOf(k);
+    const mkL = (nm, d, sig) => { const r = new Array(LH.length).fill(''); r[ci('교육구분')] = 'MSDS교육'; r[ci('교육부서')] = '6병동'; r[ci('성명')] = nm; r[ci('교육시작일')] = d; r[ci('서명여부')] = sig; r[ci('제출일시')] = '2026-05-15T07:00:00Z'; return r; };
+    L.appendRow(mkL('대장시험A', '2026-01-05', '✓ 서명완료')); L.appendRow(mkL('대장시험A', '2026-01-05', '')); L.appendRow(mkL('대장시험B', '2026-01-02', '✓ 서명완료'));
+    const del = (ids, scope) => JSON.parse(g.api.doGet({ parameter: { action: 'deleteRecords', category: 'edu', ids: JSON.stringify(ids), scope, reason: '결재탭 영구삭제', t: tk.a, callback: 'cb' } }).text.replace(/^cb\(|\)$/g, ''));
+    const cnt = nm => L.rows.filter(r => r[ci('성명')] === nm).length;
+    const r1 = del(['x|대장시험A|y|6병동|MSDS교육|2026-01-05', 'x|대장시험B|y|6병동|MSDS교육|2026-01-02'], 'dup');
+    const bak = g.sheets['교육이력_삭제'];
+    const keptSig = L.rows.find(r => r[ci('성명')] === '대장시험A');
+    check('결재 관리 삭제(사본): 이수 기록은 하나 남기고 중복만 지움 · 서명 있는 줄을 남김 · 지운 줄 보관', r1.success && cnt('대장시험A') === 1 && cnt('대장시험B') === 1 && /서명완료/.test(keptSig[ci('서명여부')]) && bak && bak.rows.some(r => r.includes('대장시험A')), [r1, cnt('대장시험A'), cnt('대장시험B')]);
+    const r2 = del(['x|대장시험B|y|6병동|MSDS교육|2026-01-02'], 'all');
+    check('현황에서 직접 삭제(scope=all): 대장 줄도 지우고 보관 시트에 남김', r2.success && cnt('대장시험B') === 0 && bak.rows.some(r => r.includes('대장시험B')), r2);
   }
 
   // 18-3. v21.6 이모지 없음(디자인 기준) · PIN 보기

@@ -5036,7 +5036,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.8';
+  var SERVER_EXPECT = 'v21.9';
   var esc = function(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
   var recs = function(k){ try{ return JSON.parse(localStorage.getItem(k) || '[]') || []; }catch(_){ return []; } };
   var post = function(op, b){ return window.BMAUTH ? BMAUTH.post(op, b || {}).catch(function(e){ return { success: false, error: e.message }; }) : Promise.resolve({ success: false, error: '로그인 필요' }); };
@@ -15148,7 +15148,9 @@ BM.markDeleted = async function(category, recordIds, reason){
       const sc = document.createElement('script');
       const idsParam = encodeURIComponent(JSON.stringify(recordIds));
       const nksParam = encodeURIComponent(JSON.stringify([...nkTombs].slice(-recordIds.length)));
-      sc.src = `${CFG.url}?action=deleteRecords&category=${category}&ids=${idsParam}&nks=${nksParam}&callback=${cb}`;
+      // v21.9: 결재 관리 삭제 · 중복 정리는 교육이력대장의 이수 기록을 하나는 남김(scope=dup). 현황에서 직접 지운 것만 모두 지움(scope=all) — 지운 줄은 서버가 '_삭제' 시트에 보관
+      const scope = /결재|중복/.test(String(reason || '')) ? 'dup' : 'all';
+      sc.src = `${CFG.url}?action=deleteRecords&category=${category}&ids=${idsParam}&nks=${nksParam}&scope=${scope}&reason=${encodeURIComponent(String(reason || '').slice(0, 80))}&callback=${cb}`;
       sc.onerror = () => { delete window[cb]; };
       document.head.appendChild(sc);
       // 5초 후 자동 정리 (GAS가 deleteRecords 액션 미구현 시 silent)
