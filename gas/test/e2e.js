@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.7/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.8/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
   const other = await page.evaluate(async () => {
@@ -504,7 +504,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.7'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.8'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -1542,6 +1542,41 @@ function check(name, cond, extra) {
       check('PDF 용량: 예전 PDF 찾기 → 그림만 JPEG로 바꿔 같은 경로에 저장 (페이지 수 그대로 · 1/5 이하) · 다시 하면 건너뜀 · 새 PDF는 JPEG', pr.putOk && pr.listed && pr.pages === 2 && pr.imgs.every(f => f === '/DCTDecode') && pr.after < pr.before / 5 && pr.again.skipped && !pr.again.listed && pr.newKB < 400,
         { before: pr.before, after: pr.after, imgs: pr.imgs, newKB: pr.newKB, again: pr.again, r: pr.r });
     } else check('PDF 용량 시험: jspdf · pdf-lib 없음 (건너뜀)', true);
+  }
+
+  // 18-2b. v21.8 기록 수정 → PDF 최종본 교체 · 정정 이력 원본 찾기(교육일을 고쳐도 404 안 남)
+  {
+    const LIB = process.env.PDF_LIBS || '/tmp/claude-0/-home-user-health/380d0980-4304-5ba9-83eb-14958bc872ed/scratchpad/pdfb/node_modules';
+    if (require('fs').existsSync(LIB + '/html2canvas/dist/html2canvas.min.js')) {
+      await page.addScriptTag({ path: LIB + '/html2canvas/dist/html2canvas.min.js' });
+      const rr = await page.evaluate(async () => {
+        await BMAUTH.adminLogin('admin-pass-1');
+        const enc = p => p.split('/').map(encodeURIComponent).join('/');
+        const put = async (path, b64) => fetch('https://api.github.com/repos/buminhealth/health/contents/' + enc(path), { method: 'PUT', body: JSON.stringify({ message: 't', content: b64 }) });
+        // 예전 PDF: 업로드 달(2026-05) 폴더 · 파일명에는 처음 교육일(01-02)
+        const old = new jspdf.jsPDF(); old.text('old', 10, 10);
+        const oldName = 'MSDS교육일지-61병동-정정시험-2026-01-02.pdf';
+        await put('교육일지/2026-05/' + oldName, old.output('datauristring').split(',')[1]);
+        const cur = await readGitHubJSON('records/edu_records.json');
+        const list = bmRecList(cur.data);
+        const rec = { recordId: 'fix-1', type: 'MSDS교육', name: '정정시험', empNo: '9', dept: '61병동', chem: '뉴젠자임폼', dateStart: '2026-03-03', dateEnd: '2026-03-03', submitted: '2026-05-02T01:00:00Z', signed: '✓ 서명완료', pdfFileName: oldName, pdfYm: '' };
+        list.push(rec);
+        await writeGitHubJSON('records/edu_records.json', Array.isArray(cur.data) ? list : Object.assign({}, cur.data, { records: list }), cur.sha, 't');
+        const found = !!(await apvResolvePdfBytes({ pdfFileName: oldName, pdfYm: '', submitted: '2026-05-02T01:00:00Z', dateStart: '2026-03-03', type: 'MSDS교육' }));
+        const ok = await bmReissuePdf('edu', Object.assign({}, rec), { yes: true });
+        const after = bmRecList((await readGitHubJSON('records/edu_records.json')).data).find(x => x.recordId === 'fix-1');
+        return { found, ok, name: after && after.pdfFileName, ym: after && after.pdfYm };
+      });
+      const fg = p => JSON.parse(g.api.doPost({ postData: { contents: JSON.stringify({ op: 'fs.get', path: p, t: tk.a }) } }).text);
+      const post = (b) => JSON.parse(g.api.doPost({ postData: { contents: JSON.stringify(b) } }).text);
+      const oldGone = fg('교육일지/2026-05/MSDS교육일지-61병동-정정시험-2026-01-02.pdf').status === 404;
+      const newHere = rr.name && fg('교육일지/' + rr.ym + '/' + rr.name).success;
+      check('PDF 최종본 교체: 고친 교육일 이름으로 새 PDF · 기록이 새 PDF를 가리킴 · 예전 PDF는 휴지통', rr.ok && rr.name === 'MSDS교육일지-61병동-정정시험-2026-03-03.pdf' && newHere && oldGone, [rr, newHere, oldGone]);
+      check('정정 이력: 교육일을 고쳐도 원본 PDF를 업로드 달 · 파일명 날짜로 찾음 (404 안 남)', rr.found, rr.found);
+      const tr = post({ op: 'fs.trash', path: 'records/edu_records.json', t: tk.a });
+      const trD = post({ op: 'fs.trash', path: '교육일지/2026-05/x.pdf', t: tk.d });
+      check('휴지통 보내기: 일지 · 보호구 · 화학물질 PDF만 · 관리자만', !tr.success && trD.status === 403, [tr.error, trD.status]);
+    } else check('PDF 최종본 시험: html2canvas 없음 (건너뜀)', true);
   }
 
   // 18-3. v21.6 이모지 없음(디자인 기준) · PIN 보기
