@@ -681,6 +681,7 @@ textarea.fc{resize:vertical;min-height:88px;line-height:1.75;font-size:11.5px}
 .adm-tbl .row-act button:hover{background:#f1f5f9}
 
 .abadge{padding:2px 7px;border-radius:20px;font-size:14px;font-weight:700}
+.ppe-new{display:inline-block;margin-left:4px;padding:1px 6px;border-radius:4px;background:#EEF6E6;color:#3F7518;font-size:11px;font-weight:800}
 .ab-s{background:#dbeafe;color:#1e40af}
 .ab-m{background:#dcfce7;color:#166534}
 .sig-ok{color:#16a34a;font-weight:700;font-size:15px}
@@ -2397,6 +2398,14 @@ input.apv-in[type=text]{width:110px}
                     <label class="fl">종료일 (to)</label>
                     <input type="date" class="fc" id="adm-ppe-to" onchange="handleTabAction('ppe','apply')">
                   </div>
+                  <div class="fg" style="margin:0">
+                    <label class="fl" for="adm-ppe-sort">정렬</label>
+                    <select class="fc" id="adm-ppe-sort" onchange="handleTabAction('ppe','apply')">
+                      <option value="recent">최근 제출순</option>
+                      <option value="join">입사일순 (감사 제출용)</option>
+                      <option value="date">지급일순</option>
+                    </select>
+                  </div>
                   <div style="display:flex;gap:6px;align-items:flex-end">
                     <button type="button" onclick="handleTabAction('ppe','apply')" style="padding:7px 14px;background:#10b981;color:#fff;border:1px solid #10b981;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">조회</button>
                   </div>
@@ -2422,6 +2431,7 @@ input.apv-in[type=text]{width:110px}
                       <th class="ath" style="width:30px"><input type="checkbox" onclick="document.querySelectorAll('input[type=checkbox][data-bmchk^=ppechk]').forEach(c=>c.checked=this.checked)"></th>
                       <th class="ath" style="width:38px">번호</th>
                       <th class="ath">지급일</th>
+                      <th class="ath" style="white-space:nowrap">제출일</th>
                       <th class="ath">이름</th>
                       <th class="ath">부서</th>
                       <th class="ath">지급물품</th>
@@ -2430,7 +2440,7 @@ input.apv-in[type=text]{width:110px}
                     </tr>
                   </thead>
                   <tbody id="ppe-admin-tbody">
-                    <tr><td colspan="8" style="text-align:center;padding:30px;color:#94a3b8">보호구 지급 기록이 없습니다</td></tr>
+                    <tr><td colspan="9" style="text-align:center;padding:30px;color:#94a3b8">보호구 지급 기록이 없습니다</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -2648,10 +2658,10 @@ input.apv-in[type=text]{width:110px}
     try{ return await _fetch(url + (url.indexOf('?') >= 0 ? '&' : '?') + '_t=' + Date.now(), { cache: 'no-store' }); }
     catch(_){ return null; }
   }
-  async function apiGet(path){
+  async function apiGet(path, noFallback){
     var r;
     try{ r = await post('fs.get', { path: path }); }catch(e){ r = { success:false, status:502, error:e.message }; }
-    if(!r.success && canFallback(path)){
+    if(!r.success && !noFallback && canFallback(path)){   // v21.8: 업로드 전 '있는지 확인'은 GitHub로 다시 묻지 않음
       var g = await ghDirect('https://api.github.com/repos/buminhealth/health/contents/' + path.split('/').map(encodeURIComponent).join('/'));
       if(g && g.ok) return g;
     }
@@ -2726,7 +2736,10 @@ input.apv-in[type=text]{width:110px}
     var m = API_RE.exec(url);
     if(m){
       var method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
-      if(method === 'GET') return apiGet(normPath(m[1]));
+      if(method === 'GET'){
+        var hd = (init && init.headers) || {};
+        return apiGet(normPath(m[1]), !!(hd['X-BM-Exists'] || (hd.get && hd.get('X-BM-Exists'))));
+      }
       if(method === 'PUT') return apiPut(normPath(m[1]), init);
       return Promise.resolve(jsonResp(405, { message: '지원하지 않는 요청: ' + method }));
     }
@@ -5013,7 +5026,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.7';
+  var SERVER_EXPECT = 'v21.8';
   var esc = function(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
   var recs = function(k){ try{ return JSON.parse(localStorage.getItem(k) || '[]') || []; }catch(_){ return []; } };
   var post = function(op, b){ return window.BMAUTH ? BMAUTH.post(op, b || {}).catch(function(e){ return { success: false, error: e.message }; }) : Promise.resolve({ success: false, error: '로그인 필요' }); };
@@ -11762,7 +11775,7 @@ async function uploadPdfToGitHub(pdfBase64, fileName){
       // 기존 파일 SHA 확인 (있으면 업데이트, 없으면 생성)
       let sha = '';
       try{
-        const check = await fetch(url, {headers:{'Authorization':'token '+token, 'Accept':'application/vnd.github.v3+json'}});
+        const check = await fetch(url, {headers:{'Authorization':'token '+token, 'Accept':'application/vnd.github.v3+json', 'X-BM-Exists':'1'}});
         if(check.ok){ const j=await check.json(); sha=j.sha||''; }
         else if(check.status !== 404){
           // 404가 아닌 다른 에러는 토큰/권한 문제일 가능성
@@ -12821,8 +12834,8 @@ function showEduChangeHistory(idx){
       </div>
       <div style="padding:14px 20px">
         <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:7px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:#92400e;line-height:1.6">
-          <b>법적 안내</b>: 원본 PDF는 변경되지 않고 보존됩니다.<br>
-          수정된 정보로 정정 PDF가 필요하면 [정정 PDF 발행] 버튼을 사용하세요.
+          <b>[수정 내용으로 PDF 다시 만들기]</b>: 고친 기록으로 일지를 새로 만들어 최종본으로 저장하고 예전 PDF는 지웁니다(드라이브 휴지통 30일 보관).<br>
+          <b>[정정 이력 붙이기]</b>: 예전 PDF는 그대로 두고 뒤에 정정 이력 한 장을 붙여 내려받습니다.
         </div>
         <table style="width:100%;border-collapse:collapse;font-size:11.5px">
           <thead>
@@ -12837,7 +12850,8 @@ function showEduChangeHistory(idx){
           <tbody>${rows}</tbody>
         </table>
         <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
-          ${history.length > 0 ? `<button onclick="issueCorrectionPdf(${idx})" style="padding:8px 16px;background:#67AF28;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">정정 PDF 발행</button>` : ''}
+          ${history.length > 0 ? `<button onclick="issueCorrectionPdf(${idx})" style="padding:8px 16px;background:#fff;color:#3F7518;border:1px solid #DDDBD5;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">정정 이력 붙이기</button>` : ''}
+          <button onclick="(async()=>{ if(await bmReissuePdf('edu', adminRecords[${idx}])){ const m=document.getElementById('edu-history-modal'); if(m) m.remove(); } })()" style="padding:8px 16px;background:#67AF28;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">수정 내용으로 PDF 다시 만들기</button>
           <button onclick="document.getElementById('edu-history-modal').remove()" style="padding:8px 16px;background:#f1f5f9;color:#3F7518;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">닫기</button>
         </div>
       </div>
@@ -12847,6 +12861,85 @@ function showEduChangeHistory(idx){
 }
 
 /* ── 정정 PDF 발행: 원본 PDF 다운로드 → 정정 페이지 추가 → 새 PDF 다운로드 ── */
+/* v21.8 기록 수정 → PDF 최종본 교체 (교육일지 · 보호구)
+   관리자가 교육일 · 이름 등을 고친 뒤: 서버 기록(서명 · 사진 포함)으로 PDF를 다시 만들어 고친 이름으로 저장
+   → 같은 PDF를 쓰던 기록(여러 명 일지)의 PDF 이름을 새 것으로 → 예전 PDF는 드라이브 휴지통(30일 보관)
+   결재 도장은 PDF에 굽지 않고 볼 때 · 받을 때 찍으므로 결재완료 기록도 그대로 결재본으로 보임 */
+async function bmReissuePdf(cat, rec, opts){
+  opts = opts || {};
+  const isPpe = cat === 'ppe';
+  if(!rec){ toast('대상 없음','err'); return false; }
+  if(!opts.yes && !confirm((isPpe ? '보호구 지급수령증' : '교육일지') + '를 지금 기록 내용으로 다시 만들어 최종본으로 저장할까요?\n\n· 예전 PDF는 지우고(드라이브 휴지통 30일 보관) 새 PDF로 바꿉니다\n· 같은 일지에 있는 다른 사람 기록도 새 PDF를 가리킵니다')) return false;
+  const path = 'records/' + (isPpe ? 'ppe' : 'edu') + '_records.json';
+  try{
+    toast('PDF 최종본 만드는 중…','info');
+    const { data, sha } = await readGitHubJSON(path);
+    const arr = bmRecList(data);
+    BM.ensureIds(arr);
+    const me = arr.find(x => rec.recordId && x.recordId === rec.recordId) || arr.find(x => BM.naturalKey(x) === BM.naturalKey(rec));
+    if(!me) throw new Error('서버에 이 기록이 없습니다 — 먼저 [저장]을 누르세요');
+    const mates = (!isPpe && me.pdfFileName) ? arr.filter(x => x.pdfFileName === me.pdfFileName && (x.dept === me.dept)) : [me];
+    const day = d => normalizeDate(String(d || '').slice(0, 10));
+    const g = {
+      type: me.type || (isPpe ? '보호구지급' : '특별안전보건교육'), dept: me.dept || '', chem: me.chem || '',
+      dateStart: day(isPpe ? (me.date || me.dateStart) : me.dateStart), dateEnd: day(me.dateEnd || me.dateStart || me.date),
+      days: me.days || '1', time: me.time || '', totalHours: me.totalHours || '', submitted: me.submitted || '',
+      pdfFileName: me.pdfFileName || '', pdfYm: me.pdfYm || '', approved: false,
+      members: mates.map(r => ({
+        name: r.name || '', empNo: r.empNo || '', joinDate: normalizeDate(r.joinDate || ''), signed: r.signed || '',
+        sigImg: r.sigImg || '', photos: r.photos, sigsByDay: r.sigsByDay,
+        eduDates: Array.isArray(r.eduDates) ? r.eduDates.map(normalizeDate) : r.eduDates,
+        time: r.time || '', totalHours: r.totalHours || '', place: r.place || '', method: r.method || '',
+        instructor: r.instructor || '', indiv: r.indiv || '', common: r.common || '',
+        items: r.items, itemsStr: r.itemsStr, date: normalizeDate(r.date || ''), recordId: r.recordId || ''
+      }))
+    };
+    // 예전 PDF 위치 (여러 달 폴더 후보로 찾음)
+    const oldPaths = [];
+    if(me.pdfFileName){
+      const probe = Object.assign({}, g);
+      try{ const b = await apvResolvePdfBytes(probe); if(b && probe.pdfYm) (isPpe ? ['보호구', '교육일지'] : ['교육일지']).forEach(f => oldPaths.push(f + '/' + probe.pdfYm + '/' + me.pdfFileName)); }catch(_){}
+    }
+    const pdf = await _apvRenderGroupPdf(g);
+    const names = mates.map(m => m.name).filter(Boolean);
+    const nmStr = names.length <= 1 ? (names[0] || '무명') : names[0] + '외' + (names.length - 1) + '명';
+    const prefix = isPpe ? '보호구지급수령증' : ((g.type || '').includes('MSDS') ? 'MSDS교육일지' : '특별안전보건교육일지');
+    const newName = `${prefix}-${g.dept}-${nmStr}-${g.dateStart || todayStr()}.pdf`;
+    await uploadPdfToGitHub(pdf.output('datauristring'), newName);
+    const ym = todayStr().slice(0, 7);
+    const newPath = (isPpe ? '보호구' : '교육일지') + '/' + ym + '/' + newName;
+    // 기록이 새 PDF를 가리키게
+    const now = new Date().toISOString(), by = (CFG.stampName && CFG.stampName.trim()) || CFG.apv1Name || '보건관리자';
+    const ids = new Set(mates.map(m => m.recordId));
+    const fresh = await readGitHubJSON(path);
+    const list = bmRecList(fresh.data);
+    list.forEach(r => { if(ids.has(r.recordId)){ r.pdfFileName = newName; r.pdfYm = ym; r.reissuedAt = now; r.reissuedBy = by; } });
+    await writeGitHubJSON(path, Array.isArray(fresh.data) ? list : Object.assign({}, fresh.data, { records: list, updated: now }), fresh.sha, 'PDF 최종본 교체: ' + nmStr);
+    try{
+      const lsKey = isPpe ? 'bm_ppe_records' : 'bm_edu_records';
+      const loc = JSON.parse(localStorage.getItem(lsKey) || '[]');
+      loc.forEach(r => { if(ids.has(r.recordId)){ r.pdfFileName = newName; r.pdfYm = ym; r.reissuedAt = now; r.reissuedBy = by; } });
+      localStorage.setItem(lsKey, JSON.stringify(loc));
+    }catch(_){}
+    rec.pdfFileName = newName; rec.pdfYm = ym;
+    // 예전 PDF 휴지통 (새 PDF와 같은 경로면 이미 덮어씀)
+    let trashed = 0;
+    for(const op of oldPaths){
+      if(op === newPath) continue;
+      try{ const t = await BMAUTH.post('fs.trash', { path: op, keep: newPath }); if(t && t.trashed) trashed++; }catch(_){}
+    }
+    try{ _ghFolderCache.clear(); }catch(_){}
+    try{ BM.audit('REISSUE_PDF', isPpe ? 'ppe' : 'edu', { name: nmStr, recordId: me.recordId, from: me.pdfFileName || '', to: newName }); }catch(_){}
+    toast('PDF 최종본으로 바꿨습니다: ' + newName + (trashed ? ' (예전 PDF 휴지통)' : ''), 'ok');
+    try{ if(typeof apvRefreshIfOpen === 'function') apvRefreshIfOpen(); _adminDirectRender(); }catch(_){}
+    return true;
+  }catch(err){
+    console.error('bmReissuePdf', err);
+    toast('PDF 최종본 만들기 실패: ' + (err.message || err), 'err');
+    return false;
+  }
+}
+
 async function issueCorrectionPdf(idx, opts){
   opts = opts || {};
   const auto = !!opts.auto;
@@ -12879,10 +12972,9 @@ async function issueCorrectionPdf(idx, opts){
       throw new Error('pdf-lib 미로드');
     }
     // 1) 원본 PDF 다운로드
-    const url = getGitHubPdfUrl(r.pdfFileName, (r.dateStart||'').slice(0,7));
-    const res = await fetch(url);
-    if(!res.ok) throw new Error(`원본 PDF 가져오기 실패 (HTTP ${res.status})`);
-    const pdfBytes = await res.arrayBuffer();
+    // v21.8: 고친 교육일 달 폴더만 보던 것을 → 업로드 달 · 파일명 날짜 달 · 앞뒤 달까지 찾음 (교육일을 고치면 404 나던 문제)
+    const pdfBytes = await apvResolvePdfBytes({ pdfFileName: r.pdfFileName, pdfYm: r.pdfYm || '', submitted: r.submitted || '', dateStart: r.dateStart || '', type: r.type || '' });
+    if(!pdfBytes) throw new Error('원본 PDF를 찾지 못했습니다 — [수정 내용으로 PDF 다시 만들기]를 쓰세요');
     const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
 
     // 2) 정정 페이지 추가
@@ -13695,6 +13787,8 @@ async function saveEduRecRow(idx){
       localStorage.setItem('bm_edu_records',JSON.stringify(clean));
       BM.audit('UPDATE_OVERWRITE','edu',{name:target.name,reason:'관리자 수정'});
       toast('저장 완료','ok');
+      // v21.8: PDF가 있는 기록이면 고친 내용으로 PDF 최종본도 바꿀지
+      if(target.pdfFileName && confirm('저장했습니다.\n\n고친 내용으로 PDF 최종본도 다시 만들까요?\n(예전 PDF는 지우고 새 PDF로 바꿈 · 드라이브 휴지통 30일 보관)')) await bmReissuePdf('edu', target, { yes: true });
     } else {
       const s=JSON.parse(localStorage.getItem('bm_edu_records')||'[]');
       BM.ensureIds(s);
@@ -13824,16 +13918,7 @@ function applyPpeFilter(){
     if(before !== filtered.length) console.log(`[applyPpeFilter] dedupe: ${before-filtered.length}건 중복 숨김`);
   }
 
-  // ★ v15.43: 감사 제출용 — 입사일순(오래된 직원이 위) → 지급일·이름순
-  filtered.sort((a,b) => {
-    const ja = a.joinDate || '';
-    const jb = b.joinDate || '';
-    if(ja !== jb) return ja.localeCompare(jb);
-    const da = a.date || a.dateStart || '';
-    const db = b.date || b.dateStart || '';
-    if(da !== db) return da.localeCompare(db);
-    return (a.name||'').localeCompare(b.name||'');
-  });
+  // v21.8: 정렬은 renderPpeAdminTable 한 곳에서 (정렬 선택: 최근 제출순 · 입사일순 · 지급일순)
   window._ppeCurrentFiltered = filtered;
   renderPpeAdminTable(filtered);
   // 통계 갱신
@@ -13867,16 +13952,29 @@ function renderPpeAdminTable(data){
   }
 
   if(!data.length){
-    tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:#94a3b8">보호구 지급 기록이 없습니다</td></tr>';
+    tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:30px;color:#94a3b8">보호구 지급 기록이 없습니다</td></tr>';
     return;
   }
   BM.ensureIds(data);
+  // v21.8 정렬: 기본 '최근 제출순' — 지급일을 과거로 적어 낸 새 제출도 맨 위에 보이게 (예전: 입사일순이라 목록 깊이 묻힘)
+  const _sortBy = (document.getElementById('adm-ppe-sort')||{}).value || 'recent';
+  const _sub = r => String(r.submitted || r.updatedAt || '');
+  const _pd = r => String(r.date || r.dateStart || '');
+  data = data.slice().sort((a,b) => {
+    if(_sortBy === 'join'){ const ja=a.joinDate||'', jb=b.joinDate||''; if(ja!==jb) return ja.localeCompare(jb); if(_pd(a)!==_pd(b)) return _pd(a).localeCompare(_pd(b)); return (a.name||'').localeCompare(b.name||''); }
+    if(_sortBy === 'date'){ if(_pd(a)!==_pd(b)) return _pd(b).localeCompare(_pd(a)); return _sub(b).localeCompare(_sub(a)); }
+    if(_sub(a)!==_sub(b)) return _sub(b).localeCompare(_sub(a));
+    return _pd(b).localeCompare(_pd(a));
+  });
   window._ppeCurrentFiltered = data;
+  const _weekAgo = new Date(Date.now() - 7*86400e3).toISOString();
+  const _subDay = r => { const v=_sub(r); if(!v) return '-'; const d=new Date(v); return isNaN(d) ? v.slice(0,10) : new Date(d.getTime()+9*3600e3).toISOString().slice(0,10); };
   tbody.innerHTML=data.map((r,i)=>`
     <tr style="background:${i%2===0?'#fff':'#fafcff'}">
       <td style="text-align:center;padding:9px 6px"><input type="checkbox" data-bmchk="ppechk_${i}" data-rid="${r.recordId||''}"></td>
       <td style="text-align:center;font-weight:700;padding:9px 6px">${i+1}</td>
       <td><input type="date" style="width:130px;font-weight:600" value="${(r.date||r.dateStart||'').slice(0,10)}" onchange="updatePpeRec(${i},'date',this.value)" title="지급일 수정 가능"></td>
+      <td style="white-space:nowrap;font-size:12px;color:#45423D">${_subDay(r)}${_sub(r) > _weekAgo ? ' <span class="ppe-new" title="최근 7일 안에 제출됨">새 제출</span>' : ''}</td>
       <td><input type="text" style="width:75px;font-weight:600" value="${r.name||''}" onchange="updatePpeRec(${i},'name',this.value)"></td>
       <td><input type="text" style="width:90px" value="${r.dept||''}" onchange="updatePpeRec(${i},'dept',this.value)"></td>
       <td><input type="text" style="width:100%;min-width:160px" value="${(function(){
@@ -14126,6 +14224,7 @@ async function savePpeRecRow(idx){
       await writeGitHubJSON('records/ppe_records.json',up,sha,`보호구Upsert: ${target.name||''}`);
       localStorage.setItem('bm_ppe_records',JSON.stringify(clean));
       toast('저장 완료','ok');
+      if(target.pdfFileName && confirm('저장했습니다.\n\n고친 내용으로 보호구 지급수령증 PDF 최종본도 다시 만들까요?\n(예전 PDF는 지우고 새 PDF로 바꿈 · 드라이브 휴지통 30일 보관)')) await bmReissuePdf('ppe', target, { yes: true });
     } else {
       const s=JSON.parse(localStorage.getItem('bm_ppe_records')||'[]');
       BM.ensureIds(s);

@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.7 (2026-10-28)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.8 (2026-11-03)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -170,6 +170,7 @@ function doPost(e) {
                                    : { success: false, status: 401, error: '로그인 필요' }; break;
       case 'fs.get':    result = requireLogin_(s) || fsGet_(req, s); break;
       case 'fs.put':    result = requireLogin_(s) || fsPut_(req, s); break;
+      case 'fs.trash':  result = requireAdmin_(s) || fsTrash_(req); break;   // v21.8 수정 PDF로 바꾼 뒤 예전 PDF 휴지통으로
       case 'rec.has':   result = requireLogin_(s) || recHas_(req, s); break;
       case 'emp.status': case 'emp.sync': case 'emp.merge': case 'hr.fetch':
       case 'nh.list': case 'nh.answer': case 'nh.resend': case 'nh.run': case 'nh.detect': case 'nh.add':
@@ -584,6 +585,16 @@ function recordKey_(r) {
     .map(v => String(v || '').trim()).join('|');
 }
 
+// v21.8 관리자: 예전 PDF를 드라이브 휴지통으로 (30일 안에는 드라이브에서 되살릴 수 있음) — 일지 · 보호구 · 화학물질 PDF만
+function fsTrash_(req) {
+  const path = normPath_(req.path);
+  if (!/^(교육일지|보호구|화학물질)\/[^\/]+\/[^\/]+\.pdf$/i.test(path)) return { success: false, status: 400, error: '지울 수 없는 경로' };
+  if (req.keep && normPath_(req.keep) === path) return { success: false, error: '새 파일과 같은 경로' };
+  const f = getFile_(path);
+  if (!f) return { success: true, trashed: false };
+  f.setTrashed(true);
+  return { success: true, trashed: true, path: path };
+}
 function fsPut_(req, s) {
   const path = normPath_(req.path);
   const isAdmin = s.role === 'admin';
