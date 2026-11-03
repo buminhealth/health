@@ -10,8 +10,15 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v21.7 (2026-10-28)
+  부민병원 MSDS 통합시스템 v21.8 (2026-11-03)
 
+  ★★★ v21.8 (2026-11-03) — PDF 최종본 교체 · 보호구 최근 제출순 · 예전 사본 재업로드 막기 · 디자인 다듬기 (서버 v21.8):
+    - 교육 · 보호구 기록을 고치면 [PDF 최종본 다시 만들기]: 고친 기록(서명 포함)으로 PDF 새로 만들어 고친 이름으로 저장 → 예전 PDF 휴지통
+    - 정정 이력 붙이기: 원본 PDF를 여러 달 폴더에서 찾음 (교육일을 고치면 HTTP 404 나던 문제)
+    - 보호구 지급 현황: 기본 최근 제출순 · 제출일 열 · 새 제출 표시 (지급일을 과거로 적은 새 제출이 목록 깊이 묻히던 문제)
+    - 서버: 관리자가 지운 기록 · 이미 있는 기록의 예전 사본은 부서가 다시 올려도 받지 않음 / 원본 PDF 없으면 같은 양식 PDF 미리보기
+    - 디자인: 관리자 현황 화면 상자 겹침 없앰 · 필터 한 줄 · 도구줄 위험 버튼 오른쪽 · 표 칸은 평소 글자처럼 · '관리' 칸 고정 ·
+      AI 도우미 버튼이 표를 가리지 않게 · 짧은 화면 전환 움직임(움직임 줄이기 설정 존중) · MSDS 빈 화면 안내
   ★★★ v21.7 (2026-10-28) — 부서 로그인 후 직원 검색 0명 (서버 v21.7):
     - 원인: 인사 사이트 부서 이름이 로그인 부서와 다름 (진단검사의학실 ↔ 진단검사의학과) + 부서매핑 비어 있음
       → '직원목록 로드됐지만 0명 — GAS 헤더명 확인 필요'(잘못된 안내)
@@ -4123,6 +4130,8 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
   };
   // 공지 · 업데이트 (보건관리실이 알릴 것이 생기면 맨 위에 한 줄 추가: [구분, 내용, 날짜])
   var NEWS = [
+    ['개선', '관리자: 기록을 고치면 PDF 최종본으로 바꾸기 · 보호구 최근 제출순', '11.03'],
+    ['개선', '부서 로그인 후 직원 검색 0명 문제 해결 · PIN 보기', '10.28'],
     ['시스템', '화면 색 · 로고 새 디자인, 부서 / 관리자 로그인 하나로', '10.23'],
     ['신규', 'AI 위험성평가 — 현장 사진으로 위험을 찾아 보건관리실에 제출', '10.22'],
     ['시스템', '홈 화면 · 부서 로그인 창 새 모양', '10.21'],
@@ -12589,7 +12598,7 @@ function renderAdminTable(data){
         <button onclick="viewEduRecord(${i})" title="창으로 보기" style="color:#3F7518">보기</button>
         <button onclick="downloadEduPdfFromAdmin(${i})" title="PDF 출력 (PC 다운로드)" style="color:#3F7518">PDF</button>
         <button onclick="saveEduRecRow(${i})" title="수정사항 저장 (DB)" style="color:#3F7518">저장</button>
-        <button onclick="deleteAdminRecord(${i})" title="삭제" style="color:#ef4444">✕</button>
+        <button onclick="deleteAdminRecord(${i})" title="삭제" style="color:#A3302A">삭제</button>
       </td>
     </tr>`).join('');
 }
@@ -14006,7 +14015,7 @@ function renderPpeAdminTable(data){
         <button onclick="viewPpeRecord(${i})" title="창으로 보기" style="color:#3F7518">보기</button>
         <button onclick="downloadPpePdfFromAdmin(${i})" title="PDF 출력 (PC 다운로드)" style="color:#3F7518">PDF</button>
         <button onclick="savePpeRecRow(${i})" title="수정사항 저장 (DB)" style="color:#3F7518">저장</button>
-        <button onclick="deletePpeRecord(${i})" title="삭제" style="color:#ef4444">✕</button>
+        <button onclick="deletePpeRecord(${i})" title="삭제" style="color:#A3302A">삭제</button>
       </td>
     </tr>`).join('');
 }
@@ -15657,7 +15666,7 @@ function renderChemAdminTable(data){
         <button onclick="viewChemRecord(${i})" title="창으로 보기" style="color:#3F7518">보기</button>
         <button onclick="downloadChemPdfFromAdmin(${i})" title="PDF 출력 (PC 다운로드)" style="color:#3F7518">PDF</button>
         <button onclick="saveChemRecRow(${i})" title="수정사항 저장 (DB)" style="color:#3F7518">저장</button>
-        <button onclick="deleteChemRecord(${i})" title="삭제" style="color:#ef4444">✕</button>
+        <button onclick="deleteChemRecord(${i})" title="삭제" style="color:#A3302A">삭제</button>
       </td>
     </tr>`;
   }).join('');
@@ -19227,7 +19236,7 @@ self.addEventListener('fetch',e=>{
   var btn;
   window.addEventListener('DOMContentLoaded', function(){
     btn = document.createElement('button');
-    btn.type = 'button'; btn.id = 'bm-help-btn'; btn.setAttribute('aria-expanded', 'false');
+    btn.type = 'button'; btn.id = 'bm-help-btn'; btn.setAttribute('aria-expanded', 'false'); btn.setAttribute('aria-label', 'AI 도우미 열기');
     btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/><path d="M9 10h.01M12 10h.01M15 10h.01"/></svg>AI 도우미';
     btn.onclick = function(){ if(box && box.classList.contains('on')) close(); else open(); };
     document.body.appendChild(btn);
@@ -19235,5 +19244,81 @@ self.addEventListener('fetch',e=>{
   window.BMHELP = { open: open, close: close, ask: function(q){ open(); ask(q); } };
 })();
 </script>
+
+<!-- ★ v21.8 디자인 다듬기 — '병원 업무 대장': 평평한 면 · 선으로 구분 · 분명한 글자 위계 · 한 가지 주요 버튼 (기능 변경 없음) -->
+<style id="bm-v218">
+:root{--v8-ink:#1E1E1C;--v8-ink2:#45423D;--v8-mute:#6B675F;--v8-line:#E4E2DC;--v8-line2:#ECEBE7;--v8-g:#67AF28;--v8-gt:#3F7518;--v8-gbg:#F3F9ED;--v8-red:#A3302A}
+body{font-feature-settings:"tnum" 1}
+/* 움직임: 짧고 조용하게, 줄이기 설정 존중 */
+.adm-pane.active{animation:v8in .18s ease-out both}
+@keyframes v8in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+button,.fc,input,select{transition:background-color .12s,border-color .12s,color .12s,box-shadow .12s}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+/* 관리자 카드: 겉 테두리 하나 + 제목 아래 가는 선. 안쪽 회색 상자는 없앰 */
+.adm-card{border:1px solid var(--v8-line)!important;border-radius:8px!important;box-shadow:none!important}
+.adm-card-header{padding:20px 24px 14px!important;border-bottom:1px solid var(--v8-line2)!important;background:#fff!important}
+.adm-card-title{font-size:20px!important;font-weight:800!important;color:var(--v8-ink)!important;letter-spacing:-.4px!important}
+.adm-card-header>button{margin-left:auto}
+.adm-card-stat{font-size:13px!important;font-weight:700!important;color:var(--v8-mute)!important;background:transparent!important;border:0!important;padding:0!important}
+.adm-card-body{padding:18px 24px 28px!important}
+/* 교육 · 보호구 · 화학물질 현황: 필터 · 도구줄을 상자 없이 한 흐름으로 */
+#adm-pane-edu .bm-std-filter-row,#adm-pane-ppe .bm-std-filter-row,#adm-pane-chem .bm-std-filter-row,
+#adm-pane-edu .bm-std-action-row,#adm-pane-ppe .bm-std-action-row,#adm-pane-chem .bm-std-action-row{background:transparent!important;border:0!important;border-radius:0!important;padding:0!important;margin:0 0 12px!important}
+#adm-pane-edu .adm-filter-grid,#adm-pane-ppe .adm-filter-grid,#adm-pane-chem .adm-filter-grid{background:transparent!important;border:0!important;padding:0!important;gap:10px 12px!important;grid-template-columns:repeat(auto-fill,minmax(132px,1fr))!important;align-items:end!important}
+#adm-pane-edu .adm-filter-grid>div:last-child,#adm-pane-ppe .adm-filter-grid>div:last-child,#adm-pane-chem .adm-filter-grid>div:last-child{grid-column:span 2;flex-wrap:wrap;align-items:flex-end}
+.adm-pane .adm-filter-grid .fl{font-size:12px!important;font-weight:700!important;color:var(--v8-mute)!important;margin:0 0 4px!important}
+.adm-pane .adm-filter-grid .fc{height:38px!important;min-height:38px!important;font-size:14px!important;border-color:#D6D3CC!important;border-radius:6px!important}
+.adm-pane .adm-filter-grid .fc:focus{border-color:var(--v8-g)!important;box-shadow:0 0 0 3px rgba(103,175,40,.18)!important;outline:0}
+.adm-pane .bm-std-filter-row button[onclick*="'apply'"]{height:38px!important;padding:0 20px!important;background:var(--v8-g)!important;border-color:var(--v8-g)!important;color:#fff!important;font-size:14px!important;font-weight:800!important;border-radius:6px!important}
+.adm-pane .bm-std-filter-row button[onclick*="'apply'"]:hover{background:#4C8A1D!important}
+/* 도구줄: 같은 무게의 조용한 버튼, 위험한 것(강제 재동기화 · 선택삭제)은 빨간 글자로 오른쪽 끝 */
+#adm-pane-edu .bm-std-action-row,#adm-pane-ppe .bm-std-action-row,#adm-pane-chem .bm-std-action-row{display:flex!important;gap:6px!important;flex-wrap:wrap!important;align-items:center!important;padding-top:12px!important;border-top:1px solid var(--v8-line2)!important}
+.adm-pane .bm-std-action-row>button{height:34px!important;padding:0 12px!important;background:#fff!important;color:var(--v8-ink2)!important;border:1px solid #DDDBD5!important;border-radius:6px!important;font-size:13px!important;font-weight:700!important}
+.adm-pane .bm-std-action-row>button:hover{border-color:var(--v8-g)!important;color:var(--v8-gt)!important;background:var(--v8-gbg)!important}
+.adm-pane .bm-std-action-row>button[onclick*="delete"],.adm-pane .bm-std-action-row>button[onclick*="forcePull"]{color:var(--v8-red)!important;order:8}
+.adm-pane .bm-std-action-row>button[onclick*="forcePull"]{margin-left:auto!important}
+.adm-pane .bm-std-action-row>button[onclick*="delete"]:hover,.adm-pane .bm-std-action-row>button[onclick*="forcePull"]:hover{border-color:var(--v8-red)!important;background:#FBEDEA!important}
+.adm-pane .bm-std-action-row>span{order:9;flex-basis:100%;text-align:right;margin:0!important;font-size:11px!important}
+/* 표가 넓으면 가로로 밀어 보기 (마지막 '관리' 칸이 잘리지 않게) */
+#adm-pane-edu .adm-tbl,#adm-pane-ppe .adm-tbl,#adm-pane-chem .adm-tbl{width:max-content!important;min-width:100%!important}
+/* '관리' 칸은 표를 옆으로 밀어도 오른쪽에 붙어 있게 */
+#adm-pane-edu .adm-tbl tr>*:last-child,#adm-pane-ppe .adm-tbl tr>*:last-child,#adm-pane-chem .adm-tbl tr>*:last-child{position:sticky;right:0;z-index:1;box-shadow:-8px 0 8px -8px rgba(0,0,0,.12)}
+#adm-pane-edu .adm-tbl thead tr>*:last-child,#adm-pane-ppe .adm-tbl thead tr>*:last-child,#adm-pane-chem .adm-tbl thead tr>*:last-child{z-index:2}
+.adm-tbl .row-act button[title="삭제"]{color:var(--v8-red)!important}
+.adm-tbl .row-act{white-space:nowrap}
+
+/* 표: 대장처럼 — 머리 연한 그린, 줄 사이 가는 선, 칸 안 입력은 평소엔 글자처럼 · 누르면 입력칸 */
+.adm-tbl{border-collapse:separate!important;border-spacing:0!important;font-size:13px!important}
+.adm-pane .adm-tbl thead tr{background:var(--v8-gbg)!important}
+.adm-pane .adm-tbl thead th,.adm-pane .adm-tbl thead th.ath{background:var(--v8-gbg)!important;color:var(--v8-gt)!important;font-size:12px!important;font-weight:800!important;padding:10px 8px!important;border-bottom:1px solid #DCEBCD!important;position:sticky;top:0;z-index:1;white-space:nowrap}
+.adm-tbl tbody td{padding:7px 8px!important;border-bottom:1px solid var(--v8-line2)!important;background:#fff!important;color:var(--v8-ink)!important}
+.adm-tbl tbody tr:hover td{background:#FAFCF7!important}
+.adm-tbl input[type=text],.adm-tbl input[type=date]{border:1px solid transparent!important;background:transparent!important;box-shadow:none!important;border-radius:4px!important;padding:4px 6px!important;color:var(--v8-ink)!important}
+.adm-tbl tbody tr:hover input[type=text],.adm-tbl tbody tr:hover input[type=date]{border-color:#E4E2DC!important;background:#fff!important}
+.adm-tbl input[type=text]:focus,.adm-tbl input[type=date]:focus{border-color:var(--v8-g)!important;background:#fff!important;box-shadow:0 0 0 3px rgba(103,175,40,.15)!important;outline:0}
+.adm-tbl .row-act button{min-height:30px;padding:0 8px!important;border-radius:4px!important;font-size:12.5px!important}
+.adm-tbl .row-act button:hover{background:var(--v8-gbg)!important}
+.adm-tbl input[type=checkbox]{width:16px;height:16px;accent-color:var(--v8-g)}
+
+/* 관리자 화면: AI 도우미 버튼이 표 마지막 줄 버튼을 가리지 않게 — 작은 동그라미 + 아래 여백 */
+body:has(#pg-admin[style*="block"]) #bm-help-btn{width:48px;height:48px;min-height:48px;padding:0;justify-content:center;font-size:0;gap:0;border-radius:50%}
+body:has(#pg-admin[style*="block"]) #bm-help-btn svg{width:22px;height:22px}
+body:has(#pg-admin[style*="block"]) .adm-content{padding-bottom:96px!important}
+@media (max-width:760px){
+  #bm-help-btn{width:52px;height:52px;min-height:52px;padding:0;justify-content:center;font-size:0;gap:0;border-radius:50%;right:12px}
+  #bm-help-btn svg{width:24px;height:24px}
+}
+
+/* MSDS 관리 빈 화면: 무엇을 하면 되는지 */
+#placeholder p{font-style:normal!important;color:var(--v8-mute)!important;font-size:15px!important;font-weight:700!important}
+#placeholder p::after{content:'왼쪽 목록에서 물질을 고르면 그림문자 · 응급조치 · MSDS 원본이 여기에 나옵니다';display:block;margin-top:6px;font-size:13px;font-weight:500;color:#8A857C}
+
+/* 대시보드 숫자: 뜻 있는 색만(미이수 빨강), 나머지는 글자색 */
+.dash .dash-k b,.dash-kpi b{font-variant-numeric:tabular-nums}
+
+/* 키보드 이동이 보이게 */
+button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #A9D67F;outline-offset:1px}
+</style>
 </body>
 </html>
