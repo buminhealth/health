@@ -1094,6 +1094,7 @@ b.hm-f{font-weight:700}
 .apv-v-hd b{display:block;font-size:16px;color:var(--bm-ink)}.apv-v-hd span{font-size:14px;color:#5A5650}
 .apv-v-x{width:36px;height:36px;border:1px solid var(--bm-line);border-radius:4px;background:#fff;font-size:16px;cursor:pointer;flex:none}
 .apv-v-bar{display:flex;gap:6px;padding:8px 10px;background:#45423D}
+.apv-v-note{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:#FEF3C7;color:#92400E;font-size:13px;border-bottom:1px solid #F5D58A}.apv-v-body{display:flex;flex-direction:column}.apv-v-body iframe{flex:1}
 .apv-v-bar button{min-height:34px;padding:0 12px;border:0;border-radius:4px;background:rgba(255,255,255,.14);color:#fff;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
 .apv-v-bar button:hover{background:rgba(255,255,255,.24)}.apv-v-bar button:disabled{opacity:.45;cursor:default}
 .apv-v-body{flex:1;min-height:0;background:#77736C;display:flex}
@@ -10643,8 +10644,12 @@ async function apvOpenViewer(key){
   on('approve', () => { apvState.selected = new Set([key]); apvBatchApprove().then(()=>{ if(apvViewKey===key) apvOpenViewer(key); }); });
   on('reject', () => apvBatchReject([key]));
   on('del', () => apvDeleteOne(key));
-  let bytes = null;
+  let bytes = null, made = false;
   try{ bytes = await apvResolvePdfBytes(g); }catch(e){ console.warn('apvOpenViewer:', e); }
+  // v21.8: 원본 PDF가 없으면 기록으로 같은 양식의 PDF를 만들어 보여 줌 (예전: 다른 모양의 기록 화면)
+  if(!bytes && (g.members||[]).length && window.jspdf && window.html2canvas){
+    try{ const pdf = await _apvRenderGroupPdf(g); bytes = pdf.output('arraybuffer'); made = true; }catch(e){ console.warn('apvOpenViewer 재생성:', e); }
+  }
   // v21.5: 결재완료면 교육 현황 미리보기와 같이 결재란에 관리자 도장을 찍은 PDF를 보여 줌 (결재 전은 도장 없는 원본)
   if(bytes && g.approved){
     try{
@@ -10663,7 +10668,10 @@ async function apvOpenViewer(key){
     return;
   }
   apvViewUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-  body.innerHTML = `<iframe id="apv-v-frame" title="PDF 원본" src="${apvViewUrl}"></iframe>`;
+  body.innerHTML = (made ? `<div class="apv-v-note">서버에 원본 PDF가 없어 <b>제출 기록으로 같은 양식의 PDF</b>를 만들어 보여 드립니다. <button type="button" class="apv-v-b" id="apv-v-save">이 PDF를 서버에 저장</button></div>` : '') +
+    `<iframe id="apv-v-frame" title="PDF 원본" src="${apvViewUrl}"></iframe>`;
+  const sv = document.getElementById('apv-v-save');
+  if(sv) sv.onclick = async () => { sv.disabled = true; sv.textContent = '저장 중…'; const ok = await apvRebuildAndUploadPdf(g); if(ok){ sv.textContent = '저장됨'; } else { sv.disabled = false; sv.textContent = '이 PDF를 서버에 저장'; } };
   const ob = v.querySelector('[data-v="open"]'), pb = v.querySelector('[data-v="print"]');
   ob.disabled = false; pb.disabled = false;
   ob.onclick = () => window.open(apvViewUrl, '_blank');

@@ -1501,6 +1501,30 @@ function check(name, cond, extra) {
     const zt2 = post({ op: 'login', kind: 'dept', dept: '61병동(별관)', pin: '7778' }).token;
     const e2 = JSON.parse(g.api.doGet({ parameter: { action: 'emp', t: zt2, callback: 'cb' } }).text.replace(/^cb\(|\)$/g, ''));
     check('세부 부서 로그인(괄호): 인사 사이트에 없는 세부 부서면 앞 부서 직원으로 검색', e2.data.length > 0 && e2.data.every(e => e.dept === '61병동'), e2.data.length);
+    // v21.8 예전 PC 사본 재업로드 막기: 관리자가 지운 기록 번호 · 이미 있는 기록의 예전 사본은 서버가 받지 않음 (새로 다시 쓴 것은 받음)
+    {
+      const fget = (p, t) => post({ op: 'fs.get', path: p, t });
+      const b64 = o => Buffer.from(JSON.stringify(o)).toString('base64');
+      const ac = fget('records/admin_cfg.json', tk.a);
+      const acObj = ac.success ? JSON.parse(Buffer.from(ac.content, 'base64').toString('utf8')) : {};
+      acObj.edu_deleted_ids = (acObj.edu_deleted_ids || []).concat(['gone-61']);
+      post({ op: 'fs.put', path: 'records/admin_cfg.json', sha: ac.success ? ac.sha : '', content: b64(acObj), t: tk.a });
+      const base = { type: 'MSDS교육', dept: '61병동', empNo: '77', dateStart: '2026-01-05' };
+      const cur0 = fget('records/edu_records.json', tk.a);
+      const all0 = JSON.parse(Buffer.from(cur0.content, 'base64').toString('utf8'));
+      all0.push(Object.assign({ recordId: 'live-61', name: '사본시험', submitted: '2026-02-01T00:00:00Z' }, base));
+      post({ op: 'fs.put', path: 'records/edu_records.json', sha: cur0.sha, content: b64(all0), t: tk.a });
+      const dv = fget('records/edu_records.json', tk.d);
+      const mine = JSON.parse(Buffer.from(dv.content, 'base64').toString('utf8'));
+      const ls = Array.isArray(mine) ? mine : mine.records;
+      ls.push(Object.assign({ recordId: 'gone-61', name: '지운기록', submitted: '2026-01-05T00:00:00Z' }, base));
+      ls.push(Object.assign({ recordId: 'stale-61', name: '사본시험', submitted: '2026-01-06T00:00:00Z' }, base));
+      ls.push(Object.assign({ recordId: 'redo-61', name: '사본시험', submitted: '2026-03-01T00:00:00Z' }, base));
+      const wr = post({ op: 'fs.put', path: 'records/edu_records.json', sha: dv.sha, content: b64(Array.isArray(mine) ? ls : Object.assign({}, mine, { records: ls })), t: tk.d });
+      const fin = JSON.parse(Buffer.from(fget('records/edu_records.json', tk.a).content, 'base64').toString('utf8'));
+      const ids = (Array.isArray(fin) ? fin : fin.records).map(r => r.recordId);
+      check('예전 PC 사본 재업로드: 지운 기록 · 예전 사본은 안 받고, 새로 다시 쓴 기록은 받음', wr.success && !ids.includes('gone-61') && !ids.includes('stale-61') && ids.includes('redo-61') && ids.includes('live-61'), [wr.success, ids.filter(x => /61$/.test(x))]);
+    }
     const ui = await page.evaluate(() => typeof apvDeleteOne === 'function' && typeof _getStampedPdfBlob === 'function');
     check('결재 관리: 한 건 삭제 · 결재본 도장 미리보기 함수', ui);
   }

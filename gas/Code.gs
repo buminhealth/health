@@ -685,6 +685,17 @@ function keepAdminFields_(next, prev) {
 }
 
 // 부서 쓰기 병합: 서버의 다른 부서 기록은 그대로 두고, 자기 부서 기록만 추가·갱신
+// v21.8 관리자가 지운 기록 번호 (admin_cfg.json 의 {edu|ppe|chem}_deleted_ids)
+function deletedIds_(cat) {
+  try {
+    const f = getFile_('records/admin_cfg.json');
+    const c = f ? JSON.parse(f.getBlob().getDataAsString('UTF-8') || '{}') : {};
+    return new Set(Array.isArray(c[cat + '_deleted_ids']) ? c[cat + '_deleted_ids'] : []);
+  } catch (_) { return new Set(); }
+}
+function natKey_(r) {
+  return [r.name, r.empNo, r.dept, r.type, String(r.dateStart || r.date || '').slice(0, 10)].map(v => String(v == null ? '' : v).trim()).join('|');
+}
 function mergeDeptWrite_(path, cur, incoming, s) {
   if (RECORD_FILES[path]) {
     const shape = RECORD_FILES[path];
@@ -692,12 +703,20 @@ function mergeDeptWrite_(path, cur, incoming, s) {
     preserveImages_(curList, recordList_(incoming, shape));
     const index = {};
     curList.forEach((r, i) => { if (r) index[recordKey_(r)] = i; });
+    // v21.8: 예전 PC에 남은 사본이 다시 올라와 결재 대기에 쌓이던 문제 — 관리자가 지운 기록 · 이미 있는 기록의 예전 사본은 받지 않음
+    const cat = (path.match(/records\/(edu|ppe|chem)_records\.json/) || [])[1] || '';
+    const gone = cat ? deletedIds_(cat) : new Set();
+    const byNk = {};
+    curList.forEach(r => { if (r) { const k = natKey_(r); if (!byNk[k] || String(r.submitted || '') > String(byNk[k].submitted || '')) byNk[k] = r; } });
     recordList_(incoming, shape).forEach(r => {
       if (!r || !sameDept_(r.dept, s.dept)) return;
       const k = recordKey_(r);
       if (index[k] !== undefined) {
         if (sameDept_(curList[index[k]].dept, s.dept)) curList[index[k]] = keepAdminFields_(r, curList[index[k]]);
       } else {
+        if (r.recordId && gone.has(r.recordId)) return;                                  // 관리자가 지운 기록
+        const twin = byNk[natKey_(r)];
+        if (twin && String(r.submitted || '') <= String(twin.submitted || '')) return;    // 이미 있는 기록의 예전 사본
         index[k] = curList.length;
         curList.push(keepAdminFields_(r, null));
       }
