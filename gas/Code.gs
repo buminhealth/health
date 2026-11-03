@@ -3328,7 +3328,9 @@ function eduStatus_(s) {
   });
   const depts = {};
   people.forEach(p => {
-    const d = depts[p.dept] = depts[p.dept] || { dept: p.dept, need: p.need, total: 0, done: 0, progress: 0, missing: 0, overdue: 0, excluded: 0, newChem: 0 };
+    const d = depts[p.dept] = depts[p.dept] || { dept: p.dept, need: p.need, total: 0, done: 0, progress: 0, missing: 0, overdue: 0, excluded: 0, newChem: 0, staff: 0, leave: 0 };
+    d.staff++;                       // v21.9 이 부서 직원(재직 + 휴직, 제외 포함) — 인사 사이트 인원과 맞춰 보기용
+    if (p.onLeave) d.leave++;
     if (p.status === '제외') { d.excluded++; return; }
     d.total++;
     if (p.status === '이수') d.done++; else if (p.status === '진행중') d.progress++; else d.missing++;
