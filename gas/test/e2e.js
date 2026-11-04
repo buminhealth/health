@@ -315,7 +315,8 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.9/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.10 \(2026-11-04\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('서버 버전 비교: v21.9 서버는 v21.10 앱에서 배포 필요로 (글자 순서 아님)', await page.evaluate(() => { try { return bmVerLess('v21.9 (2026-11-03)', 'v21.10') && !bmVerLess('v21.10 (2026-11-04)', 'v21.10') && !bmVerLess('v22.0', 'v21.10'); } catch (e) { return String(e); } }) === true);
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
   const other = await page.evaluate(async () => {
@@ -504,7 +505,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.9'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.10'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -1086,6 +1087,23 @@ function check(name, cond, extra) {
   const rowOfName = nm => empSh.rows.filter(r => r[EH.indexOf('이름')] === nm);
   check('합치기 적용: #N/A → 인사 사번, 빈 사번 + 입사일 9/1 → 사번 · 입사일 채움 (새 줄 없음)', realM.success && realM.added === 0 && rowOfName('엔에이').length === 1 && rowOfName('엔에이')[0][0] === '126000051' && rowOfName('빈사번').length === 1 && rowOfName('빈사번')[0][0] === '126000052' && rowOfName('빈사번')[0][EH.indexOf('입사일')] === '2026-09-01', [rowOfName('엔에이'), rowOfName('빈사번')]);
   check('합치기 적용: 같은 사번 두 줄 → 한 줄 (빈 칸은 다른 줄 값)', rowOfName('중복가').length === 1 && rowOfName('중복가')[0][EH.indexOf('직위')] === '간호사5급' && rowOfName('중복가')[0][EH.indexOf('재직상태')] === '재직', rowOfName('중복가'));
+  // v21.10 부서 이동: 미리보기에 '부서 이동' 목록 · 적용하면 부서이동기록 시트에 남김
+  const mvRows = [['126000051', '엔에이', '61병동', '2020-01-01']];
+  const mvDry = await page.evaluate(rows => BMAUTH.post('emp.sync', { headers: ['사번', '이름', '부서', '입사일'], rows, dry: true }), mvRows);
+  const mvReal = await page.evaluate(rows => BMAUTH.post('emp.sync', { headers: ['사번', '이름', '부서', '입사일'], rows }), mvRows);
+  const mvSh = g.sheets['부서이동기록'];
+  check('부서 이동: 미리보기에 이전 → 새 부서 · 적용하면 직원목록 부서 변경 + 부서이동기록', mvDry.deptMoves.length === 1 && mvDry.deptMoves[0].from === '71병동' && mvDry.deptMoves[0].to === '61병동' && mvReal.deptMoves.length === 1 && rowOfName('엔에이')[0][EH.indexOf('부서')] === '61병동' && mvSh && mvSh.rows.some(r => r.includes('엔에이') && r.includes('71병동') && r.includes('61병동')), [mvDry.deptMoves, mvSh && mvSh.rows]);
+  // v21.10 아침 자동 동기화 캐시를 화면 미리보기가 오래 재사용하지 않음 (10분 넘으면 새로 읽음)
+  const cacheAge = vm.runInContext(`(function(){
+    const old = Utilities.formatDate(new Date(Date.now() - 3 * 3600e3), TZ, "yyyy-MM-dd'T'HH:mm:ss");
+    bigCachePut_('hrfetch', JSON.stringify({ headers: ['사번','이름','부서','입사일'], rows: [['1','캐시사람','혈관센터','2020-01-01']], at: old }));
+    const a = hrFetchSavedCached_(false, 10);
+    bigCachePut_('hrfetch', JSON.stringify({ headers: ['사번','이름','부서','입사일'], rows: [['1','캐시사람','혈관센터','2020-01-01']], at: nowKst_() }));
+    const b = hrFetchSavedCached_(false, 10);
+    return { oldCached: !!a.cached, oldRows: a.rows.length, newCached: !!b.cached };
+  })()`, g.ctx);
+  check('인사 사이트 합치기: 3시간 전 아침 자동 동기화 결과는 다시 쓰지 않고 새로 읽음 · 10분 안이면 재사용', !cacheAge.oldCached && cacheAge.oldRows > 1 && cacheAge.newCached, cacheAge);
+  vm.runInContext('hrCacheClear_()', g.ctx);
   const mergeWarn = await page.evaluate(() => BMAUTH.post('emp.merge', { dry: true, fresh: true }));
   const mergeAuto = await page.evaluate(() => BMAUTH.post('emp.merge', { dry: true, force: true, fresh: true }));
   check('인사 사이트와 합치기: 인원이 크게 줄면 경고 후 멈춤 → 확인하면 미리보기', !mergeWarn.success && mergeWarn.warnings.length > 0 && mergeAuto.success && mergeAuto.dry && mergeAuto.hrCount > 0 && Array.isArray(mergeAuto.missingNo), [mergeWarn.error, mergeAuto.error || mergeAuto.hrCount]);

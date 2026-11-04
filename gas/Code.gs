@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.9 (2026-11-03)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.10 (2026-11-04)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -1327,7 +1327,7 @@ function syncEmployees_(incoming, fullList, dry) {
     }
 
     const seen = new Set();
-    const summary = { added: 0, updated: 0, resigned: 0, unchanged: 0, newEmployees: [], unknownDepts: unknownNames };
+    const summary = { added: 0, updated: 0, resigned: 0, unchanged: 0, newEmployees: [], unknownDepts: unknownNames, deptMoves: [] };
     incoming.forEach(e => {
       const kn = noKey(e.empNo), km = nmKey(e.name, e.joinDate), kd = ndKey(e.name, e.dept);
       let at = kn ? pos[kn] : undefined;
@@ -1361,6 +1361,8 @@ function syncEmployees_(incoming, fullList, dry) {
       }
       const row = data[at];
       let changed = false;
+      const fromDept = fmtDate_(row[idx.dept]);
+      if (e.dept && fromDept && baseDept_(fromDept) !== baseDept_(e.dept)) summary.deptMoves.push({ no: e.empNo || String(row[idx.empNo] || ''), name: e.name || String(row[idx.name] || ''), from: fromDept, to: e.dept });
       ['name','dept','joinDate','status','leaveDate','email','position'].forEach(f => {
         if (!e[f]) return;
         if (fmtDate_(row[idx[f]]) !== e[f]) { row[idx[f]] = e[f]; changed = true; }
@@ -1389,7 +1391,13 @@ function syncEmployees_(incoming, fullList, dry) {
       sheet.getRange(2, 1, data.length, width).setValues(data.map(r => r.map(v => v instanceof Date ? v : safeCell_(v))));
     }
     if (origLen > data.length) sheet.deleteRows(data.length + 2, origLen - data.length);   // 합친 중복 줄 (아래쪽 남은 줄) 삭제
-    setAdminCfg({ key: 'emp_last_sync', value: nowKst_() + ' (추가 ' + summary.added + ' · 변경 ' + summary.updated + ' · 퇴사표시 ' + summary.resigned +
+    // v21.10 부서 이동 기록 (이동일 = 반영한 날 · 교육 기준 판단용)
+    if (summary.deptMoves.length) {
+      let mv = SS.getSheetByName('부서이동기록');
+      if (!mv) { mv = SS.insertSheet('부서이동기록'); mv.appendRow(['반영일', '사번', '이름', '이전 부서', '새 부서', '비고']); }
+      summary.deptMoves.forEach(m => mv.appendRow([today, "'" + m.no, safeCell_(m.name), safeCell_(m.from), safeCell_(m.to), '인사 사이트 동기화']));
+    }
+    setAdminCfg({ key: 'emp_last_sync', value: nowKst_() + ' (추가 ' + summary.added + ' · 변경 ' + summary.updated + (summary.deptMoves.length ? ' · 부서이동 ' + summary.deptMoves.length : '') + ' · 퇴사표시 ' + summary.resigned +
       (details.filledNo.length ? ' · 사번채움 ' + details.filledNo.length : '') + (details.deleted ? ' · 중복합침 ' + details.deleted : '') + ')' });
     return summary;
   } finally {
@@ -1648,10 +1656,16 @@ function bigCacheGet_(key) {
   for (let i = 0; i < n; i++) { const p = c.get(key + ':' + i); if (p === null) return null; t += p; }
   return t;
 }
-function hrFetchSavedCached_(fresh) {
+/* v21.10: 오래된 결과 재사용 금지 — 아침 자동 전체 동기화(07시대)가 캐시에 넣은 결과를 화면 [합치기]가 6시간 동안 다시 써서
+   그 사이 인사 사이트에서 바꾼 부서(예: 혈관센터 → 중환자실)가 반영되지 않던 문제. maxAgeMin 안의 결과만 재사용 */
+function hrCacheAgeMin_(at) {
+  const t = Date.parse(String(at || '') + '+09:00');
+  return isNaN(t) ? 1e9 : (Date.now() - t) / 60000;
+}
+function hrFetchSavedCached_(fresh, maxAgeMin) {
   if (!fresh) {
     const hit = bigCacheGet_('hrfetch');
-    if (hit) { try { const j = JSON.parse(hit); j.cached = true; return j; } catch (_) {} }
+    if (hit) { try { const j = JSON.parse(hit); if (hrCacheAgeMin_(j.at) <= (maxAgeMin == null ? 360 : maxAgeMin)) { j.cached = true; return j; } } catch (_) {} }
   }
   const r = hrFetchEmployees_(PROPS.getProperty('HR_ID') || '', PROPS.getProperty('HR_PW') || '');
   r.at = nowKst_();
@@ -2174,7 +2188,7 @@ function staffOp_(req, s) {
     case 'emp.merge': {   // v20.3 인사 사이트(저장된 계정)와 합치기 — dry면 미리보기
       if (deny) return deny;
       if (!hrAutoReady_()) return { success: false, error: '인사 사이트 자동 로그인이 설정되어야 합니다 (시트 메뉴 ④). 그동안은 ② 엑셀 붙여넣기로 합치세요.' };
-      const r = hrFetchSavedCached_(req.fresh === true);
+      const r = hrFetchSavedCached_(req.fresh === true, req.dry === true ? 10 : 60);
       const list = rowsToEmployees_(r.headers, r.rows);
       const chk = hrSanity_(list);
       if (!chk.ok && !req.force) return { success: false, warnings: chk.problems, error: '인사 사이트 데이터가 평소와 다릅니다: ' + chk.problems.join(' / ') };
@@ -2185,7 +2199,7 @@ function staffOp_(req, s) {
       if (deny) return deny;
       // 비밀번호를 비우면 메뉴 ④에서 저장한 자동 로그인 계정 사용 (수동 가져오기는 메일 없음)
       const useSaved = !req.password;
-      const r = useSaved ? hrFetchSavedCached_(req.fresh === true)   // v20.4: 6시간 안의 결과 재사용 (새로 읽기는 fresh)
+      const r = useSaved ? hrFetchSavedCached_(req.fresh === true, 10)   // v21.10: 10분 안의 결과만 재사용 (새로 읽기는 fresh)
                          : hrFetchEmployees_(String(req.id || PROPS.getProperty('HR_ID') || ''), String(req.password));
       // 수동 가져오기도 이상 감지 결과를 함께 돌려줌 (화면에서 경고 후 관리자가 판단)
       const chk = hrSanity_(rowsToEmployees_(r.headers, r.rows));
