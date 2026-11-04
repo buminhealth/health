@@ -910,7 +910,7 @@ function check(name, cond, extra) {
   });
   check('교육 현황 캐시: 제외하면 바로 반영', cache[0] === '미이수' && cache[1] === '제외', cache);
   await page.evaluate(() => { admSwitchPane('edu'); return BMEDU.board(); });
-  check('관리자 화면: 교육 이수 현황판', /교육 이수 현황/.test(await page.textContent('#edu-board')) && /61병동/.test(await page.textContent('#edu-board')));
+  check('관리자 화면: 교육 이수 현황판 (숫자 카드 · 찾기 줄 · 탭 두 개)', /교육 대상/.test(await page.textContent('#edu-board')) && /61병동/.test(await page.textContent('#edu-board')) && !!(await page.$('#eb-fbar')) && !!(await page.$('#eb-tab-r')));
   // 13-9. v20.3 교육 대상 규칙 (부서 · 직종) · 부서 이동 · 부서 매칭 저장
   const seeded = g.sheets['교육대상규칙'];
   check('대상 규칙: 시트 자동 생성 + 기본 예시 (응급센터 · 응급실 · 8·9병동)', !!seeded && seeded.rows.length === 5 && seeded.rows[3][1] === '8병동,9병동' && seeded.rows[3][2] === '간호조무사', seeded && seeded.rows);
@@ -1680,6 +1680,33 @@ function check(name, cond, extra) {
       return { isSel: sel.tagName, opts, shown, delTxt, visible: !!del.closest('.apv-card-hd') && !del.closest('details'), hint };
     });
     check('결재 관리: 부서 목록에서 고르기(6병동만, 61병동 제외) · 위쪽 선택 삭제 N · 퇴사자 이름 없으면 옛 일지 찾기', ap.isSel === 'SELECT' && ap.opts.join() === ',6병동,61병동,중환자실' && ap.shown.join() === '6병동' && ap.delTxt === '선택 삭제 2' && ap.visible && ap.hint, ap);
+  }
+
+  // 18-2f. v21.11 교육 현황: 찾기 줄 하나를 두 탭이 같이 씀 · 일지 없는 수기 기록 안내 · 작업 메뉴
+  {
+    const ed = await page.evaluate(async () => {
+      admSwitchPane('edu'); await BMEDU.board();
+      const wait = async f => { const t0 = Date.now(); while (Date.now() - t0 < 8000 && !f()) await new Promise(z => setTimeout(z, 100)); };
+      await wait(() => document.getElementById('eb-fbar'));
+      const oldRows = document.querySelectorAll('#adm-pane-edu input#adm-search').length;
+      const oldVisible = !!document.getElementById('adm-search').offsetParent;
+      const menu = ['eb-manual-btn', 'eb-bulk-btn', 'eb-nc', 'eb-mail', 'eb-dupes'].every(id => document.getElementById(id) && document.getElementById(id).closest('#eb-work'));
+      // 숫자 카드 '미이수' → 직원별 탭 상태가 미이수로
+      document.querySelector('.eb-kpi[data-kst="미이수"]').click();
+      const stAfterKpi = document.getElementById('ef-st').value;
+      // 수기 기록만 있는 사람 찾기 → 기록 탭에 안내
+      const p = (window.__edu = null, null);
+      const q = document.getElementById('ef-q'); q.value = '없는사람퇴사'; q.dispatchEvent(new Event('input'));
+      document.getElementById('eb-tab-r').click();
+      await wait(() => document.getElementById('eb-rec-note') && document.getElementById('eb-rec-note').textContent);
+      const recVisible = !document.getElementById('eb-pane-rec').hidden && document.getElementById('eb-pane-people').hidden;
+      const searchSynced = document.getElementById('adm-search').value === '없는사람퇴사';
+      const noteNone = /없습니다/.test(document.getElementById('eb-rec-note').textContent);
+      document.getElementById('ef-reset').click();
+      document.getElementById('eb-tab-p').click();
+      return { oldRows, oldVisible, menu, stAfterKpi, recVisible, searchSynced, noteNone, peopleBack: !document.getElementById('eb-pane-people').hidden };
+    });
+    check('교육 현황: 찾기 줄 하나(아래 옛 찾기 칸은 숨김) · 작업 메뉴 5개 · 미이수 카드 → 상태 미이수 · 기록 탭에 같은 이름으로 조회 · 없으면 안내', ed.oldRows === 1 && !ed.oldVisible && ed.menu && ed.stAfterKpi === '미이수' && ed.recVisible && ed.searchSynced && ed.noteNone && ed.peopleBack, ed);
   }
 
   // 18-3. v21.6 이모지 없음(디자인 기준) · PIN 보기
