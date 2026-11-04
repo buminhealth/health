@@ -3447,7 +3447,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
                          ' <span style="font-size:12px;color:#475569">사번 #N/A · 빈칸 자동 채움 · 같은 사번 두 줄 합침 · 이름 · 부서 · 입사일 · 직위는 인사 사이트 값으로 — 미리보기 후 적용</span>' +
                          '<div id="staff-merge-out" style="margin-top:8px"></div></div>' +
                          '<div style="margin-bottom:8px"><button id="staff-hr-saved" style="' + BTN_P + '">저장된 계정으로 가져오기</button>' +
-                         ' <button id="staff-hr-fresh" style="' + BTN + '" title="6시간 안에 읽은 결과가 있어도 인사 사이트에서 다시 읽음 (읽기 한도 사용)">새로 읽기</button>' +
+                         ' <button id="staff-hr-fresh" style="' + BTN + '" title="10분 안에 읽은 결과가 있어도 인사 사이트에서 다시 읽음 (읽기 한도 사용)">새로 읽기</button>' +
                          ' <span style="font-size:12px;color:#5A5650">아이디·비밀번호 입력 없이 (시트 메뉴 ④에 저장된 계정)</span></div>' +
                          '<div style="font-size:12px;color:#5A5650;margin-bottom:4px">다른 계정으로 가져오기:</div>' : '') +
             '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
@@ -3492,7 +3492,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       var label = btn.textContent; btn.textContent = '가져오는 중…';
       try{
         var r = await post('hr.fetch', pwEl ? { id: id, password: pwEl.value } : { fresh: !!fresh });
-        if(r.success && r.cached) say('최근 6시간 안에 읽은 결과를 사용했습니다 (' + (r.at || '').replace('T', ' ').slice(0, 16) + ' 읽음) — 지금 상태가 필요하면 [새로 읽기]', 'info');
+        if(r.success && r.cached) say('방금(10분 안) 읽은 결과를 사용했습니다 (' + (r.at || '').replace('T', ' ').slice(0, 16) + ' 읽음) — 지금 상태가 필요하면 [새로 읽기]', 'info');
         if(pwEl) pwEl.value = '';
         if(!r.success){ say(r.error || '가져오기 실패', 'err'); return; }
         if(r.warnings && r.warnings.length &&
@@ -3511,7 +3511,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       mergeBtn.disabled = false;
       if(!r.success && r.warnings && confirm(r.error + '\n\n그래도 미리보기를 볼까요?')) r = await post('emp.merge', { dry: true, force: true });
       if(!r.success){ out.innerHTML = '<div style="font-size:12px;color:#A3302A">' + esc(r.error || '실패') + '</div>'; return; }
-      out.innerHTML = (r.cached ? '<div style="font-size:12px;color:#5A5650;margin-bottom:4px">최근 6시간 안에 읽은 인사 사이트 결과 사용 (' + esc((r.at || '').replace('T', ' ').slice(0, 16)) + ' 읽음) · <a href="#" id="staff-merge-fresh">새로 읽기</a></div>' : '') +
+      out.innerHTML = (r.cached ? '<div style="font-size:12px;color:#5A5650;margin-bottom:4px">10분 안에 읽은 인사 사이트 결과 사용 (' + esc((r.at || '').replace('T', ' ').slice(0, 16)) + ' 읽음) · <a href="#" id="staff-merge-fresh">새로 읽기</a></div>' : '') +
         mergeSummary(r) + '<div style="margin-top:8px"><button id="staff-merge-go" style="' + BTN_P + '">이대로 적용</button> <button id="staff-merge-x" style="' + BTN + '">취소</button></div>';
       var mf = document.getElementById('staff-merge-fresh');
       if(mf) mf.onclick = function(ev){ ev.preventDefault(); mergeFresh = true; mergeBtn.onclick(); };
@@ -3726,9 +3726,10 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
     var li = function(a, f){ return a.slice(0, 40).map(f).join(' · ') + (a.length > 40 ? ' 외 ' + (a.length - 40) + '명' : ''); };
     var row = function(label, n, body, color){ return '<div style="margin:3px 0"><b style="color:' + (color || '#3F7518') + '">' + label + ' ' + n + '</b>' + (body ? ' <span style="color:#475569">' + body + '</span>' : '') + '</div>'; };
     return '<div style="font-size:12px;border:1px solid #e2e8f0;border-radius:6px;padding:8px 10px;background:#fff">' +
-      (r.hrCount ? '<div style="color:#5A5650;margin-bottom:4px">인사 사이트 ' + r.hrCount + '명 · 명단에 없는 재직자 퇴사 표시: ' + (r.fullList ? '함' : '안 함') + '</div>' : '') +
+      (r.hrCount ? '<div style="color:#5A5650;margin-bottom:4px">인사 사이트 ' + r.hrCount + '명' + (r.at ? ' (' + esc(String(r.at).replace('T', ' ').slice(0, 16)) + ' 읽음)' : '') + ' · 명단에 없는 재직자 퇴사 표시: ' + (r.fullList ? '함' : '안 함') + '</div>' : '') +
       row('새 직원', r.added + '명', li(r.newEmployees || [], function(e){ return esc(e.dept) + ' ' + esc(e.name); })) +
       row('바뀌는 직원', r.updated + '명') +
+      ((r.deptMoves || []).length ? row('부서 이동', r.deptMoves.length + '명', li(r.deptMoves, function(e){ return esc(e.name) + ' ' + esc(e.from) + ' → ' + esc(e.to); }), '#345C12') : '') +
       row('사번 채움', r.filledNo.length + '명', li(r.filledNo, function(e){ return esc(e.name) + '(' + esc(e.dept) + ') ' + esc(e.was || '빈칸') + ' → ' + esc(e.no); }), '#345C12') +
       row('같은 사번 두 줄 합침', r.deleted + '줄', li(r.merged, function(e){ return esc(e.name) + ' ' + esc(e.no); })) +
       row('퇴사 표시', r.resigned + '명', '', r.resigned ? '#A3302A' : '') +
@@ -5089,7 +5090,15 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.9';
+  var SERVER_EXPECT = 'v21.10';
+  // v21.10: 'v21.9' < 'v21.10'을 글자 순서가 아니라 숫자로 비교
+  function bmVerLess(a, b){
+    var p = function(v){ return (String(v).match(/v?(\d+(?:\.\d+)*)/) || [,'0'])[1].split('.').map(Number); };
+    var x = p(a), y = p(b);
+    for(var i = 0; i < Math.max(x.length, y.length); i++){ var d = (x[i] || 0) - (y[i] || 0); if(d) return d < 0; }
+    return false;
+  }
+  try{ window.bmVerLess = bmVerLess; }catch(_){}
   var esc = function(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
   var recs = function(k){ try{ return JSON.parse(localStorage.getItem(k) || '[]') || []; }catch(_){ return []; } };
   var post = function(op, b){ return window.BMAUTH ? BMAUTH.post(op, b || {}).catch(function(e){ return { success: false, error: e.message }; }) : Promise.resolve({ success: false, error: '로그인 필요' }); };
@@ -5438,7 +5447,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
     post('whoami', {}).then(function(r){
       var el = document.getElementById('cfg-ver'); if(!el) return;
       var sv = r && r.serverVersion;
-      el.innerHTML = sv ? esc(sv) + (sv < SERVER_EXPECT ? ' <span class="cfg-bad">→ ' + SERVER_EXPECT + ' 배포 필요</span>' : ' <span class="cfg-ok">최신</span>') : '<span class="cfg-bad">확인 실패 (이전 버전이거나 연결 안 됨)</span>';
+      el.innerHTML = sv ? esc(sv) + (bmVerLess(sv, SERVER_EXPECT) ? ' <span class="cfg-bad">→ ' + SERVER_EXPECT + ' 배포 필요</span>' : ' <span class="cfg-ok">최신</span>') : '<span class="cfg-bad">확인 실패 (이전 버전이거나 연결 안 됨)</span>';
     });
     post('law.status', {}).then(function(r){
       var el = document.getElementById('cfg-law'); if(!el) return;
