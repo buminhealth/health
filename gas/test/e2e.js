@@ -1709,6 +1709,33 @@ function check(name, cond, extra) {
     check('교육 현황: 찾기 줄 하나(아래 옛 찾기 칸은 숨김) · 작업 메뉴 5개 · 미이수 카드 → 상태 미이수 · 기록 탭에 같은 이름으로 조회 · 없으면 안내', ed.oldRows === 1 && !ed.oldVisible && ed.menu && ed.stAfterKpi === '미이수' && ed.recVisible && ed.searchSynced && ed.noteNone && ed.peopleBack, ed);
   }
 
+  // 18-2g. v21.12 공개 저장소 정리 준비: 저장소에만 있는 옛 PDF 찾기 → 드라이브로 복사 (저장소는 그대로)
+  {
+    const gh = await page.evaluate(async () => {
+      const pdf = btoa('%PDF-1.4 old journal');
+      const has = '교육일지/2025-03/MSDS교육일지-61병동-있음-2025-03-01.pdf', miss = '교육일지/2025-03/MSDS교육일지-61병동-없음-2025-03-02.pdf';
+      await fetch('https://api.github.com/repos/buminhealth/health/contents/' + has.split('/').map(encodeURIComponent).join('/'), { method: 'PUT', body: JSON.stringify({ message: 't', content: pdf }) });
+      const real = window.fetch;
+      window.fetch = function(u, init){
+        u = typeof u === 'string' ? u : u.url;
+        if(/git\/trees\/main/.test(u)) return Promise.resolve(new Response(JSON.stringify({ sha: 'abc123', tree: [{ type: 'blob', path: has, size: 20 }, { type: 'blob', path: miss, size: 20 }, { type: 'blob', path: 'records/chem_msds/a.pdf', size: 5 }] }), { status: 200 }));
+        if(/raw\.githubusercontent\.com\/buminhealth\/health\/abc123\//.test(u)) return Promise.resolve(/\.json$/.test(u) ? new Response('[]', { status: 200 }) : new Response(Uint8Array.from(atob(pdf), c => c.charCodeAt(0)), { status: 200 }));
+        return real.apply(this, arguments);
+      };
+      try{
+        const el = document.createElement('div'), btn = document.createElement('button'); btn.disabled = true;
+        await bmGhAudit(el, btn);
+        const found = el.textContent, n = (window._bmGhMissing || []).length, en = !btn.disabled;
+        window.confirm = () => true;
+        await bmGhMove(el, btn);
+        const after = await BMAUTH.post('fs.get', { path: miss });
+        await bmGhAudit(el, btn);
+        return { found, n, en, copied: after.success && atob(after.content) === '%PDF-1.4 old journal', again: (window._bmGhMissing || []).length };
+      } finally { window.fetch = real; }
+    });
+    check('공개 저장소 정리 준비: 저장소 PDF 2개 중 드라이브에 없는 1개 찾기 → 복사 → 다시 찾으면 0개 (MSDS 자료 폴더는 대상 아님)', gh.n === 1 && gh.en && /PDF 2개 중/.test(gh.found) && gh.copied && gh.again === 0, gh);
+  }
+
   // 18-3. v21.6 이모지 없음(디자인 기준) · PIN 보기
   {
     const emo = await page.evaluate(async () => {

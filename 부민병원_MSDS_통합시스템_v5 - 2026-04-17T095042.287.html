@@ -5407,6 +5407,11 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
         '<p>예전 일지 · 수령증 PDF는 페이지 그림이 압축 없이 들어 있어 한 장에 8~10MB입니다. 내용 · 서명 · 도장은 그대로 두고 그림만 JPEG로 바꿔 다시 저장합니다 (보통 1/20 크기). 바꾸기 전 파일은 드라이브 휴지통에 30일 남습니다.</p>' +
         '<span style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="cfg-b" data-c="pdffind">큰 PDF 찾기</button><button type="button" class="cfg-b" data-c="pdfrun" id="cfg-pdf-run" disabled>줄이기 시작</button></span>' +
         '<div id="cfg-pdf" style="font-size:12px;margin-top:6px;line-height:1.6"></div></section>' +
+      // v21.12 공개 저장소 정리 준비: 옛 일지 · 수령증 PDF 중 드라이브에 없는 것을 찾아 드라이브로 복사 (저장소는 건드리지 않음)
+      '<section class="cfg-c"><h4>옛 일지 PDF 드라이브로 옮기기</h4>' +
+        '<p>공개 깃허브 저장소(buminhealth/health)에 남은 예전 교육일지 · 보호구 수령증 PDF 중 드라이브(서버)에 없는 파일을 찾아 드라이브로 복사합니다. 저장소 파일은 지우지 않습니다. 저장소를 비공개 보관소로 옮기기 전에 한 번 실행하세요.</p>' +
+        '<span style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="cfg-b" data-c="ghfind">드라이브에 없는 PDF 찾기</button><button type="button" class="cfg-b" data-c="ghmove" id="cfg-gh-move" disabled>드라이브로 복사</button></span>' +
+        '<div id="cfg-gh" style="font-size:12px;margin-top:6px;line-height:1.6"></div></section>' +
     '</div>';
     var act = { lawoc: async function(){
                   var v = document.getElementById('cfg-law-oc').value.trim();
@@ -5482,6 +5487,8 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
                     (fail.length ? '<br><span class="cfg-bad">실패 ' + fail.length + '개</span><br>' + fail.slice(0, 5).map(esc).join('<br>') : '');
                   window._bmPdfBig = [];
                 },
+                ghfind: async function(){ await bmGhAudit(document.getElementById('cfg-gh'), document.getElementById('cfg-gh-move')); },
+                ghmove: async function(){ await bmGhMove(document.getElementById('cfg-gh'), document.getElementById('cfg-gh-move')); },
                 sheet: function(){ window.open('https://docs.google.com/spreadsheets/d/1kFRIyXZX8aTgQR2w5MC0Ty66B9ltKrWj3Wz96D0mKIs/edit', '_blank'); }, logout: function(){ adminLogout(); } };
     host.querySelectorAll('[data-c]').forEach(function(b){ b.onclick = function(){ try{ act[b.getAttribute('data-c')](); }catch(e){ console.warn(e); } }; });
     var ocIn = document.getElementById('cfg-law-oc'); if(ocIn) ocIn.onkeydown = function(e){ if(e.key === 'Enter') act.lawoc(); };
@@ -19461,6 +19468,84 @@ self.addEventListener('fetch',e=>{
 </script>
 
 <!-- ★ v21.8 디자인 다듬기 — '병원 업무 대장': 평평한 면 · 선으로 구분 · 분명한 글자 위계 · 한 가지 주요 버튼 (기능 변경 없음) -->
+<script>
+/* v21.12 공개 저장소 정리 준비 (관리자 · 설정)
+   · 저장소 파일 목록(GitHub)과 드라이브(서버 fs.get 폴더 목록)를 견줘 드라이브에 없는 교육일지 · 보호구 PDF를 찾음
+   · 복사: GitHub에서 원본 그대로 받아 기존 업로드 경로(fs.put, 큰 파일은 나눠 올림)로 드라이브에 저장 — 저장소는 그대로
+   · 기록 json(edu · ppe)은 건수만 견줘 알려 줌 (지운 기록이 되살아나지 않게 자동으로 합치지 않음) */
+function bmGhEsc(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); }
+var BM_GH_REPO = 'buminhealth/health';
+async function bmGhTree(){
+  var r = await fetch('https://api.github.com/repos/' + BM_GH_REPO + '/git/trees/main?recursive=1', { cache: 'no-store' });
+  if(!r.ok) throw new Error('저장소 목록을 읽지 못했습니다 (HTTP ' + r.status + ')');
+  var j = await r.json();
+  return { sha: j.sha, files: (j.tree || []).filter(function(t){ return t.type === 'blob'; }) };
+}
+async function bmDriveNames(folder){
+  var x = await BMAUTH.post('fs.get', { path: folder });
+  if(!x.success || x.type !== 'dir') return {};
+  var m = {}; (x.entries || []).forEach(function(e){ if(e.type === 'file') m[e.name] = e.size || 1; }); return m;
+}
+async function bmGhAudit(el, btn){
+  if(!el) return;
+  el.textContent = '저장소와 드라이브를 견주는 중…';
+  try{
+    var t = await bmGhTree();
+    var pdfs = t.files.filter(function(f){ return /^(교육일지|보호구)\/.+\.pdf$/i.test(f.path); });
+    var byDir = {};
+    pdfs.forEach(function(f){ var d = f.path.slice(0, f.path.lastIndexOf('/')); (byDir[d] = byDir[d] || []).push(f); });
+    var missing = [], dirs = Object.keys(byDir);
+    for(var i = 0; i < dirs.length; i++){
+      el.textContent = '드라이브 폴더 확인 ' + (i + 1) + ' / ' + dirs.length + ' — ' + dirs[i];
+      var have = await bmDriveNames(dirs[i]);
+      byDir[dirs[i]].forEach(function(f){ if(!have[f.path.split('/').pop()]) missing.push(f); });
+    }
+    // 기록 json 건수 비교 (알림만)
+    var recNote = [];
+    for(var k = 0; k < 2; k++){
+      var path = k ? 'records/ppe_records.json' : 'records/edu_records.json';
+      try{
+        var gr = await fetch('https://raw.githubusercontent.com/' + BM_GH_REPO + '/' + t.sha + '/' + path, { cache: 'no-store' });
+        if(!gr.ok) continue;
+        var gj = await gr.json(); var gl = Array.isArray(gj) ? gj : (gj.records || []);
+        var dx = await BMAUTH.post('fs.get', { path: path }); var dl = [];
+        if(dx.success && dx.content){ var dj = JSON.parse(decodeURIComponent(escape(atob(dx.content)))); dl = Array.isArray(dj) ? dj : (dj.records || []); }
+        var ids = {}; dl.forEach(function(r){ if(r && r.recordId) ids[r.recordId] = 1; });
+        var only = gl.filter(function(r){ return r && r.recordId && !ids[r.recordId]; }).length;
+        recNote.push((k ? '보호구' : '교육') + ' 기록: 저장소 ' + gl.length + '건 · 드라이브 ' + dl.length + '건' + (only ? ' · <b>저장소에만 ' + only + '건</b> (지운 기록일 수 있음 — 보관소에 그대로 남김)' : ' · 모두 드라이브에 있음'));
+      }catch(_){}
+    }
+    window._bmGhMissing = missing;
+    var mb = function(b){ return (b / 1048576).toFixed(1) + 'MB'; };
+    el.innerHTML = '저장소 PDF ' + pdfs.length + '개 중 <b>드라이브에 없는 파일 ' + missing.length + '개</b>' + (missing.length ? ' (' + mb(missing.reduce(function(a, f){ return a + (f.size || 0); }, 0)) + ')' : ' — 모두 드라이브에 있습니다') +
+      (missing.length ? '<br>' + missing.slice(0, 5).map(function(f){ return bmGhEsc(f.path.split('/').slice(0, 2).join('/')) + ' …'; }).join('<br>') + (missing.length > 5 ? '<br>외 ' + (missing.length - 5) + '개' : '') : '') +
+      (recNote.length ? '<br>' + recNote.join('<br>') : '');
+    if(btn) btn.disabled = !missing.length;
+  }catch(e){ el.innerHTML = '<span class="cfg-bad">' + bmGhEsc(e.message) + '</span>'; }
+}
+async function bmGhMove(el, btn){
+  var list = window._bmGhMissing || []; if(!list.length) return;
+  if(!confirm('드라이브에 없는 PDF ' + list.length + '개를 저장소에서 받아 드라이브로 복사합니다. (저장소 파일은 그대로)')) return;
+  if(btn) btn.disabled = true;
+  var t = await bmGhTree(), ok = 0, fail = [];
+  for(var i = 0; i < list.length; i++){
+    var f = list[i];
+    el.textContent = (i + 1) + ' / ' + list.length + ' 복사 중…';
+    try{
+      var r = await fetch('https://raw.githubusercontent.com/' + BM_GH_REPO + '/' + t.sha + '/' + f.path.split('/').map(encodeURIComponent).join('/'), { cache: 'no-store' });
+      if(!r.ok) throw new Error('받기 실패 ' + r.status);
+      var buf = new Uint8Array(await r.arrayBuffer()), bin = '';
+      for(var j = 0; j < buf.length; j += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(j, j + 0x8000));
+      var api = 'https://api.github.com/repos/' + BM_GH_REPO + '/contents/' + f.path.split('/').map(encodeURIComponent).join('/');
+      var put = await fetch(api, { method: 'PUT', body: JSON.stringify({ message: '옛 PDF 드라이브로 옮김', content: btoa(bin) }) });
+      if(!put.ok) throw new Error('저장 실패 ' + put.status);
+      ok++;
+    }catch(e){ fail.push(f.path.split('/').slice(0, 2).join('/') + ' · ' + e.message); }
+  }
+  el.innerHTML = '<span class="cfg-ok">완료</span> 드라이브로 복사 ' + ok + '개' + (fail.length ? '<br><span class="cfg-bad">실패 ' + fail.length + '개</span><br>' + fail.slice(0, 5).map(esc).join('<br>') + '<br>[드라이브에 없는 PDF 찾기]를 다시 눌러 남은 파일을 확인하세요.' : '<br>[드라이브에 없는 PDF 찾기]를 다시 눌러 0개인지 확인하세요.');
+  window._bmGhMissing = [];
+}
+</script>
 <style id="bm-v218">
 :root{--v8-ink:#1E1E1C;--v8-ink2:#45423D;--v8-mute:#6B675F;--v8-line:#E4E2DC;--v8-line2:#ECEBE7;--v8-g:#67AF28;--v8-gt:#3F7518;--v8-gbg:#F3F9ED;--v8-red:#A3302A}
 body{font-feature-settings:"tnum" 1}
