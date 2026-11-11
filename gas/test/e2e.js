@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.10 \(2026-11-04\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.13 \(2026-11-11\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
   check('서버 버전 비교: v21.9 서버는 v21.10 앱에서 배포 필요로 (글자 순서 아님)', await page.evaluate(() => { try { return bmVerLess('v21.9 (2026-11-03)', 'v21.10') && !bmVerLess('v21.10 (2026-11-04)', 'v21.10') && !bmVerLess('v22.0', 'v21.10'); } catch (e) { return String(e); } }) === true);
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
@@ -505,7 +505,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.10'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.13'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -1104,6 +1104,39 @@ function check(name, cond, extra) {
   })()`, g.ctx);
   check('인사 사이트 합치기: 3시간 전 아침 자동 동기화 결과는 다시 쓰지 않고 새로 읽음 · 10분 안이면 재사용', !cacheAge.oldCached && cacheAge.oldRows > 1 && cacheAge.newCached, cacheAge);
   vm.runInContext('hrCacheClear_()', g.ctx);
+  // v21.13 월별 백업: 엑셀(요약 · 부서별 · 대장) + PDF 원본 새 파일만 · 메일 첨부 · 매월 1일 예약 · 6분 넘으면 이어서
+  {
+    const R = code => vm.runInContext(code, g.ctx);
+    R(`fsPut_({ path: '교육일지/2026-11/MSDS교육일지-61병동-백업시험-2026-11-02.pdf', content: Utilities.base64Encode('%PDF a') }, { role: 'admin' });
+       fsPut_({ path: '보호구/2026-11/보호구지급수령증-61병동-백업시험-2026-11-03.pdf', content: Utilities.base64Encode('%PDF b') }, { role: 'admin' });`);
+    const mail0 = g.ctx.MailApp.sent.length;
+    const r1 = await page.evaluate(() => BMAUTH.post('backup.run', {}));
+    const ss = g.ctx.SpreadsheetApp.created.slice(-1)[0];
+    const names = ss.sheets.map(x => x.name);
+    const dept61 = ss.sheets.find(x => x.name === '61병동');
+    const xl = R(`(function(){ const f = backupSub_(backupRoot_(), '엑셀 (매월)'); const it = f.getFiles(); const a = []; while (it.hasNext()) a.push(it.next().getName()); return a; })()`);
+    const pdfN = R(`(function(){ let n = 0; const walk = d => { const fi = d.getFiles(); while (fi.hasNext()) { fi.next(); n++; } const si = d.getFolders(); while (si.hasNext()) walk(si.next()); }; walk(backupSub_(backupRoot_(), '교육일지 · 보호구 원본')); return n; })()`);
+    const mail = g.ctx.MailApp.sent.slice(mail0).pop();
+    const r2 = await page.evaluate(() => BMAUTH.post('backup.run', {}));
+    const pdfN2 = R(`(function(){ let n = 0; const walk = d => { const fi = d.getFiles(); while (fi.hasNext()) { fi.next(); n++; } const si = d.getFolders(); while (si.hasNext()) walk(si.next()); }; walk(backupSub_(backupRoot_(), '교육일지 · 보호구 원본')); return n; })()`);
+    check('월별 백업: 엑셀(요약 · 부서별 직원 · 교육이력대장, 빈 기본 시트 삭제) · 사번 글자 · xlsx 저장 · PDF 원본 복사 · 엑셀 첨부 메일', r1.success && names[0] === '요약' && names.includes('61병동') && names.includes('교육이력대장') && !names.includes('시트1') && ss.trashed &&
+      dept61.rows[0].join() === '사번,이름,직종,입사일,재직,교육,상태,최근 교육일,기한,비고' && /^'/.test(String(dept61.rows[1][0])) && xl.length === 1 && /^교육현황_\d{4}-\d{2}-\d{2}\.xlsx$/.test(xl[0]) && pdfN >= 2 && r1.last.copied >= 2 && r1.last.done && mail && /월별 백업 완료/.test(mail.subject) && mail.attachments && mail.attachments.length === 1, { names, r1: r1.last, xl, pdfN, mail: mail && mail.subject });
+    check('월별 백업 두 번째: PDF는 새 파일만(0개 추가, 지우지 않음) · 엑셀은 같은 날이면 한 파일 더', r2.success && r2.last.copied === 0 && pdfN2 === pdfN, [r2.last, pdfN2]);
+    const sc = await page.evaluate(() => BMAUTH.post('backup.schedule', { on: true }));
+    const trig = g.ctx.ScriptApp.triggers.find(t => t.fn === 'monthlyBackup');
+    const st = await page.evaluate(() => BMAUTH.post('backup.status', {}));
+    const deny = await page.evaluate(async () => { const r = await BMAUTH.post('login', { kind: 'dept', dept: '61병동', pin: '4321' }); return (await BMAUTH.post('backup.run', { t: r.token })).status; });
+    check('월별 백업 예약: 매월 1일 5시 · 상태에 켜짐 · 마지막 백업 · 폴더 주소 · 부서 계정은 못 씀', sc.success && sc.on && trig && trig.day === 1 && trig.hour === 5 && st.on && st.last && st.last.excel && /drive/.test(st.folderUrl) && deny === 403, [sc, st.last && st.last.excel, deny]);
+    // 6분 제한: 시간이 다 되면 멈추고 2분 뒤 이어서 → 이어서 끝나면 메일
+    R(`fsPut_({ path: '교육일지/2026-11/MSDS교육일지-61병동-이어서-2026-11-04.pdf', content: Utilities.base64Encode('%PDF c') }, { role: 'admin' });`);
+    const cut = R(`backupPdfs_(Date.now() - 1)`);
+    R(`backupSave_(Object.assign(backupLast_(), { done: false })); backupResumeTrigger_(true);`);
+    const pend = g.ctx.ScriptApp.triggers.some(t => t.fn === 'monthlyBackupResume');
+    const mail1 = g.ctx.MailApp.sent.length;
+    const res = R(`monthlyBackupResume()`);
+    check('월별 백업 이어서: 시간 넘으면 멈춤 → 예약 1회 → 이어서 1개 복사 · 끝나면 예약 지움 · 메일', cut.done === false && pend && res.done && res.copied >= 1 && !g.ctx.ScriptApp.triggers.some(t => t.fn === 'monthlyBackupResume') && g.ctx.MailApp.sent.length === mail1 + 1, [cut, res]);
+    await page.evaluate(() => BMAUTH.post('backup.schedule', { on: false }));
+  }
   const mergeWarn = await page.evaluate(() => BMAUTH.post('emp.merge', { dry: true, fresh: true }));
   const mergeAuto = await page.evaluate(() => BMAUTH.post('emp.merge', { dry: true, force: true, fresh: true }));
   check('인사 사이트와 합치기: 인원이 크게 줄면 경고 후 멈춤 → 확인하면 미리보기', !mergeWarn.success && mergeWarn.warnings.length > 0 && mergeAuto.success && mergeAuto.dry && mergeAuto.hrCount > 0 && Array.isArray(mergeAuto.missingNo), [mergeWarn.error, mergeAuto.error || mergeAuto.hrCount]);

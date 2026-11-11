@@ -5212,7 +5212,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.10';
+  var SERVER_EXPECT = 'v21.13';
   // v21.10: 'v21.9' < 'v21.10'을 글자 순서가 아니라 숫자로 비교
   function bmVerLess(a, b){
     var p = function(v){ return (String(v).match(/v?(\d+(?:\.\d+)*)/) || [,'0'])[1].split('.').map(Number); };
@@ -5412,6 +5412,12 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
         '<p>공개 깃허브 저장소(buminhealth/health)에 남은 예전 교육일지 · 보호구 수령증 PDF 중 드라이브(서버)에 없는 파일을 찾아 드라이브로 복사합니다. 저장소 파일은 지우지 않습니다. 저장소를 비공개 보관소로 옮기기 전에 한 번 실행하세요.</p>' +
         '<span style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="cfg-b" data-c="ghfind">드라이브에 없는 PDF 찾기</button><button type="button" class="cfg-b" data-c="ghmove" id="cfg-gh-move" disabled>드라이브로 복사</button></span>' +
         '<div id="cfg-gh" style="font-size:12px;margin-top:6px;line-height:1.6"></div></section>' +
+      // v21.13 월별 백업 — 엑셀(부서별 명단 · 입사일 · 교육일 · 이수) + 일지 PDF 원본을 매월 드라이브 백업 폴더에 → PC는 구글 드라이브 데스크톱 앱으로 자동 저장
+      '<section class="cfg-c"><h4>월별 백업 (내 PC 자동 저장)</h4>' +
+        '<p>매월 1일 새벽 5시에 <b>엑셀</b>(요약 · 부서별 직원 명단 · 입사일 · 최근 교육일 · 이수 상태 · 교육이력대장)을 새로 만들고, <b>교육일지 · 보호구 PDF 원본</b> 중 새 파일을 백업 폴더에 더합니다. 백업 폴더에서는 아무것도 지우지 않습니다. 끝나면 엑셀을 메일로도 보냅니다. PC에 <b>구글 드라이브 데스크톱</b>을 설치해 두면 이 폴더가 PC에 자동으로 저장됩니다.</p>' +
+        '<dl id="cfg-bk-st"><dt>상태</dt><dd>확인 중…</dd></dl>' +
+        '<span style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="cfg-b" data-c="bkrun">지금 백업</button><button type="button" class="cfg-b" data-c="bkon" id="cfg-bk-on">매월 자동 백업 켜기</button><button type="button" class="cfg-b" data-c="bkopen" id="cfg-bk-open" disabled>백업 폴더 열기</button><button type="button" class="cfg-b" data-c="bkhelp">PC 설정 방법</button></span>' +
+        '<div id="cfg-bk" style="font-size:12px;margin-top:6px;line-height:1.6"></div></section>' +
     '</div>';
     var act = { lawoc: async function(){
                   var v = document.getElementById('cfg-law-oc').value.trim();
@@ -5488,9 +5494,43 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
                   window._bmPdfBig = [];
                 },
                 ghfind: async function(){ await bmGhAudit(document.getElementById('cfg-gh'), document.getElementById('cfg-gh-move')); },
+                bkrun: async function(){
+                  var el = document.getElementById('cfg-bk'); el.textContent = '백업하는 중… (엑셀을 만들고 새 PDF를 복사합니다. 처음에는 몇 분 걸립니다)';
+                  var x = await post('backup.run', {});
+                  if(!x.success){ el.innerHTML = '<span class="cfg-bad">' + esc(/unknown op/.test(x.error || '') ? '서버 v21.13 이상 필요 (Code.gs 배포)' : (x.error || '실패')) + '</span>'; return; }
+                  el.innerHTML = '<span class="cfg-ok">엑셀 저장: ' + esc(x.last.excel) + '</span> · PDF 새로 복사 ' + x.last.copied + '개' + (x.last.done ? ' · 메일 보냄' : ' · <b>PDF가 많아 2분 뒤 서버가 이어서 복사합니다</b>');
+                  bkStatus();
+                },
+                bkon: async function(){
+                  var on = document.getElementById('cfg-bk-on').getAttribute('data-on') !== '1';
+                  var x = await post('backup.schedule', { on: on });
+                  document.getElementById('cfg-bk').innerHTML = x.success ? '<span class="cfg-ok">매월 자동 백업을 ' + (x.on ? '켰습니다 (매월 1일 새벽 5시)' : '껐습니다') + '</span>' : '<span class="cfg-bad">' + esc(x.error || '실패') + '</span>';
+                  bkStatus();
+                },
+                bkopen: function(){ var u = document.getElementById('cfg-bk-open').getAttribute('data-url'); if(u) window.open(u, '_blank'); },
+                bkhelp: function(){
+                  document.getElementById('cfg-bk').innerHTML = '<ol style="margin:4px 0 0;padding-left:18px">' +
+                    '<li>PC에 <b>구글 드라이브 데스크톱</b>(Google Drive for desktop)을 설치하고, 이 시스템 서버를 만든 구글 계정(구글 시트 소유자)으로 로그인합니다.</li>' +
+                    '<li>드라이브 설정 → <b>내 드라이브 → 파일 미러링</b>을 고릅니다. (스트리밍이면 백업 폴더를 오른쪽 클릭 → <b>오프라인으로 사용 가능</b>)</li>' +
+                    '<li>PC의 드라이브(G:) 또는 내 드라이브 폴더에 「부민보건관리_월별백업 (비공개)」가 보이면 끝입니다. 매월 1일 뒤 PC가 켜지면 새 엑셀 · PDF가 자동으로 내려옵니다.</li>' +
+                    '<li>보안: 그 PC는 윈도우 로그인 비밀번호를 쓰고 혼자 쓰는 업무 PC여야 합니다 (직원 서명 · 명단이 들어 있음).</li></ol>';
+                },
                 ghmove: async function(){ await bmGhMove(document.getElementById('cfg-gh'), document.getElementById('cfg-gh-move')); },
                 sheet: function(){ window.open('https://docs.google.com/spreadsheets/d/1kFRIyXZX8aTgQR2w5MC0Ty66B9ltKrWj3Wz96D0mKIs/edit', '_blank'); }, logout: function(){ adminLogout(); } };
     host.querySelectorAll('[data-c]').forEach(function(b){ b.onclick = function(){ try{ act[b.getAttribute('data-c')](); }catch(e){ console.warn(e); } }; });
+    // v21.13 월별 백업 상태
+    async function bkStatus(){
+      var dl = document.getElementById('cfg-bk-st'); if(!dl) return;
+      var x = await post('backup.status', {});
+      if(!x.success){ dl.innerHTML = '<dt>상태</dt><dd class="cfg-bad">' + esc(/unknown op/.test(x.error || '') ? '서버 v21.13 이상 필요 (Code.gs 배포)' : (x.error || '확인 실패')) + '</dd>'; return; }
+      var L = x.last || {};
+      dl.innerHTML = '<dt>매월 자동 백업</dt><dd>' + (x.on ? '<span class="cfg-ok">켜짐</span> (매월 1일 새벽 5시)' : '<span class="cfg-bad">꺼짐</span>') + (x.pending ? ' · PDF 이어서 복사 중' : '') + '</dd>' +
+        '<dt>마지막 백업</dt><dd>' + (L.at ? esc(String(L.at).replace('T', ' ').slice(0, 16)) + ' · ' + esc(L.excel || '') + ' · PDF ' + (L.copied || 0) + '개' + (L.error ? ' · <span class="cfg-bad">' + esc(L.error) + '</span>' : '') : '아직 없음') + '</dd>' +
+        '<dt>백업 폴더</dt><dd>' + esc(x.folderName || '') + '</dd>';
+      var on = document.getElementById('cfg-bk-on'); if(on){ on.textContent = x.on ? '매월 자동 백업 끄기' : '매월 자동 백업 켜기'; on.setAttribute('data-on', x.on ? '1' : '0'); }
+      var op = document.getElementById('cfg-bk-open'); if(op && x.folderUrl){ op.disabled = false; op.setAttribute('data-url', x.folderUrl); }
+    }
+    bkStatus();
     var ocIn = document.getElementById('cfg-law-oc'); if(ocIn) ocIn.onkeydown = function(e){ if(e.key === 'Enter') act.lawoc(); };
     // v21.2 AI 도우미 질문 · 답 (시트 AI도우미_FAQ) — 찾기 · 추가 · 삭제 · 빠른 질문 · 저장
     var faqRows = [], faqDefaults = [], faqFilter = '';

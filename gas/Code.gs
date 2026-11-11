@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.10 (2026-11-04)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.13 (2026-11-11)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -49,6 +49,8 @@ function onOpen() {
     .addSeparator()
     .addItem('⑥ AI(Gemini) 키 저장', 'saveGeminiKey')
     .addItem('⑦ 안전보건공단 API 인증키 저장', 'saveKoshaKey')
+    .addSeparator()
+    .addItem('⑧ 월별 백업 지금 실행', 'monthlyBackup')
     .addToUi();
 }
 
@@ -172,6 +174,8 @@ function doPost(e) {
       case 'fs.put':    result = requireLogin_(s) || fsPut_(req, s); break;
       case 'fs.trash':  result = requireAdmin_(s) || fsTrash_(req); break;   // v21.8 수정 PDF로 바꾼 뒤 예전 PDF 휴지통으로
       case 'rec.has':   result = requireLogin_(s) || recHas_(req, s); break;
+      case 'backup.status': case 'backup.run': case 'backup.schedule':
+                        result = requireAdmin_(s) || backupOp_(req); break;
       case 'emp.status': case 'emp.sync': case 'emp.merge': case 'hr.fetch':
       case 'nh.list': case 'nh.answer': case 'nh.resend': case 'nh.run': case 'nh.detect': case 'nh.add':
                         result = staffOp_(req, s); break;
@@ -4316,4 +4320,161 @@ function pdfBig_(req) {
   ['교육일지', '보호구', '화학물질'].forEach(top => getFolders_([top]).forEach(f => walk(f, top, 1)));
   out.sort((a, b) => b.size - a.size);
   return { success: true, data: out, count: count, totalBytes: total, bigBytes: out.reduce((a, x) => a + x.size, 0) };
+}
+
+
+// ════════════════════════════════════════════════════════════════
+// v21.13 월별 백업 — 시스템이 모두 멈춰도 교육 근거가 남도록
+//  · 매월 1일 새벽(자동) 또는 [지금 백업]: 드라이브 '부민보건관리_월별백업 (비공개)' 폴더에
+//    ① 엑셀 교육현황_YYYY-MM-DD.xlsx (요약 · 부서별 직원 명단 · 교육이력대장 · 부서이동기록) — 매달 새 파일, 지우지 않음
+//    ② 교육일지 · 보호구 PDF 원본 — 새로 생긴 파일만 더함 (지우거나 덮어쓰지 않음, 원본에서 지워져도 백업에는 남음)
+//  · PC: '구글 드라이브 데스크톱' 앱이 이 폴더를 PC로 내려받음 (미러링) → 인터넷 · 서버가 멈춰도 PC에 남음
+//  · 끝나면 보건관리자에게 메일 (엑셀 첨부 = 두 번째 보관처)
+//  · Apps Script 한 번 실행 6분 제한: PDF가 많으면 4분 30초마다 끊고 2분 뒤 이어서 (예약 1회짜리)
+// ════════════════════════════════════════════════════════════════
+const BACKUP_ROOT_NAME = '부민보건관리_월별백업 (비공개)';
+const BACKUP_SLICE_MS = 270000;
+function backupRoot_() {
+  const id = PROPS.getProperty('BACKUP_ROOT_ID');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (_) {} }
+  const f = DriveApp.createFolder(BACKUP_ROOT_NAME);
+  PROPS.setProperty('BACKUP_ROOT_ID', f.getId());
+  return f;
+}
+function backupSub_(parent, name) {
+  const it = parent.getFoldersByName(name);
+  return it.hasNext() ? it.next() : parent.createFolder(name);
+}
+// 엑셀 시트 이름: 31자 · [ ] : * ? / \\ 금지 · 겹치면 (2)
+function xlsxSheetName_(name, used) {
+  let base = String(name || '부서없음').replace(/[\[\]:*?\/\\]/g, ' ').trim().slice(0, 28) || '부서없음', n = base, i = 2;
+  while (used[n]) n = base + '(' + (i++) + ')';
+  used[n] = 1;
+  return n;
+}
+function backupExcel_(today) {
+  const st = eduStatus_({ role: 'admin' });
+  const ss = SpreadsheetApp.create('교육현황_' + today);
+  const first = ss.getSheets()[0];
+  const used = {};
+  const put = (name, rows) => {
+    const sh = ss.insertSheet(xlsxSheetName_(name, used));
+    if (rows.length && rows[0].length) sh.getRange(1, 1, rows.length, rows[0].length).setValues(rows.map(r => r.map(v => v == null ? '' : v)));
+    sh.setFrozenRows(1);
+    return sh;
+  };
+  const sum = [['부서', '교육', '직원(휴직 포함)', '대상', '이수', '진행중', '미이수', '기한 초과', '제외', '백업일']];
+  (st.depts || []).forEach(d => sum.push([d.dept, d.need === '특별' ? '특별안전보건' : 'MSDS', d.staff != null ? d.staff : '', d.total || 0, d.done || 0, d.progress || 0, d.missing || 0, d.overdue || 0, d.excluded || 0, today]));
+  put('요약', sum);
+  const head = ['사번', '이름', '직종', '입사일', '재직', '교육', '상태', '최근 교육일', '기한', '비고'];
+  const byDept = {};
+  (st.people || []).forEach(p => (byDept[p.dept] = byDept[p.dept] || []).push(p));
+  Object.keys(byDept).sort((a, b) => a.localeCompare(b, 'ko')).forEach(dept => {
+    const rows = [head].concat(byDept[dept].sort((a, b) => String(a.name).localeCompare(String(b.name), 'ko')).map(p => [
+      "'" + (p.no || ''), p.name || '', p.job || '', p.joinDate || '', p.onLeave ? '휴직' : '재직', p.need === '특별' ? '특별안전보건' : 'MSDS',
+      p.status || '', p.lastEdu || '', p.deadline || '',
+      [p.excluded ? '제외: ' + (p.excluded.reason || '') : '', p.moved ? '이전 부서 기록: ' + p.moved : '', (p.manualRows || []).length ? '수기 기록 ' + p.manualRows.length + '건' : ''].filter(Boolean).join(' · ')]));
+    put(dept, rows);
+  });
+  ['교육이력대장', '보호구이력대장', '부서이동기록'].forEach(n => {
+    const src = SS.getSheetByName(n);
+    if (!src || src.getLastRow() < 1) return;
+    put(n, src.getDataRange().getDisplayValues());
+  });
+  try { ss.deleteSheet(first); } catch (_) {}
+  SpreadsheetApp.flush();
+  const res = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=xlsx',
+    { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) { try { DriveApp.getFileById(ss.getId()).setTrashed(true); } catch (_) {} throw new Error('엑셀 변환 실패 (HTTP ' + res.getResponseCode() + ')'); }
+  const blob = res.getBlob().setName('교육현황_' + today + '.xlsx');
+  const file = backupSub_(backupRoot_(), '엑셀 (매월)').createFile(blob);
+  try { DriveApp.getFileById(ss.getId()).setTrashed(true); } catch (_) {}
+  return { file: file, blob: blob, depts: (st.depts || []).length, people: (st.people || []).length };
+}
+// 원본 폴더(교육일지 · 보호구) → 백업 폴더로 새 파일만 복사. 시간이 다 되면 done:false
+function backupPdfs_(deadline) {
+  const dstRoot = backupSub_(backupRoot_(), '교육일지 · 보호구 원본');
+  const out = { copied: 0, kept: 0, done: true };
+  const walk = (src, dst) => {
+    const have = {};
+    const di = dst.getFiles(); while (di.hasNext()) { const f = di.next(); have[f.getName()] = 1; }
+    const fi = src.getFiles();
+    while (fi.hasNext()) {
+      const f = fi.next();
+      if (have[f.getName()]) { out.kept++; continue; }
+      if (Date.now() > deadline) { out.done = false; return; }
+      f.makeCopy(f.getName(), dst); have[f.getName()] = 1; out.copied++;
+    }
+    const si = src.getFolders();
+    while (si.hasNext() && out.done) { const sub = si.next(); walk(sub, backupSub_(dst, sub.getName())); }
+  };
+  ['교육일지', '보호구'].forEach(top => { if (!out.done) return; getFolders_([top]).forEach(src => { if (out.done) walk(src, backupSub_(dstRoot, top)); }); });
+  return out;
+}
+function backupMail_(r) {
+  const to = sysCfg_().adminEmail; if (!to) return false;
+  const body = '<p>' + r.at + ' 월별 백업을 마쳤습니다.</p><ul>' +
+    '<li>엑셀: ' + (r.excel || '-') + ' (부서 ' + (r.depts || 0) + '곳 · 직원 ' + (r.people || 0) + '명) — 이 메일에 첨부</li>' +
+    '<li>PDF 원본: 이번에 새로 복사 ' + r.copied + '개</li></ul>' +
+    '<p>드라이브 폴더 「' + BACKUP_ROOT_NAME + '」에 쌓이며, PC의 구글 드라이브 데스크톱 앱이 같은 내용을 PC에 내려받습니다.</p>';
+  const o = { to: to, subject: '[보건관리] 월별 백업 완료 ' + r.at.slice(0, 10), htmlBody: body };
+  if (r.blob) o.attachments = [r.blob];
+  MailApp.sendEmail(o);
+  return true;
+}
+function backupSave_(o) { setAdminCfg({ key: 'backup_last', value: JSON.stringify(o) }); }
+function backupResumeTrigger_(on) {
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'monthlyBackupResume').forEach(t => ScriptApp.deleteTrigger(t));
+  if (on) ScriptApp.newTrigger('monthlyBackupResume').timeBased().after(2 * 60 * 1000).create();
+}
+// 매월 1일 자동 실행 · 시트 메뉴 ⑧ · 관리자 [지금 백업]
+function monthlyBackup() {
+  const t0 = Date.now(), at = nowKst_();
+  const r = { at: at, excel: '', depts: 0, people: 0, copied: 0, done: false, error: '' };
+  try {
+    const x = backupExcel_(at.slice(0, 10));
+    Object.assign(r, { excel: x.file.getName(), depts: x.depts, people: x.people });
+    r.blob = x.blob;
+    const pd = backupPdfs_(t0 + BACKUP_SLICE_MS);
+    r.copied = pd.copied; r.done = pd.done;
+    if (pd.done) { try { backupMail_(r); } catch (_) {} }
+    backupResumeTrigger_(!pd.done);
+  } catch (e) { r.error = String(e.message || e); }
+  delete r.blob;
+  backupSave_(r);
+  return r;
+}
+// PDF가 많아 6분 안에 못 끝난 경우 이어서 (엑셀은 다시 만들지 않음)
+function monthlyBackupResume() {
+  const last = backupLast_();
+  const pd = backupPdfs_(Date.now() + BACKUP_SLICE_MS);
+  last.copied = (last.copied || 0) + pd.copied; last.done = pd.done;
+  backupResumeTrigger_(!pd.done);
+  if (pd.done) {
+    try {
+      const it = backupSub_(backupRoot_(), '엑셀 (매월)').getFilesByName(last.excel || '');
+      if (it.hasNext()) last.blob = it.next().getBlob();
+      backupMail_(last);
+    } catch (_) {}
+  }
+  delete last.blob;
+  backupSave_(last);
+  return last;
+}
+function backupLast_() { try { return JSON.parse((getAdminCfg().data || {}).backup_last || '{}'); } catch (_) { return {}; } }
+function backupOp_(req) {
+  const monthlyOn = () => ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'monthlyBackup');
+  if (req.op === 'backup.schedule') {
+    ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'monthlyBackup').forEach(t => ScriptApp.deleteTrigger(t));
+    if (req.on) ScriptApp.newTrigger('monthlyBackup').timeBased().onMonthDay(1).atHour(5).inTimezone(TZ).create();
+    return { success: true, on: monthlyOn() };
+  }
+  if (req.op === 'backup.run') {
+    const r = monthlyBackup();
+    return r.error ? { success: false, error: r.error, last: r } : { success: true, last: r };
+  }
+  let url = '';
+  try { url = backupRoot_().getUrl(); } catch (_) {}
+  return { success: true, on: monthlyOn(), last: backupLast_(), folderUrl: url, folderName: BACKUP_ROOT_NAME,
+           pending: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'monthlyBackupResume') };
 }

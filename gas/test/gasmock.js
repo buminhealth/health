@@ -24,7 +24,9 @@ class DFile {
   getLastUpdated() { return this.updated; }
   getUrl() { return 'https://drive.google.com/file/d/' + this.id + '/view'; }
   setSharing(a, p) { this.sharing = a + '/' + p; }
+  makeCopy(name, folder) { const b = new Blob(this.blob.buf, this.blob.mime, name); return folder.createFile(b); }
 }
+const files = {};
 const folders = {};
 class DFolder {
   constructor(name, parent) { this.id = 'd' + (++idSeq); this.name = name; this.parent = parent; this.files = []; this.folders = []; folders[this.id] = this; }
@@ -36,7 +38,7 @@ class DFolder {
   getFiles() { return new Iter(this.files.filter(f => !f.trashed)); }
   createFile(a, content, mime) {
     const blob = a instanceof Blob ? a : new Blob(Buffer.from(content, 'utf8'), mime, a);
-    const f = new DFile(this, blob); this.files.push(f); return f;
+    const f = new DFile(this, blob); this.files.push(f); files[f.id] = f; return f;
   }
 }
 class Range {
@@ -76,11 +78,22 @@ function makeEnv() {
         insertSheet: n => (sheets[n] = new Sheet(n)),
       }),
       getUi: () => { throw new Error('no ui in test'); },
+      flush() {},
+      // 새 스프레드시트 (월별 백업 엑셀) — 시트 목록 · 삭제만
+      created: [],
+      create(name) {
+        const id = 'ss' + (++idSeq); const list = [new Sheet('시트1')];
+        const o = { id, name, getId: () => id, getSheets: () => list.slice(), insertSheet: n => { const sh = new Sheet(n); list.push(sh); return sh; },
+          deleteSheet: sh => { const i = list.indexOf(sh); if (i >= 0) list.splice(i, 1); }, sheets: list };
+        this.created.push(o); files[id] = { setTrashed(t) { o.trashed = t; } };
+        return o;
+      },
     },
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); } }) },
     CacheService: { getScriptCache: () => ({ get: k => (k in cache ? cache[k] : null), put: (k, v) => { cache[k] = String(v); }, remove: k => { delete cache[k]; } }) },
     LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => {} }) },
     DriveApp: { createFolder: n => root.createFolder(n), getFolderById: id => { if (!folders[id]) throw new Error('no folder'); return folders[id]; },
+                getFileById: id => { if (!files[id]) throw new Error('no file'); return files[id]; },
                 Access: { ANYONE_WITH_LINK: 'ANYONE_WITH_LINK' }, Permission: { VIEW: 'VIEW' } },
     MimeType: { PLAIN_TEXT: 'text/plain' },
     MailApp: { sent: [], sendEmail(o) { this.sent.push(o); } },
@@ -95,6 +108,8 @@ function makeEnv() {
         { '별표번호': '0022', '별표구분': '서식', '별표제목': '서식 22', '별표내용': 'x' }] } },
     UrlFetchApp: {
       fetch(u, opt) {
+        const ex = /docs\.google\.com\/spreadsheets\/d\/([^/]+)\/export\?format=xlsx/.exec(u);
+        if (ex) { this.exports = (this.exports || []).concat(ex[1]); return { getResponseCode: () => 200, getBlob: () => new Blob(Buffer.from('PK-xlsx-' + ex[1]), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') }; }
         const fb = this.__fb;
         fb.calls.push(u);
         const resp = (code, obj) => ({ getResponseCode: () => code, getContentText: () => JSON.stringify(obj) });
@@ -166,7 +181,13 @@ function makeEnv() {
         return resp(404, {});
       },
     },
-    ScriptApp: { getProjectTriggers: () => [] },
+    // 예약 실행: newTrigger(fn).timeBased()…create() → triggers 목록
+    ScriptApp: (() => {
+      const triggers = [];
+      const builder = fn => { const t = { fn, getHandlerFunction: () => fn }; const b = { timeBased: () => b, onMonthDay: d => { t.day = d; return b; }, atHour: h => { t.hour = h; return b; },
+        inTimezone: () => b, everyDays: () => b, after: ms => { t.after = ms; return b; }, create: () => { triggers.push(t); return t; } }; return b; };
+      return { triggers, getProjectTriggers: () => triggers.slice(), newTrigger: builder, deleteTrigger: t => { const i = triggers.indexOf(t); if (i >= 0) triggers.splice(i, 1); }, getOAuthToken: () => 'tok' };
+    })(),
     ContentService: {
       MimeType: { JAVASCRIPT: 'js', JSON: 'json' },
       createTextOutput: t => ({ text: t, setMimeType() { return this; } }),
