@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.14 (2026-11-12)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.15 (2026-11-12)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -949,6 +949,7 @@ function getChemicals() {
       emergencyParsed: { skin_eye: skinEyeVal || '', inhalation: inhalVal || '', ingestion: ingVal || '' },
       pdfUrl:        fixUrl(get(row, 'pdfUrl', 'PDF', 'PDF링크', 'MSDS링크', 'pdf')),
       iconUrl:       iconUrlStr,
+      signalWord:    get(row, 'signalWord', '신호어'),
       icons:         iconUrlStr ? iconUrlStr.split(',').map(part => {
                        const pts = part.trim().split('|');
                        return { url: fixUrl(pts[0] ? pts[0].trim() : ''), label: pts[1] ? pts[1].trim() : '' };
@@ -2713,13 +2714,49 @@ const AI_PROMPT = [
   '문서에 없는 값은 빈 문자열로 두고 추측하지 마라. CAS 번호는 문서에 적힌 그대로 옮겨라(영업비밀이면 "영업비밀").',
   '함유량은 문서 표기 그대로(예: "1~5", "<1", "30-40").',
   '{"product":{"name":"제품명","manufacturer":"제조사 또는 공급자","usage":"권고 용도","signalWord":"신호어(위험/경고)",',
-  '"pictograms":["그림문자 이름(한국어: 폭발성, 인화성, 산화성, 고압가스, 부식성, 급성독성, 경고, 호흡기과민성, 수생환경유해성, 발암성 등)"],',
+  '"pictograms":["MSDS 2번(유해성 · 위험성)의 그림문자를 아래 GHS 코드로만: GHS01 폭발성(터지는 폭탄), GHS02 인화성(불꽃), GHS03 산화성(원 위의 불꽃), GHS04 고압가스(가스 실린더), GHS05 부식성(손 · 금속이 녹음), GHS06 급성독성(해골), GHS07 경고(느낌표), GHS08 건강유해성(사람 가슴 별), GHS09 수생환경유해성(죽은 나무 · 물고기). 문서에 있는 그림만, 예: [\\"GHS02\\",\\"GHS07\\"]"],',
   '"emergency":{"eye":"4번 눈에 들어갔을 때","skin":"피부에 접촉했을 때","inhalation":"흡입했을 때","ingestion":"먹었을 때"}},',
   '"components":[{"name":"구성성분명","cas":"CAS 번호","amount":"함유량(%)",',
   '"reg15":{"workEnv":"15번 법적규제에서 작업환경측정 대상 여부와 주기(예: 6개월, 해당없음)","healthCheck":"특수건강진단 대상 여부와 주기(예: 12개월, 해당없음)",',
   '"managed":"관리대상유해물질 해당 여부(해당/해당없음)","special":"특별관리물질 해당 여부(해당/해당없음)"}}],',
   '"warnings":["추출이 불확실한 부분"]}'
 ].join('\n');
+
+// ════════════════════════════════════════════════════════════════
+// v21.15 GHS 그림문자 9종 표준표 — 새로 승인하는 MSDS부터 (기존 시트 줄은 그대로)
+//  · AI는 GHS 코드로 답하고, 직접 고친 이름(인화성액체 · 피부부식성 · 환경유해성 …)도 표준 이름으로 맞춤
+//  · 그림은 지금 시트에서 쓰는 드라이브 그림 파일 · 폭발성은 그림이 없어 관리자설정 'GHS01그림주소'에 넣으면 사용 (없으면 화면에 글자 표시)
+// ════════════════════════════════════════════════════════════════
+const GHS_STD = [
+  { code: 'GHS01', name: '폭발성', id: '', alias: ['폭발', '폭탄', '자기반응성', '유기과산화물', '불안정폭발물'] },
+  { code: 'GHS02', name: '인화성', id: '1C0bts4wC2wkgD3rr9T0fw8aLKiEU45rx', alias: ['불꽃', '인화성액체', '인화성고체', '인화성가스', '인화성에어로졸', '자연발화성', '물반응성', '자기발열성'] },
+  { code: 'GHS03', name: '산화성', id: '15j8jY7yAmcnoBP423thC6eFnkgopZ-gq', alias: ['산화성액체', '산화성고체', '산화성가스', '원위의불꽃'] },
+  { code: 'GHS04', name: '고압가스', id: '1Ji04sVRENXsZwkARsSQWum3r57jJUCPe', alias: ['가스실린더', '압축가스', '액화가스', '용해가스'] },
+  { code: 'GHS05', name: '부식성', id: '1X8qLeNaNf8SIvWXPlGb1D1dSXTZB63Vh', alias: ['피부부식성', '금속부식성', '금속피부부식성', '피부또는금속부식성', '심한눈손상', '눈손상', '심한눈손상성'] },
+  { code: 'GHS06', name: '급성독성', id: '1r1ehmbJ-EzShwiF-oLNw-pAb2mglotMy', alias: ['해골', '흡입독성', '급성독성물질', '경구독성', '경피독성'] },
+  { code: 'GHS07', name: '경고', id: '1_EAoAE4_UhLAGtjvelobhkObfI_R0tcv', alias: ['느낌표', '피부과민성', '피부자극성', '눈자극성', '자극성', '마취작용', '오존층유해성'] },
+  { code: 'GHS08', name: '건강유해성', id: '11Fy3UgwWs0iVlhKlDYlF1qpNipyBwuek', alias: ['발암성', '생식독성', '생식세포변이원성', '호흡기과민성', '흡인유해성', '흡입유해성', '표적장기독성', '특정표적장기독성'] },
+  { code: 'GHS09', name: '수생환경유해성', id: '1kmSmD_Su7h05Dl7IyCdiL4BI14JaoddS', alias: ['환경유해성', '수생환경', '환경', '수생생물유해성'] }
+];
+function ghsKey_(x) { return String(x || '').replace(/[\s·,()\[\]_\-\/.]/g, '').toLowerCase(); }
+// 이름 · 코드 목록 → { names: 표준 이름(코드 순, 중복 없음), unknown: 못 맞춘 것 }
+function ghsNormalize_(list) {
+  const hit = {}, unknown = [];
+  (list || []).forEach(raw => {
+    const k = ghsKey_(raw); if (!k) return;
+    const g = GHS_STD.find(x => k === x.code.toLowerCase() || k === ghsKey_(x.name) || x.alias.some(a => ghsKey_(a) === k))
+           || GHS_STD.find(x => k.indexOf(x.code.toLowerCase()) >= 0)
+           || GHS_STD.find(x => x.alias.concat([x.name]).some(a => ghsKey_(a).length >= 3 && k.indexOf(ghsKey_(a)) >= 0));
+    if (g) hit[g.code] = g; else unknown.push(String(raw).trim());
+  });
+  return { names: GHS_STD.filter(x => hit[x.code]).map(x => x.name), codes: GHS_STD.filter(x => hit[x.code]).map(x => x.code), unknown: unknown };
+}
+function ghsUrl_(name) {
+  const g = GHS_STD.find(x => x.name === name); if (!g) return '';
+  const own = String((getAdminCfg().data || {})[g.code + '그림주소'] || '').trim();
+  return own || (g.id ? 'https://drive.google.com/uc?export=view&id=' + g.id : 'ghs:' + g.code);
+}
+function ghsIcons_(names) { return (names || []).map(n => { const u = ghsUrl_(n); return u ? u + '|' + n : ''; }).filter(Boolean).join(','); }
 
 function aiCallGemini_(bytes) {
   const key = PROPS.getProperty('GEMINI_API_KEY');
@@ -2782,11 +2819,11 @@ function aiJudge_(data) {
   const pname = String(p.name || '').trim();
   return {
     product: { name: pname, manufacturer: String(p.manufacturer || '').trim(), usage: String(p.usage || '').trim(), signalWord: String(p.signalWord || '').trim(),
-               pictograms: (p.pictograms || []).map(x => String(x).trim()).filter(Boolean),
+               pictograms: ghsNormalize_(p.pictograms).names, pictoUnknown: ghsNormalize_(p.pictograms).unknown,
                emergency: p.emergency || {} },
     components: comps,
     targetManage: comps.some(c => c.managed), specialManage: comps.some(c => c.special),
-    iconKnown: Object.keys(iconMap), duplicate: pname && names.indexOf(pname) >= 0,
+    iconKnown: GHS_STD.map(x => x.name), iconSheet: Object.keys(iconMap), duplicate: pname && names.indexOf(pname) >= 0,
     warnings: (data.warnings || []).map(String).slice(0, 10)
   };
 }
@@ -2865,7 +2902,8 @@ function chemCols_(sheet) {
   return { head: head, C: { name: ix('name', '물질명', '제품명'), mf: ix('manufacturer', '제조사'), dept: ix('department', '부서', '사용부서'), usage: ix('usage', '용도'),
     comp: ix('compName', '구성성분명', '성분명'), cas: ix('casNumber', 'CAS', 'CAS번호'), amt: ix('amount', '함유량'),
     tg: ix('targetManage', '관리대상'), sp: ix('specialManage', '특별관리'), we: ix('workEnv', '작업환경측정'), hc: ix('healthCheck', '특수건강검진', '건강검진'),
-    em: ix('emergency', '응급처치'), pdf: ix('pdfUrl', 'PDF'), icon: ix('iconUrl', '위험그림문자'), memo: ix('메모1', '비고'), memo2: ix('메모2') } };
+    em: ix('emergency', '응급처치'), pdf: ix('pdfUrl', 'PDF'), icon: ix('iconUrl', '위험그림문자'), memo: ix('메모1', '비고'), memo2: ix('메모2'),
+    sw: ix('signalWord', '신호어') } };
 }
 // 제품 한 묶음(제품 줄 + 아래 성분 줄)의 위치와 값
 function chemBlock_(sheet, name) {
@@ -2882,7 +2920,7 @@ function chemBlock_(sheet, name) {
   return {
     row: start + 1, count: end - start, raw: v.slice(start, end), width: head.length,
     product: { name: name, manufacturer: g(start, 'mf'), department: g(start, 'dept'), usage: g(start, 'usage'), target: g(start, 'tg'), special: g(start, 'sp'),
-               emergency: g(start, 'em'), pdfUrl: g(start, 'pdf'), iconUrl: g(start, 'icon') },
+               emergency: g(start, 'em'), pdfUrl: g(start, 'pdf'), iconUrl: g(start, 'icon'), signalWord: g(start, 'sw') },
     components: v.slice(start, end).map((_, i) => ({ name: g(start + i, 'comp'), cas: g(start + i, 'cas'), amount: g(start + i, 'amt'),
       hc: g(start + i, 'hc'), we: g(start + i, 'we'), memo: g(start + i, 'memo'), memo2: g(start + i, 'memo2') })).filter(c => c.name || c.cas)
   };
@@ -2915,6 +2953,7 @@ function aiApply_(req) {
     } else if (rows.some(r => r.product === name)) {
       return { success: false, error: '같은 이름의 제품이 이미 있습니다 — [기존 제품과 비교]로 개정 반영하세요' };
     }
+    if (chemCols_(sheet).C.sw < 0) sheet.getRange(1, sheet.getLastColumn() + 1).setValue('signalWord');   // v21.15 신호어 칸 (기존 줄은 비어 있음)
     const { head, C } = chemCols_(sheet);
     // 원본 PDF 링크 (보기 전용 공유 — 실패해도 진행). 직접 입력 + PDF면 여기서 보관
     if (!req.path && req.content) { const b = aiBytes_(req); if (!b.error) req.path = b.path; }
@@ -2931,9 +2970,13 @@ function aiApply_(req) {
     if (C.icon >= 0) sheet.getRange(2, C.icon + 1, Math.max(sheet.getLastRow() - 1, 1), 1).getValues().forEach(r => String(r[0] || '').split(',').forEach(part => {
       const pts = part.trim().split('|'); if (pts[1] && !iconMap[pts[1].trim()]) iconMap[pts[1].trim()] = pts[0].trim();
     }));
-    let icons = (p.pictograms || []).map(x => String(x).trim()).filter(x => iconMap[x]).map(x => iconMap[x] + '|' + x).join(',');
+    // v21.15 표준 9종으로 맞춰 그림 연결 (예전: 시트에 같은 이름이 있는 그림만 → 이름이 다르면 빠졌음)
+    const pic = ghsNormalize_(p.pictograms);
+    let icons = ghsIcons_(pic.names);
+    let signal = /위험/.test(String(p.signalWord || '')) ? '위험' : (/경고/.test(String(p.signalWord || '')) ? '경고' : '');
     if (revise) {   // 개정: 비어 있는 값은 기존 값 유지
       if (!icons) icons = old.product.iconUrl;
+      if (!signal) signal = old.product.signalWord || '';
       if (!pdfUrl) pdfUrl = old.product.pdfUrl;
       if (!(d.departments || []).length) d.departments = old.product.department.split(/[,\/]/).map(x => x.trim()).filter(Boolean);
     }
@@ -2947,7 +2990,7 @@ function aiApply_(req) {
       const set = (k, v) => { if (C[k] >= 0) r[C[k]] = safeCell_(String(v == null ? '' : v)); };
       if (i === 0) {
         set('name', name); set('mf', p.manufacturer); set('dept', (d.departments || []).join(',')); set('usage', p.usage);
-        set('tg', d.targetManage ? 'o' : ''); set('sp', d.specialManage ? 'o' : ''); set('em', emText); set('pdf', pdfUrl); set('icon', icons);
+        set('tg', d.targetManage ? 'o' : ''); set('sp', d.specialManage ? 'o' : ''); set('em', emText); set('pdf', pdfUrl); set('icon', icons); set('sw', signal);
       }
       set('comp', c.name); set('cas', String(c.cas || '').trim()); set('amt', c.amount); set('we', c.we); set('hc', c.hc); set('memo', c.memo); set('memo2', c.memo2);
       return r;
@@ -2977,7 +3020,7 @@ function aiApply_(req) {
         if (added.length) eduAdded = newChemAdd_(name, depts, 'MSDS 개정 승인', '성분 추가: ' + added.join(', '));
       }
     } catch (_) {}
-    return { success: true, eduAdded: eduAdded, mode: revise ? 'revise' : 'new', row: start, rows: out.length, oldRows: old ? old.count : 0, pdfUrl: pdfUrl, icons: icons ? icons.split(',').length : 0 };
+    return { success: true, eduAdded: eduAdded, mode: revise ? 'revise' : 'new', row: start, rows: out.length, oldRows: old ? old.count : 0, pdfUrl: pdfUrl, icons: icons ? icons.split(',').length : 0, iconNames: pic.names, iconsUnknown: pic.unknown, signalWord: signal };
   } finally {
     lock.releaseLock();
   }

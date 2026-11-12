@@ -5213,7 +5213,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.14';
+  var SERVER_EXPECT = 'v21.15';
   // v21.10: 'v21.9' < 'v21.10'을 글자 순서가 아니라 숫자로 비교
   function bmVerLess(a, b){
     var p = function(v){ return (String(v).match(/v?(\d+(?:\.\d+)*)/) || [,'0'])[1].split('.').map(Number); };
@@ -5864,10 +5864,12 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
         (note ? '<div style="padding:10px 12px;border-radius:4px;margin-bottom:10px;font-size:14px;' + (isErr ? 'background:#FBE5E2;color:#A3302A' : 'background:#F2F8EC;color:#345C12') + '">' + esc(note) + '</div>' : '') +
         (draft.duplicate && !cmp ? '<div style="padding:10px 12px;border-radius:4px;margin-bottom:10px;background:#FFF1D6;color:#6E4A00;font-size:14px">같은 이름의 제품이 이미 시트에 있습니다. 개정판이면 아래 [기존 제품과 비교] 후 [개정 반영]을 누르세요.</div>' : '') +
         ((draft.warnings || []).length ? '<div style="font-size:13px;color:#6E4A00;margin-bottom:8px">AI 확인 필요: ' + esc(draft.warnings.join(' · ')) + '</div>' : '') +
+        (((p.pictoUnknown || []).length) ? '<div style="font-size:13px;color:#6E4A00;margin-bottom:8px">표준 9종에 없는 그림문자 이름: ' + esc(p.pictoUnknown.join(', ')) + ' — 아래 그림문자 칸을 표준 이름으로 고쳐 주세요</div>' : '') +
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:12px">' +
           fld('ai-name', '제품명 *', p.name) + fld('ai-mf', '제조사', p.manufacturer) + fld('ai-usage', '용도', p.usage) +
           fld('ai-dept', '사용 부서 (쉼표로 구분)', (draft.departments || []).join(',')) +
-          fld('ai-pict', '그림문자 (쉼표) · 시트에 있는 이름: ' + (draft.iconKnown || []).join(', '), (p.pictograms || []).join(','), true) +
+          fld('ai-pict', '그림문자 (쉼표) · 표준 9종: ' + (draft.iconKnown || []).join(', '), (p.pictograms || []).join(','), true) +
+          fld('ai-sw', '신호어 (위험 / 경고)', p.signalWord || '') +
         '</div>' +
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:12px">' +
           area('ai-em-eye', '응급: 눈', em.eye) + area('ai-em-skin', '응급: 피부', em.skin) + area('ai-em-inh', '응급: 흡입', em.inhalation) + area('ai-em-ing', '응급: 먹었을 때', em.ingestion) +
@@ -5926,7 +5928,8 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       if(!srcPath && manualFile){ req.content = await fileB64(manualFile); req.name = manualFile.name; }
       var x = await BMAUTH.post('ai.apply', req);
       if(!x.success){ say(x.error || '실패', 'err'); return; }
-      say((x.mode === 'revise' ? '개정 반영했습니다 — 기존 ' + x.oldRows + '줄 → ' : '추가했습니다 — ') + '시트 ' + x.row + '행부터 ' + x.rows + '줄' + (x.pdfUrl ? ' · 원본 PDF 링크 연결' : '') + '. MSDS 목록은 [동기화] 후 보입니다.', 'ok');
+      if((x.iconsUnknown || []).length) alert('표준 9종에 없어 빠진 그림문자: ' + x.iconsUnknown.join(', ') + '\n물질 마스터에서 직접 확인해 주세요.');
+      say((x.mode === 'revise' ? '개정 반영했습니다 — 기존 ' + x.oldRows + '줄 → ' : '추가했습니다 — ') + '시트 ' + x.row + '행부터 ' + x.rows + '줄' + (x.pdfUrl ? ' · 원본 PDF 링크 연결' : '') + ((x.iconNames || []).length ? ' · 그림문자 ' + x.iconNames.join(', ') : ' · 그림문자 없음') + (x.signalWord ? ' · 신호어 ' + x.signalWord : '') + '. MSDS 목록은 [동기화] 후 보입니다.', 'ok');
       document.getElementById('ai-review').innerHTML = '';
       draft = null; cmp = null; products = null;
       open();
@@ -5937,6 +5940,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
     draft.product = draft.product || {};
     draft.product.name = v('ai-name'); draft.product.manufacturer = v('ai-mf'); draft.product.usage = v('ai-usage');
     draft.product.pictograms = v('ai-pict').split(',').map(function(x){ return x.trim(); }).filter(Boolean);
+    draft.product.signalWord = v('ai-sw');
     draft.product.emergency = { eye: v('ai-em-eye'), skin: v('ai-em-skin'), inhalation: v('ai-em-inh'), ingestion: v('ai-em-ing') };
     draft.departments = v('ai-dept').split(',').map(function(x){ return x.trim(); }).filter(Boolean);
     draft.targetManage = !!(document.getElementById('ai-tg') || {}).checked;
@@ -6395,7 +6399,11 @@ function showDetail(name){
   document.getElementById('pg-msds').classList.add('detail-open');
   document.getElementById('placeholder').style.display='none';
   const con=document.getElementById('detailContent');con.style.display='block';
-  let iconHtml=(p.icons&&p.icons.length)?p.icons.map(ic=>`<figure class="ms-pgm"><div><img src="${getDirectImgUrl(ic.url)}" alt="${bmEsc(ic.label)}" onerror="this.style.display='none'"></div><figcaption>${bmEsc(ic.label)}</figcaption></figure>`).join(''):'<span class="ms-none">그림문자 없음</span>';
+  let iconHtml=(p.icons&&p.icons.length)?p.icons.map(ic=>/^ghs:/.test(ic.url)
+    ? `<figure class="ms-pgm"><div><span class="ms-ghs-txt" role="img" aria-label="${bmEsc(ic.label)}"><b>${bmEsc(ic.label)}</b></span></div><figcaption>${bmEsc(ic.label)}</figcaption></figure>`
+    : `<figure class="ms-pgm"><div><img src="${getDirectImgUrl(ic.url)}" alt="${bmEsc(ic.label)}" onerror="this.style.display='none'"></div><figcaption>${bmEsc(ic.label)}</figcaption></figure>`).join(''):'<span class="ms-none">그림문자 없음</span>';
+  const _sw = String(p.signalWord||'').trim();
+  const swHtml = _sw ? `<span class="ms-sw ${_sw==='위험'?'d':'w'}">신호어 · ${bmEsc(_sw)}</span>` : '';
   // ★★★ v17.1: Google Sheets ISO 날짜 자동 변환 복원 (표시 직전 안전망) ★★★
   // amount: "2026-09-10 00:00:00" → "9-10" (월-일 형식)
   // casNumber: ISO 형식이면 표시
@@ -6459,7 +6467,7 @@ function showDetail(name){
         <span class="ms-kind">${_eduDept?bmEsc(_eduDept)+' · ':''}${_special?'특별안전보건교육 대상':'MSDS 교육 대상'}</span>
       </div>
     </div>
-    <h4 class="ms-h3"><i></i>경고표지 및 관리대상</h4>
+    <h4 class="ms-h3"><i></i>경고표지 및 관리대상 ${swHtml}</h4>
     <div class="ms-warn">
       <div class="ms-pgms">${iconHtml}</div>
       <div class="ms-mbs">
@@ -19727,6 +19735,13 @@ body:has(#pg-admin[style*="block"]) .adm-content{padding-bottom:96px!important}
 
 /* 키보드 이동이 보이게 */
 button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #A9D67F;outline-offset:1px}
+</style>
+<style id="bm-v2115">
+/* v21.15 신호어 · 그림 없는 GHS 그림문자(글자 마름모) */
+.ms-sw{display:inline-block;margin-left:8px;padding:2px 10px;border-radius:999px;font-size:13px;font-weight:700;vertical-align:2px}
+.ms-sw.d{background:#FBE5E2;color:#A3302A}.ms-sw.w{background:#FEF3C7;color:#92400E}
+.ms-ghs-txt{display:flex;align-items:center;justify-content:center;width:42px;height:42px;margin:14px auto;border:3px solid #C8102E;transform:rotate(45deg);background:#fff;box-sizing:border-box}
+.ms-ghs-txt b{transform:rotate(-45deg);font-size:10.5px;color:#1E1E1C;text-align:center;line-height:1.1}
 </style>
 <style id="bm-v2111">
 /* v21.11 교육 현황: 숫자 카드 · 공통 찾기 줄 · 탭 · 작업 메뉴 (디자인.md 기준: 글자 13~14px · 굵기 400/600/700 · 모서리 4/8 · 칸 36px) */

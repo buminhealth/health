@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.14 \(2026-11-12\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.15 \(2026-11-12\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
   check('서버 버전 비교: v21.9 서버는 v21.10 앱에서 배포 필요로 (글자 순서 아님)', await page.evaluate(() => { try { return bmVerLess('v21.9 (2026-11-03)', 'v21.10') && !bmVerLess('v21.10 (2026-11-04)', 'v21.10') && !bmVerLess('v22.0', 'v21.10'); } catch (e) { return String(e); } }) === true);
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
@@ -505,7 +505,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.14'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.15'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -748,6 +748,18 @@ function check(name, cond, extra) {
   check('승인: chemicals 시트에 새 제품 추가 (첫 줄 제품 정보 + 성분 줄)', ap3.success && added.length === 3 && added[0][H.indexOf('제품명')] === 'AI시험세정제' && added[1][H.indexOf('제품명')] === '' && added[1][H.indexOf('성분명')] === '물', { ap3, added });
   check('승인: 특검 · 측정 · CAS 값', added[0][H.indexOf('CAS')] === '67-56-1' && added[0][H.indexOf('특수건강검진')] === '12개월' && added[2][H.indexOf('CAS')] === '9014-01-1', added[0]);
   check('승인: 원본 PDF 링크 연결', /drive\.google\.com\/file/.test(ap3.pdfUrl || ''), ap3);
+  // v21.15 새 MSDS: 그림문자는 GHS 표준 9종으로 맞춰 그림 연결 · 신호어 칸 (기존 줄은 그대로)
+  {
+    const Hn = ch.rows[0], swI = Hn.indexOf('signalWord');
+    const norm = vm.runInContext(`ghsNormalize_(['GHS02', '인화성액체', '피부부식성', '심한 눈 손상', '환경유해성', '호흡기 과민성', 'GHS07', '없는그림'])`, g.ctx);
+    const url1 = vm.runInContext(`ghsUrl_('폭발성') + ' / ' + ghsUrl_('인화성')`, g.ctx);
+    check('GHS 표준표: 코드 · 다른 이름 → 표준 이름(중복 없음, GHS 순서) · 못 맞춘 이름 따로 · 폭발성은 그림 없으면 글자 표시', norm.names.join() === '인화성,부식성,경고,건강유해성,수생환경유해성' && norm.unknown.join() === '없는그림' && /^ghs:GHS01 \/ https:\/\/drive\.google\.com\/uc\?export=view&id=1C0bts/.test(url1), [norm, url1]);
+    check('AI 초안: 그림문자 표준 이름 · 못 맞춘 이름 알림 · 표준 9종 목록', d0.product.pictograms.join() === '부식성' && d0.product.pictoUnknown.join() === '없는그림' && d0.iconKnown.length === 9, d0.product);
+    check('승인: 신호어 칸이 없으면 맨 끝에 새로 만들고 위험 저장 · 그림문자 이름 (못 맞춘 이름은 검토 단계에서 알림)', swI >= 0 && added[0][swI] === '위험' && ap3.signalWord === '위험' && ap3.iconNames.join() === '부식성' && ap3.iconsUnknown.length === 0, { swI, ap3 });
+    const gc2 = vm.runInContext('getChemicals()', g.ctx);
+    const pr = gc2.data.find(c => c.name === 'AI시험세정제');
+    check('MSDS 목록: 새 제품 신호어 읽기 · 기존 제품은 비어 있음(그대로)', pr && pr.signalWord === '위험' && gc2.data.filter(c => c.name !== 'AI시험세정제').every(c => !c.signalWord), pr && pr.signalWord);
+  }
   const dup = await page.evaluate(d => BMAUTH.post('ai.apply', { data: d }), okDraft);
   check('승인: 같은 이름 제품은 거부 (기존 제품 안 바꿈)', !dup.success && /이미/.test(dup.error), dup);
   // 13-6. v19.8 개정 MSDS: 기존 제품과 비교 → 개정 반영 (이전 줄은 개정이력에 보관)
