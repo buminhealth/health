@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.15 \(2026-11-12\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.16 \(2026-11-12\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
   check('서버 버전 비교: v21.9 서버는 v21.10 앱에서 배포 필요로 (글자 순서 아님)', await page.evaluate(() => { try { return bmVerLess('v21.9 (2026-11-03)', 'v21.10') && !bmVerLess('v21.10 (2026-11-04)', 'v21.10') && !bmVerLess('v22.0', 'v21.10'); } catch (e) { return String(e); } }) === true);
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
@@ -505,7 +505,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.15'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.16'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -753,7 +753,7 @@ function check(name, cond, extra) {
     const Hn = ch.rows[0], swI = Hn.indexOf('signalWord');
     const norm = vm.runInContext(`ghsNormalize_(['GHS02', '인화성액체', '피부부식성', '심한 눈 손상', '환경유해성', '호흡기 과민성', 'GHS07', '없는그림'])`, g.ctx);
     const url1 = vm.runInContext(`ghsUrl_('폭발성') + ' / ' + ghsUrl_('인화성')`, g.ctx);
-    check('GHS 표준표: 코드 · 다른 이름 → 표준 이름(중복 없음, GHS 순서) · 못 맞춘 이름 따로 · 폭발성은 그림 없으면 글자 표시', norm.names.join() === '인화성,부식성,경고,건강유해성,수생환경유해성' && norm.unknown.join() === '없는그림' && /^ghs:GHS01 \/ https:\/\/drive\.google\.com\/uc\?export=view&id=1C0bts/.test(url1), [norm, url1]);
+    check('GHS 표준표: 코드 · 다른 이름 → 표준 이름(중복 없음, GHS 순서) · 못 맞춘 이름 따로 · GHS01~05는 공식 그림(앱 /ghs/)', norm.names.join() === '인화성,부식성,경고,건강유해성,수생환경유해성' && norm.unknown.join() === '없는그림' && url1 === 'https://buminhealth.github.io/health/ghs/GHS01.png / https://buminhealth.github.io/health/ghs/GHS02.png', [norm, url1]);
     check('AI 초안: 그림문자 표준 이름 · 못 맞춘 이름 알림 · 표준 9종 목록', d0.product.pictograms.join() === '부식성' && d0.product.pictoUnknown.join() === '없는그림' && d0.iconKnown.length === 9, d0.product);
     check('승인: 신호어 칸이 없으면 맨 끝에 새로 만들고 위험 저장 · 그림문자 이름 (못 맞춘 이름은 검토 단계에서 알림)', swI >= 0 && added[0][swI] === '위험' && ap3.signalWord === '위험' && ap3.iconNames.join() === '부식성' && ap3.iconsUnknown.length === 0, { swI, ap3 });
     const gc2 = vm.runInContext('getChemicals()', g.ctx);

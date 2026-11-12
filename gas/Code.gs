@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.15 (2026-11-12)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.16 (2026-11-12)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -2725,14 +2725,16 @@ const AI_PROMPT = [
 // ════════════════════════════════════════════════════════════════
 // v21.15 GHS 그림문자 9종 표준표 — 새로 승인하는 MSDS부터 (기존 시트 줄은 그대로)
 //  · AI는 GHS 코드로 답하고, 직접 고친 이름(인화성액체 · 피부부식성 · 환경유해성 …)도 표준 이름으로 맞춤
-//  · 그림은 지금 시트에서 쓰는 드라이브 그림 파일 · 폭발성은 그림이 없어 관리자설정 'GHS01그림주소'에 넣으면 사용 (없으면 화면에 글자 표시)
+//  · 그림: GHS01~05는 공식 그림문자(앱 주소 /ghs/GHS0N.png, 보건관리실 제공 원본), GHS06~09는 지금 시트에서 쓰는 드라이브 그림
+//    관리자설정 'GHS0N그림주소'에 주소를 넣으면 그 그림을 우선 사용
 // ════════════════════════════════════════════════════════════════
+const GHS_IMG_BASE = 'https://buminhealth.github.io/health/ghs/';
 const GHS_STD = [
-  { code: 'GHS01', name: '폭발성', id: '', alias: ['폭발', '폭탄', '자기반응성', '유기과산화물', '불안정폭발물'] },
-  { code: 'GHS02', name: '인화성', id: '1C0bts4wC2wkgD3rr9T0fw8aLKiEU45rx', alias: ['불꽃', '인화성액체', '인화성고체', '인화성가스', '인화성에어로졸', '자연발화성', '물반응성', '자기발열성'] },
-  { code: 'GHS03', name: '산화성', id: '15j8jY7yAmcnoBP423thC6eFnkgopZ-gq', alias: ['산화성액체', '산화성고체', '산화성가스', '원위의불꽃'] },
-  { code: 'GHS04', name: '고압가스', id: '1Ji04sVRENXsZwkARsSQWum3r57jJUCPe', alias: ['가스실린더', '압축가스', '액화가스', '용해가스'] },
-  { code: 'GHS05', name: '부식성', id: '1X8qLeNaNf8SIvWXPlGb1D1dSXTZB63Vh', alias: ['피부부식성', '금속부식성', '금속피부부식성', '피부또는금속부식성', '심한눈손상', '눈손상', '심한눈손상성'] },
+  { code: 'GHS01', img: GHS_IMG_BASE + 'GHS01.png', name: '폭발성', id: '', alias: ['폭발', '폭탄', '자기반응성', '유기과산화물', '불안정폭발물'] },
+  { code: 'GHS02', img: GHS_IMG_BASE + 'GHS02.png', name: '인화성', id: '1C0bts4wC2wkgD3rr9T0fw8aLKiEU45rx', alias: ['불꽃', '인화성액체', '인화성고체', '인화성가스', '인화성에어로졸', '자연발화성', '물반응성', '자기발열성'] },
+  { code: 'GHS03', img: GHS_IMG_BASE + 'GHS03.png', name: '산화성', id: '15j8jY7yAmcnoBP423thC6eFnkgopZ-gq', alias: ['산화성액체', '산화성고체', '산화성가스', '원위의불꽃'] },
+  { code: 'GHS04', img: GHS_IMG_BASE + 'GHS04.png', name: '고압가스', id: '1Ji04sVRENXsZwkARsSQWum3r57jJUCPe', alias: ['가스실린더', '압축가스', '액화가스', '용해가스'] },
+  { code: 'GHS05', img: GHS_IMG_BASE + 'GHS05.png', name: '부식성', id: '1X8qLeNaNf8SIvWXPlGb1D1dSXTZB63Vh', alias: ['피부부식성', '금속부식성', '금속피부부식성', '피부또는금속부식성', '심한눈손상', '눈손상', '심한눈손상성'] },
   { code: 'GHS06', name: '급성독성', id: '1r1ehmbJ-EzShwiF-oLNw-pAb2mglotMy', alias: ['해골', '흡입독성', '급성독성물질', '경구독성', '경피독성'] },
   { code: 'GHS07', name: '경고', id: '1_EAoAE4_UhLAGtjvelobhkObfI_R0tcv', alias: ['느낌표', '피부과민성', '피부자극성', '눈자극성', '자극성', '마취작용', '오존층유해성'] },
   { code: 'GHS08', name: '건강유해성', id: '11Fy3UgwWs0iVlhKlDYlF1qpNipyBwuek', alias: ['발암성', '생식독성', '생식세포변이원성', '호흡기과민성', '흡인유해성', '흡입유해성', '표적장기독성', '특정표적장기독성'] },
@@ -2754,7 +2756,7 @@ function ghsNormalize_(list) {
 function ghsUrl_(name) {
   const g = GHS_STD.find(x => x.name === name); if (!g) return '';
   const own = String((getAdminCfg().data || {})[g.code + '그림주소'] || '').trim();
-  return own || (g.id ? 'https://drive.google.com/uc?export=view&id=' + g.id : 'ghs:' + g.code);
+  return own || g.img || (g.id ? 'https://drive.google.com/uc?export=view&id=' + g.id : 'ghs:' + g.code);
 }
 function ghsIcons_(names) { return (names || []).map(n => { const u = ghsUrl_(n); return u ? u + '|' + n : ''; }).filter(Boolean).join(','); }
 
