@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.13 (2026-11-11)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.14 (2026-11-12)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -4327,7 +4327,8 @@ function pdfBig_(req) {
 // v21.13 월별 백업 — 시스템이 모두 멈춰도 교육 근거가 남도록
 //  · 매월 1일 새벽(자동) 또는 [지금 백업]: 드라이브 '부민보건관리_월별백업 (비공개)' 폴더에
 //    ① 엑셀 교육현황_YYYY-MM-DD.xlsx (요약 · 부서별 직원 명단 · 교육이력대장 · 부서이동기록) — 매달 새 파일, 지우지 않음
-//    ② 교육일지 · 보호구 PDF 원본 — 새로 생긴 파일만 더함 (지우거나 덮어쓰지 않음, 원본에서 지워져도 백업에는 남음)
+//    ② 교육일지 · 보호구 PDF 원본 — 새로 생긴 파일만 더함 (원본에서 지워져도 백업에는 남음)
+//       v21.14: 같은 이름인데 크기가 달라진 파일(결재본으로 바뀜 · 용량 줄이기)은 백업도 새 것으로 (예전 사본은 휴지통 30일)
 //  · PC: '구글 드라이브 데스크톱' 앱이 이 폴더를 PC로 내려받음 (미러링) → 인터넷 · 서버가 멈춰도 PC에 남음
 //  · 끝나면 보건관리자에게 메일 (엑셀 첨부 = 두 번째 보관처)
 //  · Apps Script 한 번 실행 6분 제한: PDF가 많으면 4분 30초마다 끊고 2분 뒤 이어서 (예약 1회짜리)
@@ -4394,16 +4395,17 @@ function backupExcel_(today) {
 // 원본 폴더(교육일지 · 보호구) → 백업 폴더로 새 파일만 복사. 시간이 다 되면 done:false
 function backupPdfs_(deadline) {
   const dstRoot = backupSub_(backupRoot_(), '교육일지 · 보호구 원본');
-  const out = { copied: 0, kept: 0, done: true };
+  const out = { copied: 0, kept: 0, updated: 0, done: true };
   const walk = (src, dst) => {
     const have = {};
-    const di = dst.getFiles(); while (di.hasNext()) { const f = di.next(); have[f.getName()] = 1; }
+    const di = dst.getFiles(); while (di.hasNext()) { const f = di.next(); have[f.getName()] = f; }
     const fi = src.getFiles();
     while (fi.hasNext()) {
-      const f = fi.next();
-      if (have[f.getName()]) { out.kept++; continue; }
+      const f = fi.next(), old = have[f.getName()];
+      if (old && old.getSize() === f.getSize()) { out.kept++; continue; }
       if (Date.now() > deadline) { out.done = false; return; }
-      f.makeCopy(f.getName(), dst); have[f.getName()] = 1; out.copied++;
+      if (old) { old.setTrashed(true); out.updated++; } else out.copied++;
+      have[f.getName()] = f.makeCopy(f.getName(), dst);
     }
     const si = src.getFolders();
     while (si.hasNext() && out.done) { const sub = si.next(); walk(sub, backupSub_(dst, sub.getName())); }
@@ -4415,7 +4417,7 @@ function backupMail_(r) {
   const to = sysCfg_().adminEmail; if (!to) return false;
   const body = '<p>' + r.at + ' 월별 백업을 마쳤습니다.</p><ul>' +
     '<li>엑셀: ' + (r.excel || '-') + ' (부서 ' + (r.depts || 0) + '곳 · 직원 ' + (r.people || 0) + '명) — 이 메일에 첨부</li>' +
-    '<li>PDF 원본: 이번에 새로 복사 ' + r.copied + '개</li></ul>' +
+    '<li>PDF: 이번에 새로 복사 ' + r.copied + '개' + (r.updated ? ' · 결재본 등으로 바뀐 파일 ' + r.updated + '개 새로 반영' : '') + '</li></ul>' +
     '<p>드라이브 폴더 「' + BACKUP_ROOT_NAME + '」에 쌓이며, PC의 구글 드라이브 데스크톱 앱이 같은 내용을 PC에 내려받습니다.</p>';
   const o = { to: to, subject: '[보건관리] 월별 백업 완료 ' + r.at.slice(0, 10), htmlBody: body };
   if (r.blob) o.attachments = [r.blob];
@@ -4436,7 +4438,7 @@ function monthlyBackup() {
     Object.assign(r, { excel: x.file.getName(), depts: x.depts, people: x.people });
     r.blob = x.blob;
     const pd = backupPdfs_(t0 + BACKUP_SLICE_MS);
-    r.copied = pd.copied; r.done = pd.done;
+    r.copied = pd.copied; r.updated = pd.updated; r.done = pd.done;
     if (pd.done) { try { backupMail_(r); } catch (_) {} }
     backupResumeTrigger_(!pd.done);
   } catch (e) { r.error = String(e.message || e); }
@@ -4448,7 +4450,7 @@ function monthlyBackup() {
 function monthlyBackupResume() {
   const last = backupLast_();
   const pd = backupPdfs_(Date.now() + BACKUP_SLICE_MS);
-  last.copied = (last.copied || 0) + pd.copied; last.done = pd.done;
+  last.copied = (last.copied || 0) + pd.copied; last.updated = (last.updated || 0) + pd.updated; last.done = pd.done;
   backupResumeTrigger_(!pd.done);
   if (pd.done) {
     try {

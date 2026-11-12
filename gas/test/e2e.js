@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.13 \(2026-11-11\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.14 \(2026-11-12\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
   check('서버 버전 비교: v21.9 서버는 v21.10 앱에서 배포 필요로 (글자 순서 아님)', await page.evaluate(() => { try { return bmVerLess('v21.9 (2026-11-03)', 'v21.10') && !bmVerLess('v21.10 (2026-11-04)', 'v21.10') && !bmVerLess('v22.0', 'v21.10'); } catch (e) { return String(e); } }) === true);
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
@@ -505,7 +505,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.13'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.14'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -1136,6 +1136,11 @@ function check(name, cond, extra) {
     const res = R(`monthlyBackupResume()`);
     check('월별 백업 이어서: 시간 넘으면 멈춤 → 예약 1회 → 이어서 1개 복사 · 끝나면 예약 지움 · 메일', cut.done === false && pend && res.done && res.copied >= 1 && !g.ctx.ScriptApp.triggers.some(t => t.fn === 'monthlyBackupResume') && g.ctx.MailApp.sent.length === mail1 + 1, [cut, res]);
     await page.evaluate(() => BMAUTH.post('backup.schedule', { on: false }));
+    // v21.14 결재본으로 바뀐 파일(크기 다름)은 백업도 새 것으로 · 같은 파일은 그대로
+    R(`(function(){ const f = getFile_('교육일지/2026-11/MSDS교육일지-61병동-백업시험-2026-11-02.pdf'); fsPut_({ path: '교육일지/2026-11/MSDS교육일지-61병동-백업시험-2026-11-02.pdf', content: Utilities.base64Encode('%PDF a + 결재 도장'), sha: fileMeta_(f).sha }, { role: 'admin' }); })()`);
+    const up = R(`backupPdfs_(Date.now() + 60000)`);
+    const bkText = R(`(function(){ const d = backupSub_(backupSub_(backupSub_(backupRoot_(), '교육일지 · 보호구 원본'), '교육일지'), '2026-11'); const it = d.getFilesByName('MSDS교육일지-61병동-백업시험-2026-11-02.pdf'); const a = []; while (it.hasNext()) a.push(it.next().getBlob().getDataAsString()); return a; })()`);
+    check('월별 백업: 결재본으로 바뀐 파일은 백업도 새 것으로 (예전 사본 휴지통) · 나머지는 그대로', up.updated === 1 && up.copied === 0 && bkText.length === 1 && /결재 도장/.test(bkText[0]), [up, bkText]);
   }
   const mergeWarn = await page.evaluate(() => BMAUTH.post('emp.merge', { dry: true, fresh: true }));
   const mergeAuto = await page.evaluate(() => BMAUTH.post('emp.merge', { dry: true, force: true, fresh: true }));
@@ -1767,6 +1772,34 @@ function check(name, cond, extra) {
       } finally { window.fetch = real; }
     });
     check('공개 저장소 정리 준비: 저장소 PDF 2개 중 드라이브에 없는 1개 찾기 → 복사 → 다시 찾으면 0개 (MSDS 자료 폴더는 대상 아님)', gh.n === 1 && gh.en && /PDF 2개 중/.test(gh.found) && gh.copied && gh.again === 0, gh);
+  }
+
+  // 18-2h. v21.14 결재본: 결재하면 도장 찍힌 PDF로 같은 파일을 바꿔 저장 · 볼 때 다시 찍지 않음
+  {
+    const LIB = process.env.PDF_LIBS || '/tmp/claude-0/-home-user-health/380d0980-4304-5ba9-83eb-14958bc872ed/scratchpad/pdfb/node_modules';
+    if (require('fs').existsSync(LIB + '/pdf-lib/dist/pdf-lib.min.js') && require('fs').existsSync(LIB + '/jspdf/dist/jspdf.umd.min.js')) {
+      if (!(await page.evaluate(() => typeof PDFLib !== 'undefined'))) await page.addScriptTag({ path: LIB + '/pdf-lib/dist/pdf-lib.min.js' });
+      if (!(await page.evaluate(() => typeof jspdf !== 'undefined'))) await page.addScriptTag({ path: LIB + '/jspdf/dist/jspdf.umd.min.js' });
+      const bk = await page.evaluate(async () => {
+        const name = 'MSDS교육일지-61병동-결재본시험-2026-11-05.pdf', path = '교육일지/2026-11/' + name;
+        const api = 'https://api.github.com/repos/buminhealth/health/contents/' + path.split('/').map(encodeURIComponent).join('/');
+        const d = new jspdf.jsPDF(); d.text('journal', 20, 20);
+        await fetch(api, { method: 'PUT', body: JSON.stringify({ message: 't', content: btoa(d.output()) }) });
+        const before = (await BMAUTH.post('fs.get', { path })).size;
+        const g = { type: 'MSDS교육', dept: '61병동', dateStart: '2026-11-05', pdfFileName: name, pdfYm: '2026-11', approved: true, approvedAt: '2026-11-12T05:00:00Z', approverName: '장은선', members: [{ name: '결재본시험' }] };
+        const r1 = await bmBakeApproval(g);
+        const x = await BMAUTH.post('fs.get', { path });
+        const bytes = Uint8Array.from(atob(x.content), c => c.charCodeAt(0));
+        const doc = await PDFLib.PDFDocument.load(bytes, { updateMetadata: false });
+        const stamp = await apvStampToImage();
+        const view = await _getStampedPdfBlob(g, stamp);
+        const r2 = await bmBakeApproval(g);
+        const list = await BMAUTH.post('fs.get', { path: '교육일지/2026-11' });
+        const same = (list.entries || []).filter(e => /결재본시험/.test(e.name)).length;
+        return { r1, r2, subject: doc.getSubject(), before, after: x.size, viewSize: view && view.size, files: same };
+      });
+      check('결재본: 도장 찍은 PDF로 같은 파일을 바꿔 저장(파일 1개) · 결재본 표시 · 볼 때 도장 다시 안 찍음 · 다시 하면 건너뜀', bk.r1.ok && bk.subject === '부민 결재본' && bk.after > bk.before && bk.viewSize === bk.after && bk.r2.skipped === '이미 결재본' && bk.files === 1, bk);
+    } else check('결재본 시험: pdf-lib · jspdf 없음 (건너뜀)', true);
   }
 
   // 18-3. v21.6 이모지 없음(디자인 기준) · PIN 보기

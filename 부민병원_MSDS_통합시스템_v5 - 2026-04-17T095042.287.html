@@ -2287,6 +2287,7 @@ input.apv-in[type=text]{width:110px}
             <button type="button" onclick="handleTabAction('apv','csv')">CSV 출력</button>
             <button type="button" onclick="handleTabAction('apv','pdf')">목록 PDF 출력</button>
             <button type="button" onclick="handleTabAction('apv','dedupe')" title="recordId 기준 중복 자동 정리">중복정리</button>
+            <button type="button" onclick="bmBakeAllApproved()" title="예전에 결재한 일지를 도장이 찍힌 결재본 PDF로 바꿔 저장">결재본 만들기 (예전 결재)</button>
             <label><input type="checkbox" id="apv-archive-mode" onchange="apvToggleArchive()"> 옛 일지까지 전체 검색</label>
             <span id="apv-archive-status"></span>
           </div>
@@ -5212,7 +5213,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.13';
+  var SERVER_EXPECT = 'v21.14';
   // v21.10: 'v21.9' < 'v21.10'을 글자 순서가 아니라 숫자로 비교
   function bmVerLess(a, b){
     var p = function(v){ return (String(v).match(/v?(\d+(?:\.\d+)*)/) || [,'0'])[1].split('.').map(Number); };
@@ -10195,6 +10196,56 @@ async function apvViewPdf(groupKey){
 }
 
 /* ── 결재 도장 합성된 PDF Blob 반환 (다운로드 안 함, 미리보기용) ── */
+/* v21.14 결재본: 결재하면 도장을 찍은 PDF로 같은 파일을 바꿔 저장 (원본을 따로 남기지 않음 — 저장 공간)
+   · PDF 정보(Subject)에 '부민 결재본' 표시 → 볼 때 · 내려받을 때 도장을 다시 찍지 않음
+   · 드라이브 · PC 미러링 · 월별 백업 어디서 열어도 서명 + 결재 도장이 함께 보임 */
+const BM_STAMP_SUBJECT = '부민 결재본';
+function bmPdfBaked(pdfDoc){ try{ return pdfDoc.getSubject() === BM_STAMP_SUBJECT; }catch(_){ return false; } }
+async function bmBakeApproval(group){
+  if(typeof PDFLib === 'undefined' || !PDFLib.PDFDocument) throw new Error('pdf-lib 미로드 — 새로고침 필요');
+  if(!group || !group.pdfFileName) return { skipped: 'PDF 이름 없음' };
+  const probe = Object.assign({}, group);
+  const bytes = await apvResolvePdfBytes(probe);
+  if(!bytes) return { skipped: '원본 PDF 없음' };
+  const doc = await PDFLib.PDFDocument.load(bytes, { updateMetadata: false });
+  if(bmPdfBaked(doc)) return { skipped: '이미 결재본' };
+  const stamp = await apvStampToImage(group.approvedAt);
+  if(!stamp) throw new Error('도장 이미지 만들기 실패');
+  const img = await doc.embedPng(Uint8Array.from(atob(stamp.split(',')[1]), c => c.charCodeAt(0)));
+  const page = doc.getPages()[0]; const sz = page.getSize();
+  page.drawImage(img, { x: sz.width - 55, y: sz.height - 58, width: 28, height: 28 });   // _getStampedPdfBlob과 같은 자리
+  doc.setSubject(BM_STAMP_SUBJECT);
+  doc.setKeywords(['결재완료', String(group.approverName || ''), String(group.approvedAt || '')]);
+  const out = await doc.save();
+  const isPpe = (group.type || '').includes('보호구');
+  const ym = probe.pdfYm || String(group.dateStart || '').slice(0, 7);
+  const path = (isPpe ? '보호구' : '교육일지') + '/' + ym + '/' + group.pdfFileName;
+  const api = 'https://api.github.com/repos/' + ((typeof CFG !== 'undefined' && CFG.ghRepo) || 'buminhealth/health') + '/contents/' + path.split('/').map(encodeURIComponent).join('/');
+  const cur = await (await fetch(api)).json();
+  if(!cur || !cur.sha) throw new Error('저장 위치를 찾지 못함: ' + path);
+  let bin = ''; for(let i = 0; i < out.length; i += 0x8000) bin += String.fromCharCode.apply(null, out.subarray(i, i + 0x8000));
+  const put = await fetch(api, { method: 'PUT', body: JSON.stringify({ message: '결재본 저장', content: btoa(bin), sha: cur.sha }) });
+  if(!put.ok) throw new Error('결재본 저장 실패 (' + put.status + ')');
+  try{ _ghFolderCache.clear(); }catch(_){}
+  return { ok: true, path: path };
+}
+// 결재 관리 → 더보기: 예전에 결재한 일지를 결재본으로 (이미 결재본이면 건너뜀)
+async function bmBakeAllApproved(){
+  const list = (apvState.groups || []).filter(g => g.approved && g.pdfFileName);
+  if(!list.length){ toast('결재완료 일지가 없습니다', 'info'); return; }
+  if(!confirm('결재완료 일지 ' + list.length + '건을 도장이 찍힌 결재본으로 바꿔 저장합니다.\n(같은 파일을 바꿔 저장 · 이미 결재본이면 건너뜀)')) return;
+  let ok = 0, skip = 0; const fail = [];
+  for(let i = 0; i < list.length; i++){
+    const g = list[i];
+    toast('결재본 만드는 중… ' + (i + 1) + ' / ' + list.length, 'info');
+    try{ const r = await bmBakeApproval(g); if(r.ok) ok++; else if(r.skipped === '이미 결재본') skip++; else fail.push(g.dept + ' ' + (g.dateStart || '') + ': ' + r.skipped); }
+    catch(e){ fail.push(g.dept + ' ' + (g.dateStart || '') + ': ' + e.message); }
+  }
+  toast('결재본 ' + ok + '건 저장' + (skip ? ' · 이미 결재본 ' + skip : '') + (fail.length ? ' · 실패 ' + fail.length : ''), fail.length ? 'err' : 'ok');
+  if(fail.length) alert('결재본을 만들지 못한 일지:\n\n' + fail.slice(0, 15).join('\n'));
+  return { ok, skip, fail };
+}
+
 async function _getStampedPdfBlob(group, stampPngDataUrl, preBytes){
   try{
     if(typeof PDFLib === 'undefined' || !PDFLib.PDFDocument){
@@ -10208,6 +10259,7 @@ async function _getStampedPdfBlob(group, stampPngDataUrl, preBytes){
       return null;
     }
     const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+    if(bmPdfBaked(pdfDoc)) return new Blob([pdfBytes], { type: 'application/pdf' });   // v21.14 이미 결재본
     const page = pdfDoc.getPages()[0];
     const { width, height } = page.getSize();
     const stampBase64 = stampPngDataUrl.split(',')[1];
@@ -11021,6 +11073,16 @@ async function apvBatchApprove(){
       }catch(e){ console.warn('GitHub records 동기화 실패:',e); }
     }
 
+    // 5-2) v21.14 결재본: 도장 찍은 PDF로 같은 파일을 바꿔 저장 (원본은 따로 남기지 않음)
+    let baked = 0; const bakeFail = [];
+    for(const g of selectedGroups){
+      try{
+        toast('결재본 저장 중… (' + (baked + bakeFail.length + 1) + ' / ' + selectedGroups.length + ')', 'info');
+        const r = await bmBakeApproval(Object.assign({}, g, { approved: true, approvedAt: now, approverName: apvName }));
+        if(r.ok) baked++; else if(r.skipped !== '이미 결재본') bakeFail.push(g.dept + ' ' + (g.dateStart || '') + ': ' + r.skipped);
+      }catch(e){ bakeFail.push(g.dept + ' ' + (g.dateStart || '') + ': ' + e.message); }
+    }
+
     // 6) 선택 초기화 + 재렌더링
     apvState.selected.clear();
     apvLoadAndRender();
@@ -11028,7 +11090,7 @@ async function apvBatchApprove(){
     if(chkAll) chkAll.checked = false;
 
    // 결과 요약 토스트 (PDF 다운로드는 별도 버튼 안내)
-    toast(`결재 완료 — ${selectedGroups.length}건 처리됨. PDF는 "선택 일지 PDF 다운로드" 버튼으로 받으세요.`, 'ok');
+    toast(`결재 완료 — ${selectedGroups.length}건 · 결재본 PDF ${baked}건 저장` + (bakeFail.length ? ` · 결재본 실패 ${bakeFail.length}건 (더보기 → 결재본 만들기로 다시)` : ''), bakeFail.length ? 'err' : 'ok');
   }catch(err){
     console.error('apvBatchApprove error:',err);
     toast('결재 오류: '+(err.message||err),'err');
@@ -11151,8 +11213,8 @@ async function apvMergeDownload() {
                 const page = pdfDoc.getPages()[0];
                 const { width, height } = page.getSize();
 
-                // 2. 결재완료 시 도장 합성 (기존 시스템 함수 apvStampToImage 활용)
-                if (group.approved) {
+                // 2. 결재완료 시 도장 합성 (기존 시스템 함수 apvStampToImage 활용) — 이미 결재본이면 건너뜀
+                if (group.approved && !bmPdfBaked(pdfDoc)) {
                     const stampPngDataUrl = await apvStampToImage(group.approvedAt);
                     if (stampPngDataUrl) {
                         const stampBase64 = stampPngDataUrl.split(',')[1];
@@ -11445,6 +11507,7 @@ async function apvStampOriginalPdf(group, stampPngDataUrl, preBytes){
 
     // pdf-lib로 PDF 로드
     const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+    const _baked = bmPdfBaked(pdfDoc);   // v21.14 이미 결재본이면 도장을 다시 찍지 않음
     const page = pdfDoc.getPages()[0];
     const { width, height } = page.getSize();
 
@@ -11466,7 +11529,7 @@ async function apvStampOriginalPdf(group, stampPngDataUrl, preBytes){
     const stampX = width - 55;   // 도장 가로 가운데 (좌측 마진 9.4pt, 우측 10.5pt)
     const stampY = height - 58;  // 도장 좌하단 = 도장영역 정중앙 (height - 57.5 반올림)
 
-    page.drawImage(stampImage, {
+    if(!_baked) page.drawImage(stampImage, {
       x: stampX,
       y: stampY,
       width: stampSize,
@@ -13199,6 +13262,11 @@ async function bmReissuePdf(cat, rec, opts){
       localStorage.setItem(lsKey, JSON.stringify(loc));
     }catch(_){}
     rec.pdfFileName = newName; rec.pdfYm = ym;
+    // v21.14 결재된 일지면 새 PDF도 결재본으로
+    if(!isPpe && me.approved){
+      try{ await bmBakeApproval(Object.assign({}, g, { pdfFileName: newName, pdfYm: ym, approved: true, approvedAt: me.approvedAt, approverName: me.approverName })); }
+      catch(e){ console.warn('재발급 결재본 실패', e); }
+    }
     // 예전 PDF 휴지통 (새 PDF와 같은 경로면 이미 덮어씀)
     let trashed = 0;
     for(const op of oldPaths){
