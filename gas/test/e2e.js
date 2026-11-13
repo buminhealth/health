@@ -311,11 +311,11 @@ function check(name, cond, extra) {
              disp: getComputedStyle(document.getElementById('admin-main')).display };
   });
   check('옛 일지 PDF: 드라이브에 없으면 공개 저장소에서 읽음 (관리자)', v203.miss === '%PDF-1.4 old' && ghOldHits >= 1, [v203.miss, ghOldHits]);
-  check('관리자 메뉴: A-8 순서 (대시보드 … 신규입사 알림 · 설정)', ['대시보드', '결재 관리', '교육 현황', '보호구 지급 현황', '화학물질 보고서 검토', '위험성평가', '물질 마스터 점검', 'AI MSDS 검토', '직원정보관리', '신규입사 알림', '설정', '홈으로 나가기'].join() === v203.nav.join(), v203.nav);
+  check('관리자 메뉴: A-8 순서 (대시보드 … 신규입사 알림 · 설정)', ['대시보드', '결재 관리', '교육 현황', '보호구 지급 현황', '화학물질 보고서 검토', '위험성평가', '신규사용 · 중단 대장', '물질 마스터 점검', 'AI MSDS 검토', '직원정보관리', '신규입사 알림', '설정', '홈으로 나가기'].join() === v203.nav.join(), v203.nav);
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.16 \(2026-11-12\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.17 \(2026-11-13\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
   check('서버 버전 비교: v21.9 서버는 v21.10 앱에서 배포 필요로 (글자 순서 아님)', await page.evaluate(() => { try { return bmVerLess('v21.9 (2026-11-03)', 'v21.10') && !bmVerLess('v21.10 (2026-11-04)', 'v21.10') && !bmVerLess('v22.0', 'v21.10'); } catch (e) { return String(e); } }) === true);
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
@@ -505,7 +505,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.16'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.17'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -1362,22 +1362,67 @@ function check(name, cond, extra) {
   check('같은 날 다시 실행해도 중복 없음', (g.api.dailyCheck(), mail.sent.filter(m => /재알림/.test(m.subject)).length === 1));
   check('자동 확인을 반복해도 신규입사 메일 중복 없음', mail.sent.filter(m => m.to === 'head61@bumin.co.kr' && !/재알림/.test(m.subject)).length === 1);
 
+  // 17-9. v21.8 신규입사 알림 골라서 삭제 · 되살리기
+  {
+    const tA = (await page.evaluate(() => BMAUTH.post('login', { kind: 'admin', password: 'admin-pass-1' }))).token;
+    const tD = (await page.evaluate(() => BMAUTH.post('login', { kind: 'dept', dept: '61병동', pin: '4321' }))).token;
+    const L0 = await page.evaluate(a => BMAUTH.post('nh.list', { t: a }), tA);
+    const tgt = L0.data.find(o => o['부서'] === '61병동' && o['상태'] === '회신대기') || L0.data[0];
+    const prev = tgt['상태'], nRows = g.sheets['신규입사알림'].rows.length;
+    const dDeny = await page.evaluate(a => BMAUTH.post('nh.delete', { ids: [a.id], t: a.t }), { id: tgt['알림ID'], t: tD });
+    const del = await page.evaluate(a => BMAUTH.post('nh.delete', { ids: [a.id], t: a.t }), { id: tgt['알림ID'], t: tA });
+    const L1 = await page.evaluate(a => Promise.all([BMAUTH.post('nh.list', { t: a.a }), BMAUTH.post('nh.list', { deleted: true, t: a.a }), BMAUTH.post('nh.list', { t: a.d }),
+      BMAUTH.post('nh.answer', { id: a.id, handles: false, t: a.d })]), { a: tA, d: tD, id: tgt['알림ID'] });
+    const dRow = (L1[1].data || []).find(o => o['알림ID'] === tgt['알림ID']) || {};
+    check('신규입사 삭제 v21.8: 부서는 삭제 불가 · 관리자 삭제 → 기본 목록 · 부서 화면에서 빠짐 · 회신 막힘', dDeny.status === 403 && del.success && del.deleted === 1 &&
+      !L1[0].data.some(o => o['알림ID'] === tgt['알림ID']) && !L1[2].data.some(o => o['알림ID'] === tgt['알림ID']) && !L1[3].success, [dDeny.status, del, L1[3].error]);
+    check('신규입사 삭제 v21.8: 시트 줄은 남고 상태 삭제됨 · 삭제전상태 · 삭제일시', g.sheets['신규입사알림'].rows.length === nRows && dRow['상태'] === '삭제됨' && dRow['삭제전상태'] === prev && !!dRow['삭제일시'], dRow);
+    const runAgain = await page.evaluate(a => BMAUTH.post('nh.detect', { t: a }), tA);
+    check('신규입사 삭제 v21.8: 누락 찾기 · 자동 확인을 다시 해도 새로 만들지 않음', g.sheets['신규입사알림'].rows.length === nRows, [runAgain.created, g.sheets['신규입사알림'].rows.length, nRows]);
+    const ui = await page.evaluate(async () => {
+      await BMAUTH.adminLogin('admin-pass-1');
+      admSwitchPane('nh'); await BMSTAFF.openNh(); await new Promise(z => setTimeout(z, 400));
+      const v = { boxes: document.querySelectorAll('#staff-nh-out input[data-nhsel]').length, all: !!document.getElementById('staff-nh-all') };
+      const sel = document.getElementById('staff-nh-filter'); sel.value = '삭제됨'; await sel.onchange(); await new Promise(z => setTimeout(z, 400));
+      v.delRows = document.querySelectorAll('#staff-nh-out input[data-nhsel]').length;
+      document.getElementById('staff-nh-all').checked = true; document.getElementById('staff-nh-all').onchange();
+      v.bar = getComputedStyle(document.getElementById('staff-nh-bar')).display; v.cnt = document.getElementById('staff-nh-cnt').textContent;
+      let asked = ''; const oc = window.confirm; window.confirm = m => { asked = m; return true; };
+      document.getElementById('staff-nh-restore').click(); await new Promise(z => setTimeout(z, 800));
+      window.confirm = oc; v.asked = asked;
+      sel.value = ''; await sel.onchange(); await new Promise(z => setTimeout(z, 400));
+      const b = document.querySelector('#staff-nh-out input[data-nhsel]'); b.checked = true; b.onchange();
+      window.confirm = m => { asked = m; return false; };
+      document.getElementById('staff-nh-del').click(); window.confirm = oc; v.askDel = asked;
+      return v;
+    });
+    const L2 = await page.evaluate(a => BMAUTH.post('nh.list', { t: a }), tA);
+    const back = L2.data.find(o => o['알림ID'] === tgt['알림ID']) || {};
+    check('신규입사 화면 v21.8: 줄마다 체크 · 전체 선택 · 삭제됨 필터에서 되살리기', ui.boxes >= 1 && ui.all && ui.delRows === 1 && ui.bar === 'flex' && /1건 선택됨/.test(ui.cnt) && /되살릴까요/.test(ui.asked) && back['상태'] === prev, [ui, back['상태']]);
+    check('신규입사 화면 v21.8: 선택 삭제 확인 창에 이름 · 부서 · 상태', /삭제할까요/.test(ui.askDel) && /· .+ · .+ · /.test(ui.askDel), ui.askDel);
+  }
+
   // 18. v21.0 AI 위험성평가: 부서 로그인 → 사진 AI 분석(점수 · 등급은 서버 계산, 법령은 기준규칙 조문 목록과 대조) → 제출 → 메일 · 시트 → 관리자 처리 → 부서 화면에 결과
   g.props.LAW_OC = 'bumin3131';
   g.sheets['관리자설정'].appendRow(['위험성평가알림이메일', 'safety@bumin.co.kr', '']);
+  if (!g.sheets['직원목록'].rows.some(r => r[1] === '박간호')) g.sheets['직원목록'].appendRow(['126009001', '박간호', '61병동', '2020-01-01', '여']);
   const tk = await page.evaluate(async () => ({
     d: (await BMAUTH.post('login', { kind: 'dept', dept: '61병동', pin: '4321' })).token,
     a: (await BMAUTH.post('login', { kind: 'admin', password: 'admin-pass-1' })).token }));
   const jpg = 'data:image/jpeg;base64,' + Buffer.from('fakejpeg').toString('base64');
-  const raNo = await page.evaluate(() => BMAUTH.post('ra.analyze', { image: 'x', t: '' }));
-  check('위험성평가: 로그인 없으면 거부', !raNo.success && raNo.status === 401, raNo);
+  // v21.8 로그인 · PIN 없이 작성: 부서는 목록에 있어야 함
+  const raNo = await page.evaluate(() => Promise.all([BMAUTH.post('ra.analyze', { image: 'x', t: '' }), BMAUTH.post('ra.analyze', { image: 'x', dept: '없는부서', t: '' }),
+    BMAUTH.post('ra.meta', { t: '' }), BMAUTH.post('ra.list', { t: '' }), BMAUTH.post('ra.photo', { id: 'x', t: '' })]));
+  check('위험성평가 v21.8: 로그인 없이도 부서를 골라야 함 (없는 부서 거부)', !raNo[0].success && /부서/.test(raNo[0].error) && !raNo[1].success && /부서/.test(raNo[1].error), raNo.slice(0, 2));
+  check('위험성평가 v21.8: 로그인 없이 부서 목록 (PIN 없는 부서 · 직원목록 부서 포함, PIN 값 없음) · 하루 횟수', raNo[2].success && raNo[2].depts.indexOf('61병동') >= 0 && raNo[2].limit > 0 && !/4321/.test(JSON.stringify(raNo[2])), raNo[2].depts);
+  check('위험성평가 v21.8: 로그인 없이 목록 · 사진 거부', raNo[3].status === 401 && raNo[4].status === 401, raNo.slice(3));
   const gmCalls = gm.calls.length;
   gm.reply = { scene: '처치실 바닥', privacy: '', quality: '', goodPractice: '',
     hazards: [{ category: '작업환경', hazard: '바닥 물기', situation: '이동 중 미끄러져 넘어짐', evidence: '바닥에 물 고임', freq: 4, sev: 3, score: 99, grade: '낮음',
                 controls: [{ type: '관리적', text: '물기 제거 · 미끄럼 주의 표지', who: '근로자 즉시' }, { type: '공학적', text: '미끄럼 방지 매트', who: '관리자' }],
                 afterFreq: 2, afterSev: 3, laws: ['제3조', '제9999조'] },
               { category: '생물', hazard: '뚜껑 없는 주사침 용기', situation: '자상', evidence: '용기 넘침', freq: 9, sev: 0, controls: [], laws: ['제597조'] }] };
-  const ra1 = await page.evaluate(a => BMAUTH.post('ra.analyze', { image: a.jpg, place: '61병동 처치실', task: '청소 후', t: a.t }), { jpg, t: tk.d });
+  const ra1 = await page.evaluate(a => BMAUTH.post('ra.analyze', { image: a.jpg, place: '61병동 처치실', task: '청소 후', dept: '61병동', t: '' }), { jpg });
   const sentPrompt = gm.calls.length > gmCalls ? gm.calls[gm.calls.length - 1].body.contents[0].parts : [];
   check('위험성평가 AI: 사진(image/jpeg) · 장소만 보냄 (부서 · 이름 없음) · 기준규칙 조문 목록 포함', sentPrompt[0] && sentPrompt[0].inline_data.mime_type === 'image/jpeg' && /61병동 처치실/.test(sentPrompt[1].text) && /제3조 전도의 방지/.test(sentPrompt[1].text) && !/작성자/.test(sentPrompt[1].text), (sentPrompt[1] || {}).text && sentPrompt[1].text.slice(0, 80));
   const h0 = (ra1.hazards || [])[0] || {}, h1 = (ra1.hazards || [])[1] || {};
@@ -1385,45 +1430,151 @@ function check(name, cond, extra) {
   check('위험성평가 AI: 법령은 실제 조문만 (제9999조 버림 · 제목은 법령에서)', h0.laws.length === 1 && h0.laws[0].no === '제3조' && h0.laws[0].title === '전도의 방지' && h1.laws[0].title === '혈액노출 예방 조치', [h0.laws, h1.laws]);
   const mailN = mail.sent.length;
   const raHz = ra1.hazards.map(h => Object.assign({}, h, { freq: h === ra1.hazards[0] ? 5 : h.freq, picked: [0], extra: '매트 설치 요청' }));
-  const raSub0 = await page.evaluate(a => BMAUTH.post('ra.submit', { image: a.jpg, place: '61병동 처치실', hazards: a.hz, ai: true, author: '', t: a.t }), { jpg, hz: raHz, t: tk.d });
+  const raSub0 = await page.evaluate(a => BMAUTH.post('ra.submit', { image: a.jpg, place: '61병동 처치실', hazards: a.hz, ai: true, author: '', dept: '61병동', t: '' }), { jpg, hz: raHz });
   check('위험성평가 제출: 작성자 없으면 거부', !raSub0.success && /작성자/.test(raSub0.error), raSub0);
-  const sub = await page.evaluate(a => BMAUTH.post('ra.submit', { image: a.jpg, place: '61병동 처치실', task: '청소 후', hazards: a.hz, ai: true, immediate: '물기 닦음', author: '박간호', t: a.t }), { jpg, hz: raHz, t: tk.d });
+  const sub = await page.evaluate(a => BMAUTH.post('ra.submit', { image: a.jpg, place: '61병동 처치실', task: '청소 후', hazards: a.hz, ai: true, immediate: '물기 닦음', author: '박간호', dept: '61병동', t: '' }), { jpg, hz: raHz });
   const raSh = g.sheets['위험성평가'], raRow = raSh.rows[raSh.rows.length - 1], raH = raSh.rows[0];
   const rv = k => raRow[raH.indexOf(k)];
-  check('위험성평가 제출: 근로자가 고친 값으로 재계산(5×3=15 매우높음) · 시트 · 사진 저장 · 메일(사진 첨부)', sub.success && sub.maxScore === 15 && sub.maxGrade === '매우높음' && rv('부서') === '61병동' && rv('작성자') === '박간호' && /records\/ra\//.test(rv('사진')) && rv('상태') === '접수' &&
+  check('위험성평가 제출(로그인 없이): 근로자가 고친 값으로 재계산(5×3=15 매우높음) · 시트 · 사진 저장 · 메일(사진 첨부)', sub.success && sub.maxScore === 15 && sub.maxGrade === '매우높음' && rv('부서') === '61병동' && rv('작성자') === '박간호' && /records\/ra\//.test(rv('사진')) && rv('상태') === '접수' &&
     mail.sent.length === mailN + 1 && mail.sent[mailN].to === 'safety@bumin.co.kr' && /매우높음/.test(mail.sent[mailN].subject) && (mail.sent[mailN].attachments || []).length === 1, [sub, raRow, mail.sent.slice(mailN).map(m => m.subject)]);
   const raDet = JSON.parse(rv('상세(JSON)'));
   check('위험성평가 제출: AI 원래 값 · 선택한 대책 · 근로자 제안 보관', raDet.hazards[0].aiFreq === 4 && raDet.hazards[0].freq === 5 && raDet.hazards[0].picked[0] === 0 && raDet.hazards[0].extra === '매트 설치 요청', raDet.hazards[0]);
-  raRow[raH.indexOf('부서')] = '71병동';   // 다른 부서 제출로 바꿔 권한 확인
   const deny2 = await page.evaluate(a => Promise.all([BMAUTH.post('ra.list', { t: a.d }), BMAUTH.post('ra.photo', { id: a.id, t: a.d }), BMAUTH.post('ra.mine', { t: a.d })]), { d: tk.d, id: sub.id });
-  raRow[raH.indexOf('부서')] = '61병동';
-  check('위험성평가 권한: 부서는 전체 목록 불가 · 다른 부서 사진 · 내역 안 보임', deny2[0].status === 403 && deny2[1].status === 403 && !deny2[2].data.some(x => x.id === sub.id), deny2.map(x => x.status || x.data && x.data.length));
+  check('위험성평가 v21.8 권한: 부서 로그인도 목록 · 사진 · 내역 불가 (관리자만)', deny2.every(x => x.status === 403), deny2.map(x => x.status));
   const raUp = await page.evaluate(a => BMAUTH.post('ra.update', { id: a.id, status: '개선중', owner: '시설팀', due: '2026-11-05', comment: '매트 구매 요청함', t: a.a }), { id: sub.id, a: tk.a });
-  const raMine = await page.evaluate(a => BMAUTH.post('ra.mine', { t: a }), tk.d);
-  const raPh = await page.evaluate(a => BMAUTH.post('ra.photo', { id: a.id, t: a.d }), { id: sub.id, d: tk.d });
-  check('위험성평가 처리: 관리자 상태 · 담당 · 예정일 · 의견 → 부서 내역에 표시 · 자기 부서 사진 보기', raUp.success && raMine.data[0].status === '개선중' && raMine.data[0].comment === '매트 구매 요청함' && raMine.data[0].due === '2026-11-05' && raPh.success && /^data:image\/jpeg;base64,/.test(raPh.image), [raUp, raMine.data[0]]);
+  const sub2 = await page.evaluate(a => BMAUTH.post('ra.submit', { place: '린넨실', hazards: [{ category: '작업환경', hazard: '적재물 낙하', freq: 2, sev: 2 }], author: '없는사람', dept: '61병동', t: '' }), {});
+  const raL = await page.evaluate(a => BMAUTH.post('ra.list', { t: a }), tk.a);
+  const lMine = (raL.data || []).find(x => x.id === sub.id) || {}, lUnk = (raL.data || []).find(x => x.id === sub2.id) || {};
+  const raPh = await page.evaluate(a => BMAUTH.post('ra.photo', { id: a.id, t: a.a }), { id: sub.id, a: tk.a });
+  check('위험성평가 처리: 관리자 상태 · 담당 · 예정일 · 의견 저장 · 사진 보기', raUp.success && lMine.status === '개선중' && lMine.comment === '매트 구매 요청함' && lMine.due === '2026-11-05' && raPh.success && /^data:image\/jpeg;base64,/.test(raPh.image), [raUp, lMine]);
+  check('위험성평가 v21.8: 직원목록에 없는 작성자 → 확인 필요', sub2.success && lUnk.authorCheck === true && lMine.authorCheck === false, [lMine.author, lMine.authorCheck, lUnk.authorCheck]);
+  const raDel = await page.evaluate(a => Promise.all([BMAUTH.post('ra.delete', { ids: [a.id], t: a.d }), BMAUTH.post('ra.delete', { ids: [a.id], t: a.a })]), { id: sub2.id, d: tk.d, a: tk.a });
+  const raL2 = await page.evaluate(a => BMAUTH.post('ra.list', { t: a }), tk.a);
+  const delRow = raSh.rows.find(r => r[0] === sub2.id) || [];
+  check('위험성평가 v21.8 삭제: 부서 거부 · 관리자 삭제 → 목록에서 빠지고 시트엔 삭제일시', raDel[0].status === 403 && raDel[1].success && raDel[1].deleted === 1 && !raL2.data.some(x => x.id === sub2.id) && !!delRow[raH.indexOf('삭제일시')], [raDel, delRow.slice(-1)]);
   const raUi = await page.evaluate(async () => {
-    const r = await BMAUTH.post('login', { kind: 'dept', dept: '61병동', pin: '4321' });
+    BMAUTH.logout && BMAUTH.logout();
     goTab('home'); await new Promise(z => setTimeout(z, 200));
-    const tile = !!document.querySelector('#hm-tiles [data-go="risk"]');
+    const tileEl = document.querySelector('#hm-tiles [data-go="risk"]');
+    const tile = !!tileEl && !/로그인/.test(tileEl.textContent);
     goTab('risk'); await new Promise(z => setTimeout(z, 1500));
-    const v = { tile, page: getComputedStyle(document.getElementById('pg-risk')).display, drop: !!document.getElementById('ra-drop'), mine: document.getElementById('ra-mine') ? document.getElementById('ra-mine').textContent : '' };
+    const dsel = document.getElementById('ra-dept');
+    const v = { tile, page: getComputedStyle(document.getElementById('pg-risk')).display, drop: !!document.getElementById('ra-drop'), mine: !!document.getElementById('ra-mine'),
+                login: /로그인이 필요/.test(document.getElementById('ra-root').textContent), depts: dsel ? dsel.options.length : 0 };
+    dsel.value = '61병동'; document.getElementById('ra-author').value = '박간호';
     document.getElementById('ra-manual').click(); await new Promise(z => setTimeout(z, 100));
     v.manual = document.querySelectorAll('[data-hz]').length;
     const box = document.querySelector('[data-hz="0"]'); box.querySelector('[data-k="freq"]').value = '5'; box.querySelector('[data-k="sev"]').value = '4'; box.querySelector('[data-k="freq"]').onchange();
     v.score = box.querySelector('[data-score]').textContent;
-    admSwitchPane && goTab('admin');
+    box.querySelector('[data-k="hazard"]').value = '전선 걸림';
+    document.getElementById('ra-place').value = '간호사실';
+    const oc = window.confirm; window.confirm = () => true;
+    document.getElementById('ra-submit').click(); await new Promise(z => setTimeout(z, 1500));
+    window.confirm = oc;
+    v.done = document.getElementById('ra-form').textContent;
     return v;
   });
-  check('위험성평가 화면: 홈 타일 · 탭 · 사진 칸 · 우리 부서 내역(처리 의견) · 직접 입력 시 점수 즉시 계산', raUi.tile && raUi.page === 'block' && raUi.drop && /매트 구매 요청함/.test(raUi.mine) && raUi.manual === 1 && /20점 매우높음/.test(raUi.score), raUi);
+  check('위험성평가 화면 v21.8: 로그인 없이 열림 · 부서 선택 · 작성자 · 우리 부서 내역 없음 · 직접 입력 점수 즉시 계산', raUi.tile && raUi.page === 'block' && raUi.drop && !raUi.mine && !raUi.login && raUi.depts > 1 && raUi.manual === 1 && /20점 매우높음/.test(raUi.score), raUi);
+  check('위험성평가 화면 v21.8: 제출 완료 화면 (부서 · 작성자 · 내선 3293 · 3034)', /제출했습니다/.test(raUi.done) && /61병동/.test(raUi.done) && /박간호/.test(raUi.done) && /3293/.test(raUi.done), raUi.done.slice(0, 200));
   const raAdm = await page.evaluate(async () => {
     await BMAUTH.adminLogin('admin-pass-1');
     admSwitchPane('risk'); await BMRISK.admin(); await new Promise(z => setTimeout(z, 300));
-    const tr = document.querySelector('#ra-adm-body tr.hit'); if(tr) tr.click();
+    const v = { agg: document.querySelectorAll('#ra-adm-body tr[data-dg]').length, filters: ['raf-st', 'raf-g', 'raf-d'].every(id => !!document.getElementById(id)) };
+    document.querySelector('#ra-adm-body tr[data-dg]').click(); await new Promise(z => setTimeout(z, 50));
+    v.deptFilter = document.getElementById('raf-d').value;
+    document.getElementById('raf-st').value = ''; document.getElementById('raf-st').onchange();
+    const trs = document.querySelectorAll('#ra-adm-body tr[data-id]'), tr = trs[trs.length - 1]; if(tr) tr.children[1].click();   // 사진 있는 첫 제출
     await new Promise(z => setTimeout(z, 800));
-    return { rows: document.querySelectorAll('#ra-adm-body tr.hit').length, kpi: document.querySelector('#ra-adm-body .ra-kpi').textContent, img: !!document.querySelector('#ra-adm-body img'), save: !!document.querySelector('#ra-adm-body [data-save]') };
+    v.rows = document.querySelectorAll('#ra-adm-body tr[data-id]').length; v.kpi = document.querySelector('#ra-adm-body .ra-kpi').textContent;
+    v.img = !!document.querySelector('#ra-adm-body img'); v.save = !!document.querySelector('#ra-adm-body [data-save]');
+    const c = document.querySelector('#ra-adm-body input[data-sel]'); c.checked = true; c.onchange();
+    v.bar = getComputedStyle(document.getElementById('raf-bar')).display;
+    let asked = ''; const oc = window.confirm; window.confirm = m => { asked = m; return false; };
+    document.getElementById('raf-del').click(); window.confirm = oc;
+    v.asked = asked;
+    return v;
   });
-  check('위험성평가 관리자 화면: 목록 · 지표 · 사진 · 처리 저장 칸', raAdm.rows >= 1 && /높음 이상 미완료/.test(raAdm.kpi) && raAdm.img && raAdm.save, raAdm);
+  check('위험성평가 관리자 화면 v21.8: 부서별 집계(누르면 부서 필터) · 필터 3개 유지 · 지표 · 사진 · 처리 칸', raAdm.agg >= 1 && raAdm.filters && raAdm.deptFilter === '61병동' && raAdm.rows >= 1 && /전체 제출/.test(raAdm.kpi) && /높음 이상/.test(raAdm.kpi) && /처리 중/.test(raAdm.kpi) && raAdm.img && raAdm.save, raAdm);
+  check('위험성평가 관리자 화면 v21.8: 체크 → 선택 삭제 바 · 확인 창에 부서 · 장소 · 작성자', raAdm.bar === 'flex' && /1건을 삭제할까요/.test(raAdm.asked) && /61병동/.test(raAdm.asked), raAdm.asked);
+
+  // 18-2. v21.8 화학물질 작업공정별 관리요령: 관리자 MSDS → AI 추출(초안) → 확인 · 저장 → 누구나 출력
+  {
+    const tA = (await page.evaluate(() => BMAUTH.post('login', { kind: 'admin', password: 'admin-pass-1' }))).token;
+    const tD = (await page.evaluate(() => BMAUTH.post('login', { kind: 'dept', dept: '61병동', pin: '4321' }))).token;
+    const pdf = Buffer.from('%PDF-1.4 fake').toString('base64');
+    gm.status = 200;
+    gm.reply = { name: '테스트소독제', signal: '위험', pictos: [{ code: 'GHS02', desc: '인화성 액체 구분 2' }, { code: '감탄 부호', desc: '눈 자극성 구분 2' }, { code: 'GHS99', desc: 'x' }],
+      h: ['H225 고인화성 액체 및 증기', 'H319 눈에 심한 자극을 일으킴'], p: { prevent: ['P210 열·스파크·화염·고열로부터 멀리하시오 - 금연', 'P233 용기를 단단히 밀폐하시오', 'P240 용기와 수용설비를 접지하시오', 'P280 보호장갑·보안경을 착용하시오'],
+      respond: ['P305+P351+P338 눈에 묻으면 몇 분간 물로 조심해서 씻으시오'], store: ['P403+P235 환기가 잘 되는 곳에 보관하고 저온으로 유지하시오'], dispose: ['P501 내용물·용기를 폐기하시오'] },
+      p280: '보호장갑·보안경을 착용하시오', sec8: { resp: '유기증기용 방독마스크를 착용하시오', eye: '보안경 착용', hand: '', body: '해당없음' },
+      aid: { eye: '즉시 다량의 물로 15분 이상 씻으시오. 의학적인 조치를 받으시오.', skin: '물로 씻으시오.', inhal: '신선한 공기가 있는 곳으로 옮기시오.', ingest: '입을 물로 씻으시오.' },
+      spill: ['점화원을 제거하시오', '불활성 물질로 흡수하시오', '하수구로 유입되지 않게 하시오'], extra: ['졸음 또는 현기증을 일으킬 수 있음', '피부 건조를 일으킬 수 있음'],
+      supplier: { name: 'A사', addr: '부산시', tel: '051-000-0000' }, rev: '2025-01-02', comps: [{ name: '에탄올', cas: '64-17-5', amount: '70' }] };
+    const gx = await page.evaluate(a => Promise.all([BMAUTH.post('guide.extract', { name: '테스트소독제', content: a.pdf, t: a.d }), BMAUTH.post('guide.extract', { name: '테스트소독제', content: a.pdf, t: a.a }),
+      BMAUTH.post('guide.get', { names: ['테스트소독제'], t: '' })]), { pdf, a: tA, d: tD });
+    const gd = gx[1].data || {};
+    const sentPdf = gm.calls[gm.calls.length - 1].body.contents[0].parts;
+    check('관리요령 v21.8: 부서는 AI 추출 불가 · AI에 MSDS PDF만 보냄', gx[0].status === 403 && sentPdf[0].inline_data.mime_type === 'application/pdf' && /관리요령/.test(sentPdf[1].text), gx[0].status);
+    check('관리요령 v21.8: 그림문자 번호로 정리(감탄 부호 → GHS07, 없는 번호 버림) · H · P 코드 번호 지움', gx[1].success && gd.pictos.map(x => x.code).join() === 'GHS02,GHS07' && gd.h[0] === '고인화성 액체 및 증기' && gd.p.prevent[0].indexOf('P210') < 0 && gd.signal === '위험', gd.pictos);
+    check('관리요령 v21.8: 보호구는 8번 단어로(방독 · 보안경), 8번에 없는 손은 P280 → 확인 필요, 신체 해당없음', gd.ppe.resp === 'gas' && gd.ppe.eye && gd.ppe.hand && !gd.ppe.body && gd.ppe.check.length === 1 && /손/.test(gd.ppe.check[0]), gd.ppe);
+    check('관리요령 v21.8: 초안은 시트에 보관되지만 로그인 없이는 안 보임', !!g.sheets['관리요령'] && g.sheets['관리요령'].rows.length === 2 && gx[2].success && !gx[2].data['테스트소독제'], gx[2]);
+    const gs = await page.evaluate(a => Promise.all([BMAUTH.post('guide.save', { name: '테스트소독제', data: a.d, ok: true, t: a.dt }), BMAUTH.post('guide.save', { name: '테스트소독제', data: a.d, ok: true, t: a.at })]).then(async r => r.concat([await BMAUTH.post('guide.get', { names: ['테스트소독제'], t: '' })])), { d: gd, dt: tD, at: tA });
+    check('관리요령 v21.8: 관리자 확인 · 저장 → 로그인 없이 출력 자료 받음 (부서는 저장 불가)', gs[0].status === 403 && gs[1].success && gs[2].data['테스트소독제'] && gs[2].data['테스트소독제'].ok && g.sheets['관리요령'].rows.length === 2, gs[2]);
+    const gui = await page.evaluate(async () => {
+      BMAUTH.logout && BMAUTH.logout();
+      const p = { name: '테스트소독제', manufacturer: 'A사', usage: '소독', departments: ['61병동'], icons: [{ url: '', label: '인화성' }], components: [{ compName: '에탄올', casNumber: '64-17-5', amount: '70' }], emergency: '', pdfUrl: '' };
+      productMap[p.name] = p; if (!CHEMS.some(c => c.name === p.name)) CHEMS.push(p);
+      goTab('msds'); showDetail(p.name);
+      const ab = document.querySelector('.ms-ab'), btns = [].map.call(ab.querySelectorAll('button'), b => b.textContent);
+      const abBox = ab.getBoundingClientRect(), kind = document.querySelector('.ms-kind').getBoundingClientRect();
+      const bh = ab.querySelector('button').getBoundingClientRect().height, fs = getComputedStyle(ab.querySelector('button')).fontSize;
+      document.getElementById('ms-guide-btn').click(); await new Promise(z => setTimeout(z, 1200));
+      const dlg = document.getElementById('bm-guide');
+      const v = { btns, bh, fs, below: kind.top >= abBox.bottom - 1, dlg: !!dlg, opts: dlg ? dlg.querySelectorAll('input[name="gd-m"]').length : 0, ppeChk: !!document.getElementById('gd-ppe'), editor: !!document.getElementById('gd-ed') };
+      let written = ''; const ow = window.open;
+      window.open = () => ({ document: { open() {}, write(h) { written += h; }, close() {} } });
+      document.getElementById('gd-ppe').click(); document.getElementById('gd-print').click();
+      v.one = written; written = '';
+      dlg.querySelector('input[name="gd-m"][value="dept"]').click(); await new Promise(z => setTimeout(z, 50));
+      document.getElementById('gd-print').click();
+      v.dept = written; window.open = ow;
+      BMGUIDE.close();
+      return v;
+    });
+    const one = gui.one, pages = (one.match(/class="pg"/g) || []).length;
+    check('관리요령 화면 v21.8: MSDS 상세 버튼 3개 가로(작게 34px · 13px) · 교육 대상 안내는 버튼 아래', gui.btns.join('|') === '교육일지 작성|관리요령 출력' || gui.btns.join('|') === 'PDF 원본보기|교육일지 작성|관리요령 출력' ? (gui.bh <= 36 && gui.fs === '13px' && gui.below) : false, gui);
+    check('관리요령 화면 v21.8: 로그인 없이 출력 창 (이 물질만 · 우리 부서 전체 · 보호구 일람표 체크), 관리자 편집칸 없음', gui.dlg && gui.opts === 2 && gui.ppeChk && !gui.editor, gui);
+    check('관리요령 A4 v21.8: 제목 · 그림문자 2개 → 물질명 왼쪽 큰 칸 · 경고(감탄 부호 아님) · 신호어 위험', /화학물질 작업공정별 관리요령/.test(one) && /flex:0 0 170px/.test(one) && />경고</.test(one) && !/감탄/.test(one) && />위험</.test(one), one.length);
+    const hUl = (one.match(/<ul[^>]*>(.*?)<\/ul>/) || [])[1] || '';
+    check('관리요령 A4 v21.8: 유해위험 문구 2개 → 최소 4개(보충 문구) · 짝수 두 칸 · • 글머리', (hUl.match(/<li>• /g) || []).length === 4 && /졸음/.test(hUl) && /grid-template-columns:repeat\(2/.test(one), hUl.slice(0, 200));
+    check('관리요령 A4 v21.8: 예방 3줄 · 보호구 원형 그림(방독 · 보안경 · 장갑) · 응급조치 · 사고시 · 공급자 · 개정일 · 보호구 일람표', (one.match(/• 열·스파크|• 용기를 단단히|• 용기와 수용설비/g) || []).length === 3 && !/보호장갑·보안경을 착용하시오<br>/.test(one.split('대응')[0].split('예방')[2] || '') &&
+      /alt="방독마스크"/.test(one) && /alt="보안경"/.test(one) && /alt="보호장갑"/.test(one) && !/alt="보호의"/.test(one) && /• 즉시 다량의 물로/.test(one) && /• 점화원을 제거하시오/.test(one) && /긴급전화 051-000-0000/.test(one) && /MSDS 최종 개정 2025-01-02/.test(one) && pages === 2 && /화학물질별 적절한 보호구/.test(one), pages);
+    check('관리요령 A4 v21.8: 관리 정보 · 허용기준 · 부서 표시 없음 · 확인 필요 표시는 출력에 없음', !/허용기준|관리 정보|관리정보|확인 필요/.test(one), '');
+    const fitT = await page.evaluate(() => {
+      const R = BMGUIDE._render, long = ' 증상이 계속되거나 의식이 흐려지면 지체하지 말고 가까운 응급실로 이송하고, 이 물질안전보건자료를 의료진에게 보여 주시오.';
+      const g = { ok: true, signal: '', pictos: ['GHS02','GHS04','GHS05','GHS06','GHS07','GHS08','GHS09'].map(c => ({ code: c, desc: '시험 분류 구분 1' })),
+        h: Array.from({ length: 16 }, (_, i) => '시험 유해위험 문구 ' + (i + 1) + ' 장기간 또는 반복노출 되면 장기에 손상을 일으킴'),
+        p: { prevent: ['열 · 스파크 · 화염으로부터 멀리하시오.', '흡입하지 마시오.', '보호구를 착용하시오.'], respond: ['삼켰다면 입을 씻어내시오.', '피부에 묻으면 물로 씻으시오.', '흡입하면 신선한 공기로 옮기시오.'], store: ['환기가 잘 되는 곳에 보관하시오.', '잠금장치를 하시오.'], dispose: ['법령에 따라 폐기하시오.'] },
+        ppe: { resp: 'gas', eye: true, hand: true, body: true }, aid: { eye: '물로 씻으시오. 렌즈를 빼시오. 치료를 받으시오.' + long, skin: '물로 씻으시오. 옷을 벗으시오. 치료를 받으시오.' + long, inhal: '공기로 옮기시오. 산소를 주시오.' + long, ingest: '입을 씻으시오. 토하게 하지 마시오.' + long },
+        spill: [1, 2, 3].map(i => '누출 대처 문장 ' + i + ' 작업자는 바람을 등지고 접근하며, 관계자 외 출입을 통제하고 흡수재로 회수하시오.'), supplier: { name: '시험', tel: '000' }, rev: '2026-01-01' };
+      const box = document.createElement('div'); box.style.cssText = 'position:absolute;left:-9999px;top:0';
+      box.innerHTML = '<style>.pg{width:794px;height:1123px;box-sizing:border-box;padding:32px}</style>' + R.pageFull(g, { name: '넘침 시험', signalWord: '경고', components: [] });
+      document.body.appendChild(box);
+      const r = R.fitA4(box)[0], f = box.querySelector('[data-fit]');
+      const v = { pics: box.querySelectorAll('img[alt]').length, over: r.over, fits: f.scrollHeight <= f.clientHeight + 1, steps: r.steps, sig: /경고/.test(box.textContent) };
+      box.remove(); return v;
+    });
+    check('관리요령 v21.17: 그림문자 7개도 모두 출력 · 글이 아주 길어도 A4 한 장 (칸 · 글자 차례로 줄임) · 신호어 비면 MSDS 목록 신호어', fitT.pics >= 7 + 4 && !fitT.over && fitT.fits && fitT.steps.length >= 1 && fitT.sig, fitT);
+    check('관리요령 요약형 v21.8: 우리 부서 전체 → 반 장 요약 (공급처 · 예방조치문구)', /예방조치문구/.test(gui.dept) && /공급처/.test(gui.dept) && /flex:0 0 514px/.test(gui.dept), gui.dept.length);
+    const gAdm = await page.evaluate(async () => {
+      await BMAUTH.adminLogin('admin-pass-1');
+      BMGUIDE.open('테스트소독제'); await new Promise(z => setTimeout(z, 1200));
+      const v = { editor: !!document.getElementById('gd-ed'), flag: (document.getElementById('gd-ed') || {}).textContent || '', pics: document.querySelectorAll('#gd-ed [data-pic]:checked').length };
+      BMGUIDE.close();
+      return v;
+    });
+    check('관리요령 관리자 v21.8: 편집 칸 · 그림문자 체크 · 보호구 확인 필요 표시 (관리자 화면만)', gAdm.editor && gAdm.pics === 2 && /확인 필요/.test(gAdm.flag) && /MSDS에서 AI로 뽑기/.test(gAdm.flag), gAdm);
+  }
 
   // 19. v21.1 AI 도우미 · 안전보건공단 OPEN API · 법령 본문
   const ks = g.env.KOSHA;
@@ -1839,6 +1990,115 @@ function check(name, cond, extra) {
       return r;
     });
     check('PIN 보기: [보기] 누르면 PIN이 보이고 [숨기기]로 다시 가림', eye.t0 === 'password' && eye.t1 === 'text' && eye.l1 === '숨기기' && eye.t2 === 'password' && /PIN/.test(eye.aria), eye);
+  }
+
+  // 18-9. v21.11 유해화학물질 신규사용 · 중단 대장: 종이 대장 올리기 → 부서 보고서 반영 대기 → 승인(대장 적용) · 반려(부서에 사유)
+  {
+    const post = (b) => JSON.parse(g.api.doPost({ postData: { contents: JSON.stringify(b) } }).text);
+    const ta = post({ op: 'login', kind: 'admin', password: 'admin-pass-1' }).token, td = post({ op: 'login', kind: 'dept', dept: '61병동', pin: '4321' }).token;
+    const l0 = [post({ op: 'ledger.list', t: td }), post({ op: 'ledger.list', t: ta }), post({ op: 'ledger.list', t: '' })];
+    check('대장 v21.11: 관리자만 (부서 403 · 로그인 없음 401) · 처음엔 비어 있고 시작일 없음', l0[0].status === 403 && l0[2].status === 401 && l0[1].success && !l0[1].rows.length && !l0[1].from && !l0[1].pending.length, l0.map(x => x.status || x.rows.length));
+    const im = post({ op: 'ledger.import', t: ta, file: '대장.xlsx', from: '2026-01-01', rows: [
+      { dept: '병리과', name: 'Xylenes (혼합 자일렌)', start: '2019.3.4' },
+      { dept: '수술실', name: '10% 중성포르말린', start: '2015-01-02', stop: '2026-03-31' },
+      { dept: '수술실', name: '10% 중성포르말린', start: '20-01-01' },
+      { dept: '진단검사의학과', name: '메탄올', start: '18-02-12' },
+      { dept: '중환자실', name: '에탄올 83%', sup: 'A사', start: '2021년 6월 1일' },
+      { dept: '병리과', name: 'Xylenes (혼합 자일렌)', start: '2019-03-04' },
+      { dept: '병리과', name: '' }] });
+    const L1 = post({ op: 'ledger.list', t: ta });
+    const xy = L1.rows.find(o => /Xylenes/.test(o.name)) || {};
+    check('대장 v21.11: 종이 대장 올리기 — 날짜 여러 모양 읽기 · 같은 줄 건너뜀 · 물질명 없는 줄 뺌 · 업체 없어도 됨 · 반영 시작일', im.success && im.added === 5 && im.skipped === 1 && im.bad === 1 && L1.from === '2026-01-01' &&
+      xy.start === '2019-03-04' && xy.sup === '' && xy.src === '종이 대장' && L1.rows.find(o => o.name === '에탄올 83%').start === '2021-06-01' && L1.rows.filter(o => o.stop).length === 1 && g.sheets['신규사용중단대장'].rows.length === 6, [im, L1.rows.map(o => o.name + ' ' + o.start + '~' + o.stop)]);
+    const rec = (id, o) => Object.assign({ recordId: id, docNo: 'CR-' + id, type: '화학물질보고서', submitted: '2026-11-05T01:00:00.000Z', isNew: false, isStop: false }, o);
+    const reps = [
+      rec('r1', { isNew: true, tag: '신규', dept: '병리과', product: 'Xylenes', newDept: '병리과', newProduct: 'Xylenes', newSups: '㈜ 강동그룹(051-111-2222)', newDate: '2026-11-03', name: '김병리' }),
+      rec('r2', { isStop: true, tag: '중단', dept: '진단검사의학과', product: '메탄올', stopDept: '진단검사의학과', stopProduct: '메탄올', stopDate: '2026-11-01' }),
+      rec('r3', { isNew: true, tag: '신규', dept: '61병동', product: 'Xylene Substitute', newDept: '61병동', newProduct: 'Xylene Substitute', newSups: 'B사', newDate: '2026-11-04' }),
+      rec('r4', { isNew: true, isStop: true, tag: '신규+중단', dept: '중환자실', product: '에탄올 83%', newDept: '중환자실', newProduct: '에탄올83%', newSups: 'C사(02-1)', newDate: '2026-11-02',
+                  stopDept: '중환자실', stopProduct: '에탄올 83%', stopSups: 'A사', stopDate: '2026-11-01' }),
+      rec('r5', { isNew: true, tag: '신규', dept: '병리과', product: '옛 보고서', newDept: '병리과', newProduct: '옛 보고서', newDate: '2025-12-01', submitted: '2025-12-01T01:00:00.000Z' }),
+      rec('r6', { isNew: true, tag: '신규', dept: '수술실', product: '10% 중성포르말린', newDept: '수술실', newProduct: '10%중성포르말린', newSups: 'D사', newDate: '2026-11-01' }),
+      rec('r7', { isNew: true, tag: '신규', dept: '61병동', product: '이상한이름', newDept: '61병동', newProduct: '이상한이름', newDate: '2026-11-04' })];
+    const cg = post({ op: 'fs.get', path: 'records/chem_records.json', t: ta });
+    const cp = post({ op: 'fs.put', path: 'records/chem_records.json', sha: cg.sha || '', content: Buffer.from(JSON.stringify({ records: reps })).toString('base64'), t: ta });
+    const L2 = post({ op: 'ledger.list', t: ta });
+    const pl = id => (L2.pending.find(p => p.recordId === id) || { sides: [] }).sides;
+    check('대장 v21.11: 반영 대기 = 시작일 뒤 보고서만 (옛 보고서 빠짐) · 승인 전엔 대장 그대로', cp.success && L2.pending.length === 6 && !L2.pending.some(p => p.recordId === 'r5') && L2.rows.length === 5, L2.pending.map(p => p.recordId));
+    check('대장 v21.11: 반영 계획 — 종이 대장(업체 미기재)과 겹침 → 고름(같은 제품 기본) · 중단 → 중단일 · 없는 물질 → 추가 · 교체(신규+중단) → 옛 업체 중단 + 새 줄',
+      pl('r1')[0].act === 'ask' && pl('r1')[0].defMode === 'same' && pl('r1')[0].sup === '㈜ 강동그룹' && pl('r2')[0].act === 'stop' && pl('r3')[0].act === 'add' &&
+      pl('r4').map(x => x.side + ':' + x.act).join() === 'stop:stop,new:add' && pl('r6')[0].act === 'ask' && pl('r6')[0].cands.length === 1 && pl('r6')[0].defStop === '2026-10-31', L2.pending.map(p => p.recordId + '=' + p.sides.map(x => x.side + ':' + x.act).join('+')));
+    const ap = ['r1', 'r2', 'r3', 'r4'].map(id => post({ op: 'ledger.approve', recordId: id, choices: id === 'r1' ? { new: { mode: 'same' } } : {}, t: ta }));
+    const ap6 = post({ op: 'ledger.approve', recordId: 'r6', choices: { new: { mode: 'changed', stopDate: '2026-10-30' } }, t: ta });
+    const L3 = post({ op: 'ledger.list', t: ta });
+    const f = (n, sup) => L3.rows.filter(o => o.name.replace(/\s/g, '') === n.replace(/\s/g, '') && (sup === undefined || o.sup === sup));
+    const xy3 = f('Xylenes (혼합 자일렌)')[0] || {}, me = f('메탄올')[0] || {}, fo = f('10% 중성포르말린');
+    check('대장 v21.11: 승인 = 같은 제품 → 종이 대장 줄에 업체 채움 · 신규사용일 갱신 (줄 그대로, 이력 2개)', ap[0].success && f('Xylenes (혼합 자일렌)').length === 1 && xy3.sup === '㈜ 강동그룹' && xy3.start === '2026-11-03' && xy3.hist.length === 2 && /CR-r1/.test(xy3.hist[1].ref), xy3);
+    check('대장 v21.11: 승인 = 사용중단은 지우지 않고 중단일 기록 · 상태 중단', ap[1].success && me.stop === '2026-11-01' && me.status === '중단', me);
+    check('대장 v21.11: 승인 = 새 물질 줄 추가 · 교체 보고서는 옛 업체 줄 중단 + 새 업체 줄', ap[2].success && f('Xylene Substitute').length === 1 && f('에탄올 83%', 'A사')[0].stop === '2026-11-01' && f('에탄올 83%', 'C사')[0].start === '2026-11-02' && !f('에탄올 83%', 'C사')[0].stop, f('에탄올 83%'));
+    check('대장 v21.11: 승인 = 업체 변경 → 고른 줄에 고친 중단일 + 새 업체 줄 (예전 중단 줄은 그대로)', ap6.success && fo.length === 3 && fo.filter(o => o.stop).map(o => o.stop).sort().join() === '2026-03-31,2026-10-30' && fo.find(o => o.sup === 'D사').start === '2026-11-01', fo.map(o => o.sup + ' ' + o.start + '~' + o.stop));
+    const rj = [post({ op: 'ledger.reject', recordId: 'r7', reason: '물질명 확인', t: td }), post({ op: 'ledger.reject', recordId: 'r7', reason: '', t: ta }), post({ op: 'ledger.reject', recordId: 'r7', reason: '물질명을 MSDS와 같게 다시 적어 주세요', t: ta }),
+                post({ op: 'ledger.approve', recordId: 'r1', t: ta })];
+    const mine = post({ op: 'ledger.mine', t: td }), L4 = post({ op: 'ledger.list', t: ta });
+    check('대장 v21.11: 반려 — 부서 불가 · 사유 필수 · 대장 그대로 · 부서에 사유 (다른 부서 보고서는 안 보임) · 처리한 보고서 다시 승인 불가', rj[0].status === 403 && !rj[1].success && rj[2].success && !rj[3].success &&
+      mine.data.r7.status === '반려' && /다시 적어/.test(mine.data.r7.reason) && mine.data.r3.status === '대장 반영' && !mine.data.r1 && !L4.pending.length && L4.rows.length === L3.rows.length, [mine.data, L4.pending.length]);
+    const tid = (f('Xylene Substitute')[0] || {}).id;
+    const ed = post({ op: 'ledger.edit', id: tid, start: '2026-11-05', t: ta }), L5 = post({ op: 'ledger.list', t: ta });
+    const xs = L5.rows.find(o => o.id === tid);
+    const dl = post({ op: 'ledger.delete', id: tid, reason: '시험', t: ta }), L6 = post({ op: 'ledger.list', t: ta });
+    check('대장 v21.11: 관리자 고치기 → 이력 \'관리자 수정\' · 줄 지우기 → 목록에서 빠짐(시트엔 남음)', ed.success && xs.start === '2026-11-05' && xs.hist[xs.hist.length - 1].act === '관리자 수정' && /2026-11-04 → 2026-11-05/.test(xs.hist[xs.hist.length - 1].detail) &&
+      dl.success && !L6.rows.some(o => o.id === tid) && g.sheets['신규사용중단대장'].rows.some(r => r[0] === tid && r[6] === '삭제'), xs.hist);
+    // 화면: 승인 창(업체가 다른 같은 이름 → 업체 변경 기본) · 표 · 종이 대장 미리보기
+    reps.push(rec('r8', { isNew: true, tag: '신규', dept: '병리과', product: 'Xylenes', newDept: '병리과', newProduct: 'Xylenes', newSups: 'E사', newDate: '2026-11-08', submitted: '2026-11-08T01:00:00.000Z' }));
+    const cg2 = post({ op: 'fs.get', path: 'records/chem_records.json', t: ta });
+    post({ op: 'fs.put', path: 'records/chem_records.json', sha: cg2.sha, content: Buffer.from(JSON.stringify({ records: reps })).toString('base64'), t: ta });
+    const ui = await page.evaluate(async () => {
+      await BMAUTH.adminLogin('admin-pass-1');
+      productMap['에탄올 83%'] = { name: '에탄올 83%', departments: ['중환자실'], components: [], icons: [] };
+      productMap['메탄올'] = { name: '메탄올', departments: ['진단검사의학과'], components: [], icons: [] };
+      goTab('admin'); admSwitchPane('ledger'); await BMLEDGER.open(); await new Promise(z => setTimeout(z, 200));
+      const b = document.getElementById('ledger-body');
+      const v = { kpi: b.querySelector('.lg-kpi').textContent, wait: b.querySelectorAll('tr.w').length, sub: [...b.querySelectorAll('.lg-tbl td')].filter(td => /padding-left:\s*24px/.test(td.getAttribute('style') || '')).length,
+                  badge: document.getElementById('adm-nav-ledger-badge').textContent, nav: !!document.querySelector('.adm-nav-item[data-pane="ledger"]') };
+      const fixedNew = () => [...document.querySelectorAll('body > div')].filter(d => /z-index: ?9999/.test(d.getAttribute('style') || '') && /Xylenes/.test(d.textContent));
+      b.querySelector('[data-view]').click(); await new Promise(z => setTimeout(z, 800));
+      const vw = fixedNew(); v.view = vw.length ? vw[vw.length - 1].textContent : ''; vw.forEach(d => d.remove());
+      b.querySelector('[data-ok]').click(); await new Promise(z => setTimeout(z, 100));
+      const m = document.getElementById('lg-modal');
+      v.modal = m ? m.textContent : ''; v.def = m ? (m.querySelector('input[type=radio]:checked') || {}).value : '';
+      document.getElementById('lg-view').click(); await new Promise(z => setTimeout(z, 800));
+      const vw2 = fixedNew(); v.view2 = vw2.length > 0; vw2.forEach(d => d.remove());
+      document.getElementById('lg-go').click(); await new Promise(z => setTimeout(z, 1500));
+      v.after = b.querySelectorAll('tr.w').length;
+      document.getElementById('lg-imp').click(); await new Promise(z => setTimeout(z, 50));
+      document.getElementById('lg-i-paste').value = '부서\t물질명\t사용일\t중단일\n중환자실\t에탄올83%\t2021.6.1\t\n진검\t메탄올\t2018-02-12\t2025-12-31\n중앙공급실\t글루타알데하이드 2%\t2017.5.8\t2024.8.30\n중환자실\t에탄올 83%\t2021-06-01\t';
+      document.getElementById('lg-i-read').click(); await new Promise(z => setTimeout(z, 50));
+      v.prev = document.getElementById('lg-i-prev').textContent;
+      v.nfix = !!document.querySelector('[data-nfix]'); v.dfix = !!document.querySelector('[data-dfix]');
+      document.getElementById('lg-i-x').click();
+      return v;
+    });
+    const L7 = post({ op: 'ledger.list', t: ta });
+    check('대장 화면 v21.11: 관리자 메뉴 · 지표 4칸 · 반영 대기 줄(승인 · 반려 · 제외) · 같은 물질 묶어 보기', ui.nav && /전체 물질/.test(ui.kpi) && /반영 대기/.test(ui.kpi) && ui.wait === 1 && ui.badge === '1' && ui.sub >= 2, ui);
+    check('대장 화면 v21.11: 반영 대기 줄 · 승인 창의 [보고서 보기] → 부서가 작성한 보고서 그대로 (제품 · 업체 · 사용일)', /Xylenes/.test(ui.view) && /E사/.test(ui.view) && /2026-11-08/.test(ui.view) && ui.view2, (ui.view || '').slice(0, 200));
+    check('대장 화면 v21.11: 승인 창 — 다른 업체 같은 이름 → 업체 변경 기본 · 승인하면 옛 줄 중단 + E사 줄', /어느 경우인가요/.test(ui.modal) && ui.def === 'changed' && ui.after === 0 &&
+      L7.rows.some(o => o.sup === 'E사' && o.start === '2026-11-08' && o.name === 'Xylenes (혼합 자일렌)') && L7.rows.some(o => o.sup === '㈜ 강동그룹' && o.stop === '2026-11-07'), [ui.def, ui.after]);
+    check('대장 화면 v21.11: 종이 대장 미리보기 — MSDS 목록 대조(같음 · 비슷한 이름 · 부서 이름 확인 · 목록에 없음) · 날짜 읽기', /미리보기 — 4줄/.test(ui.prev) && /비슷한 이름 →/.test(ui.prev) && /부서 이름 확인/.test(ui.prev) && /MSDS 목록에 없음/.test(ui.prev) && /2017-05-08/.test(ui.prev) && ui.nfix && ui.dfix, ui.prev.slice(0, 300));
+    // 부서 화면: 부서현황 화학물질 보고서에 '대장 반영' · '반려(사유)' · [다시 작성], 홈 할 일에 반려
+    const dvL = await page.evaluate(async () => {
+      const os = BMAUTH.session;
+      BMAUTH.session = () => Object.assign({}, os(), { role: 'dept', dept: '61병동' });
+      try{
+        await BMDEPT.render();
+        const dv = document.getElementById('dv-body').textContent;
+        const redo = !!document.querySelector('#dv-body [data-chemredo]');
+        goTab('home');
+        const t0 = Date.now();
+        while (Date.now() - t0 < 8000 && document.getElementById('hm-todo').textContent.includes('불러오는 중')) await new Promise(r => setTimeout(r, 100));
+        return { dv, redo, home: document.getElementById('hm-todo').textContent };
+      } finally { BMAUTH.session = os; }
+    });
+    check('대장 v21.11 부서 화면: 부서현황 보고서에 대장 반영 · 반려 사유 · [다시 작성], 홈 할 일에 화학물질 보고서 반려', /대장 반영/.test(dvL.dv) && /사유: 물질명을 MSDS와 같게/.test(dvL.dv) && dvL.redo && /화학물질 보고서 다시 작성/.test(dvL.home), [dvL.dv.slice(0, 200), dvL.home.slice(0, 200)]);
   }
 
   // 19. v21.3 저장 공간 가득 참 (같은 주소 다른 앱이 5MB를 거의 다 씀) → 멈추지 않고 메모리 보관 · 앱별 사용량 표시
