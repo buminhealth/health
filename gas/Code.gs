@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.16 (2026-11-12)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.17 (2026-11-13)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -177,15 +177,20 @@ function doPost(e) {
       case 'backup.status': case 'backup.run': case 'backup.schedule':
                         result = requireAdmin_(s) || backupOp_(req); break;
       case 'emp.status': case 'emp.sync': case 'emp.merge': case 'hr.fetch':
-      case 'nh.list': case 'nh.answer': case 'nh.resend': case 'nh.run': case 'nh.detect': case 'nh.add':
+      case 'nh.list': case 'nh.answer': case 'nh.resend': case 'nh.run': case 'nh.detect': case 'nh.add': case 'nh.delete': case 'nh.restore':
                         result = staffOp_(req, s); break;
       case 'chem.audit': case 'chem.seedLaw': case 'chem.apply': case 'chem.lawImport': case 'chem.lawFetch': case 'chem.lawCycle': case 'law.status': case 'law.setOc':
                         result = chemOp_(req, s); break;
       case 'ai.status': case 'ai.setKey': case 'ai.list': case 'ai.analyze': case 'ai.judge': case 'ai.apply': case 'ai.products': case 'ai.compare':
                         result = aiOp_(req, s); break;
       case 'pdf.big':  result = requireAdmin_(s) || pdfBig_(req); break;
-      case 'ra.meta': case 'ra.analyze': case 'ra.submit': case 'ra.mine': case 'ra.photo': case 'ra.list': case 'ra.update':
+      case 'ra.meta': case 'ra.analyze': case 'ra.submit': case 'ra.mine': case 'ra.photo': case 'ra.list': case 'ra.update': case 'ra.delete':
                         result = raOp_(req, s); break;
+      case 'guide.get': case 'guide.extract': case 'guide.save': case 'guide.delete':
+                        result = guideOp_(req, s); break;
+      case 'ledger.list': case 'ledger.start': case 'ledger.import': case 'ledger.approve': case 'ledger.reject': case 'ledger.skip':
+      case 'ledger.add': case 'ledger.edit': case 'ledger.delete': case 'ledger.mine':
+                        result = clLedgerOp_(req, s); break;
       case 'help.ask': case 'help.meta': case 'help.lawRefresh': case 'help.faqList': case 'help.faqSave': case 'kosha.status': case 'kosha.setKey': case 'kosha.saveApis': case 'kosha.test':
                         result = helpOp_(req, s); break;
       case 'edu.dupes': case 'edu.dedupe': case 'edu.status': case 'edu.exclude': case 'edu.askMail': case 'edu.newChem':
@@ -1805,7 +1810,9 @@ function clearHrCredentials() {
 // ════════════════════════════════════════════════════════════════
 const NH_SHEET = '신규입사알림';
 const NH_HEADER = ['알림ID','생성일시','사번','이름','부서','입사일','취급물질','부서장이메일','최초발송','최근재알림',
-                   '재알림횟수','회신일시','취급여부','회신메모','교육일지제출일','상태','교육기한'];
+                   '재알림횟수','회신일시','취급여부','회신메모','교육일지제출일','상태','교육기한','삭제전상태','삭제일시'];
+// v21.8 관리자 삭제: 시트에서 지우지 않고 상태 '삭제됨' (재알림 · 부서 화면 · 대시보드에서 빠짐, 다시 감지돼도 새로 만들지 않음, 되살리기 가능)
+const NH_DELETED = '삭제됨';
 const EDU_PERIOD_DAYS = 3;   // 입사일로부터 3일 안에 교육
 const NH_MAX_REMIND = 3;
 
@@ -1822,6 +1829,7 @@ function sysCfg_() {
 function nhSheet_() {
   let sh = SS.getSheetByName(NH_SHEET);
   if (!sh) { sh = SS.insertSheet(NH_SHEET); sh.appendRow(NH_HEADER); sh.setFrozenRows(1); }
+  else if (sh.getLastColumn() < NH_HEADER.length) sh.getRange(1, 1, 1, NH_HEADER.length).setValues([NH_HEADER]);   // v21.8 열 추가
   return sh;
 }
 function nhRows_() {
@@ -1987,9 +1995,9 @@ function sendReminders_() {
   return sent;
 }
 
-function nhList_(s) {
+function nhList_(s, req) {
   const rows = nhRows_().map(o => { const c = Object.assign({}, o); delete c._row; return c; });
-  if (s.role === 'admin') return { success: true, data: rows };
+  if (s.role === 'admin') return { success: true, data: (req && req.deleted) ? rows : rows.filter(o => o['상태'] !== NH_DELETED) };
   return { success: true, data: rows.filter(o => sameDept_(o['부서'], s.dept) && (o['상태'] === '회신대기' || o['상태'] === '이메일없음' || o['상태'] === '취급-교육대기')) };
 }
 
@@ -1997,6 +2005,7 @@ function nhAnswer_(req, s) {
   const o = nhRows_().find(x => x['알림ID'] === req.id);
   if (!o) return { success: false, status: 404, error: '알림을 찾을 수 없습니다' };
   if (s.role !== 'admin' && !sameDept_(o['부서'], s.dept)) return { success: false, status: 403, error: '다른 부서 알림입니다' };
+  if (o['상태'] === NH_DELETED) return { success: false, status: 410, error: '보건관리실에서 삭제한 알림입니다' };
   const handles = req.handles === true;
   o['회신일시'] = nowKst_();
   o['취급여부'] = handles ? '예' : '아니오';
@@ -2034,6 +2043,13 @@ function nhAdd_(req) {
   if (!e) return { success: false, error: '직원목록에서 찾지 못했습니다: ' + name + (dept ? ' (' + dept + ')' : '') };
   const key = (e.empNo || '') + '|' + e.name + '|' + e.dept;
   const dup = nhRows_().find(o => (o['사번'] || '') + '|' + o['이름'] + '|' + o['부서'] === key);
+  if (dup && dup['상태'] === NH_DELETED) {   // v21.8 삭제했던 사람을 다시 보내면 되살려서 재발송
+    nhRestoreRow_(dup);
+    const sent = nhSend_(dup, true);
+    if (sent) { dup['최근재알림'] = nowKst_(); if (dup['상태'] === '이메일없음') { dup['상태'] = '회신대기'; dup['최초발송'] = dup['최초발송'] || nowKst_(); } }
+    nhWrite_(dup);
+    return { success: true, status: dup['상태'], id: dup['알림ID'], restored: true };
+  }
   if (dup) return { success: false, exists: dup['알림ID'], error: '이미 알림이 있습니다 (' + dup['상태'] + ') — 목록에서 [재발송]을 누르세요' };
   const chems = chemsForDept_(handlingDepts_(), e.dept) || [];
   const jd = normDate_(e.joinDate) || todayKst_();
@@ -2048,9 +2064,39 @@ function nhAdd_(req) {
   nhWrite_(o);
   return { success: true, status: o['상태'], id: o['알림ID'] };
 }
+// v21.8 관리자: 고른 알림 삭제 / 되살리기
+function nhDelete_(req) {
+  const ids = new Set((req.ids || []).map(String));
+  if (!ids.size) return { success: false, error: '삭제할 알림을 고르세요' };
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
+  let n = 0;
+  try {
+    nhRows_().forEach(o => {
+      if (!ids.has(o['알림ID']) || o['상태'] === NH_DELETED) return;
+      o['삭제전상태'] = o['상태']; o['삭제일시'] = nowKst_(); o['상태'] = NH_DELETED;
+      nhWrite_(o); n++;
+    });
+  } finally { lock.releaseLock(); }
+  return { success: true, deleted: n };
+}
+function nhRestoreRow_(o) {
+  o['상태'] = o['삭제전상태'] || (o['부서장이메일'] ? '회신대기' : '이메일없음');
+  o['삭제전상태'] = ''; o['삭제일시'] = '';
+}
+function nhRestore_(req) {
+  const ids = new Set((req.ids || []).map(String));
+  let n = 0;
+  nhRows_().forEach(o => {
+    if (!ids.has(o['알림ID']) || o['상태'] !== NH_DELETED) return;
+    nhRestoreRow_(o); nhWrite_(o); n++;
+  });
+  return { success: true, restored: n };
+}
 function nhResend_(req) {
   const o = nhRows_().find(x => x['알림ID'] === req.id);
   if (!o) return { success: false, status: 404, error: '알림을 찾을 수 없습니다' };
+  if (o['상태'] === NH_DELETED) return { success: false, error: '삭제된 알림입니다 — 먼저 되살리세요' };
   if (!o['부서장이메일']) o['부서장이메일'] = deptEmail_(o['부서']);
   if (!nhSend_(o, true)) return { success: false, error: '부서장 이메일이 없습니다 (부서인증 시트에 입력)' };
   o['최근재알림'] = nowKst_();
@@ -2211,7 +2257,9 @@ function staffOp_(req, s) {
       if (chk.ok && useSaved) saveHrBaseline_(chk);
       return { success: true, headers: r.headers, rows: r.rows, warnings: chk.problems, cached: !!r.cached, at: r.at || '' };
     }
-    case 'nh.list':   return requireLogin_(s) || nhList_(s);
+    case 'nh.list':   return requireLogin_(s) || nhList_(s, req);
+    case 'nh.delete': return deny || nhDelete_(req);
+    case 'nh.restore': return deny || nhRestore_(req);
     case 'nh.answer': return requireLogin_(s) || nhAnswer_(req, s);
     case 'nh.resend': return deny || nhResend_(req);
     case 'nh.detect':   // v21.6 누락 찾기: 인사 사이트를 다시 읽지 않고 지금 직원목록으로 신규입사 확인 · 메일
@@ -3466,7 +3514,7 @@ function nhSyncHandling_(emp, handles, by) {
   if (!SS.getSheetByName(NH_SHEET)) return;
   nhRows_().forEach(o => {
     const same = (/^\d{6,}$/.test(String(o['사번'] || '')) && o['사번'] === emp.empNo) || (o['이름'] === emp.name && sameDept_(deptAlias_(o['부서']), emp.dept));
-    if (!same) return;
+    if (!same || o['상태'] === NH_DELETED) return;
     if (handles === null) {
       if (!/^교육 현황에서/.test(o['회신메모'] || '')) return;
       o['취급여부'] = ''; o['회신일시'] = ''; o['회신메모'] = '';
@@ -3693,12 +3741,14 @@ function chemOp_(req, s) {
 // ════════════════════════════════════════════════════════════════
 const RA_SHEET = '위험성평가';
 const RA_HEADER = ['평가ID', '제출일시', '부서', '작성자', '장소', '작업·상황', '사진', '분석방식', '위험요인 요약', '최고점수', '최고등급',
-                   '즉시조치', '상세(JSON)', '상태', '담당자', '완료예정일', '관리자의견', '처리일시', '처리자'];
+                   '즉시조치', '상세(JSON)', '상태', '담당자', '완료예정일', '관리자의견', '처리일시', '처리자', '삭제일시'];
 const RA_STATUS = ['접수', '검토중', '개선중', '개선완료', '해당없음'];
 const RA_CATS = ['기계적', '전기적', '화학적', '생물학적', '작업특성(근골격계)', '작업환경', '화재·폭발', '심리사회적'];
 const RA_FREQ = ['', '거의 없음 (연 1회 미만)', '가끔 (연 수회)', '종종 (월 수회)', '자주 (주 수회)', '매우 자주 (매일)'];
 const RA_SEV = ['', '경미 (치료 불필요)', '보통 (치료 필요한 부상 · 질병)', '중대 (휴업이 필요한 부상 · 직업병)', '치명 (사망 · 영구장해)'];
 const RA_DAILY_LIMIT = 40;   // 부서별 하루 AI 분석 횟수 (무료 한도 보호)
+const RA_ANON_LIMIT = 200;   // v21.8 로그인 없이 쓰는 AI 분석 — 병원 전체 하루 합계
+const RA_ANON_SUBMIT = 300;  // v21.8 로그인 없이 제출 — 병원 전체 하루 합계 (시트 · 메일 · 사진 저장 도배 방지)
 const RA_MAX_BYTES = 6 * 1024 * 1024;
 
 function raGrade_(score) {
@@ -3708,7 +3758,22 @@ function raInt_(v, lo, hi) { const n = parseInt(v, 10); return isNaN(n) ? lo : M
 function raSheet_() {
   let sh = SS.getSheetByName(RA_SHEET);
   if (!sh) { sh = SS.insertSheet(RA_SHEET); sh.appendRow(RA_HEADER); sh.setFrozenRows(1); }
+  else if (sh.getLastColumn() < RA_HEADER.length) sh.getRange(1, 1, 1, RA_HEADER.length).setValues([RA_HEADER]);   // v21.8 열 추가
   return sh;
+}
+// v21.8 로그인 없이 작성: 고를 수 있는 부서 = 부서인증 시트(PIN 없는 부서 포함) + 직원목록 부서 (부서 이름만, 개인정보 없음)
+function raDepts_() {
+  const seen = {}, out = [];
+  const add = d => { d = String(d || '').trim(); const k = normDept_(d); if (k && !seen[k]) { seen[k] = 1; out.push(d); } };
+  try { readAuthRows_().filter(r => r.active).forEach(r => add(r.dept)); } catch (_) {}
+  try { (readEmployees_() || []).filter(e => !isResigned_(e)).forEach(e => add(e.dept)); } catch (_) {}
+  return out.filter(d => d !== '관리자').sort((a, b) => a.localeCompare(b, 'ko'));
+}
+// 로그인 = 그 부서, 로그인 없음 = 화면에서 고른 부서 (목록에 있어야 함)
+function raDept_(req, s) {
+  if (s) return s.role === 'admin' ? String(req.dept || '').trim() || '관리자' : s.dept;
+  const d = String(req.dept || '').trim();
+  return raDepts_().find(x => normDept_(x) === normDept_(d)) || '';
 }
 function raRows_() {
   const sh = raSheet_();
@@ -3827,11 +3892,16 @@ function raAnalyze_(req, s) {
   const b64 = String(req.image || '').replace(/^data:image\/\w+;base64,/, '');
   if (!b64) return { success: false, error: '사진이 없습니다' };
   if (b64.length * 0.75 > RA_MAX_BYTES) return { success: false, error: '사진이 너무 큽니다' };
-  const ck = 'ra_n_' + todayKst_() + '_' + sha256Hex_(s.dept || 'admin').slice(0, 12);
+  const isAdmin = s && s.role === 'admin', dept = raDept_(req, s);
+  if (!isAdmin && !dept) return { success: false, error: '부서를 고르세요' };
+  const ck = 'ra_n_' + todayKst_() + '_' + sha256Hex_(isAdmin ? 'admin' : normDept_(dept)).slice(0, 12);
+  const ak = 'ra_n_' + todayKst_() + '_anon';
   const cache = CacheService.getScriptCache();
-  const n = parseInt(cache.get(ck) || '0', 10);
-  if (s.role !== 'admin' && n >= RA_DAILY_LIMIT) return { success: false, error: '오늘 이 부서의 AI 분석 횟수(' + RA_DAILY_LIMIT + '회)를 다 썼습니다. [직접 입력]으로 제출하거나 내일 다시 시도하세요.' };
+  const n = parseInt(cache.get(ck) || '0', 10), na = parseInt(cache.get(ak) || '0', 10);
+  if (!isAdmin && n >= RA_DAILY_LIMIT) return { success: false, error: '오늘 이 부서의 AI 분석 횟수(' + RA_DAILY_LIMIT + '회)를 다 썼습니다. [직접 입력]으로 제출하거나 내일 다시 시도하세요.' };
+  if (!s && na >= RA_ANON_LIMIT) return { success: false, error: '오늘 병원 전체 AI 분석 횟수를 다 썼습니다. [직접 입력]으로 제출하거나 내일 다시 시도하세요.' };
   cache.put(ck, String(n + 1), 86400);
+  if (!s) cache.put(ak, String(na + 1), 86400);
   let laws = null;
   try { laws = raLawArticles_(); } catch (_) {}
   const mime = /^image\/(png|webp)$/.test(String(req.mime || '')) ? String(req.mime) : 'image/jpeg';
@@ -3848,6 +3918,8 @@ function raAnalyze_(req, s) {
 }
 
 function raSubmit_(req, s) {
+  const dept = raDept_(req, s);
+  if (!dept) return { success: false, error: '부서를 고르세요' };
   const author = String(req.author || '').trim().slice(0, 30);
   if (!author) return { success: false, error: '작성자 이름을 적어 주세요' };
   const place = String(req.place || '').trim().slice(0, 100);
@@ -3861,26 +3933,31 @@ function raSubmit_(req, s) {
       return h;
     });
   if (!hz.length) return { success: false, error: '위험요인을 하나 이상 적어 주세요' };
+  if (!s) {
+    const sk = 'ra_sub_' + todayKst_(), cache = CacheService.getScriptCache(), ns = parseInt(cache.get(sk) || '0', 10);
+    if (ns >= RA_ANON_SUBMIT) return { success: false, error: '오늘 제출이 너무 많습니다. 보건관리실(내선 3293 · 3034)에 연락해 주세요.' };
+    cache.put(sk, String(ns + 1), 86400);
+  }
   const id = 'RA' + Utilities.formatDate(new Date(), TZ, 'yyMMdd') + '-' + Math.random().toString(36).slice(2, 7).toUpperCase();
   let photo = '';
   const b64 = String(req.image || '').replace(/^data:image\/\w+;base64,/, '');
   if (b64) {
     if (b64.length * 0.75 > RA_MAX_BYTES) return { success: false, error: '사진이 너무 큽니다' };
     photo = 'records/ra/' + Utilities.formatDate(new Date(), TZ, 'yyyy-MM') + '/' + id + '.jpg';
-    writeFile_(photo, Utilities.base64Decode(b64), 'image/jpeg', s.dept || '');
+    writeFile_(photo, Utilities.base64Decode(b64), 'image/jpeg', dept === '관리자' ? '' : dept);
   }
   const max = hz.reduce((m, h) => Math.max(m, h.score), 0);
   const summary = hz.map((h, i) => (i + 1) + ') [' + h.category + '] ' + h.hazard + ' — ' + h.freq + '×' + h.sev + '=' + h.score + ' ' + h.grade +
     (h.picked.length ? ' / 대책: ' + h.picked.map(k => h.controls[k].text).join(', ') : '') + (h.extra ? ' / 제안: ' + h.extra : '')).join('\n');
   const detail = { scene: String(req.scene || '').slice(0, 200), method: req.ai ? 'AI' : '직접', hazards: hz };
-  const row = [id, nowKst_().replace('T', ' '), s.dept || '관리자', author, place, String(req.task || '').trim().slice(0, 300), photo, req.ai ? 'AI(' + aiModel_() + ')' : '직접 입력',
-               summary, max, raGrade_(max), String(req.immediate || '').trim().slice(0, 300), JSON.stringify(detail), '접수', '', '', '', '', ''];
+  const row = [id, nowKst_().replace('T', ' '), dept, author, place, String(req.task || '').trim().slice(0, 300), photo, req.ai ? 'AI(' + aiModel_() + ')' : '직접 입력',
+               summary, max, raGrade_(max), String(req.immediate || '').trim().slice(0, 300), JSON.stringify(detail), '접수', '', '', '', '', '', ''];
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
   try { raSheet_().appendRow(row.map(safeCell_)); } finally { lock.releaseLock(); }
   let mailed = false;
   try { mailed = raMail_(row, hz, photo); } catch (_) {}
-  return { success: true, id: id, maxScore: max, maxGrade: raGrade_(max), mailed: mailed };
+  return { success: true, id: id, dept: dept, author: author, place: place, maxScore: max, maxGrade: raGrade_(max), mailed: mailed };
 }
 function raLawSafe_() { try { return raLawArticles_(); } catch (_) { return null; } }
 
@@ -3916,31 +3993,43 @@ function raView_(o, full) {
 }
 
 function raOp_(req, s) {
-  const deny = requireLogin_(s);
-  if (deny) return deny;
-  const isAdmin = s.role === 'admin';
+  // v21.8 작성 · 제출은 로그인 · PIN 없이 (부서 · 작성자 직접 선택), 조회 · 처리는 관리자만
+  const isAdmin = !!s && s.role === 'admin';
   switch (req.op) {
     case 'ra.meta':
-      return { success: true, hasKey: !!PROPS.getProperty('GEMINI_API_KEY'), cats: RA_CATS, freq: RA_FREQ, sev: RA_SEV, status: RA_STATUS };
+      return { success: true, hasKey: !!PROPS.getProperty('GEMINI_API_KEY'), cats: RA_CATS, freq: RA_FREQ, sev: RA_SEV, status: RA_STATUS,
+               depts: raDepts_(), limit: RA_DAILY_LIMIT };
     case 'ra.analyze': return raAnalyze_(req, s);
     case 'ra.submit': return raSubmit_(req, s);
-    case 'ra.mine': {
-      const rows = raRows_().filter(o => isAdmin || o['부서'] === s.dept).reverse().slice(0, 50);
-      return { success: true, data: rows.map(o => raView_(o, true)) };
+  }
+  const deny = requireLogin_(s);
+  if (deny) return deny;
+  if (!isAdmin) return { success: false, status: 403, error: '관리자 권한 필요' };
+  switch (req.op) {
+    case 'ra.mine': case 'ra.list': {
+      const rows = raRows_().filter(o => !o['삭제일시']).reverse();
+      // 작성자 이름이 직원목록(재직 · 휴직)에 없으면 '확인 필요'
+      let names = null;
+      try { const emps = readEmployees_(); if (emps && emps.length) names = new Set(emps.filter(e => !isResigned_(e)).map(e => String(e.name).replace(/\s/g, ''))); } catch (_) {}
+      return { success: true, total: rows.length, data: rows.slice(0, 300).map(o => {
+        const v = raView_(o, true);
+        if (names) v.authorCheck = !names.has(String(o['작성자']).replace(/\s/g, ''));
+        return v;
+      }) };
     }
     case 'ra.photo': {
       const o = raRows_().find(x => x['평가ID'] === req.id);
-      if (!o || (!isAdmin && o['부서'] !== s.dept)) return { success: false, status: 403, error: '권한 없음' };
-      const f = o['사진'] ? getFile_(o['사진']) : null;
+      const f = o && o['사진'] ? getFile_(o['사진']) : null;
       if (!f) return { success: false, error: '사진 없음' };
       return { success: true, image: 'data:image/jpeg;base64,' + Utilities.base64Encode(f.getBlob().getBytes()) };
     }
-  }
-  if (!isAdmin) return { success: false, status: 403, error: '관리자 권한 필요' };
-  switch (req.op) {
-    case 'ra.list': {
-      const rows = raRows_().reverse();
-      return { success: true, data: rows.slice(0, 300).map(o => raView_(o, true)), total: rows.length };
+    case 'ra.delete': {   // 시트 줄은 남기고 삭제일시만 적음 (목록 · 집계에서 빠짐)
+      const ids = new Set((req.ids || []).map(String));
+      if (!ids.size) return { success: false, error: '삭제할 평가를 고르세요' };
+      const sh = raSheet_(), col = RA_HEADER.indexOf('삭제일시') + 1, now = nowKst_().replace('T', ' ');
+      let n = 0;
+      raRows_().forEach(o => { if (ids.has(o['평가ID']) && !o['삭제일시']) { sh.getRange(o._row, col).setValue(now); n++; } });
+      return { success: true, deleted: n };
     }
     case 'ra.update': {
       const o = raRows_().find(x => x['평가ID'] === req.id);
@@ -3956,6 +4045,477 @@ function raOp_(req, s) {
       set('처리일시', nowKst_().replace('T', ' '));
       set('처리자', '보건관리자');
       return { success: true };
+    }
+  }
+  return { success: false, error: 'unknown op: ' + req.op };
+}
+
+// ════════════════════════════════════════════════════════════════
+// v21.8 화학물질 작업공정별 관리요령 (MSDS 상세 → [관리요령 출력], A4 1장 · 부서 전체 요약형 · 보호구 일람표)
+//  · 자료: 시트 '관리요령' (물질마다 한 줄, 내용은 JSON). 관리자가 MSDS PDF에서 AI로 뽑고 → 고쳐서 [확인]한 것만 화면에 출력
+//  · 뽑는 항목: 신호어 · 그림문자(GHS 번호 · 분류) · 유해위험 문구 · 예방조치 문구(예방/대응/저장/폐기) · 8번 보호구 ·
+//              4번 응급조치 · 6번 누출 대처 · 1번 공급자 · 16번 개정일 · 11번 건강영향(유해위험 문구가 적을 때 보충)
+//  · 보호구는 8번 문구의 단어로 정하고(호흡기 · 눈 · 손 · 신체), 8번에 없는 부위는 2번 P280으로 채움 → 관리자 화면에 '확인 필요' 표시
+//  · AI에는 MSDS 문서만 보냄 (개인정보 없음)
+// ════════════════════════════════════════════════════════════════
+const GUIDE_SHEET = '관리요령';
+const GUIDE_HEADER = ['물질명', '신호어', '확인', '수정일시', '출처', '데이터(JSON)'];
+const GHS_NAMES = { GHS01: '폭발성', GHS02: '인화성', GHS03: '산화성', GHS04: '고압가스', GHS05: '부식성', GHS06: '급성독성', GHS07: '경고', GHS08: '건강 유해성', GHS09: '수생환경 유해성' };
+const GUIDE_PROMPT = [
+  '너는 산업보건 전문가다. 첨부한 한국어 물질안전보건자료(MSDS) PDF에서 작업장 게시용 「화학물질 작업공정별 관리요령」에 쓸 항목만 JSON으로 뽑아라.',
+  '문서에 없는 값은 빈 문자열 · 빈 배열로 두고 추측하지 마라. 문장은 문서 표현을 그대로 쓰되 H · P 코드 번호는 빼라.',
+  '{"name":"제품명","signal":"2번 신호어(위험 또는 경고)",',
+  '"pictos":[{"code":"GHS01~GHS09 중 하나","desc":"그 그림문자에 해당하는 2번 유해성 분류와 구분 (짧게, 예: 인화성 액체 구분 2)"}],',
+  '"h":["2번 유해·위험 문구 (문서 순서)"],',
+  '"p":{"prevent":["2번 예방조치 문구 - 예방"],"respond":["대응"],"store":["저장"],"dispose":["폐기"]},',
+  '"p280":"2번 P280 문구 원문 (없으면 빈 문자열)",',
+  '"sec8":{"resp":"8번 호흡기 보호 문구","eye":"눈 보호","hand":"손 보호","body":"신체 보호"},',
+  '"aid":{"eye":"4번 눈에 들어갔을 때","skin":"피부에 접촉했을 때","inhal":"흡입했을 때","ingest":"먹었을 때"},',
+  '"spill":["6번 누출 사고 시 대처 핵심 문장 3개 (인체 보호 · 흡수 · 회수 · 환경 유출 방지)"],',
+  '"extra":["11번 독성 정보 또는 4번에서 건강 영향을 짧은 문장으로 (최대 4개)"],',
+  '"supplier":{"name":"1번 공급자 또는 제조사","addr":"주소","tel":"긴급전화번호"},',
+  '"rev":"16번 최종 개정일자 (YYYY-MM-DD)",',
+  '"comps":[{"name":"3번 구성성분명","cas":"CAS 번호","amount":"함유량"}],',
+  '"warnings":["읽기 불확실한 부분"]}'
+].join('\n');
+
+function guideSheet_() {
+  let sh = SS.getSheetByName(GUIDE_SHEET);
+  if (!sh) { sh = SS.insertSheet(GUIDE_SHEET); sh.appendRow(GUIDE_HEADER); sh.setFrozenRows(1); }
+  return sh;
+}
+function guideRows_() {
+  const sh = SS.getSheetByName(GUIDE_SHEET);
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, GUIDE_HEADER.length).getDisplayValues().map((r, i) => {
+    let d = null;
+    try { d = JSON.parse(r[5] || 'null'); } catch (_) {}
+    return { _row: i + 2, name: String(r[0]).trim(), ok: /^(Y|예|확인|O)$/i.test(String(r[2]).trim()), at: r[3], src: r[4], data: d };
+  }).filter(o => o.name && o.data);
+}
+// 그림문자 이름 → GHS 번호 (AI가 이름으로 답하거나 시트 아이콘 이름에서 고를 때)
+function ghsCode_(v) {
+  const t = String(v || '').replace(/\s/g, '');
+  const m = t.match(/^GHS0?([1-9])$/i);
+  if (m) return 'GHS0' + m[1];
+  const map = [[/폭발/, 'GHS01'], [/인화|가연/, 'GHS02'], [/산화/, 'GHS03'], [/고압|가스/, 'GHS04'], [/부식/, 'GHS05'], [/급성독|해골|독성/, 'GHS06'],
+               [/감탄|경고|자극/, 'GHS07'], [/건강|호흡기과민|발암|생식|변이|표적/, 'GHS08'], [/수생|환경/, 'GHS09']];
+  for (const x of map) if (x[0].test(t)) return x[1];
+  return '';
+}
+const guideStr_ = (v, n) => String(v == null ? '' : v).replace(/\b[HP]\d{3}(\s*\+\s*[HP]\d{3})*\s*[:：]?\s*/g, '').replace(/\s+/g, ' ').trim().slice(0, n || 300);
+const guideList_ = (a, max, n) => (Array.isArray(a) ? a : String(a || '').split('\n')).map(x => guideStr_(x, n)).filter(Boolean).slice(0, max || 20);
+
+// 8번 단어로 보호구 고르기 → 없으면 P280 (확인 필요)
+function guidePpe_(sec8, p280, pAll) {
+  sec8 = sec8 || {};
+  const none = t => !t || /해당\s*없|필요\s*(하지\s*)?않|자료\s*없|^-$/.test(t);
+  const p = String(p280 || '') + ' ' + (pAll || []).join(' ');
+  const out = { resp: '', eye: false, hand: false, body: false, check: [] };
+  const r = String(sec8.resp || '');
+  if (!none(r)) {
+    if (/방독|유기|정화통|가스|증기|송기|공기호흡기|산성/.test(r)) out.resp = 'gas';
+    else if (/방진|분진|입자|미스트|흄|먼지/.test(r)) out.resp = 'dust';
+    else { out.resp = 'gas'; out.check.push('호흡기: 8번 문구가 분명하지 않아 방독마스크로 넣음'); }
+  } else if (/호흡\s*보호구/.test(p)) { out.resp = 'gas'; out.check.push('호흡기: 8번에 없어 2번 예방조치 문구로 넣음'); }
+  const part = (k, re, label) => {
+    const t = String(sec8[k] || '');
+    if (!none(t)) { out[k] = true; return; }
+    if (re.test(p)) { out[k] = true; out.check.push(label + ': 8번에 없어 P280으로 넣음'); }
+  };
+  part('eye', /보안경|안면|눈\s*보호/, '눈');
+  part('hand', /장갑/, '손');
+  part('body', /보호의|보호복|앞치마|작업복/, '신체');
+  return out;
+}
+
+function guideNormalize_(d) {
+  d = d || {};
+  const p = d.p || {};
+  const pictos = [];
+  (Array.isArray(d.pictos) ? d.pictos : []).forEach(x => {
+    const code = ghsCode_(typeof x === 'string' ? x : (x.code || x.name));
+    if (code && !pictos.some(y => y.code === code)) pictos.push({ code: code, desc: guideStr_(x.desc, 80) });
+  });
+  pictos.sort((a, b) => a.code.localeCompare(b.code));
+  const pp = { prevent: guideList_(p.prevent, 12), respond: guideList_(p.respond, 12), store: guideList_(p.store, 8), dispose: guideList_(p.dispose, 6) };
+  const sec8 = d.sec8 || {};
+  const s8 = { resp: guideStr_(sec8.resp, 300), eye: guideStr_(sec8.eye, 300), hand: guideStr_(sec8.hand, 300), body: guideStr_(sec8.body, 300) };
+  const aid = d.aid || {};
+  const sup = d.supplier || {};
+  const sig = String(d.signal || '').indexOf('위험') >= 0 ? '위험' : String(d.signal || '').indexOf('경고') >= 0 ? '경고' : '';
+  const out = {
+    name: guideStr_(d.name, 80), signal: sig, pictos: pictos.slice(0, 9),   // v21.17 5개 이상도 모두 (출력에서 그림 크기로 맞춤)
+    h: guideList_(d.h, 20, 120), p: pp, p280: guideStr_(d.p280, 300), sec8: s8,
+    aid: { eye: guideStr_(aid.eye, 400), skin: guideStr_(aid.skin, 400), inhal: guideStr_(aid.inhal, 400), ingest: guideStr_(aid.ingest, 400) },
+    spill: guideList_(d.spill, 3, 200), extra: guideList_(d.extra, 4, 120),
+    supplier: { name: guideStr_(sup.name, 80), addr: guideStr_(sup.addr, 120), tel: guideStr_(sup.tel, 40) },
+    rev: guideStr_(d.rev, 20),
+    comps: (Array.isArray(d.comps) ? d.comps : []).map(c => ({ name: guideStr_(c.name, 60), cas: guideStr_(c.cas, 30), amount: guideStr_(c.amount, 20) })).filter(c => c.name).slice(0, 8),
+    warnings: guideList_(d.warnings, 6, 200)
+  };
+  out.ppe = d.ppe && typeof d.ppe === 'object' && d.ppeManual
+    ? { resp: ['gas', 'dust'].indexOf(d.ppe.resp) >= 0 ? d.ppe.resp : '', eye: !!d.ppe.eye, hand: !!d.ppe.hand, body: !!d.ppe.body, check: [] }
+    : guidePpe_(s8, out.p280, pp.prevent);
+  out.ppeManual = !!d.ppeManual;
+  return out;
+}
+
+function guidePdfBytes_(req) {
+  if (req.content) return { bytes: Utilities.base64Decode(String(req.content)) };
+  const sh = findChemSheet_();
+  const b = sh ? chemBlock_(sh, String(req.name || '').trim()) : null;
+  if (!b) return { error: 'MSDS 목록에서 물질을 찾지 못했습니다' };
+  const m = String(b.product.pdfUrl || '').match(/[-\w]{25,}/);
+  if (!m) return { error: '이 물질은 MSDS PDF 링크가 없습니다 — PDF를 직접 올려 주세요', block: b };
+  try { return { bytes: DriveApp.getFileById(m[0]).getBlob().getBytes(), block: b }; }
+  catch (e) { return { error: 'MSDS PDF를 열지 못했습니다 (드라이브 권한 확인): ' + e.message, block: b }; }
+}
+
+function guideExtract_(req) {
+  const key = PROPS.getProperty('GEMINI_API_KEY');
+  if (!key) return { success: false, noKey: true, error: 'AI 키가 없습니다 — 관리자 화면 설정에서 Gemini 키를 저장하세요. (직접 입력해 저장할 수도 있습니다)' };
+  const b = guidePdfBytes_(req);
+  if (b.error) return { success: false, error: b.error };
+  if (b.bytes.length > AI_MAX_BYTES) return { success: false, error: 'PDF가 너무 큽니다 (15MB 이하)' };
+  const body = { contents: [{ parts: [{ inline_data: { mime_type: 'application/pdf', data: Utilities.base64Encode(b.bytes) } }, { text: GUIDE_PROMPT }] }],
+                 generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
+  const r = geminiCall_(body, key), j = r.j;
+  if (r.code !== 200 || !j) return { success: false, error: geminiErr_(r, ' (직접 입력도 가능)') };
+  const text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(x => x.text || '').join('');
+  let d;
+  try { d = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); }
+  catch (_) { return { success: false, error: 'AI 응답을 읽지 못했습니다 — 다시 시도하세요' }; }
+  const g = guideNormalize_(d);
+  const name = String(req.name || '').trim() || g.name;
+  if (!g.pictos.length && b.block && b.block.product.iconUrl) g.warnings.push('그림문자를 MSDS에서 읽지 못했습니다 — 시트 아이콘을 확인하세요');
+  guidePut_(name, g, false, 'AI(' + r.model + ')');   // 확인 전 초안으로 보관
+  return { success: true, name: name, model: r.model, data: g, ok: false };
+}
+
+function guidePut_(name, data, ok, src) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('서버가 바쁩니다');
+  try {
+    const sh = guideSheet_();
+    const json = JSON.stringify(data);
+    if (json.length > 45000) throw new Error('내용이 너무 깁니다');
+    const row = [name, data.signal || '', ok ? 'Y' : '', nowKst_().replace('T', ' '), src || '', json].map(safeCell_);
+    const cur = guideRows_().find(o => o.name === name);
+    if (cur) sh.getRange(cur._row, 1, 1, row.length).setValues([row]); else sh.appendRow(row);
+  } finally { lock.releaseLock(); }
+}
+
+function guideOp_(req, s) {
+  const isAdmin = !!s && s.role === 'admin';
+  switch (req.op) {
+    case 'guide.get': {   // 로그인 없이 — 확인된 것만 (관리자는 초안까지)
+      const want = Array.isArray(req.names) ? new Set(req.names.map(String)) : null;
+      const out = {};
+      guideRows_().forEach(o => { if ((o.ok || isAdmin) && (!want || want.has(o.name))) out[o.name] = Object.assign({ ok: o.ok, at: o.at, src: o.src }, o.data); });
+      return { success: true, data: out, ghs: GHS_NAMES };
+    }
+  }
+  const deny = requireAdmin_(s);
+  if (deny) return deny;
+  switch (req.op) {
+    case 'guide.extract': return guideExtract_(req);
+    case 'guide.save': {
+      const name = String(req.name || '').trim();
+      if (!name) return { success: false, error: '물질명이 없습니다' };
+      const g = guideNormalize_(req.data || {});
+      guidePut_(name, g, !!req.ok, '관리자 확인');
+      return { success: true, name: name, data: g, ok: !!req.ok };
+    }
+    case 'guide.delete': {
+      const cur = guideRows_().find(o => o.name === String(req.name || '').trim());
+      if (cur) guideSheet_().deleteRow(cur._row);
+      return { success: true, deleted: cur ? 1 : 0 };
+    }
+  }
+  return { success: false, error: 'unknown op: ' + req.op };
+}
+
+// ════════════════════════════════════════════════════════════════
+// v21.11 유해화학물질 신규사용 · 중단 대장
+//  · 처음 한 번 종이 대장(부서 · 물질명 · 사용일 · 중단일, 업체는 없어도 됨)을 올림 → 시트 '신규사용중단대장'
+//  · 그 뒤 부서가 낸 화학물질 보고서(records/chem_records.json)는 '반영 대기' → 관리자 [승인]하면 대장에 적용, [반려]하면 대장은 그대로 · 부서에 사유 표시
+//  · 같은 물질 = 부서 + 물질명 + 업체 (띄어쓰기 · 대소문자 · ㈜ · 괄호 안 표기 무시)
+//    신규사용: 대장에 없으면 줄 추가 / 같은 업체 줄이 있으면 신규사용일 갱신 / 업체 미기재(종이 대장) · 다른 업체 줄과 겹치면 승인 때 고름(같은 제품 · 업체 변경 · 다른 물질)
+//    사용중단: 줄을 지우지 않고 사용중단일 기록 (같은 이름 줄이 여러 개면 승인 때 고름)
+//  · 줄마다 이력(JSON) — 종이 대장 · 보고서 번호 · 관리자 수정
+//  · 보고서 처리 결과는 시트 '대장반영' (보고서 기록 JSON은 바꾸지 않음)
+// ════════════════════════════════════════════════════════════════
+const LEDGER_SHEET = '신규사용중단대장';
+const LEDGER_HEADER = ['대장ID', '부서', '물질명', '업체', '신규사용일', '사용중단일', '상태', '출처', '최근변경', '이력(JSON)'];
+const LEDGER_DEC_SHEET = '대장반영';
+const LEDGER_DEC_HEADER = ['보고서ID', '문서번호', '제출일시', '부서', '구분', '물질명', '처리', '처리일시', '처리자', '사유', '결과'];
+
+function clLedgerSheet_(name, header) {
+  let sh = SS.getSheetByName(name);
+  if (!sh) { sh = SS.insertSheet(name); sh.appendRow(header); sh.setFrozenRows(1); sh.getRange('A:Z').setNumberFormat('@'); }
+  return sh;
+}
+function clLedgerRead_(name, header) {
+  const sh = SS.getSheetByName(name);
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, header.length).getDisplayValues().map((r, i) => {
+    const o = { _row: i + 2 };
+    header.forEach((h, j) => { o[h] = String(r[j] || '').trim(); });
+    return o;
+  });
+}
+function clLedgerRows_() {
+  return clLedgerRead_(LEDGER_SHEET, LEDGER_HEADER).filter(o => o['대장ID']).map(o => {
+    let hist = [];
+    try { hist = JSON.parse(o['이력(JSON)'] || '[]'); } catch (_) {}
+    return { _row: o._row, id: o['대장ID'], dept: o['부서'], name: o['물질명'], sup: o['업체'], start: o['신규사용일'], stop: o['사용중단일'],
+             status: o['상태'], src: o['출처'], at: o['최근변경'], hist: Array.isArray(hist) ? hist : [] };
+  });
+}
+function clLedgerWrite_(sh, o) {
+  o.status = o.status === '삭제' ? '삭제' : (o.stop ? '중단' : '사용 중');
+  const row = [o.id, o.dept, o.name, o.sup || '', o.start || '', o.stop || '', o.status, o.src || '', o.at || nowKst_().replace('T', ' '),
+               JSON.stringify((o.hist || []).slice(-60))];
+  if (o._row) sh.getRange(o._row, 1, 1, row.length).setValues([row.map(safeCell_)]);
+  else { sh.appendRow(row.map(safeCell_)); o._row = sh.getLastRow(); }
+}
+function clLedgerNewId_() { return 'L' + Utilities.formatDate(new Date(), TZ, 'yyMMdd') + '-' + Math.random().toString(36).slice(2, 7).toUpperCase(); }
+function clLedgerHist_(o, act, detail, ref, by) {
+  o.hist = o.hist || [];
+  o.hist.push({ at: nowKst_().replace('T', ' '), act: act, detail: detail || '', ref: ref || '', by: by || '보건관리자' });
+  o.at = nowKst_().replace('T', ' ');
+}
+// 이름 맞추기: 띄어쓰기 · 대소문자 · 괄호 안 표기 무시 / 업체: ㈜ · (주) · 주식회사 무시
+function clLedgerNormName_(v) { return String(v || '').replace(/\([^)]*\)|\[[^\]]*\]/g, '').replace(/[\s·.,_\-]/g, '').toLowerCase(); }
+function clLedgerNormSup_(v) { return String(v || '').replace(/㈜|\(주\)|주식회사|\(유\)|유한회사|co\.?,?\s*ltd\.?|inc\.?/gi, '').replace(/[\s·.,_\-()]/g, '').toLowerCase(); }
+// 보고서 공급업체 칸 'A사(051-…), B사' → 첫 업체 이름
+function clLedgerSupOf_(v) {
+  const first = String(v || '').split(/,\s*/)[0] || '';
+  return first.replace(/\([^)]*\d[^)]*\)\s*$/, '').trim();
+}
+// 날짜: 2019.3.4 · 19-03-04 · 2019년 3월 4일 · 2019/3/4 → 2019-03-04 (모르면 '')
+function clLedgerDate_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, TZ, 'yyyy-MM-dd');
+  const t = String(v || '').trim();
+  if (!t) return '';
+  const m = t.match(/^(\d{2,4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})/);
+  if (!m) return '';
+  let y = +m[1]; if (y < 100) y += 2000;
+  const mo = +m[2], d = +m[3];
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return '';
+  return y + '-' + ('0' + mo).slice(-2) + '-' + ('0' + d).slice(-2);
+}
+function clLedgerPrevDay_(d) {
+  const t = new Date(d + 'T00:00:00+09:00');
+  if (isNaN(t)) return d;
+  return Utilities.formatDate(new Date(t.getTime() - 86400000), TZ, 'yyyy-MM-dd');
+}
+
+// 부서가 낸 화학물질 보고서 (서버 저장소의 records/chem_records.json)
+function clLedgerReports_() {
+  const f = getFile_('records/chem_records.json');
+  if (!f) return [];
+  let d;
+  try { d = JSON.parse(f.getBlob().getDataAsString('UTF-8')); } catch (_) { return []; }
+  const list = Array.isArray(d) ? d : (d && Array.isArray(d.records) ? d.records : []);
+  return list.filter(r => r && r.recordId && !r._deleted && !r.deleted);
+}
+function clLedgerSides_(r) {
+  const out = [];
+  if (r.isStop && (r.stopProduct || r.product)) out.push({ side: 'stop', dept: r.stopDept || r.dept || '', name: r.stopProduct || r.product || '', date: clLedgerDate_(r.stopDate || r.date || ''), sup: clLedgerSupOf_(r.stopSups) });
+  if (r.isNew && (r.newProduct || r.product)) out.push({ side: 'new', dept: r.newDept || r.dept || '', name: r.newProduct || r.product || '', date: clLedgerDate_(r.newDate || r.date || ''), sup: clLedgerSupOf_(r.newSups) });
+  return out;
+}
+
+// 보고서 하나를 대장에 어떻게 반영할지 (사용중단 먼저 → 신규사용)
+//  반환 sides: [{side, dept, name, date, sup, act, rowId, ask, cands, def}]
+//   act: stop | update | add | addStopped | ask
+function clLedgerPlan_(r, rows) {
+  const live = rows.filter(o => o.status !== '삭제');
+  const same = x => o => sameDept_(o.dept, x.dept) && clLedgerNormName_(o.name) === clLedgerNormName_(x.name);
+  const stopped = {};
+  return clLedgerSides_(r).map(x => {
+    const cand = live.filter(same(x)).filter(o => !o.stop && !stopped[o.id]);
+    const brief = o => ({ id: o.id, sup: o.sup, start: o.start });
+    if (x.side === 'stop') {
+      let c = cand;
+      if (x.sup && c.length > 1) { const m = c.filter(o => !o.sup || clLedgerNormSup_(o.sup) === clLedgerNormSup_(x.sup)); if (m.length) c = m; }
+      if (c.length === 1) { stopped[c[0].id] = 1; return Object.assign(x, { act: 'stop', rowId: c[0].id }); }
+      if (!c.length) return Object.assign(x, { act: 'addStopped' });
+      return Object.assign(x, { act: 'ask', ask: 'pickStop', cands: c.map(brief), def: c[0].id });
+    }
+    const exact = x.sup ? cand.filter(o => o.sup && clLedgerNormSup_(o.sup) === clLedgerNormSup_(x.sup)) : [];
+    if (exact.length) return Object.assign(x, { act: 'update', rowId: exact[0].id });
+    if (!cand.length) return Object.assign(x, { act: 'add' });
+    if (!x.sup && cand.length === 1) return Object.assign(x, { act: 'update', rowId: cand[0].id });
+    // 업체 미기재(종이 대장) · 다른 업체 줄과 이름이 겹침 → 승인 때 고름
+    const c0 = cand.find(o => !o.sup) || cand[0];
+    return Object.assign(x, { act: 'ask', ask: 'sameOrChanged', cands: cand.map(brief), def: c0.id, defMode: c0.sup ? 'changed' : 'same', defStop: x.date ? clLedgerPrevDay_(x.date) : '' });
+  });
+}
+
+function clLedgerDecisions_() {
+  const out = {};
+  clLedgerRead_(LEDGER_DEC_SHEET, LEDGER_DEC_HEADER).forEach(o => { if (o['보고서ID']) out[o['보고서ID']] = o; });
+  return out;
+}
+function clLedgerFrom_() { return PROPS.getProperty('LEDGER_FROM') || ''; }
+// 반영 대기: 대장 시작일 뒤에 제출됐고 아직 처리(승인 · 반려 · 제외) 안 된 보고서
+function clLedgerPending_(rows, dec) {
+  const from = clLedgerFrom_();
+  if (!from) return [];
+  return clLedgerReports_().filter(r => !dec[r.recordId] && String(r.submitted || '') >= from)
+    .sort((a, b) => String(a.submitted).localeCompare(String(b.submitted)))
+    .map(r => ({ recordId: r.recordId, docNo: r.docNo || '', submitted: r.submitted || '', tag: r.tag || '', writer: r.name || r.newWriter || r.stopWriter || '',
+                 sides: clLedgerPlan_(r, rows) }));
+}
+
+function clLedgerApprove_(req, by) {
+  const r = clLedgerReports_().find(x => x.recordId === req.recordId);
+  if (!r) return { success: false, error: '보고서를 찾지 못했습니다 (삭제됐을 수 있음)' };
+  if (clLedgerDecisions_()[r.recordId]) return { success: false, error: '이미 처리한 보고서입니다' };
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
+  try {
+    const sh = clLedgerSheet_(LEDGER_SHEET, LEDGER_HEADER);
+    const rows = clLedgerRows_();
+    const byId = {}; rows.forEach(o => { byId[o.id] = o; });
+    const ref = (r.docNo || r.recordId) + (r.tag ? ' · ' + r.tag : '');
+    const ch = req.choices || {};
+    const done = [];
+    const addRow = (x, start, stop, why) => {
+      const o = { id: clLedgerNewId_(), dept: x.dept, name: x.name, sup: x.sup, start: start || '', stop: stop || '', src: '보고서 ' + (r.docNo || ''), hist: [] };
+      clLedgerHist_(o, why, (start ? '신규사용일 ' + start : '') + (stop ? (start ? ' · ' : '') + '사용중단일 ' + stop : ''), ref, by);
+      clLedgerWrite_(sh, o); rows.push(o); byId[o.id] = o;
+      return o;
+    };
+    clLedgerPlan_(r, rows).forEach(x => {
+      let act = x.act, rowId = x.rowId, mode = '';
+      if (act === 'ask') {
+        const c = ch[x.side] || {};
+        rowId = x.cands.some(k => k.id === c.rowId) ? c.rowId : x.def;
+        if (x.ask === 'pickStop') act = 'stop';
+        else { mode = ['same', 'changed', 'different'].indexOf(c.mode) >= 0 ? c.mode : x.defMode; act = mode === 'same' ? 'update' : mode === 'changed' ? 'changed' : 'add'; }
+      }
+      const o = byId[rowId];
+      if (act === 'stop' && o) {
+        const d = x.date || todayKst_();
+        clLedgerHist_(o, '사용중단일 기록', '사용중단일 ' + (o.stop || '—') + ' → ' + d, ref, by);
+        o.stop = d; clLedgerWrite_(sh, o); done.push(x.name + ' 중단일 ' + d);
+      } else if (act === 'update' && o) {
+        const fill = !o.sup && x.sup;
+        clLedgerHist_(o, fill ? '같은 제품 · 업체 채움' : '신규사용일 갱신', (fill ? '업체 ' + x.sup + ' · ' : '') + '신규사용일 ' + (o.start || '—') + ' → ' + (x.date || o.start), ref, by);
+        if (fill) o.sup = x.sup;
+        if (x.date) o.start = x.date;
+        o.src = '보고서 ' + (r.docNo || ''); clLedgerWrite_(sh, o); done.push(x.name + ' 사용일 ' + o.start);
+      } else if (act === 'changed' && o) {
+        const sd = clLedgerDate_((ch[x.side] || {}).stopDate) || x.defStop || x.date || todayKst_();
+        clLedgerHist_(o, '업체 변경으로 중단', (o.sup || '업체 미기재') + ' → ' + (x.sup || '새 업체') + ' · 사용중단일 ' + sd, ref, by);
+        o.stop = sd; clLedgerWrite_(sh, o);
+        const n = addRow(Object.assign({}, x, { name: o.name }), x.date, '', '업체 변경으로 추가');   // 물질명은 대장 줄과 같게
+        n.hist[n.hist.length - 1].detail += ' · 이전 줄 ' + o.id; clLedgerWrite_(sh, n);
+        done.push(x.name + ' 업체 변경');
+      } else if (act === 'addStopped') {
+        addRow(x, '', x.date || todayKst_(), '대장에 없던 물질 · 중단으로 추가'); done.push(x.name + ' 중단(새 줄)');
+      } else {
+        addRow(x, x.date, '', mode === 'different' ? '다른 물질로 추가' : '새 물질 추가'); done.push(x.name + ' 추가');
+      }
+    });
+    clLedgerSheet_(LEDGER_DEC_SHEET, LEDGER_DEC_HEADER).appendRow([r.recordId, r.docNo || '', r.submitted || '', r.dept || '', r.tag || '', r.product || '',
+      '승인', nowKst_().replace('T', ' '), by, '', done.join(' / ')].map(safeCell_));
+    return { success: true, done: done };
+  } finally { lock.releaseLock(); }
+}
+
+function clLedgerOp_(req, s) {
+  if (req.op === 'ledger.mine') {   // 부서: 우리 부서 보고서의 대장 반영 상태 (반려 사유)
+    const deny = requireLogin_(s);
+    if (deny) return deny;
+    const dec = clLedgerDecisions_(), from = clLedgerFrom_(), out = {};
+    clLedgerReports_().forEach(r => {
+      if (s.role !== 'admin' && !sameDept_(r.dept || r.newDept || r.stopDept, s.dept)) return;
+      const d = dec[r.recordId];
+      if (d) out[r.recordId] = { status: d['처리'] === '승인' ? '대장 반영' : d['처리'], reason: d['사유'], at: d['처리일시'] };
+      else if (from && String(r.submitted || '') >= from) out[r.recordId] = { status: '반영 대기' };
+    });
+    return { success: true, data: out };
+  }
+  const deny = requireAdmin_(s);
+  if (deny) return deny;
+  const by = '보건관리자';
+  switch (req.op) {
+    case 'ledger.list': {
+      const rows = clLedgerRows_(), dec = clLedgerDecisions_();
+      return { success: true, from: clLedgerFrom_(), rows: rows.filter(o => o.status !== '삭제').map(o => { const c = Object.assign({}, o); delete c._row; return c; }),
+               pending: clLedgerPending_(rows, dec) };
+    }
+    case 'ledger.start': {   // 이 날짜(제출일시) 뒤에 낸 보고서부터 반영 대기
+      const d = clLedgerDate_(req.from) || todayKst_();
+      PROPS.setProperty('LEDGER_FROM', d);
+      return { success: true, from: d };
+    }
+    case 'ledger.import': {
+      const list = (Array.isArray(req.rows) ? req.rows : []).slice(0, 3000);
+      if (!list.length) return { success: false, error: '넣을 줄이 없습니다' };
+      const lock = LockService.getScriptLock();
+      if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
+      try {
+        const sh = clLedgerSheet_(LEDGER_SHEET, LEDGER_HEADER);
+        const rows = clLedgerRows_().filter(o => o.status !== '삭제');
+        const key = o => normDept_(o.dept) + '|' + clLedgerNormName_(o.name) + '|' + clLedgerNormSup_(o.sup) + '|' + (o.start || '');
+        const seen = {}; rows.forEach(o => { seen[key(o)] = 1; });
+        let added = 0, skipped = 0, bad = 0;
+        const out = [];
+        list.forEach(x => {
+          const o = { dept: String(x.dept || '').trim().slice(0, 40), name: String(x.name || '').trim().slice(0, 120), sup: String(x.sup || '').trim().slice(0, 80),
+                      start: clLedgerDate_(x.start), stop: clLedgerDate_(x.stop) };
+          if (!o.dept || !o.name) { bad++; return; }
+          if (seen[key(o)]) { skipped++; return; }
+          seen[key(o)] = 1;
+          o.id = clLedgerNewId_(); o.src = '종이 대장'; o.hist = [];
+          clLedgerHist_(o, '종이 대장에서 올림', (req.file ? String(req.file).slice(0, 80) + ' · ' : '') + '사용일 ' + (o.start || '—') + (o.stop ? ' · 중단일 ' + o.stop : ''), '', by);
+          o.status = o.stop ? '중단' : '사용 중'; o.at = nowKst_().replace('T', ' ');
+          out.push([o.id, o.dept, o.name, o.sup, o.start, o.stop, o.status, o.src, o.at, JSON.stringify(o.hist)].map(safeCell_));
+          added++;
+        });
+        if (out.length) sh.getRange(sh.getLastRow() + 1, 1, out.length, LEDGER_HEADER.length).setValues(out);
+        if (!clLedgerFrom_()) PROPS.setProperty('LEDGER_FROM', clLedgerDate_(req.from) || todayKst_());
+        return { success: true, added: added, skipped: skipped, bad: bad, from: clLedgerFrom_() };
+      } finally { lock.releaseLock(); }
+    }
+    case 'ledger.approve': return clLedgerApprove_(req, by);
+    case 'ledger.reject': case 'ledger.skip': {
+      const reason = String(req.reason || '').trim().slice(0, 300);
+      if (req.op === 'ledger.reject' && !reason) return { success: false, error: '반려 사유를 적어 주세요' };
+      const r = clLedgerReports_().find(x => x.recordId === req.recordId);
+      if (!r) return { success: false, error: '보고서를 찾지 못했습니다' };
+      if (clLedgerDecisions_()[r.recordId]) return { success: false, error: '이미 처리한 보고서입니다' };
+      clLedgerSheet_(LEDGER_DEC_SHEET, LEDGER_DEC_HEADER).appendRow([r.recordId, r.docNo || '', r.submitted || '', r.dept || '', r.tag || '', r.product || '',
+        req.op === 'ledger.reject' ? '반려' : '제외', nowKst_().replace('T', ' '), by, reason, '대장 변경 없음'].map(safeCell_));
+      return { success: true };
+    }
+    case 'ledger.add': case 'ledger.edit': case 'ledger.delete': {
+      const sh = clLedgerSheet_(LEDGER_SHEET, LEDGER_HEADER);
+      const rows = clLedgerRows_();
+      let o = req.op === 'ledger.add' ? { id: clLedgerNewId_(), src: '관리자 추가', hist: [] } : rows.find(x => x.id === req.id);
+      if (!o) return { success: false, error: '대장 줄을 찾지 못했습니다' };
+      if (req.op === 'ledger.delete') {
+        clLedgerHist_(o, '관리자 삭제', String(req.reason || '').slice(0, 200), '', by);
+        o.status = '삭제'; clLedgerWrite_(sh, o);
+        return { success: true };
+      }
+      const v = { dept: String(req.dept != null ? req.dept : o.dept || '').trim().slice(0, 40), name: String(req.name != null ? req.name : o.name || '').trim().slice(0, 120),
+                  sup: String(req.sup != null ? req.sup : o.sup || '').trim().slice(0, 80),
+                  start: req.start != null ? clLedgerDate_(req.start) : o.start, stop: req.stop != null ? clLedgerDate_(req.stop) : o.stop };
+      if (!v.dept || !v.name) return { success: false, error: '부서와 물질명을 적어 주세요' };
+      const diff = ['dept', 'name', 'sup', 'start', 'stop'].filter(k => (o[k] || '') !== (v[k] || ''))
+        .map(k => ({ dept: '부서', name: '물질명', sup: '업체', start: '신규사용일', stop: '사용중단일' }[k]) + ' ' + (o[k] || '—') + ' → ' + (v[k] || '—'));
+      if (req.op === 'ledger.edit' && !diff.length) return { success: true, same: true };
+      Object.assign(o, v);
+      clLedgerHist_(o, req.op === 'ledger.add' ? '관리자 추가' : '관리자 수정', req.op === 'ledger.add' ? '신규사용일 ' + (v.start || '—') + (v.stop ? ' · 사용중단일 ' + v.stop : '') : diff.join(' · '), '', by);
+      clLedgerWrite_(sh, o);
+      return { success: true, id: o.id };
     }
   }
   return { success: false, error: 'unknown op: ' + req.op };
