@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.17 (2026-11-13)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.19 (2026-11-16)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -179,6 +179,7 @@ function doPost(e) {
       case 'emp.status': case 'emp.sync': case 'emp.merge': case 'hr.fetch':
       case 'nh.list': case 'nh.answer': case 'nh.resend': case 'nh.run': case 'nh.detect': case 'nh.add': case 'nh.delete': case 'nh.restore':
                         result = staffOp_(req, s); break;
+      case 'chem.readMsds': result = chemReadMsds_(req, s); break;   // v21.19 부서: 보고서에 올린 MSDS로 칸 채우기
       case 'chem.audit': case 'chem.seedLaw': case 'chem.apply': case 'chem.lawImport': case 'chem.lawFetch': case 'chem.lawCycle': case 'law.status': case 'law.setOc':
                         result = chemOp_(req, s); break;
       case 'ai.status': case 'ai.setKey': case 'ai.list': case 'ai.analyze': case 'ai.judge': case 'ai.apply': case 'ai.products': case 'ai.compare':
@@ -186,10 +187,10 @@ function doPost(e) {
       case 'pdf.big':  result = requireAdmin_(s) || pdfBig_(req); break;
       case 'ra.meta': case 'ra.analyze': case 'ra.submit': case 'ra.mine': case 'ra.photo': case 'ra.list': case 'ra.update': case 'ra.delete':
                         result = raOp_(req, s); break;
-      case 'guide.get': case 'guide.extract': case 'guide.save': case 'guide.delete':
+      case 'guide.get': case 'guide.auto': case 'guide.extract': case 'guide.save': case 'guide.delete':
                         result = guideOp_(req, s); break;
       case 'ledger.list': case 'ledger.start': case 'ledger.import': case 'ledger.approve': case 'ledger.reject': case 'ledger.skip':
-      case 'ledger.add': case 'ledger.edit': case 'ledger.delete': case 'ledger.mine':
+      case 'ledger.add': case 'ledger.edit': case 'ledger.delete': case 'ledger.mine': case 'ledger.readFile':
                         result = clLedgerOp_(req, s); break;
       case 'help.ask': case 'help.meta': case 'help.lawRefresh': case 'help.faqList': case 'help.faqSave': case 'kosha.status': case 'kosha.setKey': case 'kosha.saveApis': case 'kosha.test':
                         result = helpOp_(req, s); break;
@@ -4158,6 +4159,7 @@ function guideNormalize_(d) {
     ? { resp: ['gas', 'dust'].indexOf(d.ppe.resp) >= 0 ? d.ppe.resp : '', eye: !!d.ppe.eye, hand: !!d.ppe.hand, body: !!d.ppe.body, check: [] }
     : guidePpe_(s8, out.p280, pp.prevent);
   out.ppeManual = !!d.ppeManual;
+  out.pdfId = String(d.pdfId || '').replace(/[^-\w]/g, '').slice(0, 80);
   return out;
 }
 
@@ -4172,25 +4174,68 @@ function guidePdfBytes_(req) {
   catch (e) { return { error: 'MSDS PDF를 열지 못했습니다 (드라이브 권한 확인): ' + e.message, block: b }; }
 }
 
+// MSDS PDF를 Gemini로 읽어 관리요령 자료로 정리 (관리자 · 자동 공통)
+function guideRead_(bytes, key) {
+  if (bytes.length > AI_MAX_BYTES) return { error: 'MSDS PDF가 너무 큽니다 (15MB 이하)' };
+  const body = { contents: [{ parts: [{ inline_data: { mime_type: 'application/pdf', data: Utilities.base64Encode(bytes) } }, { text: GUIDE_PROMPT }] }],
+                 generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
+  const r = geminiCall_(body, key), j = r.j;
+  if (r.code !== 200 || !j) return { error: geminiErr_(r, '') };
+  const text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(x => x.text || '').join('');
+  let d;
+  try { d = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); }
+  catch (_) { return { error: 'AI가 MSDS를 읽었지만 내용을 정리하지 못했습니다 — 잠시 뒤 다시 눌러 주세요' }; }
+  return { g: guideNormalize_(d), model: r.model };
+}
+function guidePdfId_(url) { const m = String(url || '').match(/[-\w]{25,}/); return m ? m[0] : ''; }
+
+// 관리자: 다시 읽기 · PDF 올려서 읽기
 function guideExtract_(req) {
   const key = PROPS.getProperty('GEMINI_API_KEY');
   if (!key) return { success: false, noKey: true, error: 'AI 키가 없습니다 — 관리자 화면 설정에서 Gemini 키를 저장하세요. (직접 입력해 저장할 수도 있습니다)' };
   const b = guidePdfBytes_(req);
   if (b.error) return { success: false, error: b.error };
-  if (b.bytes.length > AI_MAX_BYTES) return { success: false, error: 'PDF가 너무 큽니다 (15MB 이하)' };
-  const body = { contents: [{ parts: [{ inline_data: { mime_type: 'application/pdf', data: Utilities.base64Encode(b.bytes) } }, { text: GUIDE_PROMPT }] }],
-                 generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
-  const r = geminiCall_(body, key), j = r.j;
-  if (r.code !== 200 || !j) return { success: false, error: geminiErr_(r, ' (직접 입력도 가능)') };
-  const text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(x => x.text || '').join('');
-  let d;
-  try { d = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); }
-  catch (_) { return { success: false, error: 'AI 응답을 읽지 못했습니다 — 다시 시도하세요' }; }
-  const g = guideNormalize_(d);
-  const name = String(req.name || '').trim() || g.name;
+  const r = guideRead_(b.bytes, key);
+  if (r.error) return { success: false, error: r.error };
+  const g = r.g, name = String(req.name || '').trim() || g.name;
+  if (b.block) g.pdfId = guidePdfId_(b.block.product.pdfUrl);
   if (!g.pictos.length && b.block && b.block.product.iconUrl) g.warnings.push('그림문자를 MSDS에서 읽지 못했습니다 — 시트 아이콘을 확인하세요');
-  guidePut_(name, g, false, 'AI(' + r.model + ')');   // 확인 전 초안으로 보관
+  guidePut_(name, g, false, 'AI(' + r.model + ')');
   return { success: true, name: name, model: r.model, data: g, ok: false };
+}
+
+// v21.18 부서: [관리요령 출력]을 누르면 MSDS PDF를 자동으로 읽어 저장 → 바로 출력 (로그인 없이)
+//  · 이미 읽은 것(같은 PDF)은 다시 읽지 않음 → 두 번째부터 바로 · PDF 링크가 바뀌면 다시 읽음
+//  · 같은 물질을 여러 명이 동시에 누르면 한 번만 읽음(나머지는 잠시 뒤 다시 확인) · 하루 자동 읽기 한도
+const GUIDE_AUTO_LIMIT = 80;   // 기본값 — 스크립트 속성 GUIDE_AUTO_LIMIT 에 숫자를 넣으면 그 값
+function guideAuto_(req) {
+  const name = String(req.name || '').trim();
+  if (!name) return { success: false, error: '물질명이 없습니다' };
+  const sh = findChemSheet_();
+  const blk = sh ? chemBlock_(sh, name) : null;
+  if (!blk) return { success: false, error: 'MSDS 목록에서 물질을 찾지 못했습니다 — 보건관리실(내선 3293 · 3034)에 알려 주세요' };
+  const pdfId = guidePdfId_(blk.product.pdfUrl);
+  const cur = guideRows_().find(o => o.name === name);
+  if (cur && cur.data && (cur.ok || !pdfId || !cur.data.pdfId || cur.data.pdfId === pdfId)) return { success: true, name: name, data: Object.assign({ ok: cur.ok, at: cur.at, src: cur.src }, cur.data), cached: true };
+  if (!pdfId) return { success: false, noPdf: true, error: '이 물질은 MSDS PDF가 등록되어 있지 않아 자동으로 읽을 수 없습니다 — 보건관리실(내선 3293 · 3034)에 알려 주세요' };
+  const key = PROPS.getProperty('GEMINI_API_KEY');
+  if (!key) return { success: false, noKey: true, error: 'AI 설정이 아직 안 되어 자동으로 읽을 수 없습니다 — 보건관리실(내선 3293 · 3034)에 알려 주세요' };
+  const cache = CacheService.getScriptCache(), busyKey = 'guide_busy_' + sha256Hex_(name).slice(0, 16), dayKey = 'guide_auto_' + todayKst_();
+  if (cache.get(busyKey)) return { success: false, busy: true, error: '다른 사람이 지금 이 MSDS를 읽는 중입니다 — 잠시 뒤 자동으로 다시 확인합니다' };
+  const n = parseInt(cache.get(dayKey) || '0', 10);
+  const lim = parseInt(PROPS.getProperty('GUIDE_AUTO_LIMIT') || '', 10) || GUIDE_AUTO_LIMIT;   // v21.19 스크립트 속성으로 바꿀 수 있음
+  if (n >= lim) return { success: false, error: '오늘 자동 읽기 횟수를 다 썼습니다 — 내일 다시 눌러 주세요' };
+  cache.put(busyKey, '1', 180); cache.put(dayKey, String(n + 1), 86400);
+  try {
+    let bytes;
+    try { bytes = DriveApp.getFileById(pdfId).getBlob().getBytes(); }
+    catch (e) { return { success: false, error: 'MSDS PDF를 열지 못했습니다 (드라이브 권한) — 보건관리실(내선 3293 · 3034)에 알려 주세요' }; }
+    const r = guideRead_(bytes, key);
+    if (r.error) return { success: false, error: r.error };
+    const g = r.g; g.pdfId = pdfId;
+    guidePut_(name, g, false, 'AI 자동(' + r.model + ')');
+    return { success: true, name: name, data: Object.assign({ ok: false, src: 'AI 자동', at: nowKst_().replace('T', ' ') }, g) };
+  } finally { cache.remove(busyKey); }
 }
 
 function guidePut_(name, data, ok, src) {
@@ -4209,10 +4254,11 @@ function guidePut_(name, data, ok, src) {
 function guideOp_(req, s) {
   const isAdmin = !!s && s.role === 'admin';
   switch (req.op) {
-    case 'guide.get': {   // 로그인 없이 — 확인된 것만 (관리자는 초안까지)
+    case 'guide.auto': return guideAuto_(req);
+    case 'guide.get': {   // 로그인 없이
       const want = Array.isArray(req.names) ? new Set(req.names.map(String)) : null;
       const out = {};
-      guideRows_().forEach(o => { if ((o.ok || isAdmin) && (!want || want.has(o.name))) out[o.name] = Object.assign({ ok: o.ok, at: o.at, src: o.src }, o.data); });
+      guideRows_().forEach(o => { if (!want || want.has(o.name)) out[o.name] = Object.assign({ ok: o.ok, at: o.at, src: o.src }, o.data); });   // v21.18 자동으로 읽은 것도 바로 출력
       return { success: true, data: out, ghs: GHS_NAMES };
     }
   }
@@ -4281,6 +4327,11 @@ function clLedgerWrite_(sh, o) {
   else { sh.appendRow(row.map(safeCell_)); o._row = sh.getLastRow(); }
 }
 function clLedgerNewId_() { return 'L' + Utilities.formatDate(new Date(), TZ, 'yyMMdd') + '-' + Math.random().toString(36).slice(2, 7).toUpperCase(); }
+// v21.18 출처: 시스템으로 제출된 화학물질 보고서 → '화학물질 보고서 · 번호 · 부서 제출 날짜'
+function clLedgerRepSrc_(r, dept) {
+  const d = String(r.submitted || '').slice(0, 10);
+  return '화학물질 보고서 · ' + (r.docNo || r.recordId || '') + ' · ' + (dept || r.dept || '') + (d ? ' 제출 ' + d : '');
+}
 function clLedgerHist_(o, act, detail, ref, by) {
   o.hist = o.hist || [];
   o.hist.push({ at: nowKst_().replace('T', ' '), act: act, detail: detail || '', ref: ref || '', by: by || '보건관리자' });
@@ -4385,12 +4436,13 @@ function clLedgerApprove_(req, by) {
     const ch = req.choices || {};
     const done = [];
     const addRow = (x, start, stop, why) => {
-      const o = { id: clLedgerNewId_(), dept: x.dept, name: x.name, sup: x.sup, start: start || '', stop: stop || '', src: '보고서 ' + (r.docNo || ''), hist: [] };
+      const o = { id: clLedgerNewId_(), dept: x.dept, name: x.name, sup: x.sup, start: start || '', stop: stop || '', src: clLedgerRepSrc_(r, x.dept), hist: [] };
       clLedgerHist_(o, why, (start ? '신규사용일 ' + start : '') + (stop ? (start ? ' · ' : '') + '사용중단일 ' + stop : ''), ref, by);
       clLedgerWrite_(sh, o); rows.push(o); byId[o.id] = o;
       return o;
     };
-    clLedgerPlan_(r, rows).forEach(x => {
+    const plan = clLedgerPlan_(r, rows);
+    plan.forEach(x => {
       let act = x.act, rowId = x.rowId, mode = '';
       if (act === 'ask') {
         const c = ch[x.side] || {};
@@ -4408,7 +4460,7 @@ function clLedgerApprove_(req, by) {
         clLedgerHist_(o, fill ? '같은 제품 · 업체 채움' : '신규사용일 갱신', (fill ? '업체 ' + x.sup + ' · ' : '') + '신규사용일 ' + (o.start || '—') + ' → ' + (x.date || o.start), ref, by);
         if (fill) o.sup = x.sup;
         if (x.date) o.start = x.date;
-        o.src = '보고서 ' + (r.docNo || ''); clLedgerWrite_(sh, o); done.push(x.name + ' 사용일 ' + o.start);
+        clLedgerWrite_(sh, o); done.push(x.name + ' 사용일 ' + o.start);   // v21.18 출처(처음 들어온 곳)는 그대로 — 바뀐 내용은 이력에
       } else if (act === 'changed' && o) {
         const sd = clLedgerDate_((ch[x.side] || {}).stopDate) || x.defStop || x.date || todayKst_();
         clLedgerHist_(o, '업체 변경으로 중단', (o.sup || '업체 미기재') + ' → ' + (x.sup || '새 업체') + ' · 사용중단일 ' + sd, ref, by);
@@ -4422,10 +4474,123 @@ function clLedgerApprove_(req, by) {
         addRow(x, x.date, '', mode === 'different' ? '다른 물질로 추가' : '새 물질 추가'); done.push(x.name + ' 추가');
       }
     });
+    plan.forEach(x => { try { const m = clChemDept_(x.name, x.dept, x.side === 'new'); if (m) done.push(m); } catch (e) { done.push('MSDS 목록 부서 칸 반영 실패: ' + e.message); } });   // v21.19
     clLedgerSheet_(LEDGER_DEC_SHEET, LEDGER_DEC_HEADER).appendRow([r.recordId, r.docNo || '', r.submitted || '', r.dept || '', r.tag || '', r.product || '',
       '승인', nowKst_().replace('T', ' '), by, '', done.join(' / ')].map(safeCell_));
     return { success: true, done: done };
   } finally { lock.releaseLock(); }
+}
+
+// v21.18 종이 대장 PDF · 사진(스캔 포함)을 AI로 읽어 표로 (미리보기에서 확인한 뒤 넣음)
+const LEDGER_READ_PROMPT = [
+  '첨부한 문서는 병원의 「유해화학물질 신규사용 · 사용중단 대장」(종이 대장을 스캔하거나 출력한 것)이다.',
+  '표의 줄마다 부서, 물질명(제품명), 업체(제조사 · 공급업체가 적혀 있으면), 사용일(신규사용일), 중단일(사용중단일)을 읽어 JSON으로만 답하라.',
+  '부서가 표 위 제목 · 머리말에만 적혀 있으면(부서별 한 장) 그 부서를 모든 줄에 채워라. 여러 쪽이면 모든 쪽을 읽어라.',
+  '읽을 수 없는 칸은 빈 문자열. 날짜는 적힌 그대로 옮기되 가능하면 YYYY-MM-DD. 제목 줄 · 합계 · 서명란은 빼라. 추측하지 마라.',
+  '{"rows":[{"dept":"부서","name":"물질명","sup":"업체","start":"사용일","stop":"중단일"}],"warnings":["읽기 어려웠던 부분"]}'
+].join('\n');
+function clLedgerReadFile_(req) {
+  const key = PROPS.getProperty('GEMINI_API_KEY');
+  if (!key) return { success: false, error: 'AI 키가 없어 PDF · 사진을 읽을 수 없습니다 — 엑셀로 옮기거나 표를 붙여넣어 주세요' };
+  const b64 = String(req.content || '').replace(/^data:[^,]*,/, '');
+  if (!b64) return { success: false, error: '파일이 없습니다' };
+  if (b64.length * 0.75 > AI_MAX_BYTES) return { success: false, error: '파일이 너무 큽니다 (15MB 이하)' };
+  const mime = /^image\/(png|jpeg|webp)$/.test(String(req.mime || '')) ? String(req.mime) : 'application/pdf';
+  const body = { contents: [{ parts: [{ inline_data: { mime_type: mime, data: b64 } }, { text: LEDGER_READ_PROMPT }] }],
+                 generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
+  const r = geminiCall_(body, key), j = r.j;
+  if (r.code !== 200 || !j) return { success: false, error: geminiErr_(r, '') };
+  const text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(x => x.text || '').join('');
+  let d;
+  try { d = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); }
+  catch (_) { return { success: false, error: 'AI가 대장을 읽었지만 표로 정리하지 못했습니다 — 다시 시도하거나 엑셀로 올려 주세요' }; }
+  const t = v => String(v == null ? '' : v).trim().slice(0, 120);
+  const rows = (Array.isArray(d.rows) ? d.rows : []).slice(0, 3000).map(x => ({ dept: t(x.dept), name: t(x.name), sup: t(x.sup), start: t(x.start), stop: t(x.stop) }))
+    .filter(x => x.dept || x.name);
+  return { success: true, rows: rows, model: r.model, warnings: (Array.isArray(d.warnings) ? d.warnings : []).map(t).slice(0, 10) };
+}
+
+// ════════════════════════════════════════════════════════════════
+// v21.19 화학물질 보고서(신규사용): 부서가 업체 MSDS(PDF · 사진)를 올리면 AI로 읽어 보고서 칸을 미리 채움
+//  · 제품명(상표명 그대로) · 공급업체 · 연락처 · 권고 용도 · 구성성분(한글 이름 + 원어 · CAS · 함유량)
+//  · 외국어 MSDS는 한글로 번역 (lang 으로 알려 줌 → 화면에서 '한글 MSDS도 요청' 안내)
+//  · 부서 로그인 필요 · 병원 전체 하루 CHEM_READ_LIMIT 회 · AI에는 MSDS 파일만 보냄
+// ════════════════════════════════════════════════════════════════
+const CHEM_READ_LIMIT = 50;   // 기본값 — 스크립트 속성 CHEM_READ_LIMIT 에 숫자를 넣으면 그 값
+const CHEM_READ_PROMPT = [
+  '첨부한 문서는 화학제품의 물질안전보건자료(MSDS, SDS)다. 한국어가 아닐 수 있다(영어 · 일본어 · 중국어 등).',
+  '병원 「화학물질 신규사용 보고서」 칸에 넣을 값만 JSON으로 답하라. 문서에 없는 값은 빈 문자열, 추측하지 마라.',
+  '- lang: 문서 언어(한국어/영어/일본어/중국어/기타)',
+  '- product: 1번 제품명. 상표명이므로 번역하지 말고 문서 그대로.',
+  '- supplier: 1번 공급자(국내 공급자가 있으면 그것, 없으면 제조사) 이름 · 긴급전화번호(없으면 대표 전화)',
+  '- usage: 1번 권고 용도를 한국어로(외국어면 번역), 짧게',
+  '- comps: 3번 구성성분. nameKo는 한국어 물질명(외국어면 흔히 쓰는 한국어 화학물질명으로 번역), nameOrig는 문서에 적힌 원래 이름(한국어 문서면 빈 문자열), cas는 그대로(영업비밀이면 "영업비밀"), amount는 함유량 표기 그대로',
+  '{"lang":"","product":"","supplier":{"name":"","tel":""},"usage":"","comps":[{"nameKo":"","nameOrig":"","cas":"","amount":""}],"warnings":["읽기 어려웠던 부분"]}'
+].join('\n');
+function chemReadMsds_(req, s) {
+  const deny = requireLogin_(s);
+  if (deny) return deny;
+  const key = PROPS.getProperty('GEMINI_API_KEY');
+  if (!key) return { success: false, error: 'AI 설정이 아직 안 되어 자동으로 채울 수 없습니다 — 직접 입력해 주세요' };
+  const b64 = String(req.content || '').replace(/^data:[^,]*,/, '');
+  if (!b64) return { success: false, error: '파일이 없습니다' };
+  if (b64.length * 0.75 > AI_MAX_BYTES) return { success: false, error: '파일이 너무 큽니다 (15MB 이하)' };
+  const mime = /^image\/(png|jpeg|webp)$/.test(String(req.mime || '')) ? String(req.mime) : 'application/pdf';
+  const cache = CacheService.getScriptCache(), dayKey = 'chem_read_' + todayKst_();
+  const n = parseInt(cache.get(dayKey) || '0', 10);
+  const limit = parseInt(PROPS.getProperty('CHEM_READ_LIMIT') || '', 10) || CHEM_READ_LIMIT;
+  if (n >= limit) return { success: false, limit: true, error: '오늘 자동 채우기 횟수를 다 썼습니다 — 직접 입력해 주세요 (보고서 제출은 그대로 됩니다)' };
+  cache.put(dayKey, String(n + 1), 86400);
+  const body = { contents: [{ parts: [{ inline_data: { mime_type: mime, data: b64 } }, { text: CHEM_READ_PROMPT }] }],
+                 generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
+  const r = geminiCall_(body, key), j = r.j;
+  if (r.code !== 200 || !j) return { success: false, error: geminiErr_(r, '') };
+  const text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(x => x.text || '').join('');
+  let d;
+  try { d = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); }
+  catch (_) { return { success: false, error: 'MSDS를 읽었지만 칸으로 정리하지 못했습니다 — 직접 입력해 주세요' }; }
+  const t = (v, k) => String(v == null ? '' : v).trim().slice(0, k || 120);
+  const sup = d.supplier || {};
+  const data = { lang: t(d.lang, 20), product: t(d.product), supplier: { name: t(sup.name), tel: t(sup.tel, 40) }, usage: t(d.usage, 200),
+    comps: (Array.isArray(d.comps) ? d.comps : []).map(c => ({ nameKo: t(c && c.nameKo), nameOrig: t(c && c.nameOrig), cas: t(c && c.cas, 30), amount: t(c && c.amount, 30) }))
+      .filter(c => c.nameKo || c.nameOrig || c.cas).slice(0, 15),
+    warnings: (Array.isArray(d.warnings) ? d.warnings : []).map(x => t(x, 200)).filter(Boolean).slice(0, 6) };
+  return { success: true, data: data, model: r.model, left: Math.max(0, limit - n - 1) };
+}
+
+// v21.19 대장 승인 때 MSDS 목록(chemicals) '부서' 칸도 맞춤 → MSDS 관리 · 교육일지 물질 목록 · 관리요령 요약형이 따라 바뀜
+//  · 중단: 그 부서만 뺌 (마지막 부서까지 빠지면 줄은 지우지 않고 메모에 '[사용중단 날짜]')
+//  · 신규: MSDS 목록에 이미 있는 물질이면 그 부서를 더함 (처음 보는 물질은 AI MSDS 검토에서 관리자가 추가)
+//  · 이름은 그대로 같은 줄 우선, 없으면 띄어쓰기 · 괄호를 뺀 이름이 하나만 같을 때만 (같은 이름 여러 줄이면 손대지 않음)
+function clChemDept_(name, dept, add) {
+  const sh = findChemSheet_();
+  if (!sh || !name || !dept) return '';
+  const { C } = chemCols_(sh);
+  if (C.name < 0 || C.dept < 0) return '';
+  const last = sh.getLastRow(); if (last < 2) return '';
+  const v = sh.getRange(1, 1, last, sh.getLastColumn()).getValues();
+  const nm = r => String(v[r][C.name] || '').trim();
+  let rows = [];
+  for (let r = 1; r < v.length; r++) if (nm(r) && nm(r) === String(name).trim()) rows.push(r);
+  if (!rows.length) { const k = clLedgerNormName_(name); for (let r = 1; r < v.length; r++) if (nm(r) && clLedgerNormName_(nm(r)) === k) rows.push(r); }
+  if (!rows.length) return add ? 'MSDS 목록에 없는 물질 — AI MSDS 검토에서 추가해 주세요' : '';
+  if (rows.length > 1) return 'MSDS 목록에 비슷한 이름 ' + rows.length + '줄 — 부서 칸은 직접 고쳐 주세요';
+  const r = rows[0], name0 = nm(r);
+  const cur = String(v[r][C.dept] || '').split(/\s*[,·ㆍ]\s*/).map(x => x.trim()).filter(Boolean);
+  const has = cur.some(d => sameDept_(d, dept));
+  const memo = C.memo >= 0 ? String(v[r][C.memo] || '') : '';
+  const STOPM = /\s*\[사용중단[^\]]*\]/g;
+  if (add) {
+    if (has) return '';
+    sh.getRange(r + 1, C.dept + 1).setValue(safeCell_(cur.concat([dept]).join(',')));
+    if (C.memo >= 0 && STOPM.test(memo)) sh.getRange(r + 1, C.memo + 1).setValue(safeCell_(memo.replace(STOPM, '').trim()));
+    return 'MSDS 목록 ' + name0 + ' 부서 칸에 ' + dept + ' 더함';
+  }
+  if (!has) return '';
+  const nx = cur.filter(d => !sameDept_(d, dept));
+  sh.getRange(r + 1, C.dept + 1).setValue(safeCell_(nx.join(',')));
+  if (!nx.length && C.memo >= 0) sh.getRange(r + 1, C.memo + 1).setValue(safeCell_((memo.replace(STOPM, '') + ' [사용중단 ' + todayKst_() + ']').trim()));
+  return 'MSDS 목록 ' + name0 + ' 부서 칸에서 ' + dept + ' 뺌' + (nx.length ? '' : ' (쓰는 부서 없음 — 메모에 사용중단)');
 }
 
 function clLedgerOp_(req, s) {
@@ -4473,7 +4638,7 @@ function clLedgerOp_(req, s) {
           if (!o.dept || !o.name) { bad++; return; }
           if (seen[key(o)]) { skipped++; return; }
           seen[key(o)] = 1;
-          o.id = clLedgerNewId_(); o.src = '종이 대장'; o.hist = [];
+          o.id = clLedgerNewId_(); o.src = '종이 대장' + (req.file ? ' · ' + String(req.file).slice(0, 80) : ''); o.hist = [];
           clLedgerHist_(o, '종이 대장에서 올림', (req.file ? String(req.file).slice(0, 80) + ' · ' : '') + '사용일 ' + (o.start || '—') + (o.stop ? ' · 중단일 ' + o.stop : ''), '', by);
           o.status = o.stop ? '중단' : '사용 중'; o.at = nowKst_().replace('T', ' ');
           out.push([o.id, o.dept, o.name, o.sup, o.start, o.stop, o.status, o.src, o.at, JSON.stringify(o.hist)].map(safeCell_));
@@ -4484,6 +4649,7 @@ function clLedgerOp_(req, s) {
         return { success: true, added: added, skipped: skipped, bad: bad, from: clLedgerFrom_() };
       } finally { lock.releaseLock(); }
     }
+    case 'ledger.readFile': return clLedgerReadFile_(req);
     case 'ledger.approve': return clLedgerApprove_(req, by);
     case 'ledger.reject': case 'ledger.skip': {
       const reason = String(req.reason || '').trim().slice(0, 300);
