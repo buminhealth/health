@@ -10,7 +10,30 @@
 <!DOCTYPE html>
 <!--
   ════════════════════════════════════════════════════════════════════
-  부민병원 MSDS 통합시스템 v21.17 (2026-11-13)
+  부민병원 MSDS 통합시스템 v21.19 (2026-11-16)
+
+  ★★★ v21.19 (2026-11-16) — 화학물질 보고서 첫 화면 바꿈 · MSDS 자동 채우기 · 승인 때 MSDS 목록 반영 (서버 v21.19):
+    - 화학물질 보고서에 들어가면 우리 부서가 쓰는 물질 목록(MSDS 목록 기준) · 오른쪽 위 [+ 신규사용 보고서]
+      물질을 누르면 [사용중단] → '이 물질을 사용중단하시겠습니까?'(사용중단일 · 작성자 · 서명) → 지금과 같은 보고서(PDF)로 제출
+    - 신규사용: 지금 단계 양식에서 신규 칸만. 1단계 맨 위 [MSDS로 자동 채우기] — 업체 MSDS(PDF · 사진)를 AI로 읽어
+      제품명 · 물질(성분 · CAS) · 공급업체 · 연락처 · 사용목적 · MSDS 첨부를 채움. 외국어 MSDS는 한글로 번역 · 한글 MSDS 요청 안내
+      부서 로그인 필요 · 병원 전체 하루 50회(스크립트 속성 CHEM_READ_LIMIT)
+    - 관리자가 대장에서 [승인]하면 MSDS 목록 시트 '부서' 칸도 바뀜 → MSDS 관리 · 교육일지 물질 목록 · 관리요령 요약형이 따라 바뀜
+      중단 = 그 부서만 뺌(마지막 부서면 줄은 두고 메모에 [사용중단 날짜]) / 신규 = 목록에 있는 물질이면 부서 더함(처음 보는 물질은 AI MSDS 검토)
+    - 관리요령 자동 읽기 하루 한도도 스크립트 속성 GUIDE_AUTO_LIMIT 로 바꿀 수 있음 (기본 80)
+
+  ★★★ v21.18 (2026-11-13) — 관리요령 부서에서 바로 출력 · 종이 대장 PDF · 사진 읽기 (서버 v21.18):
+    - [관리요령 출력]을 누르면 서버가 그 물질의 MSDS PDF를 AI로 읽어 관리요령을 만들고 바로 출력 (관리자 확인 없이)
+      처음 한 번만 20~60초, 그 뒤엔 저장해 둔 내용으로 바로. MSDS PDF를 바꾸면 다음 출력 때 다시 읽음
+      '우리 부서 전체': 아직 안 읽은 물질은 [n개 지금 읽기]. PDF가 없는 물질은 안내만. 자동 읽기 하루 80회
+      관리자: [내용 고치기]로 고치고 저장하면 그 내용으로 출력 (자동으로 다시 읽지 않음) · [MSDS 다시 읽기]
+    - 종이 대장 올리기: PDF · 사진(스캔)도 올리면 AI가 표로 읽어 미리보기 (예전: 엑셀 · CSV만, PDF는 못 읽음)
+    - 관리요령 A4 자동 배열: 유해위험 문구는 두 칸 — 반 칸에서 두 줄이 되는 긴 문구는 한 줄 전체 칸, 짧은 문구는 빈자리에 채움
+      예방조치 · 사고시 대처 줄은 넘치는 줄만 글자를 줄여(82%까지) 한 줄로 · 물질명은 괄호 앞에서만 줄바꿈
+    - 신규사용 · 중단 대장: 모든 칸 한 줄 · 여러 부서가 쓰는 물질은 한 줄로 접고 물질명을 누르면 부서별 줄(부서마다 중단일)
+      [종이 대장 올리기] 옆에 부서 선택(그 부서 줄만 · 사용 중/중단 요약) · 승인하면 그 물질이 펼쳐지고 바뀐 줄 표시
+      종이 대장 한 칸에 여러 부서(병동,외래,치과 / 수술실ㆍ공급실)면 부서마다 한 줄로 나눠 넣음 → 한 부서만 중단해도 그 줄에만 중단일
+      업체 칸은 화면에서 숨김(시트 · 승인 판단에는 그대로) · 마지막 칸 '출처': 종이 대장 · 파일 / 화학물질 보고서 · 번호 · 부서 제출일 (+ → 중단 보고서 번호)
 
   ★★★ v21.17 (2026-11-13) — 관리요령 출력 · 위험성평가 로그인 없이 · 신규입사 알림 삭제 · 신규사용 · 중단 대장 (서버 v21.17):
     - MSDS 상세: 버튼 3개 가로(작게) [PDF 원본보기][교육일지 작성][관리요령 출력] · 교육 대상 안내는 버튼 아래 · 신호어 표시(v21.15) 그대로
@@ -1887,10 +1910,13 @@ input.apv-in[type=text]{width:110px}
 <!-- ══ 화학물질 보고서 ══ -->
 <div id="pg-chem" style="display:none">
 <div class="chem-wrap">
-<div class="ph"><div class="crumb">화학물질 보고서 › <b>신규사용 · 사용중단</b></div><h1>화학물질 보고서</h1><p>제출 → 보건관리실 검토 · 관리대상 판정 → 승인되면 MSDS 목록에 반영</p></div>
+<div class="ph"><div class="crumb">화학물질 보고서 › <b>신규사용 · 사용중단</b></div><h1>화학물질 보고서</h1><p>제출 → 보건관리실 검토 · 관리대상 판정 → 승인되면 MSDS 목록 · 신규사용 · 중단 대장에 반영</p></div>
 
-<!-- 본문 -->
-<div class="chem-box">
+<!-- v21.19 첫 화면: 우리 부서 물질 목록 (BMCR) -->
+<div id="cr-main"></div>
+
+<!-- 본문 (신규사용 양식 · 사용중단 제출에 그대로 씀) -->
+<div class="chem-box" style="display:none">
 
 <!-- 단계 표시 (교육일지 stepbar와 통일) -->
 <div class="stepbar" style="margin-bottom:18px">
@@ -5306,7 +5332,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.17';
+  var SERVER_EXPECT = 'v21.19';
   // v21.10: 'v21.9' < 'v21.10'을 글자 순서가 아니라 숫자로 비교
   function bmVerLess(a, b){
     var p = function(v){ return (String(v).match(/v?(\d+(?:\.\d+)*)/) || [,'0'])[1].split('.').map(Number); };
@@ -6337,6 +6363,7 @@ function goTab(t){
   if(t==='edu1') e1Reset();
   if(t==='edu2') e2Reset();
   if(t==='chem') chemReset();  // ★ 화학물질 보고서 초기화
+  if(t==='chem' && window.BMCR) BMCR.open();   // v21.19 첫 화면 = 우리 부서 물질 목록
 }
 
 /* ══ 교육 템플릿 GAS 로드 (구글시트 변경 즉시 반영) ══ */
@@ -7596,6 +7623,7 @@ function chemSigClear(side){
 }
 
 function chemSigData(side){
+  if(window.__chemSigOverride && window.__chemSigOverride[side]) return window.__chemSigOverride[side];   // v21.19 사용중단 확인 창의 서명
   const cv = document.getElementById('chem-sig-'+side);
   if(!cv) return '';
   // 빈 캔버스 검출
@@ -19539,6 +19567,9 @@ self.addEventListener('fetch',e=>{
 .gd-btn.p{background:#67AF28;border-color:#67AF28;color:#fff}.gd-btn.p:hover{background:#5A9E22}
 .gd-note{padding:9px 12px;border-radius:6px;background:#FFF6E0;color:#6E4A00;font-size:13px;margin:8px 0}
 .gd-note.err{background:#FCEDEB;color:#8A1F17}.gd-note.ok{background:#EEF6E6;color:#345C12}
+.gd-spin{display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border:2px solid #E8C979;border-top-color:#6E4A00;border-radius:50%;animation:gdspin .9s linear infinite}
+@keyframes gdspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.gd-spin{animation:none}}
 .gd-ed{border-top:1px solid #E4E2DC;margin-top:14px;padding-top:12px}
 .gd-ed h4{margin:14px 0 6px;font-size:14px;font-weight:800;color:#3F7518}
 .gd-ed label{display:block;font-size:12.5px;font-weight:700;margin:6px 0 3px;color:#45423D}
@@ -19583,10 +19614,12 @@ self.addEventListener('fetch',e=>{
   // 짝수 = 좌우 두 칸(세로 먼저: 2→1+1, 4→2+2, 6→3+3), 홀수 = 한 칸에 연달아
   function hHtml(list, fs){
     var n = list.length, base = 'flex:1 1 auto;margin:0;padding:6px 10px;list-style:none;align-content:center;column-gap:16px;font-size:calc(' + (fs || 12.5) + 'px * var(--k, 1));line-height:1.55;';
-    var st = n % 2 === 0 ? base + 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(' + (n / 2) + ',auto);grid-auto-flow:column;' : base + 'display:flex;flex-direction:column;justify-content:center;';
-    return '<ul style="' + st + '">' + list.map(function(t){ return '<li>• ' + esc(t) + '</li>'; }).join('') + '</ul>';
+    // v21.18 두 칸 격자 — 반 칸에서 두 줄이 되는 긴 문구는 fitA4가 한 줄 전체 칸으로 옮기고, 짧은 문구는 빈자리에 채움(dense)
+    var st = base + 'display:grid;grid-template-columns:repeat(' + (n > 1 ? 2 : 1) + ',minmax(0,1fr));grid-auto-flow:row dense;';
+    return '<ul data-h style="' + st + '">' + list.map(function(t){ return '<li style="white-space:nowrap;overflow:hidden">• ' + esc(t) + '</li>'; }).join('') + '</ul>';
   }
-  function bullets(arr){ return arr.map(function(l){ return '• ' + esc(l); }).join('<br>'); }
+  // v21.18 줄마다 요소로 — fitA4가 넘치는 줄만 글자를 줄여 한 줄로 맞춤
+  function bullets(arr){ return '<div style="flex:1 1 0;min-width:0;width:0;max-width:100%">' + arr.map(function(l){ return '<span data-l style="display:block;white-space:nowrap;overflow:hidden;padding-left:.9em;text-indent:-.9em">• ' + esc(l) + '</span>'; }).join('') + '</div>'; }
   function sentences(t){ return String(t || '').split(/(?<=[.다])\s+/).map(function(x){ return x.trim(); }).filter(Boolean); }
   function ppeItems(g){
     var q = g.ppe || {}, out = [];
@@ -19622,6 +19655,7 @@ self.addEventListener('fetch',e=>{
       '<div style="flex:0 0 32px;display:grid;place-items:center;border-top:' + b1 + ';font-size:' + (fsName || 16) + 'px">' + esc(GHS[x.code]) + '</div>' +
       '<div style="flex:1 1 auto;display:grid;place-items:center;border-top:' + b1 + ';padding:0 4px;font-size:' + (fsDesc || 12) + 'px;line-height:1.3;text-align:center;word-break:keep-all;overflow-wrap:anywhere">' + esc(x.desc || '') + '</div></div>';
   }
+  function nameBrk(n){ return esc(n).replace(/\(/g, '<wbr>(').replace(/_/g, '_<wbr>'); }   // v21.18 '…(말통)'의 ')'만 넘어가지 않게
   function pageFull(g, p){
     var pics = pictos(g, p), name = esc(p.name), comps = compLine(g, p), top;
     var n = pics.length, im = picSize(n, 112), nameFs = n >= 6 ? 13 : n === 5 ? 14.5 : 16, descFs = n >= 5 ? 11 : 12;
@@ -19631,7 +19665,7 @@ self.addEventListener('fetch',e=>{
         '<div style="flex:0 0 206px;display:flex;border-bottom:' + B + '">' + pics.map(function(x){ return picCell(x, 118, im, nameFs, descFs); }).join('') + signalCell(g.signal || p.signalWord, 118, n >= 6 ? 96 : 118) + '</div>';
     } else {               // 1~2개: 물질명은 왼쪽 큰 칸
       top = '<div style="flex:0 0 236px;display:flex;border-bottom:' + B + '"><div style="flex:0 0 170px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:8px;box-sizing:border-box;border-right:' + B + ';text-align:center;word-break:keep-all;overflow-wrap:anywhere">' +
-        '<b style="font-size:' + (p.name.length > 14 ? 26 : 40) + 'px;font-weight:700;line-height:1.1">' + name + '</b>' + (comps ? '<span style="font-size:11px;line-height:1.4">' + comps.replace(/ · /g, '<br>') + '</span>' : '') + '</div>' +
+        '<b style="font-size:' + (p.name.length > 14 ? 26 : 40) + 'px;font-weight:700;line-height:1.1">' + nameBrk(p.name) + '</b>' + (comps ? '<span style="font-size:11px;line-height:1.4">' + comps.replace(/ · /g, '<br>') + '</span>' : '') + '</div>' +
         (pics.length ? pics.map(function(x){ return picCell(x, 150, 132, 17); }).join('') : '<div style="flex:1 1 auto;display:grid;place-items:center;border-right:' + B + ';font-size:15px;color:#555">그림문자 없음</div>') +
         signalCell(g.signal || p.signalWord, 150) + '</div>';
     }
@@ -19664,7 +19698,7 @@ self.addEventListener('fetch',e=>{
     var sup = g.supplier || {};
     return '<div data-fit="1" style="flex:0 0 514px;display:flex;flex-direction:column;border:2px solid #111;box-sizing:border-box;overflow:hidden">' +
       '<div style="flex:0 0 34px;display:grid;place-items:center;background:#E6EFD8;border-bottom:' + B + ';font-size:17px;font-weight:700;letter-spacing:2px">화학물질 작업공정별 관리요령</div>' +
-      '<div style="flex:0 0 184px;display:flex;border-bottom:' + B + '"><div style="flex:0 0 160px;display:grid;place-items:center;border-right:' + B + ';padding:6px;box-sizing:border-box;font-size:' + (p.name.length > 12 ? 22 : 34) + 'px;font-weight:700;line-height:1.15;text-align:center;word-break:keep-all;overflow-wrap:anywhere">' + esc(p.name) + '</div>' +
+      '<div style="flex:0 0 184px;display:flex;border-bottom:' + B + '"><div style="flex:0 0 160px;display:grid;place-items:center;border-right:' + B + ';padding:6px;box-sizing:border-box;font-size:' + (p.name.length > 12 ? 22 : 34) + 'px;font-weight:700;line-height:1.15;text-align:center;word-break:keep-all;overflow-wrap:anywhere">' + nameBrk(p.name) + '</div>' +
         (pics.length ? pics.map(function(x){ return picCell(x, 112, him, hn >= 5 ? 13.5 : 16, hn >= 5 ? 10.5 : 12); }).join('') : '<div style="flex:1 1 auto;display:grid;place-items:center;border-right:' + B + ';color:#555">그림문자 없음</div>') + signalCell(g.signal || p.signalWord, 112, 104, 26) + '</div>' +
       '<div style="flex:0 0 auto;min-height:96px;display:flex;border-bottom:' + B + '"><div style="flex:0 0 160px;display:grid;place-items:center;border-right:' + B + ';font-size:17px">유해위험 문구</div>' + hHtml(hl, 13) + '</div>' +
       '<div style="flex:1 1 auto;display:flex;border-bottom:' + B + '"><div style="flex:0 0 160px;display:grid;place-items:center;border-right:' + B + ';font-size:17px">예방조치문구</div><div style="' + CELL + ';font-size:13px;padding:6px 14px;line-height:1.5">' + bullets(pv) + '</div></div>' +
@@ -19711,10 +19745,32 @@ self.addEventListener('fetch',e=>{
     for(var k2 = 0.68; k2 >= 0.595; k2 -= 0.04) STEPS.push({ k: Math.round(k2 * 100) / 100 });
     var out = [];
     [].forEach.call((root || document).querySelectorAll('.pg'), function(pg){
+      // v21.18 자동 배열: 유해위험 문구 — 반 칸에 한 줄로 안 들어가면 한 줄 전체 칸(넘치면 그 문구만 88%까지 줄임)
+      //  예방조치 · 사고시 대처 줄 — 넘치는 줄만 글자를 82%까지 줄여 한 줄로, 그래도 넘치면 두 줄
+      var hArr = function(){ var info = { wide: 0, small: 0, wrap: 0, lsmall: 0, lwrap: 0 };
+        [].forEach.call(pg.querySelectorAll('ul[data-h]'), function(ul){
+          var lis = [].slice.call(ul.children), cols = getComputedStyle(ul).gridTemplateColumns.split(' ').length;
+          lis.forEach(function(li){ li.style.gridColumn = ''; li.style.fontSize = ''; li.style.whiteSpace = 'nowrap'; });
+          lis.forEach(function(li){ if(cols > 1 && li.scrollWidth > li.clientWidth + 1){ li.style.gridColumn = '1 / -1'; info.wide++; } });
+          lis.forEach(function(li){
+            for(var f = 0.96; f >= 0.875 && li.scrollWidth > li.clientWidth + 1; f -= 0.04){ li.style.fontSize = f + 'em'; info.small = 1; }
+            if(li.scrollWidth > li.clientWidth + 1){ li.style.whiteSpace = 'normal'; info.wrap++; }
+          });
+          if(lis.filter(function(li){ return !li.style.gridColumn; }).length === 1) lis.forEach(function(li){ li.style.gridColumn = '1 / -1'; });
+        });
+        [].forEach.call(pg.querySelectorAll('[data-l]'), function(li){
+          li.style.fontSize = ''; li.style.whiteSpace = 'nowrap';
+          var shr = false;
+          for(var f = 0.98; f >= 0.815 && li.scrollWidth > li.clientWidth + 1; f -= 0.02){ li.style.fontSize = f.toFixed(2) + 'em'; shr = true; }
+          if(li.scrollWidth > li.clientWidth + 1){ li.style.fontSize = ''; li.style.whiteSpace = 'normal'; info.lwrap++; }
+          else if(shr) info.lsmall++;
+        });
+        return info; };
       var boxes = [].slice.call(pg.querySelectorAll('[data-fit]'));
       var over = function(){ return boxes.some(function(b){ return b.scrollHeight > b.clientHeight + 1; }); };
       ['--k', '--hmin', '--ppe', '--ppei'].forEach(function(v){ pg.style.removeProperty(v); });
       pg.removeAttribute('data-trim');
+      var hi = hArr();
       var cur = { k: 1 }, used = [];
       for(var i = 0; i < STEPS.length && over(); i++){
         var st = STEPS[i];
@@ -19723,7 +19779,7 @@ self.addEventListener('fetch',e=>{
         if(st.k){ pg.style.setProperty('--k', String(st.k)); cur.k = st.k; used.push('글자'); }
         if(st.trim){ pg.setAttribute('data-trim', st.trim); used.push('응급조치 문장'); }
       }
-      var res = { k: cur.k, over: over(), steps: used.filter(function(x, j){ return used.indexOf(x) === j; }), trim: pg.getAttribute('data-trim') || '' };
+      var res = { hArr: hi, k: cur.k, over: over(), steps: used.filter(function(x, j){ return used.indexOf(x) === j; }), trim: pg.getAttribute('data-trim') || '' };
       pg.setAttribute('data-k', String(cur.k));
       if(res.over) pg.setAttribute('data-over', '1'); else pg.removeAttribute('data-over');
       out.push(res);
@@ -19745,13 +19801,37 @@ self.addEventListener('fetch',e=>{
     return w;
   }
 
-  /* ── 출력 창 ── */
-  var cache = {}, cur = null;
+  /* ── 출력 창 — v21.18: 누르면 MSDS PDF를 자동으로 읽어 바로 출력 (부서가 직접, 관리자 확인 단계 없음) ── */
+  var cache = {}, cur = null, busy = {};
   function deptsOf(p){ var s = sess(); return s && s.role === 'dept' ? [s.dept] : (p.departments || []).filter(Boolean); }
   function deptProducts(dept){
     var pm = products(), out = [];
     Object.keys(pm).forEach(function(k){ var p = pm[k]; if((p.departments || []).some(function(d){ return String(d).replace(/\s/g, '') === String(dept).replace(/\s/g, ''); })) out.push(p); });
     return out.sort(function(a, b){ return a.name.localeCompare(b.name, 'ko'); });
+  }
+  function pdfIdOf(p){ var m = String((p && p.pdfUrl) || '').match(/[-\w]{25,}/); return m ? m[0] : ''; }
+  // 읽어 둔 관리요령 (MSDS PDF가 바뀌었으면 다시 읽어야 함 — 관리자가 고쳐 저장한 것은 그대로)
+  function ready(name){
+    var g = cache[name], p = products()[name];
+    if(!g) return null;
+    if(!g.ok && g.pdfId && pdfIdOf(p) && g.pdfId !== pdfIdOf(p)) return null;
+    return g;
+  }
+  // 서버가 MSDS PDF를 읽음 (처음 한 번 20~60초) · 다른 사람이 읽는 중이면 잠시 뒤 다시 확인
+  async function autoRead(name){
+    if(busy[name]) return busy[name];
+    busy[name] = (async function(){
+      for(var t = 0; t < 12; t++){
+        var x = await post('guide.auto', { name: name });
+        if(x.success){ cache[name] = x.data; return { ok: true }; }
+        if(/unknown op/.test(x.error || '')) return { ok: false, error: '서버(Code.gs)를 v21.18 이상으로 배포하면 자동으로 읽을 수 있습니다' };
+        if(!x.busy) return { ok: false, error: x.error || 'MSDS를 읽지 못했습니다' };
+        await new Promise(function(z){ setTimeout(z, 8000); });
+      }
+      return { ok: false, error: '다른 사람이 읽는 중이라 오래 걸립니다 — 잠시 뒤 다시 눌러 주세요' };
+    })();
+    var r = await busy[name]; delete busy[name];
+    return r;
   }
   async function open(name){
     var p = products()[name]; if(!p) return;
@@ -19765,62 +19845,93 @@ self.addEventListener('fetch',e=>{
     depts.forEach(function(d){ deptProducts(d).forEach(function(x){ if(names.indexOf(x.name) < 0) names.push(x.name); }); });
     var r = await post('guide.get', { names: names });
     if(!document.getElementById('bm-guide')) return;
-    if(!r.success){ document.getElementById('gd-body').innerHTML = '<div class="gd-note err">' + esc(/unknown op/.test(r.error || '') ? '서버(Code.gs)를 v21.8 이상으로 배포하면 사용할 수 있습니다' : (r.error || '불러오기 실패')) + '</div>'; return; }
+    if(!r.success){ document.getElementById('gd-body').innerHTML = '<div class="gd-note err">' + esc(/unknown op/.test(r.error || '') ? '서버(Code.gs)를 v21.18 이상으로 배포하면 사용할 수 있습니다' : (r.error || '불러오기 실패')) + '</div>'; return; }
+    names.forEach(function(k){ delete cache[k]; });   // 서버에 있는 것이 기준
     Object.keys(r.data || {}).forEach(function(k){ cache[k] = r.data[k]; });
-    cur = { p: p, depts: depts, mode: 'one', dept: depts[0] || '', ppe: false };
+    cur = { p: p, depts: depts, mode: 'one', dept: depts[0] || '', ppe: false, state: '', err: '', prog: '', edit: false };
+    if(!ready(p.name)) readOne(); else renderDlg();
+  }
+  async function readOne(){
+    if(!cur) return;
+    var p = cur.p; cur.state = 'reading'; cur.err = ''; renderDlg();
+    var r = await autoRead(p.name);
+    if(!cur || cur.p !== p) return;
+    cur.state = r.ok ? '' : 'error'; cur.err = r.error || '';
     renderDlg();
   }
-  function ready(name){ var g = cache[name]; return g && (g.ok || isAdmin()) ? g : null; }
+  async function readDept(){
+    var miss = deptProducts(cur.dept).filter(function(x){ return !ready(x.name); });
+    cur.state = 'deptReading';
+    for(var i = 0; i < miss.length; i++){
+      if(!cur || !document.getElementById('bm-guide')) return;
+      cur.prog = (i + 1) + ' / ' + miss.length + ' · ' + miss[i].name; renderDlg();
+      var r = await autoRead(miss[i].name);
+      if(!r.ok) cur.err = miss[i].name + ': ' + r.error;
+    }
+    if(!cur) return;
+    cur.state = ''; cur.prog = ''; renderDlg();
+  }
   function renderDlg(){
     var body = document.getElementById('gd-body'); if(!body || !cur) return;
     var p = cur.p, g = ready(p.name), dp = cur.dept ? deptProducts(cur.dept) : [], dpReady = dp.filter(function(x){ return ready(x.name); });
     var opt = function(v, t, sub){ return '<label class="gd-opt' + (cur.mode === v ? ' on' : '') + '"><input type="radio" name="gd-m" value="' + v + '"' + (cur.mode === v ? ' checked' : '') + '><span><b>' + t + '</b><small>' + sub + '</small></span></label>'; };
-    body.innerHTML =
-      (g && !g.ok ? '<div class="gd-note">확인 전 초안입니다 — 아래 내용을 확인하고 [확인 · 저장]을 누르면 부서 화면에서도 출력됩니다.</div>' : '') +
-      (!g ? '<div class="gd-note">이 물질은 아직 보건관리실에서 관리요령을 준비하지 않았습니다.' + (isAdmin() ? ' 아래 [MSDS에서 AI로 뽑기]를 누르세요.' : ' 보건관리실(내선 3293 · 3034)에 요청해 주세요.') + '</div>' : '') +
-      opt('one', '이 물질만 · A4 1장', esc(p.name) + (g ? '' : ' — 준비 전')) +
-      opt('dept', '우리 부서 전체 물질 · 요약형', 'A4 한 장에 2물질 · ' + (cur.dept ? esc(cur.dept) + ' ' + dpReady.length + '/' + dp.length + '개 준비됨' : '취급부서 없음')) +
+    var reading = cur.state === 'reading' || cur.state === 'deptReading';
+    var canPrint = !reading && (cur.mode === 'one' ? !!g : dpReady.length > 0);
+    var status = cur.state === 'reading' ? '<div class="gd-note" role="status"><span class="gd-spin" aria-hidden="true"></span>MSDS PDF를 읽고 관리요령을 만드는 중입니다… 처음 한 번만 20~60초 걸립니다.</div>'
+      : cur.state === 'deptReading' ? '<div class="gd-note" role="status"><span class="gd-spin" aria-hidden="true"></span>부서 물질 MSDS를 읽는 중 · ' + esc(cur.prog) + '</div>'
+      : cur.state === 'error' ? '<div class="gd-note err">' + esc(cur.err) + ' <button class="gd-btn" id="gd-retry" style="min-height:32px;margin-left:6px">다시 읽기</button></div>'
+      : (cur.mode === 'one' && g ? '<div class="gd-note ok">MSDS' + (g.rev ? '(개정 ' + esc(g.rev) + ')' : '') + '를 읽어 만든 관리요령입니다. [출력]을 누르세요.</div>' : '');
+    var missN = dp.length - dpReady.length;
+    body.innerHTML = status +
+      opt('one', '이 물질만 · A4 1장', esc(p.name)) +
+      opt('dept', '우리 부서 전체 물질 · 요약형', 'A4 한 장에 2물질 · ' + (cur.dept ? esc(cur.dept) + ' ' + dp.length + '개 중 ' + dpReady.length + '개 준비됨' : '취급부서 없음')) +
       (cur.mode === 'dept' && cur.depts.length > 1 ? '<div class="gd-row" style="margin:0 0 8px 28px"><select id="gd-dept" class="fc" style="width:auto">' + cur.depts.map(function(d){ return '<option' + (d === cur.dept ? ' selected' : '') + '>' + esc(d) + '</option>'; }).join('') + '</select></div>' : '') +
+      (cur.mode === 'dept' && missN > 0 && !reading ? '<div class="gd-row" style="margin:0 0 8px 28px"><button class="gd-btn" id="gd-readall">아직 안 읽은 ' + missN + '개 지금 읽기</button><small style="color:#5A5650">한 물질에 20~60초 · 읽은 것만 출력됩니다</small></div>' : '') +
+      (cur.mode === 'dept' && cur.err && !reading ? '<div class="gd-note err">' + esc(cur.err) + '</div>' : '') +
       '<label class="gd-chk" style="margin:6px 0 12px"><input type="checkbox" id="gd-ppe"' + (cur.ppe ? ' checked' : '') + ' style="width:18px;height:18px;accent-color:#67AF28"> 보호구 일람표 함께 출력</label>' +
-      '<div class="gd-row" style="justify-content:flex-end"><button class="gd-btn" id="gd-close">닫기</button><button class="gd-btn p" id="gd-print">출력</button></div>' +
-      (isAdmin() ? '<div class="gd-ed" id="gd-ed"></div>' : '');
-    body.querySelectorAll('input[name="gd-m"]').forEach(function(x){ x.onchange = function(){ cur.mode = x.value; renderDlg(); }; });
+      '<div class="gd-row" style="justify-content:space-between">' + (isAdmin() ? '<button class="gd-btn" id="gd-edit-tg" aria-expanded="' + (cur.edit ? 'true' : 'false') + '">' + (cur.edit ? '고치기 닫기' : '내용 고치기 (관리자)') + '</button>' : '<span></span>') +
+        '<span class="gd-row"><button class="gd-btn" id="gd-close">닫기</button><button class="gd-btn p" id="gd-print"' + (canPrint ? '' : ' disabled') + '>출력</button></span></div>' +
+      (isAdmin() && cur.edit ? '<div class="gd-ed" id="gd-ed"></div>' : '');
+    body.querySelectorAll('input[name="gd-m"]').forEach(function(x){ x.onchange = function(){ cur.mode = x.value; cur.err = cur.mode === 'one' ? cur.err : ''; renderDlg(); if(cur.mode === 'one' && !ready(cur.p.name) && cur.state !== 'reading') readOne(); }; });
     var ds = document.getElementById('gd-dept'); if(ds) ds.onchange = function(){ cur.dept = ds.value; renderDlg(); };
+    var ra = document.getElementById('gd-readall'); if(ra) ra.onclick = readDept;
+    var rt = document.getElementById('gd-retry'); if(rt) rt.onclick = readOne;
+    var et = document.getElementById('gd-edit-tg'); if(et) et.onclick = function(){ cur.edit = !cur.edit; renderDlg(); };
     document.getElementById('gd-ppe').onchange = function(){ cur.ppe = this.checked; };
     document.getElementById('gd-close').onclick = close;
     document.getElementById('gd-print').onclick = doPrint;
-    if(isAdmin()) editor();
+    if(isAdmin() && cur.edit) editor();
   }
   function doPrint(){
     var p = cur.p, items, html, title;
     if(cur.mode === 'one'){
       var g = ready(p.name);
-      if(!g){ say('이 물질은 관리요령이 아직 준비되지 않았습니다', 'err'); return; }
+      if(!g){ say('MSDS를 아직 읽는 중입니다', 'err'); return; }
       items = [{ g: g, p: p }];
       html = pageFull(g, p); title = '관리요령 · ' + p.name;
     } else {
       items = deptProducts(cur.dept).map(function(x){ return { g: ready(x.name), p: x }; }).filter(function(x){ return x.g; });
-      if(!items.length){ say(cur.dept + ' 물질 중 준비된 관리요령이 없습니다', 'err'); return; }
+      if(!items.length){ say(cur.dept + ' 물질 중 읽어 둔 관리요령이 없습니다 — [지금 읽기]를 누르세요', 'err'); return; }
       html = halfPages(items); title = '관리요령 요약 · ' + cur.dept;
     }
     if(cur.ppe) html += ppePages(items, cur.mode === 'dept' ? cur.dept : '');
     printPages(html, title);
   }
-  function close(){ var o = document.getElementById('bm-guide'); if(o) o.remove(); }
+  function close(){ var o = document.getElementById('bm-guide'); if(o) o.remove(); cur = null; }
 
-  /* ── 관리자: MSDS에서 AI로 뽑기 · 고치기 · 확인 ── */
+  /* ── 관리자: 자동으로 읽은 내용 고치기 · 다시 읽기 (평소 출력에는 끼어들지 않음) ── */
   function lines(id){ var e = document.getElementById(id); return e ? e.value.split('\n').map(function(x){ return x.trim(); }).filter(Boolean) : []; }
   function val(id){ var e = document.getElementById(id); return e ? e.value.trim() : ''; }
   function editor(){
     var ed = document.getElementById('gd-ed'); if(!ed) return;
     document.querySelector('#bm-guide .gd-box').classList.add('wide');
     var p = cur.p, g = cache[p.name] || { p: {}, aid: {}, supplier: {}, ppe: {}, sec8: {}, pictos: [] };
-    var ta = function(id, label, v, rows){ return '<label for="' + id + '">' + label + '</label><textarea id="' + id + '" rows="' + (rows || 3) + '">' + esc((v || []).join ? v.join('\n') : (v || '')) + '</textarea>'; };
+    var ta = function(id, label, v, rows){ return '<label for="' + id + '">' + label + '</label><textarea id="' + id + '" rows="' + (rows || 3) + '">' + esc(Array.isArray(v) ? v.join('\n') : (v || '')) + '</textarea>'; };
     var tx = function(id, label, v){ return '<label for="' + id + '">' + label + '</label><input type="text" id="' + id + '" value="' + esc(v || '') + '">'; };
     var pic = {}; (g.pictos || []).forEach(function(x){ pic[x.code] = x.desc || ''; });
     var q = g.ppe || {}, s8 = g.sec8 || {};
     ed.innerHTML = '<div class="gd-row" style="justify-content:space-between"><b style="font-size:15px">관리자 · 관리요령 내용' + (g.at ? ' <span style="font-weight:400;font-size:12px;color:#5A5650">(' + esc(g.src || '') + ' · ' + esc(g.at) + ')</span>' : '') + '</b>' +
-        '<span class="gd-row"><button class="gd-btn" id="gd-ai"' + (p.pdfUrl ? '' : ' title="PDF 링크가 없으면 아래에서 PDF를 고르세요"') + '>MSDS에서 AI로 뽑기</button><label class="gd-btn" style="display:inline-flex;align-items:center">PDF 올려서 뽑기<input type="file" id="gd-pdf" accept="application/pdf" style="display:none"></label></span></div>' +
+        '<span class="gd-row"><button class="gd-btn" id="gd-ai"' + (p.pdfUrl ? '' : ' title="PDF 링크가 없으면 아래에서 PDF를 고르세요"') + '>MSDS 다시 읽기</button><label class="gd-btn" style="display:inline-flex;align-items:center">다른 PDF로 읽기<input type="file" id="gd-pdf" accept="application/pdf" style="display:none"></label></span></div>' +
       '<div id="gd-msg"></div>' +
       ((g.warnings || []).length ? '<div class="gd-note">AI 메모: ' + esc(g.warnings.join(' / ')) + '</div>' : '') +
       '<h4>그림문자 · 신호어</h4><div class="gd-g2">' + Object.keys(GHS).map(function(c){
@@ -19835,19 +19946,20 @@ self.addEventListener('fetch',e=>{
       '<h4>적절한 보호구 <span style="font-weight:400;font-size:12px;color:#5A5650">8번 단어로 고름 · 8번에 없는 부위는 P280</span></h4>' +
         ((q.check || []).length ? '<div>' + q.check.map(function(c){ return '<span class="gd-flag">확인 필요 · ' + esc(c) + '</span>'; }).join('') + '</div>' : '') +
         '<div class="gd-row" style="margin:6px 0"><label class="gd-chk" style="margin:0">호흡기 <select id="gd-resp" style="width:auto;margin-left:4px"><option value="">없음</option><option value="gas"' + (q.resp === 'gas' ? ' selected' : '') + '>방독마스크</option><option value="dust"' + (q.resp === 'dust' ? ' selected' : '') + '>방진마스크</option></select></label>' +
-          '<label class="gd-chk"><input type="checkbox" id="gd-eye"' + (q.eye ? ' checked' : '') + '> 보안경</label><label class="gd-chk"><input type="checkbox" id="gd-hand"' + (q.hand ? ' checked' : '') + '> 보호장갑</label><label class="gd-chk"><input type="checkbox" id="gd-body"' + (q.body ? ' checked' : '') + '> 보호의</label></div>' +
+          '<label class="gd-chk"><input type="checkbox" id="gd-eye"' + (q.eye ? ' checked' : '') + '> 보안경</label><label class="gd-chk"><input type="checkbox" id="gd-hand"' + (q.hand ? ' checked' : '') + '> 보호장갑</label><label class="gd-chk"><input type="checkbox" id="gd-ppebody"' + (q.body ? ' checked' : '') + '> 보호의</label></div>' +
         ((s8.resp || s8.eye || s8.hand || s8.body || g.p280) ? '<div style="font-size:12px;color:#5A5650;line-height:1.5">8번 원문 — 호흡기: ' + esc(s8.resp || '-') + ' / 눈: ' + esc(s8.eye || '-') + ' / 손: ' + esc(s8.hand || '-') + ' / 신체: ' + esc(s8.body || '-') + (g.p280 ? '<br>P280: ' + esc(g.p280) : '') + '</div>' : '') +
       '<h4>응급조치 요령 (4번)</h4><div class="gd-g2">' + AID.map(function(r){ return '<div>' + ta('gd-a-' + r[0], r[1], (g.aid || {})[r[0]], 2) + '</div>'; }).join('') + '</div>' +
       '<h4>사고시 대처방법 (6번 · 3줄)</h4>' + ta('gd-spill', '한 줄에 하나', g.spill, 3) +
       '<h4>공급자 · 개정일</h4><div class="gd-g2"><div>' + tx('gd-sn', '공급자', (g.supplier || {}).name || p.manufacturer) + '</div><div>' + tx('gd-tel', '긴급전화', (g.supplier || {}).tel) + '</div><div>' + tx('gd-addr', '주소', (g.supplier || {}).addr) + '</div><div>' + tx('gd-rev', 'MSDS 최종 개정일', g.rev) + '</div></div>' +
-      '<div class="gd-row" style="justify-content:flex-end;margin-top:14px"><button class="gd-btn" id="gd-save0">임시 저장</button><button class="gd-btn p" id="gd-save1">확인 · 저장 (부서에 공개)</button></div>';
+      '<div class="gd-row" style="justify-content:flex-end;margin-top:14px"><button class="gd-btn p" id="gd-save1">저장 (고친 내용으로 출력 · 자동으로 다시 읽지 않음)</button></div>';
     var run = async function(content){
-      var m = document.getElementById('gd-msg'); m.innerHTML = '<div class="gd-note">AI가 MSDS를 읽는 중… (20~60초)</div>';
+      var m = document.getElementById('gd-msg'); m.innerHTML = '<div class="gd-note" role="status"><span class="gd-spin" aria-hidden="true"></span>MSDS를 다시 읽는 중… (20~60초)</div>';
       var x = await post('guide.extract', content ? { name: p.name, content: content } : { name: p.name });
-      if(!x.success){ m.innerHTML = '<div class="gd-note err">' + esc(/unknown op/.test(x.error || '') ? '서버(Code.gs)를 v21.8 이상으로 배포하면 사용할 수 있습니다' : (x.error || '실패')) + '</div>'; return; }
+      if(!x.success){ m.innerHTML = '<div class="gd-note err">' + esc(/unknown op/.test(x.error || '') ? '서버(Code.gs)를 v21.18 이상으로 배포하면 사용할 수 있습니다' : (x.error || '실패')) + '</div>'; return; }
       cache[p.name] = Object.assign({ ok: false, src: 'AI(' + (x.model || '') + ')', at: '방금' }, x.data);
+      if(cur){ cur.state = ''; cur.err = ''; }
       renderDlg();
-      var m2 = document.getElementById('gd-msg'); if(m2) m2.innerHTML = '<div class="gd-note ok">MSDS에서 뽑았습니다 (확인 전 초안으로 저장됨). 내용을 확인 · 고친 뒤 [확인 · 저장]을 누르세요.</div>';
+      var m2 = document.getElementById('gd-msg'); if(m2) m2.innerHTML = '<div class="gd-note ok">MSDS를 다시 읽었습니다 — 바로 출력에 쓰입니다. 고칠 곳이 있으면 고친 뒤 [저장]을 누르세요.</div>';
     };
     document.getElementById('gd-ai').onclick = function(){ run(''); };
     document.getElementById('gd-pdf').onchange = function(){
@@ -19859,17 +19971,17 @@ self.addEventListener('fetch',e=>{
       var old = cache[p.name] || {}, pp = {}, aid = {};
       P_ROWS.forEach(function(r){ pp[r[0]] = lines('gd-p-' + r[0]); });
       AID.forEach(function(r){ aid[r[0]] = val('gd-a-' + r[0]); });
-      var resp = val('gd-resp'), ppe = { resp: resp, eye: document.getElementById('gd-eye').checked, hand: document.getElementById('gd-hand').checked, body: document.getElementById('gd-body').checked };
+      var resp = val('gd-resp'), ppe = { resp: resp, eye: document.getElementById('gd-eye').checked, hand: document.getElementById('gd-hand').checked, body: document.getElementById('gd-ppebody').checked };
       var oq = old.ppe || {}, manual = !!old.ppeManual || ppe.resp !== (oq.resp || '') || ppe.eye !== !!oq.eye || ppe.hand !== !!oq.hand || ppe.body !== !!oq.body;
       var data = { name: p.name, signal: val('gd-sig'), pictos: pictos, h: lines('gd-h'), extra: lines('gd-extra'), p: pp, p280: old.p280 || '', sec8: old.sec8 || {}, aid: aid, spill: lines('gd-spill'),
                    supplier: { name: val('gd-sn'), addr: val('gd-addr'), tel: val('gd-tel') }, rev: val('gd-rev'), comps: old.comps || [], warnings: old.warnings || [], ppe: ppe, ppeManual: manual };
       var x = await post('guide.save', { name: p.name, data: data, ok: ok });
-      if(!x.success){ say(/unknown op/.test(x.error || '') ? '서버(Code.gs)를 v21.8 이상으로 배포하면 사용할 수 있습니다' : (x.error || '저장 실패'), 'err'); return; }
+      if(!x.success){ say(/unknown op/.test(x.error || '') ? '서버(Code.gs)를 v21.18 이상으로 배포하면 사용할 수 있습니다' : (x.error || '저장 실패'), 'err'); return; }
       cache[p.name] = Object.assign({ ok: x.ok, src: '관리자 확인', at: '방금' }, x.data);
-      say(ok ? '확인 · 저장했습니다 — 부서 화면에서도 출력됩니다' : '임시 저장했습니다', 'ok');
+      if(cur){ cur.state = ''; cur.err = ''; }
       renderDlg();
+      say('저장했습니다 — 이 내용으로 출력됩니다', 'ok');
     };
-    document.getElementById('gd-save0').onclick = function(){ save(false); };
     document.getElementById('gd-save1').onclick = function(){ save(true); };
   }
 
@@ -19894,7 +20006,13 @@ self.addEventListener('fetch',e=>{
 .lg-tw{overflow-x:auto;border:1px solid #E4E2DC;border-radius:8px;background:#fff}
 .lg-tbl{width:100%;border-collapse:collapse;font-size:14px;min-width:980px}
 .lg-tbl th{background:#F1F6EA;text-align:left;padding:9px 10px;border-bottom:1px solid #E4E2DC;white-space:nowrap}
-.lg-tbl td{padding:9px 10px;border-bottom:1px solid #ECEAE4;vertical-align:middle}
+.lg-tbl td{padding:9px 10px;border-bottom:1px solid #ECEAE4;vertical-align:middle;white-space:nowrap}
+.lg-tbl td.lg-src{max-width:460px;overflow:hidden;text-overflow:ellipsis}
+.lg-exp{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 6px 0 2px;border:0;border-radius:4px;background:transparent;color:#1E1E1C;font:inherit;font-weight:800;cursor:pointer;text-decoration:underline;text-decoration-color:#C6C3BB;text-underline-offset:3px}
+.lg-exp:hover{background:#F3F9ED}.lg-exp:focus-visible{outline:3px solid #67AF28;outline-offset:2px}
+.lg-exp i{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:4px;background:#E3F1D6;color:#2F5A10;font-size:12px;font-style:normal;text-decoration:none}
+.lg-tbl tr.sub td{background:#FAFAF8;border-bottom-style:dashed}.lg-tbl tr.sub.off td{color:#5A5650}
+.lg-tbl tr.flash td{box-shadow:inset 0 3px 0 #67AF28,inset 0 -3px 0 #67AF28}
 .lg-tbl tr.w td{background:#FFFBEF}.lg-tbl tr.off td{color:#5A5650}
 .lg-tg{display:inline-block;padding:2px 10px;border-radius:999px;font-size:13px;font-weight:700;white-space:nowrap}
 .lg-tg.w{background:#FFF1C9;color:#6E4A00}.lg-tg.on{background:#E3F1D6;color:#2F5A10}.lg-tg.off{background:#ECEAE4;color:#45423D}.lg-tg.bad{background:#FCEDEB;color:#8A1F17}
@@ -19939,7 +20057,7 @@ self.addEventListener('fetch',e=>{
   }
   function products(){ try{ return productMap; }catch(_){ return {}; } }
 
-  var st = { data: null, f: { k: '', dept: '', q: '' } };
+  var st = { data: null, f: { k: '', dept: '', q: '' }, open: {}, flash: {} };   // v21.18 open: 펼친 물질 · flash: 방금 바뀐 줄
   function body(){ return document.getElementById('ledger-body'); }
 
   async function open(){
@@ -19981,35 +20099,77 @@ self.addEventListener('fetch',e=>{
     var showRows = f.k === 'wait' ? [] : rows.filter(function(o){ return (!f.k || (f.k === 'on' ? !o.stop : !!o.stop)) && hit(o.dept, o.name, o.sup); });
     var showPend = (!f.k || f.k === 'wait') ? pend.filter(function(w){ return hit(w.x.dept, w.x.name, w.x.sup); }) : [];
     var kp = function(k, label, n, color){ return '<button type="button" data-k="' + k + '" class="' + (f.k === k ? 'on' : '') + '"><span>' + label + '</span><b style="color:' + color + '">' + n + '</b></button>'; };
-    var last = function(o){ var h = (o.hist || [])[o.hist.length - 1]; return h ? esc(h.act) + (h.ref ? ' · ' + esc(h.ref) : '') : esc(o.src || ''); };
-    var prev = null;
+    // v21.18 출처: 처음 들어온 곳(종이 대장 파일 · 시스템으로 제출된 화학물질 보고서 번호 · 부서 · 제출일 · 관리자 추가)
+    //  + 그 뒤 보고서로 바뀐 것(→ 중단 보고서 CR-…). 자세한 차례는 [이력]
+    var srcOf = function(o){
+      var base = String(o.src || ''), hist = o.hist || [];
+      if(/^보고서 /.test(base)) base = '화학물질 보고서 · ' + base.slice(4);   // v21.17 이전 줄
+      if(!base && hist[0]) base = hist[0].act;
+      var m = base.match(/^(종이 대장|화학물질 보고서|관리자 추가)(.*)$/);
+      var html = m ? '<b style="color:#45423D">' + esc(m[1]) + '</b>' + esc(m[2]) : esc(base), text = base;
+      var lastRep = null; hist.forEach(function(h){ if(h.ref) lastRep = h; });
+      if(lastRep){
+        var no = String(lastRep.ref).split(' · ')[0], tag = String(lastRep.ref).split(' · ')[1] || '';
+        if(base.indexOf(no) < 0){ var t = ' → ' + (tag ? tag + ' ' : '') + '보고서 ' + no; html += '<span style="color:#1E1E1C">' + esc(t) + '</span>'; text += t; }
+      }
+      return { html: html, text: text };
+    };
     b.innerHTML =
       (!d.from ? '<div class="lg-note"><b>아직 대장을 시작하지 않았습니다.</b> 종이 대장을 올리면 그날 이후 부서가 제출한 화학물질 보고서부터 \'반영 대기\'에 뜹니다. 종이 대장 없이 시작하려면 <button type="button" class="lg-btn s" id="lg-start">오늘부터 시작</button></div>'
                : '<div class="lg-sub" style="margin-bottom:8px">' + esc(d.from) + ' 이후 제출된 화학물질 보고서가 반영 대기에 뜹니다. 승인하면 대장에 적용되고, 반려하면 대장은 그대로 두고 부서에 사유를 보여 줍니다.</div>') +
-      '<div class="lg-bar" style="justify-content:flex-end"><button type="button" class="lg-btn o" id="lg-imp">종이 대장 올리기</button><button type="button" class="lg-btn" id="lg-add">직접 추가</button><button type="button" class="lg-btn" id="lg-csv">엑셀로 내려받기</button><button type="button" class="lg-btn" id="lg-re">새로 보기</button></div>' +
+      '<div class="lg-bar" style="justify-content:flex-end"><label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:700;white-space:nowrap;margin-right:auto">부서 <select id="lg-dept" class="fc" style="width:auto;min-height:40px"><option value="">전체 부서 (' + rows.length + '줄)</option>' +
+        Object.keys(depts).sort(function(a, b){ return a.localeCompare(b, 'ko'); }).map(function(x){ var c = rows.filter(function(o){ return o.dept === x; }).length; return '<option value="' + esc(x) + '"' + (x === f.dept ? ' selected' : '') + '>' + esc(x) + ' (' + c + ')</option>'; }).join('') + '</select></label>' +
+        '<button type="button" class="lg-btn o" id="lg-imp">종이 대장 올리기</button><button type="button" class="lg-btn" id="lg-add">직접 추가</button><button type="button" class="lg-btn" id="lg-csv">엑셀로 내려받기</button><button type="button" class="lg-btn" id="lg-re">새로 보기</button></div>' +
       '<div class="lg-kpi">' + kp('', '전체 물질', rows.length, '#1E1E1C') + kp('on', '사용 중', on, '#2F5A10') + kp('off', '중단 (중단일 있음)', off, '#45423D') + kp('wait', '반영 대기 (승인 전)', pend.length, '#8A5A00') + '</div>' +
-      '<div class="lg-bar"><label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;white-space:nowrap">부서 <select id="lg-dept" class="fc" style="width:auto"><option value="">모든 부서</option>' +
-        Object.keys(depts).sort(function(a, b){ return a.localeCompare(b, 'ko'); }).map(function(x){ return '<option' + (x === f.dept ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></label>' +
-        '<label style="flex:1 1 220px;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;white-space:nowrap">찾기 <input id="lg-q" type="search" class="fc" placeholder="물질명 · 업체" value="' + esc(f.q) + '"></label>' +
+      (f.dept ? (function(){ var mine = rows.filter(function(o){ return o.dept === f.dept; }), offN = mine.filter(function(o){ return o.stop; }).length;
+        return '<div class="lg-bar" style="justify-content:space-between;padding:8px 12px;border-radius:6px;background:#F3F9ED"><span><b>' + esc(f.dept) + '</b> · 물질 ' + mine.length + '줄 · <span class="lg-tg on">사용 중 ' + (mine.length - offN) + '</span> ' + (offN ? '<span class="lg-tg off">중단 ' + offN + '</span>' : '') + '</span><button type="button" class="lg-btn s" id="lg-alldept">전체 부서 보기</button></div>'; })() : '') +
+      '<div class="lg-bar"><label style="flex:1 1 220px;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;white-space:nowrap">찾기 <input id="lg-q" type="search" class="fc" placeholder="물질명 · 업체" value="' + esc(f.q) + '"></label>' +
         '<span class="lg-sub">' + (showRows.length + showPend.length) + '건</span></div>' +
-      ((showRows.length + showPend.length) ? '<div class="lg-tw"><table class="lg-tbl"><tr><th>부서</th><th>물질명</th><th>업체</th><th>신규사용일</th><th>사용중단일</th><th>상태</th><th>최근 변경</th><th></th></tr>' +
+      ((showRows.length + showPend.length) ? '<div class="lg-tw"><table class="lg-tbl"><tr><th>부서</th><th>물질명</th><th>신규사용일</th><th>사용중단일</th><th>상태</th><th>출처</th><th></th></tr>' +
         showPend.map(function(w){
           var x = w.x, p = w.p;
-          return '<tr class="w"><td>' + esc(x.dept) + '</td><td style="font-weight:700">' + esc(x.name) + '</td><td>' + (x.sup ? esc(x.sup) : '<span class="lg-sub">미기재</span>') + '</td>' +
+          return '<tr class="w"><td>' + esc(x.dept) + '</td><td style="font-weight:700">' + esc(x.name) + '</td>' +
             '<td>' + (x.side === 'new' ? esc(x.date || '-') : '') + '</td><td style="font-weight:700">' + (x.side === 'stop' ? esc(x.date || '-') : '—') + '</td>' +
-            '<td><span class="lg-tg w">반영 대기</span></td><td class="lg-sub">보고서 ' + esc(p.docNo || '') + ' · ' + (x.side === 'new' ? '신규사용' : '사용중단') + ' · ' + esc(planText(x)) + '<br>제출 ' + esc(String(p.submitted).slice(0, 10)) + (p.writer ? ' · ' + esc(p.writer) : '') + '</td>' +
+            '<td><span class="lg-tg w">반영 대기</span></td>' + (function(){ var t = '화학물질 보고서 · ' + (p.docNo || '') + ' · ' + x.dept + ' 제출 ' + String(p.submitted).slice(0, 10) + ' · ' + (x.side === 'new' ? '신규사용' : '사용중단') + ' · ' + planText(x) + (p.writer ? ' · ' + p.writer : ''); return '<td class="lg-sub lg-src" title="' + esc(t) + '"><b style="color:#45423D">화학물질 보고서</b>' + esc(t.slice(8)) + '</td>'; })() +
             '<td style="white-space:nowrap"><button type="button" class="lg-btn s" data-view="' + esc(p.recordId) + '" title="부서가 작성한 보고서 그대로 보기">보고서 보기</button> <button type="button" class="lg-btn p s" data-ok="' + esc(p.recordId) + '">승인</button> <button type="button" class="lg-btn r s" data-rj="' + esc(p.recordId) + '">반려</button> <button type="button" class="lg-btn s" data-skip="' + esc(p.recordId) + '" title="대장과 관계없는 보고서 — 대장은 그대로 두고 목록에서 뺌">제외</button></td></tr>';
         }).join('') +
-        showRows.map(function(o){
-          var key = o.dept + '|' + normName(o.name), sub = prev === key; prev = key;
-          return '<tr class="' + (o.stop ? 'off' : '') + '"><td>' + (sub ? '' : esc(o.dept)) + '</td><td style="font-weight:' + (sub ? 500 : 700) + ';' + (sub ? 'padding-left:24px' : '') + '">' + esc(o.name) + '</td>' +
-            '<td>' + (o.sup ? esc(o.sup) : '<span class="lg-sub">미기재</span>') + '</td><td>' + esc(o.start || '-') + '</td><td style="font-weight:700">' + esc(o.stop || '—') + '</td>' +
-            '<td><span class="lg-tg ' + (o.stop ? 'off">중단' : 'on">사용 중') + '</span></td><td class="lg-sub">' + last(o) + '</td>' +
-            '<td style="white-space:nowrap"><button type="button" class="lg-btn s" data-hist="' + esc(o.id) + '">이력</button> <button type="button" class="lg-btn s" data-edit="' + esc(o.id) + '">고치기</button></td></tr>';
-        }).join('') + '</table></div>'
+        (function(){
+          // v21.18 같은 물질(이름)을 여러 부서 · 여러 줄이 쓰면 한 줄로 접어 둠 → 물질명을 누르면 부서별 줄이 펼쳐짐
+          //  부서를 고르면 그 부서 줄만 한 줄씩 (접지 않음)
+          var line = function(o, sub){
+            var cls = (sub ? 'sub ' : '') + (o.stop ? 'off ' : '') + (st.flash[o.id] ? 'flash' : '');
+            return '<tr class="' + cls + '"><td' + (sub ? ' style="padding-left:26px"' : '') + '>' + esc(o.dept) + '</td><td style="font-weight:' + (sub ? 500 : 700) + '">' + (sub ? '<span class="lg-sub">└ </span>' : '') + esc(o.name) + '</td>' +
+              '<td>' + esc(o.start || '-') + '</td><td style="font-weight:700">' + esc(o.stop || '—') + '</td>' +
+              '<td><span class="lg-tg ' + (o.stop ? 'off">중단' : 'on">사용 중') + '</span></td>' + (function(){ var sc = srcOf(o); return '<td class="lg-sub lg-src" title="' + esc(sc.text) + '">' + sc.html + '</td>'; })() +
+              '<td style="white-space:nowrap"><button type="button" class="lg-btn s" data-hist="' + esc(o.id) + '">이력</button> <button type="button" class="lg-btn s" data-edit="' + esc(o.id) + '">고치기</button></td></tr>';
+          };
+          if(f.dept) return showRows.map(function(o){ return line(o, false); }).join('');
+          var groups = [], gi = {};
+          showRows.slice().sort(function(a, b){ return normName(a.name).localeCompare(normName(b.name), 'ko') || a.dept.localeCompare(b.dept, 'ko') || (a.stop ? 1 : 0) - (b.stop ? 1 : 0); })
+            .forEach(function(o){ var k = normName(o.name); if(!(k in gi)){ gi[k] = groups.length; groups.push({ k: k, rows: [] }); } groups[gi[k]].rows.push(o); });
+          return groups.map(function(g){
+            if(g.rows.length === 1) return line(g.rows[0], false);
+            var r0 = g.rows[0], isOpen = !!st.open[g.k], dn = {}, sups = {};
+            g.rows.forEach(function(o){ dn[o.dept] = 1; sups[o.sup || ''] = 1; });
+            var nd = Object.keys(dn).length, offN = g.rows.filter(function(o){ return o.stop; }).length, onN = g.rows.length - offN;
+            var stopD = {}; g.rows.forEach(function(o){ if(o.stop && !g.rows.some(function(y){ return y.dept === o.dept && !y.stop; })) stopD[o.dept] = 1; });
+            var ns = Object.keys(sups), starts = g.rows.map(function(o){ return o.start; }).filter(Boolean).sort();
+            var fl = g.rows.some(function(o){ return st.flash[o.id]; });
+            return '<tr class="' + (fl && !isOpen ? 'flash' : '') + '"><td><span class="lg-sub">' + nd + '개 부서</span></td>' +
+              '<td><button type="button" class="lg-exp" data-grp="' + esc(g.k) + '" aria-expanded="' + isOpen + '"><i aria-hidden="true">' + (isOpen ? '▾' : '▸') + '</i>' + esc(r0.name) + '</button></td>' +
+              '<td>' + esc(starts[0] || '-') + (starts.length > 1 && starts[0] !== starts[starts.length - 1] ? ' <span class="lg-sub">부터</span>' : '') + '</td>' +
+              '<td style="font-weight:700">' + (Object.keys(stopD).length ? Object.keys(stopD).length + '개 부서 중단' : '—') + '</td>' +
+              '<td><span class="lg-tg on">사용 중 ' + onN + '</span>' + (offN ? ' <span class="lg-tg off">중단 ' + offN + '</span>' : '') + '</td>' +
+              '<td class="lg-sub">' + (isOpen ? '' : '눌러서 부서별 보기') + '</td><td></td></tr>' +
+              (isOpen ? g.rows.map(function(o){ return line(o, true); }).join('') : '');
+          }).join('');
+        })() + '</table></div>'
         : '<div class="lg-sub" style="padding:16px 4px">' + (d.rows.length || pend.length ? '조건에 맞는 줄이 없습니다.' : '대장이 비어 있습니다. [종이 대장 올리기]로 시작하세요.') + '</div>');
     b.querySelectorAll('.lg-kpi [data-k]').forEach(function(x){ x.onclick = function(){ var k = x.getAttribute('data-k'); f.k = f.k === k ? '' : k; render(); }; });
     var ds = document.getElementById('lg-dept'); ds.onchange = function(){ f.dept = ds.value; render(); };
+    var ad = document.getElementById('lg-alldept'); if(ad) ad.onclick = function(){ f.dept = ''; render(); var d2 = document.getElementById('lg-dept'); if(d2) d2.focus(); };
+    b.querySelectorAll('[data-grp]').forEach(function(x){ x.onclick = function(){ var k = x.getAttribute('data-grp'); st.open[k] = !st.open[k]; render();
+      var nb = [].filter.call(body().querySelectorAll('[data-grp]'), function(y){ return y.getAttribute('data-grp') === k; })[0]; if(nb) nb.focus(); }; });
     var qi = document.getElementById('lg-q'); qi.onchange = function(){ f.q = qi.value; render(); };
     var sb = document.getElementById('lg-start'); if(sb) sb.onclick = async function(){
       if(!confirm('오늘(' + today() + ') 이후 제출된 화학물질 보고서부터 반영 대기에 띄울까요?')) return;
@@ -20100,7 +20260,14 @@ self.addEventListener('fetch',e=>{
     if(!x.success){ say(oldSrv(x), 'err'); return; }
     close();
     say('승인 · 대장에 반영했습니다' + (x.done && x.done.length ? ' — ' + x.done.join(', ') : ''), 'ok');
-    open();
+    // v21.18 방금 바뀐 물질은 펼쳐서 그 부서 줄을 표시
+    var pp = st.data && st.data.pending.find(function(y){ return y.recordId === rid; }), was = {};
+    (st.data.rows || []).forEach(function(o){ was[o.id] = (o.stop || '') + '|' + (o.start || '') + '|' + (o.sup || ''); });
+    await open();
+    st.flash = {};
+    (st.data.rows || []).forEach(function(o){ if(was[o.id] !== (o.stop || '') + '|' + (o.start || '') + '|' + (o.sup || '')) st.flash[o.id] = 1; });
+    if(pp) pp.sides.forEach(function(sd){ st.open[normName(sd.name)] = true; });
+    render();
   }
   async function decide(op, rid){
     var p = st.data.pending.find(function(x){ return x.recordId === rid; }); if(!p) return;
@@ -20170,7 +20337,42 @@ self.addEventListener('fetch',e=>{
     document.body.appendChild(a); a.click(); a.remove();
   }
 
-  /* ── 종이 대장 올리기: 엑셀 · CSV · 붙여넣기 → 미리보기(MSDS 목록 대조) → 넣기 ── */
+  /* ── 종이 대장 올리기: 엑셀 · CSV · 붙여넣기 · PDF · 사진 → 미리보기(MSDS 목록 대조) → 넣기 ── */
+  // v21.18 PDF · 사진(스캔)은 서버 AI(ledger.readFile)가 표로 읽음. 사진은 보내기 전에 줄여서 보냄
+  function fileB64(f){
+    return new Promise(function(ok, no){
+      var rd = new FileReader();
+      rd.onload = function(){ ok(String(rd.result).replace(/^data:[^,]*,/, '')); };
+      rd.onerror = function(){ no(new Error('파일을 열지 못했습니다')); };
+      rd.readAsDataURL(f);
+    });
+  }
+  function shrinkImg(f){
+    return new Promise(function(ok){
+      var u = URL.createObjectURL(f), im = new Image();
+      im.onload = function(){
+        var k = Math.min(1, 2200 / Math.max(im.naturalWidth, im.naturalHeight)), c = document.createElement('canvas');
+        c.width = Math.round(im.naturalWidth * k); c.height = Math.round(im.naturalHeight * k);
+        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(u);
+        ok({ b64: c.toDataURL('image/jpeg', 0.88).split(',')[1], mime: 'image/jpeg' });
+      };
+      im.onerror = function(){ URL.revokeObjectURL(u); ok(null); };
+      im.src = u;
+    });
+  }
+  async function readByAi(f){
+    var el = document.getElementById('lg-i-prev');
+    el.innerHTML = '<div class="lg-note" role="status" style="background:#F3F9ED;color:#2F5A10"><span class="gd-spin" aria-hidden="true"></span>AI가 \'' + esc(f.name) + '\' 대장을 읽는 중입니다… (20~60초) 다 읽으면 아래에 미리보기가 나옵니다.</div>';
+    var isImg = /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic)$/i.test(f.name), b64, mime;
+    if(isImg){ var sm = await shrinkImg(f); if(!sm) throw new Error('이 사진 형식은 읽을 수 없습니다 — JPG · PNG로 찍어 올려 주세요'); b64 = sm.b64; mime = sm.mime; }
+    else { if(f.size > 15 * 1024 * 1024) throw new Error('PDF가 너무 큽니다 (15MB 이하) — 쪽을 나눠 올려 주세요'); b64 = await fileB64(f); mime = 'application/pdf'; }
+    var x = await post('ledger.readFile', { content: b64, mime: mime, name: f.name });
+    if(!x || !x.success) throw new Error(x && /unknown op|알 수 없는/i.test(x.error || '') ? '서버(Code.gs)를 v21.18 이상으로 배포하면 PDF · 사진을 읽을 수 있습니다' : ((x && x.error) || 'PDF · 사진을 읽지 못했습니다'));
+    imp.warn = x.warnings || [];
+    return (x.rows || []).map(function(r, i){
+      return { line: i + 1, dept: r.dept || '', name: r.name || '', sup: r.sup || '', startRaw: r.start || '', stopRaw: r.stop || '', start: pdate(r.start || ''), stop: pdate(r.stop || '') };
+    }).filter(function(r){ return r.dept || r.name; });
+  }
   var imp = null;
   function parseText(t){
     var sep = t.indexOf('\t') >= 0 ? '\t' : ',';
@@ -20237,16 +20439,21 @@ self.addEventListener('fetch',e=>{
   function importDlg(){
     imp = { rows: [], file: '' };
     var ov = modal('종이 대장 올리기',
-      '<div class="lg-sub" style="margin-bottom:10px">지금 종이로 갖고 계신 대장(부서 · 물질명 · 사용일 · 중단일)을 엑셀로 옮겨 올리거나, 엑셀에서 표를 복사해 붙여넣으세요. <b>업체명은 없어도 됩니다</b> — \'미기재\'로 들어가고, 그 물질의 신규사용 보고서가 들어올 때 채워집니다.</div>' +
-      '<div class="lg-g2 lg-f"><div><label>엑셀 · CSV 파일</label><input type="file" id="lg-i-file" accept=".xlsx,.xls,.csv,.txt"><div class="lg-sub" id="lg-i-fn" style="margin-top:4px">첫 줄 제목: 부서 · 물질명 · 사용일 · 중단일 (· 업체). 제목이 없으면 A~D열 순서로 읽음</div></div>' +
+      '<div class="lg-sub" style="margin-bottom:10px">지금 갖고 계신 대장(부서 · 물질명 · 사용일 · 중단일)을 <b>PDF · 사진(스캔) · 엑셀</b> 그대로 올리거나, 엑셀에서 표를 복사해 붙여넣으세요. PDF · 사진은 AI가 표로 읽어 미리보기로 보여 줍니다 — 넣기 전에 꼭 확인하세요. <b>업체명은 없어도 됩니다</b> — \'미기재\'로 들어가고, 그 물질의 신규사용 보고서가 들어올 때 채워집니다.</div>' +
+      '<div class="lg-g2 lg-f"><div><label for="lg-i-file">파일 (PDF · 사진 · 엑셀 · CSV)</label><input type="file" id="lg-i-file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.xls,.csv,.txt,application/pdf,image/*"><div class="lg-sub" id="lg-i-fn" style="margin-top:4px">PDF · 사진: AI가 읽음 (스캔도 됨). 엑셀: 첫 줄 제목 부서 · 물질명 · 사용일 · 중단일 (· 업체), 제목이 없으면 A~D열 순서</div></div>' +
         '<div><label for="lg-i-paste">또는 표 붙여넣기</label><textarea id="lg-i-paste" rows="4" placeholder="부서&#9;물질명&#9;사용일&#9;중단일"></textarea><button type="button" class="lg-btn s" id="lg-i-read" style="margin-top:6px">붙여넣은 표 읽기</button></div></div>' +
       '<div id="lg-i-prev" style="margin-top:14px"></div>', true);
     var file = document.getElementById('lg-i-file');
     file.onchange = async function(){
       var f = file.files[0]; if(!f) return;
-      imp.file = f.name;
+      imp.file = f.name; imp.warn = [];
       try{
         var table;
+        if(/\.pdf$/i.test(f.name) || f.type === 'application/pdf' || /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic)$/i.test(f.name)){
+          file.disabled = true;
+          try{ preview(await readByAi(f)); } finally { file.disabled = false; }
+          return;
+        }
         if(/\.xlsx?$/i.test(f.name)){
           var X = await loadXlsx();
           var wb = X.read(await f.arrayBuffer(), { type: 'array', cellDates: true });
@@ -20257,17 +20464,29 @@ self.addEventListener('fetch',e=>{
     };
     document.getElementById('lg-i-read').onclick = function(){ imp.file = '붙여넣기'; preview(toRows(parseText(document.getElementById('lg-i-paste').value))); };
   }
+  // v21.18 한 칸에 여러 부서(병동,외래,치과 / 수술실ㆍ공급실 / 줄바꿈) → 부서마다 한 줄 (그래야 한 부서만 중단해도 그 줄에만 중단일)
+  function splitDept(rows){
+    var out = [];
+    rows.forEach(function(r){
+      var ds = String(r.dept || '').split(/\s*(?:[·ㆍ・,，、\/;\n]|\s및\s)\s*/).map(function(x){ return x.trim(); }).filter(Boolean);
+      if(ds.length <= 1){ out.push(r); return; }
+      ds.forEach(function(d, k){ out.push(Object.assign({}, r, { dept: d, splitFrom: r.dept, splitN: ds.length, splitK: k })); });
+    });
+    return out;
+  }
   function preview(rows){
+    rows = splitDept(rows);
     imp.rows = check(rows);
     var el = document.getElementById('lg-i-prev'); if(!el) return;
     if(!rows.length){ el.innerHTML = '<div class="lg-note">읽은 줄이 없습니다. 부서 · 물질명 열이 있는지 확인하세요.</div>'; return; }
     var n = function(fn){ return rows.filter(fn).length; };
     var dsel = function(r, i){ return '<select class="fc" data-dfix="' + i + '" style="width:auto"><option value="">그대로 (' + esc(r.dept) + ')</option>' + imp.depts.map(function(d){ return '<option' + (d === r.deptFix ? ' selected' : '') + '>' + esc(d) + '</option>'; }).join('') + '</select>'; };
     el.innerHTML =
+      (rows.some(function(r){ return r.splitFrom; }) ? '<div class="lg-note" style="background:#EEF6E6;color:#345C12">한 칸에 부서가 여러 개 적힌 줄은 <b>부서마다 한 줄로 나눠</b> 넣습니다. 그래야 나중에 한 부서만 중단해도 그 부서 줄에만 사용중단일이 찍힙니다.</div>' : '') +
       '<div class="lg-bar" style="justify-content:space-between"><b style="font-size:16px">미리보기 — ' + rows.length + '줄</b><span style="display:flex;flex-wrap:wrap;gap:6px">' +
         '<span class="lg-tg on">MSDS 목록과 같음 ' + n(function(r){ return r.nm === 'same'; }) + '</span><span class="lg-tg w">비슷한 이름 ' + n(function(r){ return r.nm === 'similar'; }) + '</span>' +
         '<span class="lg-tg bad">확인 필요 ' + n(function(r){ return r.nm === 'none' || r.dp === 'check' || r.bad; }) + '</span></span></div>' +
-      '<div class="lg-tw" style="max-height:420px;overflow:auto"><table class="lg-tbl" style="min-width:860px"><tr><th>줄</th><th>부서</th><th>물질명</th><th>업체</th><th>사용일</th><th>중단일</th><th>MSDS 목록 대조</th></tr>' +
+      '<div class="lg-tw" style="max-height:420px;overflow:auto"><table class="lg-tbl" style="min-width:860px"><tr><th>줄</th><th>부서</th><th>물질명</th><th>사용일</th><th>중단일</th><th>MSDS 목록 대조</th></tr>' +
         rows.map(function(r, i){
           var chk = [];
           if(r.bad) chk.push('<span style="color:#8A1F17;font-weight:700">' + (!r.dept || !r.name ? '부서 · 물질명 없음 — 넣지 않음' : '날짜를 읽지 못함 (' + esc(r.startRaw && !r.start ? r.startRaw : r.stopRaw) + ') — 빈칸으로 넣음') + '</span>');
@@ -20275,9 +20494,12 @@ self.addEventListener('fetch',e=>{
           if(r.nm === 'similar') chk.push('<label style="display:flex;align-items:center;gap:6px;color:#6E4A00;font-weight:700">비슷한 이름 → <select class="fc" data-nfix="' + i + '" style="width:auto"><option value="' + esc(r.nameFix) + '">' + esc(r.nameFix) + ' 로 맞춤</option><option value="">이 이름 그대로</option></select></label>');
           if(r.nm === 'none' && r.name) chk.push('<span style="color:#8A1F17;font-weight:700">MSDS 목록에 없음 — 그래도 대장에 넣음</span>');
           if(!chk.length) chk.push('<span style="color:#2F5A10;font-weight:700">같음' + (r.stop ? ' · 중단으로 넣음' : '') + '</span>');
-          return '<tr class="' + (r.dp === 'check' || r.nm === 'none' || r.bad ? '' : (r.nm === 'similar' ? 'w' : '')) + '"' + (r.dp === 'check' || r.nm === 'none' || r.bad ? ' style="background:#FCEDEB"' : '') + '><td>' + r.line + '</td><td>' + esc(r.dept) + '</td><td style="font-weight:700">' + esc(r.name) + '</td><td>' + (r.sup ? esc(r.sup) : '<span class="lg-sub">미기재</span>') + '</td>' +
+          if(r.splitFrom) chk.unshift('<span style="color:#3F7518;font-weight:700">부서 칸 \'' + esc(r.splitFrom) + '\' → ' + r.splitN + '개 부서로 나눠 넣음 (' + (r.splitK + 1) + '/' + r.splitN + ')</span>');
+          return '<tr class="' + (r.dp === 'check' || r.nm === 'none' || r.bad ? '' : (r.nm === 'similar' ? 'w' : '')) + '"' + (r.dp === 'check' || r.nm === 'none' || r.bad ? ' style="background:#FCEDEB"' : '') + '><td>' + r.line + '</td><td>' + esc(r.dept) + '</td><td style="font-weight:700">' + esc(r.name) + '</td>' +
             '<td>' + esc(r.start || r.startRaw || '—') + '</td><td>' + esc(r.stop || r.stopRaw || '—') + '</td><td>' + chk.join('<br>') + '</td></tr>';
         }).join('') + '</table></div>' +
+      (imp.warn && imp.warn.length ? '<div class="lg-note" style="margin-top:8px">AI가 읽기 어려웠던 부분: ' + imp.warn.map(esc).join(' · ') + '</div>' : '') +
+      (/\.(pdf|jpe?g|png|webp|heic)$/i.test(imp.file || '') ? '<div class="lg-sub" style="margin-top:8px"><b>AI가 읽은 결과입니다.</b> 종이와 한 줄씩 맞는지 확인하세요 — 틀린 줄은 넣은 뒤 대장에서 [고치기]로 바꿀 수 있습니다.</div>' : '') +
       '<div class="lg-sub" style="margin-top:8px">같은 부서 · 물질 · 업체 · 사용일 줄이 대장에 이미 있으면 건너뜁니다.</div>' +
       '<div class="lg-bar" style="justify-content:space-between;margin-top:12px"><label style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px;font-weight:700">이 날짜 이후 제출된 보고서부터 반영 대기 <input type="date" id="lg-i-from" class="fc" style="width:auto" value="' + esc((st.data && st.data.from) || today()) + '"' + (st.data && st.data.from ? ' disabled title="이미 정해짐"' : '') + '></label>' +
         '<span style="display:flex;gap:8px"><button type="button" class="lg-btn" id="lg-i-x">취소</button><button type="button" class="lg-btn p" id="lg-i-go">' + n(function(r){ return r.dept && r.name; }) + '줄 대장에 넣기</button></span></div>';
@@ -20300,6 +20522,284 @@ self.addEventListener('fetch',e=>{
   window.BMLEDGER = { open: open, _parse: function(t){ return toRows(parseText(t)); } };
 })();
 </script>
+
+<!-- ★ v21.19 화학물질 보고서 첫 화면: 우리 부서 물질 목록 + [+ 신규사용 보고서] · 물질 누르면 [사용중단]
+     · 사용중단: 확인 창(사용중단일 · 작성자 · 서명) → 지금 보고서 양식(PDF)으로 제출 → 관리자 대장 [승인] 때 MSDS 목록 부서 칸에서 빠짐
+     · 신규사용: 지금 단계 양식에서 신규 칸만 + 1단계 맨 위 'MSDS로 자동 채우기'(서버 chem.readMsds, 외국어 번역)
+     · 저장되는 보고서 내용 · PDF 양식 · 관리자 검토 · 대장 반영은 그대로 -->
+<style>
+#cr-main{display:flex;flex-direction:column;gap:12px;background:#fff;border:1px solid var(--bm-line,#E4E2DC);border-radius:8px;padding:18px 20px}
+.cr-top{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.cr-tag{display:inline-block;padding:2px 10px;border-radius:999px;background:#E3F1D6;color:#2F5A10;font-size:13px;font-weight:700;white-space:nowrap}
+.cr-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:40px;padding:0 16px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;color:#1E1E1C;font:inherit;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap}
+.cr-btn:hover{background:#FAFAF8}.cr-btn:disabled{opacity:.5;cursor:default}
+.cr-btn.p{background:#67AF28;border-color:#67AF28;color:#fff}.cr-btn.p:hover{background:#5A9E22}
+.cr-btn.r{background:#A3302A;border-color:#A3302A;color:#fff}
+.cr-btn:focus-visible,.cr-item:focus-visible{outline:3px solid #67AF28;outline-offset:2px}
+.cr-split{display:grid;grid-template-columns:minmax(260px,380px) minmax(0,1fr);gap:16px;align-items:start}
+.cr-left{display:flex;flex-direction:column;gap:8px;min-width:0}
+.cr-list{display:flex;flex-direction:column;gap:6px;max-height:560px;overflow:auto}
+.cr-item{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:10px 12px;border:1px solid #E4E2DC;border-radius:8px;background:#fff;color:#1E1E1C;font:inherit;text-align:left;cursor:pointer}
+.cr-item span:first-child{display:flex;flex-direction:column;min-width:0}.cr-item small{color:#5A5650;font-size:12.5px}
+.cr-item:hover{border-color:#67AF28}.cr-item.on{border:2px solid #67AF28;padding:9px 11px;background:#F3F9ED}
+.cr-item.wait{cursor:default;border-style:dashed}
+.cr-st{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+.cr-st.ok{background:#E3F1D6;color:#2F5A10}.cr-st.w{background:#FFF1C9;color:#6E4A00}
+.cr-right{min-width:0;padding:16px;border:1px solid #E4E2DC;border-radius:10px;min-height:200px}
+.cr-tbl{width:100%;border-collapse:collapse;font-size:14px;margin-top:10px}
+.cr-tbl th{width:110px;background:#F1F6EA;text-align:left;padding:8px 10px;border-bottom:1px solid #E4E2DC;white-space:nowrap}
+.cr-tbl td{padding:8px 10px;border-bottom:1px solid #ECEAE4}
+.cr-note{padding:9px 12px;border-radius:6px;background:#FFF6E0;color:#6E4A00;font-size:13.5px}
+.cr-note.ok{background:#EEF6E6;color:#345C12}.cr-note.err{background:#FCEDEB;color:#8A1F17}
+.cr-sub{font-size:13px;color:#5A5650}
+#cr-dlg{position:fixed;inset:0;z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:24px 16px;background:rgba(20,22,18,.45)}
+#cr-dlg .box{width:min(480px,100%);background:#fff;border-radius:10px;padding:18px 20px;display:flex;flex-direction:column;gap:10px;box-shadow:0 20px 50px rgba(0,0,0,.25)}
+#cr-dlg label{font-size:13.5px;font-weight:700}
+#cr-dlg input{width:100%;min-height:42px;padding:8px 10px;border:1px solid #C6C3BB;border-radius:6px;font:inherit;box-sizing:border-box}
+#cr-sig{width:100%;height:90px;border:1px dashed #C6C3BB;border-radius:6px;background:#fff;touch-action:none;cursor:crosshair}
+#cr-formbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-bottom:14px}
+.cr-ai{border-color:#67AF28!important;background:#F3F9ED!important}
+.cr-one{grid-template-columns:1fr!important}
+.cr-spin{display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:crspin .9s linear infinite}
+@keyframes crspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.cr-spin{animation:none}}
+@media (max-width:760px){.cr-split{grid-template-columns:1fr}}
+</style>
+<script>
+(function(){
+  if(window.BMCR) return;
+  var esc = function(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
+  function sess(){ try{ return window.BMAUTH && BMAUTH.session ? BMAUTH.session() : null; }catch(_){ return null; } }
+  function post(op, b){ return window.BMAUTH ? BMAUTH.post(op, b || {}).catch(function(e){ return { success: false, error: '서버 연결 실패: ' + e.message }; }) : Promise.resolve({ success: false, error: '서버 연결 준비 중입니다' }); }
+  function say(m, k){ try{ toast(m, k || 'ok'); }catch(_){} }
+  function $(id){ return document.getElementById(id); }
+  function today(){ try{ return todayStr(); }catch(_){ return new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); } }
+  function chems(){
+    var list = [];
+    try{ if(typeof productMap !== 'undefined' && productMap && Object.keys(productMap).length) list = Object.keys(productMap).map(function(k){ return productMap[k]; }); }catch(_){}
+    if(!list.length){ try{ list = CHEMS; }catch(_){} }
+    return (list || []).filter(function(p){ return p && p.name; });
+  }
+  function deptsOf(p){ return (p.departments || String(p.department || '').split(/\s*,\s*/)).map(function(d){ return String(d).trim(); }).filter(Boolean); }
+  var nd = function(v){ return String(v || '').replace(/\s/g, ''); };
+  function useBy(p, d){ return deptsOf(p).some(function(x){ return nd(x) === nd(d); }); }
+  function records(){ try{ return JSON.parse(localStorage.getItem('bm_chem_records') || '[]'); }catch(_){ return []; } }
+
+  var st = { dept: '', sel: '', mine: {}, mode: '', q: '' };
+  function myDept(){ var s = sess(); return s && s.role === 'dept' ? s.dept : ''; }
+  function allDepts(){ var m = {}; chems().forEach(function(p){ deptsOf(p).forEach(function(d){ m[d] = 1; }); }); return Object.keys(m).sort(function(a, b){ return a.localeCompare(b, 'ko'); }); }
+
+  async function open(){
+    var root = $('cr-main'); if(!root) return;
+    leaveForm();
+    st.dept = myDept() || st.dept || allDepts()[0] || '';
+    st.sel = ''; st.q = '';
+    render();
+    // 우리 부서 보고서의 대장 반영 상태 (반영 대기 = 승인 전)
+    var s = sess();
+    if(s){ var x = await post('ledger.mine', {}); if(x && x.success){ st.mine = x.data || {}; render(); } }
+  }
+  function waitOf(kind, name){
+    var out = null;
+    records().forEach(function(r){
+      var rid = r.recordId, mn = st.mine[rid];
+      if(!mn || mn.status !== '반영 대기') return;
+      if(kind === 'stop' && r.isStop && nd(r.stopProduct) === nd(name) && nd(r.stopDept || r.dept) === nd(st.dept)) out = r;
+      if(kind === 'new' && r.isNew && nd(r.newDept || r.dept) === nd(st.dept)) (out = out || []).push(r);
+    });
+    return out;
+  }
+  function render(){
+    var root = $('cr-main'); if(!root) return;
+    var locked = !!myDept(), q = st.q.trim().toLowerCase();
+    var mine = chems().filter(function(p){ return useBy(p, st.dept); }).sort(function(a, b){ return a.name.localeCompare(b.name, 'ko'); });
+    var list = mine.filter(function(p){ return !q || (p.name + ' ' + (p.manufacturer || '') + ' ' + (p.components || []).map(function(c){ return (c.compName || '') + ' ' + (c.casNumber || ''); }).join(' ')).toLowerCase().indexOf(q) >= 0; });
+    var newWait = waitOf('new') || [];
+    root.innerHTML =
+      '<div class="cr-top"><span style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">' +
+        (locked ? '<span class="cr-tag">' + esc(st.dept) + ' 로그인</span>'
+                : '<label style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:700">부서 <select id="cr-dept" class="fc" style="width:auto">' + allDepts().map(function(d){ return '<option' + (d === st.dept ? ' selected' : '') + '>' + esc(d) + '</option>'; }).join('') + '</select></label><span class="cr-sub">부서로 로그인하면 우리 부서로 고정됩니다</span>') +
+      '</span><button type="button" class="cr-btn p" id="cr-new">+ 신규사용 보고서</button></div>' +
+      '<div class="cr-split"><div class="cr-left">' +
+        '<div style="display:flex;justify-content:space-between;gap:8px"><b>' + esc(st.dept) + '가 쓰는 물질</b><span class="cr-sub">사용 중 ' + mine.length + '개</span></div>' +
+        '<input id="cr-q" class="fc" type="search" placeholder="찾기 — 제품명 · 업체 · 성분 · CAS" aria-label="물질 찾기" value="' + esc(st.q) + '">' +
+        '<div class="cr-list" id="cr-list">' +
+          newWait.map(function(r){ return '<div class="cr-item wait"><span><b>' + esc(r.newProduct) + '</b><small>신규사용 보고서 ' + esc(r.docNo || '') + ' · ' + esc(String(r.submitted || '').slice(0, 10)) + '</small></span><span class="cr-st w">신규 신청 · 승인 대기</span></div>'; }).join('') +
+          list.map(function(p){ var w = waitOf('stop', p.name);
+            return '<button type="button" class="cr-item' + (st.sel === p.name ? ' on' : '') + '" data-n="' + esc(p.name) + '"><span><b>' + esc(p.name) + '</b><small>' + esc(p.manufacturer || '') + '</small></span>' +
+              (w ? '<span class="cr-st w">중단 신청 · 승인 대기</span>' : '<span class="cr-st ok">사용 중</span>') + '</button>'; }).join('') +
+          (!list.length ? '<p class="cr-sub" style="padding:8px 2px">' + (mine.length ? '찾는 물질이 없습니다.' : esc(st.dept) + '가 쓰는 물질이 MSDS 목록에 없습니다.') + '</p>' : '') +
+        '</div></div>' +
+        '<div class="cr-right" id="cr-detail"></div></div>';
+    var ds = $('cr-dept'); if(ds) ds.onchange = function(){ st.dept = ds.value; st.sel = ''; render(); };
+    $('cr-q').oninput = function(){ st.q = this.value; var pos = this.selectionStart; render(); var qi = $('cr-q'); qi.focus(); try{ qi.setSelectionRange(pos, pos); }catch(_){} };
+    $('cr-new').onclick = openNew;
+    root.querySelectorAll('[data-n]').forEach(function(b){ b.onclick = function(){ st.sel = b.getAttribute('data-n'); render(); }; });
+    detail();
+  }
+  function detail(){
+    var box = $('cr-detail'); if(!box) return;
+    var p = chems().filter(function(x){ return x.name === st.sel && useBy(x, st.dept); })[0];
+    if(!p){ box.innerHTML = '<div class="cr-sub" style="line-height:1.8;padding:8px 2px">왼쪽에서 물질을 누르면 정보가 나오고 <b>[사용중단]</b>을 할 수 있습니다.<br>새 물질을 쓰기 시작하면 오른쪽 위 <b>[+ 신규사용 보고서]</b>를 누르세요.</div>'; return; }
+    var w = waitOf('stop', p.name), ds = deptsOf(p), comps = (p.components || []).filter(function(c){ return c.compName || c.casNumber; });
+    box.innerHTML = '<b style="font-size:20px;font-weight:800">' + esc(p.name) + '</b>' +
+      '<table class="cr-tbl"><tbody><tr><th>업체</th><td>' + esc(p.manufacturer || '—') + '</td></tr>' +
+      '<tr><th>성분 · CAS</th><td>' + (comps.length ? comps.map(function(c){ return esc(c.compName || '') + (c.casNumber ? ' ' + esc(c.casNumber) : ''); }).join('<br>') : '—') + '</td></tr>' +
+      '<tr><th>쓰는 부서</th><td>' + esc(ds.join(', ')) + '</td></tr></tbody></table>' +
+      (ds.length > 1 ? '<p class="cr-sub" style="margin-top:8px">다른 부서(' + (ds.length - 1) + '곳)는 계속 사용합니다. ' + esc(st.dept) + '만 중단됩니다.</p>' : '') +
+      (w ? '<div class="cr-note" style="margin-top:12px"><b>' + esc(w.stopDate || '') + ' 사용중단 신청함</b> (' + esc(w.docNo || '') + ') — 보건관리실 승인을 기다리는 중입니다. 승인되면 MSDS 목록 · 교육일지에서 빠집니다.</div>'
+         : '<div style="margin-top:14px"><button type="button" class="cr-btn r" id="cr-stop">사용중단</button></div>');
+    var sb = $('cr-stop'); if(sb) sb.onclick = function(){ askStop(p); };
+  }
+
+  /* ── 사용중단: 확인 창 → 지금 보고서 양식으로 제출 ── */
+  function askStop(p){
+    var d = document.createElement('div'); d.id = 'cr-dlg';
+    d.innerHTML = '<div class="box" role="dialog" aria-modal="true" aria-labelledby="cr-dlg-t"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><b id="cr-dlg-t" style="font-size:18px">이 물질을 사용중단하시겠습니까?</b><button type="button" class="cr-btn" id="cr-dx" aria-label="닫기" style="min-height:36px;padding:0 10px">×</button></div>' +
+      '<div class="cr-note ok"><b>' + esc(p.name) + '</b> · ' + esc(p.manufacturer || '') + '<br>부서: <b>' + esc(st.dept) + '</b></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div><label for="cr-dd">사용중단일</label><input id="cr-dd" type="date" value="' + today() + '"></div><div><label for="cr-dw">작성자 (부서의 장)</label><input id="cr-dw" placeholder="성명"></div></div>' +
+      '<div><label>서명</label><canvas id="cr-sig" aria-label="서명 칸"></canvas><button type="button" class="cr-btn" id="cr-sclr" style="min-height:30px;font-size:12px;margin-top:4px">서명 지우기</button></div>' +
+      '<p class="cr-sub">[사용중단]을 누르면 지금과 같은 보고서(PDF)가 만들어져 보건관리실로 제출됩니다. <b>관리자가 승인하면</b> MSDS 목록 · 교육일지 · 관리요령에서 ' + esc(st.dept) + '가 빠집니다.</p>' +
+      '<div id="cr-dmsg"></div><div style="display:flex;justify-content:flex-end;gap:8px"><button type="button" class="cr-btn" id="cr-dc">취소</button><button type="button" class="cr-btn r" id="cr-dok">사용중단</button></div></div>';
+    document.body.appendChild(d);
+    var shut = function(){ d.remove(); };
+    $('cr-dx').onclick = shut; $('cr-dc').onclick = shut;
+    d.onclick = function(e){ if(e.target === d) shut(); };
+    d.addEventListener('keydown', function(e){ if(e.key === 'Escape') shut(); });
+    var sig = sigPad($('cr-sig')); $('cr-sclr').onclick = sig.clear;
+    $('cr-dw').focus();
+    $('cr-dok').onclick = async function(){
+      var date = $('cr-dd').value, w = $('cr-dw').value.trim(), m = $('cr-dmsg');
+      if(!date){ m.innerHTML = '<div class="cr-note err">사용중단일을 넣어 주세요</div>'; return; }
+      if(!w){ m.innerHTML = '<div class="cr-note err">작성자 성명을 넣어 주세요</div>'; $('cr-dw').focus(); return; }
+      if(!sig.has()){ m.innerHTML = '<div class="cr-note err">서명을 해 주세요</div>'; return; }
+      this.disabled = true; m.innerHTML = '<div class="cr-note" role="status"><span class="cr-spin" aria-hidden="true"></span>보고서를 만들어 제출하는 중…</div>';
+      var ok = await submitStop(p, date, w, sig.data());
+      if(ok){ shut(); say(p.name + ' 사용중단 보고서를 제출했습니다 — 보건관리실 승인 후 반영됩니다', 'ok'); open(); }
+      else { this.disabled = false; m.innerHTML = '<div class="cr-note err">제출하지 못했습니다 — 잠시 뒤 다시 눌러 주세요</div>'; }
+    };
+  }
+  function sigPad(cv){
+    var r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    cv.width = Math.max(10, r.width) * dpr; cv.height = Math.max(10, r.height) * dpr;
+    var c = cv.getContext('2d'); c.scale(dpr, dpr); c.lineWidth = 2; c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = '#1c3557';
+    var on = false, last = null, ink = false;
+    var xy = function(e){ var b = cv.getBoundingClientRect(), t = (e.touches && e.touches[0]) || e; return { x: t.clientX - b.left, y: t.clientY - b.top }; };
+    var down = function(e){ e.preventDefault(); on = true; last = xy(e); c.beginPath(); c.arc(last.x, last.y, 1, 0, Math.PI * 2); c.fillStyle = '#1c3557'; c.fill(); ink = true; };
+    var move = function(e){ if(!on) return; e.preventDefault(); var p = xy(e); c.beginPath(); c.moveTo(last.x, last.y); c.lineTo(p.x, p.y); c.stroke(); last = p; ink = true; };
+    var up = function(){ on = false; };
+    cv.onmousedown = down; cv.onmousemove = move; cv.onmouseup = up; cv.onmouseleave = up;
+    cv.ontouchstart = down; cv.ontouchmove = move; cv.ontouchend = up;
+    return { has: function(){ return ink; }, data: function(){ return ink ? cv.toDataURL('image/png') : ''; },
+             clear: function(){ c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv.width, cv.height); c.restore(); ink = false; } };
+  }
+  function setVal(id, v){ var e = $(id); if(e) e.value = v; }
+  function ensureOpt(id, v){ var s = $(id); if(!s || !v) return; if(![].some.call(s.options, function(o){ return o.value === v || o.text === v; })){ var o = document.createElement('option'); o.textContent = v; o.value = v; s.appendChild(o); } s.value = v; }
+  async function submitStop(p, date, writer, sigData){
+    try{
+      chemReset();
+      $('chem-c-stop').checked = true;
+      setVal('chem-d-stop', date); setVal('chem-prod-stop', p.name); ensureOpt('chem-dept-stop', st.dept);
+      var comps = (p.components || []).filter(function(c){ return c.compName || c.casNumber; });
+      chemState.stop.mats = comps.length ? comps.map(function(c){ return { name: String(c.compName || '').trim(), cas: String(c.casNumber || '').trim() }; }) : [{ name: '', cas: '' }];
+      chemState.stop.sups = [{ name: p.manufacturer || '', phone: '' }];
+      chemRenderMats('stop'); chemRenderSups('stop');
+      // 지난 신규사용 보고서에 적은 보관 장소 · 사용목적이 있으면 그대로
+      var prev = records().filter(function(r){ return r.isNew && nd(r.newProduct) === nd(p.name) && nd(r.newDept) === nd(st.dept); }).pop();
+      if(prev){ setVal('chem-loc-stop', prev.newLocation || ''); setVal('chem-pur-stop', prev.newPurpose || ''); }
+      if(p.pdfUrl){ var y = $('chem-msds-stop-y'); if(y) y.checked = true; }
+      setVal('chem-writer-stop', writer);
+      window.__chemSigOverride = { stop: sigData };
+      var n0 = records().length;
+      await window.chemGenPDF();
+      return records().length > n0;
+    }catch(e){ console.error(e); return false; }
+    finally { window.__chemSigOverride = null; }
+  }
+
+  /* ── 신규사용: 지금 단계 양식에서 신규 칸만 + MSDS 자동 채우기 ── */
+  var hidden = [];
+  function openNew(){
+    chemReset();
+    $('chem-c-new').checked = true;
+    ensureOpt('chem-dept-new', st.dept);
+    var box = document.querySelector('#pg-chem .chem-box');
+    hidden = [];
+    var hide = function(el){ if(el && el.style.display !== 'none'){ hidden.push([el, el.style.display]); el.style.display = 'none'; } };
+    hide($('chem-c-new').closest('.chem-2col > div'));
+    hide($('chem-d-stop').closest('.chem-2col > div'));
+    [2, 3, 4].forEach(function(i){ document.querySelectorAll('#chem-pn-' + i + ' .chem-2col').forEach(function(g){ if(g.children.length >= 2){ hide(g.children[1]); g.classList.add('cr-one'); } }); });
+    autoBox(true);
+    $('cr-main').style.display = 'none';
+    box.style.display = '';
+    var bar = $('cr-formbar');
+    if(!bar){ bar = document.createElement('div'); bar.id = 'cr-formbar'; box.insertBefore(bar, box.firstChild); }
+    bar.innerHTML = '<span class="cr-tag" style="background:#FFF1C9;color:#6E4A00">신규사용 보고서 · ' + esc(st.dept) + '</span><button type="button" class="cr-btn" id="cr-back">← 목록으로</button>';
+    $('cr-back').onclick = function(){ open(); };
+    st.mode = 'new';
+    box.scrollIntoView({ block: 'start' });
+  }
+  function leaveForm(){
+    hidden.forEach(function(h){ h[0].style.display = h[1]; }); hidden = [];
+    document.querySelectorAll('#pg-chem .cr-one').forEach(function(g){ g.classList.remove('cr-one'); });
+    document.querySelectorAll('#pg-chem .cr-ai').forEach(function(x){ x.classList.remove('cr-ai'); });
+    autoBox(false);
+    var box = document.querySelector('#pg-chem .chem-box'); if(box) box.style.display = 'none';
+    var m = $('cr-main'); if(m) m.style.display = '';
+    st.mode = '';
+  }
+  function autoBox(on){
+    var el = $('cr-auto');
+    if(!on){ if(el) el.remove(); return; }
+    if(el) el.remove();
+    el = document.createElement('div'); el.id = 'cr-auto';
+    el.style.cssText = 'margin:0 0 14px;padding:12px 14px;border:2px solid #67AF28;border-radius:8px;background:#F3F9ED;display:flex;flex-direction:column;gap:8px';
+    el.innerHTML = '<div><b style="font-size:15px">업체에서 받은 MSDS로 자동 채우기</b> <span class="cr-st ok">선택</span>' +
+      '<div class="cr-sub" style="margin-top:2px">MSDS(PDF · 사진)를 올리면 2단계 제품명 · 3단계 물질 · 공급업체 · 연락처 · 4단계 사용목적 · MSDS 첨부가 미리 채워집니다. 외국어 MSDS는 한글로 번역합니다. 올리지 않고 직접 입력해도 됩니다.</div></div>' +
+      '<div><label class="cr-btn p" style="position:relative">MSDS 파일 고르기<input type="file" id="cr-file" accept=".pdf,application/pdf,image/png,image/jpeg,image/webp" style="position:absolute;width:1px;height:1px;opacity:0"></label></div><div id="cr-amsg"></div>';
+    var pn = $('chem-pn-1'); pn.insertBefore(el, pn.children[1] || null);
+    $('cr-file').onchange = function(){ var f = this.files[0]; this.value = ''; if(f) readMsds(f); };
+  }
+  async function readMsds(f){
+    var m = $('cr-amsg');
+    if(f.size > 15 * 1024 * 1024){ m.innerHTML = '<div class="cr-note err">파일이 너무 큽니다 (15MB 이하)</div>'; return; }
+    if(!sess()){ m.innerHTML = '<div class="cr-note err">부서로 로그인하면 자동 채우기를 쓸 수 있습니다 — 직접 입력해도 됩니다</div>'; return; }
+    m.innerHTML = '<div class="cr-note" role="status"><span class="cr-spin" aria-hidden="true"></span>MSDS를 읽고 보고서 칸을 채우는 중입니다… (20~60초)</div>';
+    var url = await new Promise(function(ok, no){ var rd = new FileReader(); rd.onload = function(){ ok(String(rd.result)); }; rd.onerror = no; rd.readAsDataURL(f); });
+    var mime = /^image\//.test(f.type) ? f.type : 'application/pdf';
+    var x = await post('chem.readMsds', { content: url.split(',')[1], mime: mime, name: f.name });
+    if(!$('cr-amsg')) return;
+    if(!x || !x.success){ m.innerHTML = '<div class="cr-note err">' + esc(/unknown op/.test((x && x.error) || '') ? '서버(Code.gs)를 v21.19 이상으로 배포하면 쓸 수 있습니다' : ((x && x.error) || '읽지 못했습니다')) + '</div>'; return; }
+    var d = x.data || {}, filled = 0, mark = function(id){ var e = $(id); if(e){ e.classList.add('cr-ai'); } };
+    if(d.product){ setVal('chem-prod-new', d.product); mark('chem-prod-new'); filled++; }
+    var comps = (d.comps || []).map(function(c){ return { name: c.nameKo + (c.nameOrig && c.nameOrig !== c.nameKo ? ' (' + c.nameOrig + ')' : ''), cas: c.cas || '' }; }).filter(function(c){ return c.name || c.cas; });
+    if(comps.length){ chemState.new.mats = comps; chemRenderMats('new'); filled++; }
+    var sp = d.supplier || {};
+    if(sp.name || sp.tel){ chemState.new.sups = [{ name: sp.name || '', phone: sp.tel || '' }]; chemRenderSups('new'); filled++; }
+    if(d.usage){ setVal('chem-pur-new', d.usage); mark('chem-pur-new'); filled++; }
+    // MSDS 수령 '예' + 올린 파일 첨부 (지금 첨부 칸과 같은 모양)
+    var y = $('chem-msds-new-y'); if(y){ y.checked = true; chemMsdsToggle('new', true); }
+    chemState.new.msdsFile = { name: f.name, type: f.type || 'application/octet-stream', size: f.size, dataURL: url };
+    var fn = $('chem-msds-fname-new'); if(fn) fn.innerHTML = '<b>' + esc(f.name) + '</b> <span style="color:#94a3b8">(MSDS로 자동 채우기에서 첨부)</span>';
+    document.querySelectorAll('#chem-mat-new input, #chem-sup-new input').forEach(function(i){ i.classList.add('cr-ai'); });
+    var foreign = d.lang && !/한국/.test(d.lang);
+    m.innerHTML = '<div class="cr-note ok"><b>MSDS에서 ' + (filled + 1) + '곳을 채웠습니다</b> — 2 · 3 · 4단계의 초록 칸입니다. [다음 →]으로 넘어가며 맞는지 확인하고, 용기 용량 · 보관 장소 · 서명은 직접 넣어 주세요.' + (x.left != null ? ' <span class="cr-sub">(오늘 남은 자동 채우기 ' + x.left + '회)</span>' : '') + '</div>' +
+      (foreign ? '<div class="cr-note" style="margin-top:6px"><b>' + esc(d.lang) + ' MSDS를 한글로 번역해서 채웠습니다.</b> 국내에 공급하는 화학물질의 MSDS는 한글로 작성하는 것이 원칙입니다 — 업체에 <b>한글 MSDS</b>도 요청해 주세요.</div>' : '') +
+      ((d.warnings || []).length ? '<div class="cr-note" style="margin-top:6px">읽기 어려웠던 부분: ' + d.warnings.map(esc).join(' · ') + '</div>' : '');
+  }
+  // 신규사용 양식에서 [PDF 생성 · 저장]이 끝나면 목록으로
+  var origGen = window.chemGenPDF;
+  if(typeof origGen === 'function'){
+    window.chemGenPDF = async function(){
+      var n0 = records().length, mode = st.mode;
+      await origGen.apply(this, arguments);
+      if(mode === 'new' && records().length > n0){ say('신규사용 보고서를 제출했습니다 — 보건관리실 승인 후 MSDS 목록 · 교육일지에 반영됩니다', 'ok'); open(); }
+    };
+  }
+  window.BMCR = { open: open, _openNew: openNew, _askStop: function(n){ var p = chems().filter(function(x){ return x.name === n; })[0]; if(p) askStop(p); }, _readMsds: readMsds, _st: st };
+})();
+</script>
+
 
 
 <!-- ★ v21.1 AI 도우미 (묻고 답하기) — 앱 사용법 · 교육내용 · MSDS · 법령 · 안전보건공단 자료. 서버 op: help.ask (서버 v21.1) -->
