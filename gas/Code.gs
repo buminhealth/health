@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.19 (2026-11-16)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.20 (2026-11-17)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -2211,17 +2211,31 @@ function runAutoCheck_(forceFull) {
 
 // 자동 로그인이 될 때만 진행 (안 되면 아무 메일도 보내지 않음)
 function dailyCheck() {
+  ensurePmCheck_();
   if (hrAutoReady_()) runAutoCheck_();
+}
+// v21.20 오후 1시 한 번 더 확인 (아침 7시 이후 인사 사이트에 등록된 신규입사자를 그날 안에 잡음 — 부분 조회라 읽기 적음)
+//  · 아침 확인이 돌 때 오후 예약이 없으면 스스로 만듦 (메뉴 ⑤를 다시 누르지 않아도 됨)
+function dailyCheckPm() {
+  if (hrAutoReady_()) runAutoCheck_();
+}
+function ensurePmCheck_() {
+  try {
+    const ts = ScriptApp.getProjectTriggers();
+    if (ts.some(t => t.getHandlerFunction() === 'dailyCheck') && !ts.some(t => t.getHandlerFunction() === 'dailyCheckPm'))
+      ScriptApp.newTrigger('dailyCheckPm').timeBased().everyDays(1).atHour(13).inTimezone(TZ).create();
+  } catch (_) {}
 }
 
 function enableDailyCheck() {
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'dailyCheck').forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('dailyCheck').timeBased().everyDays(1).atHour(7).inTimezone(TZ).create();
-  SpreadsheetApp.getUi().alert('매일 아침 7시경 자동 확인을 켰습니다.' +
+  ensurePmCheck_();
+  SpreadsheetApp.getUi().alert('매일 아침 7시경 · 오후 1시경 자동 확인을 켰습니다.' +
     (hrAutoReady_() ? '' : '\n(인사 사이트 자동 로그인(메뉴 ④)이 설정되기 전에는 아무 것도 하지 않습니다)'));
 }
 function disableDailyCheck() {
-  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'dailyCheck').forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.getProjectTriggers().filter(t => /^dailyCheck(Pm)?$/.test(t.getHandlerFunction())).forEach(t => ScriptApp.deleteTrigger(t));
   SpreadsheetApp.getUi().alert('매일 자동 확인을 껐습니다.');
 }
 
