@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.25 (2026-11-18)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.26 (2026-11-18)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -2066,6 +2066,7 @@ function nhAnswerLocked_(req, s) {
 //          일지 종류가 모자라면(특별교육 대상인데 MSDS 일지) 아래 nhReconcile_가 교육대기로 되돌리고 이유를 적음
 function nhMarkEducated_(dept, names) {
   if (!SS.getSheetByName(NH_SHEET)) return;
+  eduCacheClear_();
   const set = new Set(names.map(n => String(n).trim()));
   nhRows_().forEach(o => {
     if (!sameDept_(o['부서'], dept) || !set.has(o['이름'])) return;
@@ -2097,14 +2098,23 @@ function nhDedupe_(rows) {
     drop._dirty = true;
   });
 }
-function nhReconcile_(st) {
+/* v21.26 원인 ②: v21.23부터 신규입사 알림 목록을 열 때마다 교육 현황 전체를 새로 계산하고(시트 1번 → 12번 읽기)
+   대시보드의 다른 요청과 잠금을 최대 10초씩 기다렸음 → 교육 자료가 바뀐 뒤 한 번만 · 잠겨 있으면 건너뜀 (force: 매일 확인) */
+function nhReconcile_(st, force) {
   if (!SS.getSheetByName(NH_SHEET)) return 0;
+  const c = CacheService.getScriptCache();
+  // 표시: 교육 자료 버전 + 알림 줄 상태 요약 — 둘 다 그대로면 이미 맞춘 것 (알림 시트 한 번 읽기만)
+  const rows0 = nhRows_();
+  const sig = sha256Hex_(rows0.map(o => o['알림ID'] + o['상태'] + o['교육일지제출일'] + o['사번']).join('|')).slice(0, 16);
+  const mark = 'nh:rec:' + (c.get('edu:ver') || '0') + ':' + sig;
+  if (!force && c.get(mark)) return 0;
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(10000)) return 0;
+  if (!lock.tryLock(force ? 10000 : 1)) return 0;
   try {
+    st = st || eduStatusCached_({ role: 'admin' });   // 캐시(5분)에 있으면 그대로 · 없을 때만 한 번 계산해 캐시에 넣음
+    if (!st) return 0;
     const rows = nhRows_();
     nhDedupe_(rows);
-    st = st || eduStatus_({ role: 'admin' });
     const byNo = {}, byNm = {};
     (st.people || []).forEach(p => { if (/^\d{6,}$/.test(String(p.no || ''))) byNo[String(p.no)] = p; byNm[p.name + '|' + normDept_(p.dept)] = p; });
     rows.forEach(o => {
@@ -2128,6 +2138,8 @@ function nhReconcile_(st) {
     });
     let n = 0;
     rows.forEach(o => { if (o._dirty) { delete o._dirty; nhWrite_(o); n++; } });
+    const after = n ? sha256Hex_(rows.map(o => o['알림ID'] + o['상태'] + o['교육일지제출일'] + o['사번']).join('|')).slice(0, 16) : sig;
+    c.put('nh:rec:' + (c.get('edu:ver') || '0') + ':' + after, '1', 600);
     return n;
   } finally { lock.releaseLock(); }
 }
@@ -2293,7 +2305,7 @@ function runAutoCheck_(forceFull) {
     setAdminCfg({ key: 'hr_last_check', value: today });
     out.created = detectNewHires_();
     setAdminCfg({ key: 'hr_last_error', value: '' });
-    try { out.reconciled = nhReconcile_(); } catch (_) {}   // v21.23 재알림 전에 교육 현황과 맞춤 (일지 낸 사람에게 재알림 안 감)
+    try { eduCacheClear_(); out.reconciled = nhReconcile_(null, true); } catch (_) {}   // v21.23 재알림 전에 교육 현황과 맞춤 (일지 낸 사람에게 재알림 안 감) · 직원 동기화 뒤라 새로 계산
   } catch (e) {
     const msg = String(e.message || e);
     setAdminCfg({ key: 'hr_last_error', value: nowKst_() + ' ' + msg.slice(0, 300) });
@@ -3671,6 +3683,14 @@ function dashToday_() {
     });
   } catch (_) {}
   try { out.ledger = clLedgerPending_(clLedgerRows_(), clLedgerDecisions_()).length; } catch (_) {}
+  // v21.26 대시보드가 교육 현황 · 신규입사 목록을 따로 부르지 않도록 같이 보냄 (요청 3개 → 1개)
+  out.depts = (st.depts || []).map(d => ({ dept: d.dept, total: d.total, done: d.done, missing: d.missing, progress: d.progress, overdue: d.overdue }));
+  try {
+    const all = nhRows_().filter(o => o['상태'] !== NH_DELETED);
+    out.nhTotal = all.length;
+    out.nhWait = all.filter(o => ['회신대기', '이메일없음', '취급-교육대기'].indexOf(o['상태']) >= 0)
+      .map(o => ({ '상태': o['상태'], '부서': o['부서'], '이름': o['이름'], '입사일': o['입사일'], '교육기한': o['교육기한'] }));
+  } catch (_) {}
   return out;
 }
 
@@ -3998,15 +4018,34 @@ function eduAskMail_(req) {
 
 function eduCacheKey_(s) { return 'edu:' + (s.role === 'admin' ? 'admin' : sha256Hex_(normDept_(s.dept)).slice(0, 16)); }
 function eduCacheClear_() { try { CacheService.getScriptCache().put('edu:ver', String(Date.now()), 21600); } catch (_) {} }
-function eduStatusCached_(s) {
+/* v21.26 대시보드 · 신규입사 알림이 느리던 원인 ①: 직원 550여 명이면 결과가 약 200KB라
+   예전 캐시(한 칸 95KB 까지)에 들어가지 못해 요청마다 직원목록 · 교육이력대장 · 물질 시트를 처음부터 다시 계산했음
+   → 90KB씩 나눠 5분 저장. 교육 기록 · 제외 · 근무지 · 부서이동 확인 · 직원 동기화 때는 eduCacheClear_로 바로 새로 계산 */
+const EDU_CACHE_SEC = 300;
+function eduStatusCached_(s, peek) {   // peek: 캐시에 있을 때만 (없으면 null · 새로 계산 안 함)
   const c = CacheService.getScriptCache();
   const ver = c.get('edu:ver') || '0';
   const k = eduCacheKey_(s) + ':' + ver;
-  const hit = c.get(k);
-  if (hit) { try { return JSON.parse(hit); } catch (_) {} }
+  try {
+    const n = parseInt(c.get(k + ':n') || '0', 10);
+    if (n) {
+      const parts = c.getAll(Array.from({ length: n }, (_, i) => k + ':' + i));
+      let t = '';
+      for (let i = 0; i < n; i++) { const x = parts[k + ':' + i]; if (x == null) { t = ''; break; } t += x; }
+      if (t) return JSON.parse(t);
+    }
+  } catch (_) {}
+  if (peek) return null;
   const r = eduStatus_(s);
-  const txt = JSON.stringify(r);
-  if (txt.length < 95000) c.put(k, txt, 60);
+  try {
+    const txt = JSON.stringify(r), size = 90000, n = Math.ceil(txt.length / size);
+    if (n <= 40) {
+      const put = {};
+      for (let i = 0; i < n; i++) put[k + ':' + i] = txt.substr(i * size, size);
+      c.putAll(put, EDU_CACHE_SEC);
+      c.put(k + ':n', String(n), EDU_CACHE_SEC);
+    }
+  } catch (_) {}
   return r;
 }
 function eduOp_(req, s) {

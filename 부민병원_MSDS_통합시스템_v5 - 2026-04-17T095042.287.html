@@ -5405,7 +5405,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.25';
+  var SERVER_EXPECT = 'v21.26';
   // v21.10: 'v21.9' < 'v21.10'을 글자 순서가 아니라 숫자로 비교
   function bmVerLess(a, b){
     var p = function(v){ return (String(v).match(/v?(\d+(?:\.\d+)*)/) || [,'0'])[1].split('.').map(Number); };
@@ -5440,6 +5440,14 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
     if(el) el.textContent = n ? (n > 99 ? '99+' : String(n)) : '';
     var st = document.getElementById('nh-stat');
     if(st) st.textContent = '회신 대기 ' + n + '명 · 전체 ' + (list || []).length + '건';
+    return n;
+  }
+  function nhBadgeN(n, total){
+    nhLoaded = true;
+    var el = document.getElementById('adm-nav-nh-badge');
+    if(el) el.textContent = n ? (n > 99 ? '99+' : String(n)) : '';
+    var st = document.getElementById('nh-stat');
+    if(st && total != null) st.textContent = '회신 대기 ' + n + '명 · 전체 ' + total + '건';
     return n;
   }
   function go(pane, after){
@@ -5506,7 +5514,11 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
     bind(host);
 
     // v21.25 오늘 할 일: 흩어진 숫자를 한 줄로 · 누르면 그 화면(필요하면 그 조건으로)
-    post('dash.today', {}).then(function(r){
+    // v21.26 서버가 부서별 이수율 · 신규입사 대기 목록도 같이 주면 그것으로 카드를 채움 (요청 3개 → 1개)
+    var today$ = post('dash.today', {});
+    var eduFrom = today$.then(function(r){ return r && r.success && r.depts ? { success: true, depts: r.depts } : post('edu.status', {}); });
+    var nhFrom = today$.then(function(r){ return r && r.success && r.nhWait ? { success: true, wait: r.nhWait, total: r.nhTotal } : post('nh.list', {}); });
+    today$.then(function(r){
       if(my !== seq) return;
       var box = document.getElementById('dash-today');
       if(!box) return;
@@ -5529,7 +5541,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       bind(box);
     });
 
-    post('edu.status', {}).then(function(r){
+    eduFrom.then(function(r){
       if(my !== seq) return;
       var box = document.getElementById('dash-edu'), k = document.getElementById('dash-k-edu');
       if(!r.success){
@@ -5548,13 +5560,14 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       }).join('') : '<div class="dash-empty">교육 대상 부서가 없습니다.</div>';
       bind(box); bind(k);
     });
-    post('nh.list', {}).then(function(r){
+    nhFrom.then(function(r){
       if(my !== seq) return;
       var box = document.getElementById('dash-nh'), k = document.getElementById('dash-k-nh');
       if(!r.success){ box.innerHTML = '<div class="dash-empty">' + esc(r.error || '불러오지 못했습니다') + '</div>'; k.innerHTML = kpi('신규입사 회신 대기', '-', '', '서버 확인 필요', '', 'nh'); bind(k); return; }
-      var n = nhBadge(r.data);
+      var data = r.wait ? r.wait : r.data;
+      var n = r.wait ? nhBadgeN(r.wait.length, r.total) : nhBadge(r.data);
       k.innerHTML = kpi('신규입사 회신 대기', n, '명', '교육 기한 입사 후 3일', n ? 'hot' : '', 'nh');
-      var list = r.data.filter(function(o){ return NH_WAIT.indexOf(o['상태']) >= 0; }).reverse().slice(0, 5);
+      var list = data.filter(function(o){ return NH_WAIT.indexOf(o['상태']) >= 0; }).reverse().slice(0, 5);
       box.innerHTML = list.length ? list.map(function(o){
         var over = o['교육기한'] && today > o['교육기한'];
         return row(esc(o['상태']), over ? 'rj' : 'wait', esc(o['부서']) + ' · ' + esc(o['이름']), '입사 ' + esc(o['입사일']) + (o['교육기한'] ? ' · 교육 기한 ' + esc(o['교육기한']) + (over ? ' (초과)' : '') : ''), 'nh');
