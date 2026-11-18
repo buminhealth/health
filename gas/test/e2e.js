@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.21 \(2026-11-18\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.22 \(2026-11-18\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
   check('서버 버전 비교: v21.9 서버는 v21.10 앱에서 배포 필요로 (글자 순서 아님)', await page.evaluate(() => { try { return bmVerLess('v21.9 (2026-11-03)', 'v21.10') && !bmVerLess('v21.10 (2026-11-04)', 'v21.10') && !bmVerLess('v22.0', 'v21.10'); } catch (e) { return String(e); } }) === true);
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
@@ -505,7 +505,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.21'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.22'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -1715,6 +1715,12 @@ function check(name, cond, extra) {
     const adm = post({ op: 'fs.get', path: 'records/edu_records.json', t: tk.a });
     const all = JSON.parse(Buffer.from(adm.content, 'base64').toString('utf8'));
     check('결재 관리 누락 수정: 부서가 { records } 로 올려도 서버 교육 기록([ … ])에 들어감', put.success && Array.isArray(all) && all.some(r => r.recordId === 'shape61'), [put, Array.isArray(all)]);
+    // v21.22 일지를 못 찾을 때 [드라이브 폴더 열기]: 관리자만 · 없는 달은 있는 상위 폴더 · 데이터 폴더 밖(..)은 막음
+    const fo1 = post({ op: 'fs.folder', path: 'records/없는폴더/2099-01', t: tk.a }), fo2 = post({ op: 'fs.folder', path: 'records', t: tk.a });
+    const fo3 = post({ op: 'fs.folder', path: 'records', t: tk.d }), fo4 = post({ op: 'fs.folder', path: '../x', t: tk.a });
+    check('드라이브 폴더 열기 v21.22: 관리자만 · 없는 달은 상위 폴더 · 경로 밖은 막음', fo1.success && fo1.exact === false && fo1.path === 'records' && /drive/.test(fo1.url) && fo2.exact === true && !fo3.success && !fo4.success, [fo1, fo2.exact, fo3.success, fo4.success]);
+    const words = await page.evaluate(() => [bmStoreWord('GitHub 보관 완료 ✓ — 관리자 모드에서 언제든 재다운로드 가능'), bmStoreWord('3건 완전 삭제 완료 (로컬+GitHub)'), bmStoreWord('GitHub에서 PDF 자동 검색 중…'), document.body.innerHTML.includes('GitHub 폴더 직접 보기')]);
+    check('화면 알림 v21.22: 기록이 드라이브로 가므로 GitHub 대신 드라이브로 안내 · 빈 저장소 링크 없앰', words[0] === '드라이브 보관 완료 ✓ — 관리자 모드에서 언제든 재다운로드 가능' && /이 PC\+드라이브/.test(words[1]) && words[2] === '드라이브에서 PDF 자동 검색 중…' && !words[3], words);
     const calls0 = gm.calls.length;
     gm.failModel = 'gemini-2.5-flash'; gm.reply = { scene: 'x', hazards: [{ category: '작업환경', hazard: '물기', situation: '넘어짐', freq: 2, sev: 2, controls: [] }] };
     const b1 = post({ op: 'ra.analyze', image: 'data:image/jpeg;base64,' + Buffer.from('x').toString('base64'), place: '복도', t: tk.a });

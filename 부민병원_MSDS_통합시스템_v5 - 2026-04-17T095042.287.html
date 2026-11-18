@@ -5342,7 +5342,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.21';
+  var SERVER_EXPECT = 'v21.22';
   // v21.10: 'v21.9' < 'v21.10'을 글자 순서가 아니라 숫자로 비교
   function bmVerLess(a, b){
     var p = function(v){ return (String(v).match(/v?(\d+(?:\.\d+)*)/) || [,'0'])[1].split('.').map(Number); };
@@ -10558,7 +10558,7 @@ async function apvToggleArchive(){
   if(cb.checked){
     // ON: GitHub에서 records 가져오기
     apvState.archiveMode = true;
-    statusEl.textContent = 'GitHub에서 전체 데이터 로드 중…';
+    statusEl.textContent = '드라이브에서 전체 데이터 로드 중…';
     statusEl.style.color = '#0284c7';
     try{
       await apvLoadFromGitHub();
@@ -13162,19 +13162,19 @@ function _showEduPdfNotFoundModal(r){
     <div style="font-size:12px;font-weight:700;color:#3F7518;margin-bottom:6px">해결 방법</div>
     <div style="font-size:11.5px;color:#1e3a8a;line-height:1.7">
       ${hasData
-        ? '<b>"records로 PDF 재생성"</b> → 저장된 데이터로 PDF 즉시 생성<br>또는 <b>"GitHub 폴더 직접 보기"</b> → 폴더에서 파일 직접 찾기'
-        : '옛 데이터는 서명·강사·교육내용이 일부 없습니다. <b>"GitHub 폴더 직접 보기"</b>로 원본 파일을 찾거나 일지를 다시 작성하세요.'}
+        ? '<b>"records로 PDF 재생성"</b> → 저장된 데이터로 PDF 즉시 생성<br>또는 <b>"드라이브 폴더 열기"</b> → 폴더에서 파일 직접 찾기'
+        : '옛 데이터는 서명·강사·교육내용이 일부 없습니다. <b>"드라이브 폴더 열기"</b>로 원본 파일을 찾거나 일지를 다시 작성하세요.'}
     </div>
   </div>
   <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:8px 10px;margin-bottom:14px;font-size:10.5px;color:#9a3412;line-height:1.55">
     <b>매칭 실패 원인 (개발자 도구 F12 → Console 확인):</b><br>
-    ① 폴더가 비어있음 (메일발송 안 함 또는 GitHub 업로드 실패)<br>
+    ① 폴더가 비어있음 (메일발송 안 함 또는 드라이브 저장 실패)<br>
     ② 파일명 패턴 불일치 (옛 파일은 다른 이름일 수 있음)<br>
     ③ 부서명 불일치 (예: "61병동" vs 파일명의 "병동6")
   </div>
   <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
     <button onclick="document.getElementById('edu-pdf-not-found-modal').remove();delete window['${dataKey}']" style="padding:8px 14px;background:#fff;color:#475569;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">닫기</button>
-    <a href="https://github.com/${CFG.ghRepo||'buminhealth/health'}/tree/main/${encodeURIComponent(folder)}/${ym}" target="_blank" rel="noopener" style="padding:8px 14px;background:#fff;color:#3F7518;border:1px solid #3F7518;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none">GitHub 폴더 직접 보기</a>
+    <button type="button" onclick="bmOpenDriveFolder('${folder}/${ym}')" style="padding:8px 14px;background:#fff;color:#3F7518;border:1px solid #3F7518;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none">드라이브 폴더 열기</button>
     <button onclick="document.getElementById('edu-pdf-not-found-modal').remove();_regenerateEduFromRecord(window['${dataKey}']);delete window['${dataKey}']" style="padding:8px 14px;background:#3F7518;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">records로 PDF 재생성</button>
   </div>
 </div>`;
@@ -14563,19 +14563,19 @@ function _showPpePdfNotFoundModal(r){
     <div style="font-size:12px;font-weight:700;color:#3F7518;margin-bottom:6px">해결 방법</div>
     <div style="font-size:11.5px;color:#1e3a8a;line-height:1.7">
       ${hasData
-        ? '<b>"records로 PDF 재생성"</b> → 저장된 데이터로 PDF를 즉시 만들기<br>또는 <b>"GitHub 폴더 직접 보기"</b> → 폴더에서 파일을 직접 찾기'
-        : '옛 데이터는 서명·물품이 없어 빈 PDF가 생성됩니다. <b>"GitHub 폴더 직접 보기"</b>로 원본 파일을 찾아보거나 일지를 다시 작성하세요.'}
+        ? '<b>"records로 PDF 재생성"</b> → 저장된 데이터로 PDF를 즉시 만들기<br>또는 <b>"드라이브 폴더 열기"</b> → 폴더에서 파일을 직접 찾기'
+        : '옛 데이터는 서명·물품이 없어 빈 PDF가 생성됩니다. <b>"드라이브 폴더 열기"</b>로 원본 파일을 찾아보거나 일지를 다시 작성하세요.'}
     </div>
   </div>
   <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:8px 10px;margin-bottom:14px;font-size:10.5px;color:#9a3412;line-height:1.55">
     <b>매칭 실패 원인 (개발자 도구 F12 → Console 확인):</b><br>
-    ① 폴더가 비어있음 (메일발송 안 함 또는 GitHub 업로드 실패)<br>
+    ① 폴더가 비어있음 (메일발송 안 함 또는 드라이브 저장 실패)<br>
     ② 파일명 패턴 불일치 (옛 파일은 "보호구지급대장-"이 아닌 다른 이름일 수 있음)<br>
     ③ 부서명 불일치 (예: "시설관리팀" vs 파일명의 "시설관리")
   </div>
   <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
     <button onclick="document.getElementById('ppe-pdf-not-found-modal').remove();delete window['${dataKey}']" style="padding:8px 14px;background:#fff;color:#475569;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">닫기</button>
-    <a href="https://github.com/${CFG.ghRepo||'buminhealth/health'}/tree/main/${encodeURIComponent('보호구')}/${(r.date||r.dateStart||'').slice(0,7)}" target="_blank" rel="noopener" style="padding:8px 14px;background:#fff;color:#3F7518;border:1px solid #3F7518;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none">GitHub 폴더 직접 보기</a>
+    <button type="button" onclick="bmOpenDriveFolder('보호구/${(r.date||r.dateStart||'').slice(0,7)}')" style="padding:8px 14px;background:#fff;color:#3F7518;border:1px solid #3F7518;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none">드라이브 폴더 열기</button>
     <button onclick="document.getElementById('ppe-pdf-not-found-modal').remove();_regeneratePpeFromRecord(window['${dataKey}']);delete window['${dataKey}']" style="padding:8px 14px;background:#3F7518;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">records로 PDF 재생성</button>
   </div>
 </div>`;
@@ -18268,7 +18268,23 @@ function e1Reset(){e1={step:1,parts:[],photos:[null,null,null,null],photoSlot:0,
 function e2Reset(){e2={step:1,parts:[],dept:'',chems:[],sigData:{},approval:{mgr:null}};['e2-dept','e2-indiv','e2-common'].forEach(id=>document.getElementById(id).value='');document.getElementById('e2-chem-grid').innerHTML='';document.getElementById('e2-chem-manual').value='';document.getElementById('e2-ptbody').innerHTML='';document.getElementById('e2-sig-blocks').innerHTML='';for(let i=2;i<=5;i++)document.getElementById('e2s'+i).style.display='none';document.getElementById('e2s1').style.display='block';setSteps('e2',1,5);toast('새 일지 시작','ok');}
 
 /* ══ Toast ══ */
-function toast(msg,type='info'){const el=document.createElement('div');el.className='toast '+type;el.textContent=msg;document.body.appendChild(el);setTimeout(()=>el.remove(),3200);}
+/* v21.22 기록 · PDF는 이제 서버를 거쳐 비공개 드라이브에 저장됨 — 화면 알림에 'GitHub'로 나오던 옛 문구를 바로잡음 */
+function bmStoreWord(msg){
+  if(typeof CFG==='undefined' || CFG.ghToken!=='gas-proxy') return msg;
+  return String(msg)
+    .replace(/GitHub에서/g,'드라이브에서').replace(/GitHub에/g,'드라이브에')
+    .replace(/로컬\+GitHub/g,'이 PC+드라이브').replace(/GitHub/g,'드라이브');
+}
+async function bmOpenDriveFolder(path){
+  const w = window.open('about:blank','_blank');
+  try{
+    const r = await BMAUTH.post('fs.folder', { path: path });
+    if(!r.success) throw new Error(r.error||'열 수 없음');
+    if(!r.exact) toast('그 달 폴더가 없어 상위 폴더('+(r.path||'데이터 폴더')+')를 엽니다','info');
+    if(w) w.location.href = r.url; else location.href = r.url;
+  }catch(e){ if(w) w.close(); toast('드라이브 폴더 열기 실패: '+e.message,'err'); }
+}
+function toast(msg,type='info'){msg=bmStoreWord(msg);const el=document.createElement('div');el.className='toast '+type;el.textContent=msg;document.body.appendChild(el);setTimeout(()=>el.remove(),3200);}
 /* ══ PWA 설정 ══ */
 (function(){
   // ── 아이콘 Canvas 생성 (부민병원 스타일)

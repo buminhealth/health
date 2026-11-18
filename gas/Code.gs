@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.21 (2026-11-18)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.22 (2026-11-18)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -172,7 +172,8 @@ function doPost(e) {
                                    : { success: false, status: 401, error: '로그인 필요' }; break;
       case 'fs.get':    result = requireLogin_(s) || fsGet_(req, s); break;
       case 'fs.put':    result = requireLogin_(s) || fsPut_(req, s); break;
-      case 'fs.trash':  result = requireAdmin_(s) || fsTrash_(req); break;   // v21.8 수정 PDF로 바꾼 뒤 예전 PDF 휴지통으로
+      case 'fs.trash':  result = requireAdmin_(s) || fsTrash_(req); break;
+      case 'fs.folder': result = requireAdmin_(s) || fsFolder_(req); break;   // v21.22 일지를 못 찾을 때 드라이브 폴더 바로 열기   // v21.8 수정 PDF로 바꾼 뒤 예전 PDF 휴지통으로
       case 'rec.has':   result = requireLogin_(s) || recHas_(req, s); break;
       case 'backup.status': case 'backup.run': case 'backup.schedule':
                         result = requireAdmin_(s) || backupOp_(req); break;
@@ -362,6 +363,16 @@ function normPath_(p) {
   const path = String(p || '').replace(/^\/+|\/+$/g, '');
   if (!path || path.split('/').some(seg => seg === '' || seg === '.' || seg === '..')) throw new Error('잘못된 경로: ' + p);
   return path;
+}
+/* v21.22 관리자 '드라이브 폴더 열기' — 경로 폴더가 없으면 있는 데까지 거슬러 올라가 그 폴더 주소 (데이터 폴더 안만) */
+function fsFolder_(req) {
+  let segs = [];
+  try { segs = req.path ? normPath_(req.path).split('/') : []; } catch (e) { return { success: false, error: e.message }; }
+  for (let n = segs.length; n >= 0; n--) {
+    const f = getFolder_(segs.slice(0, n), false);
+    if (f) return { success: true, url: f.getUrl(), path: segs.slice(0, n).join('/'), exact: n === segs.length };
+  }
+  return { success: false, error: '데이터 폴더를 찾지 못했습니다' };
 }
 function rootFolder_() {
   const id = PROPS.getProperty('DATA_ROOT_ID');
