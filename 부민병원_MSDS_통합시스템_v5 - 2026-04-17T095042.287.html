@@ -1839,13 +1839,13 @@ input.apv-in[type=text]{width:110px}
   <div class="ppe-wrap">
     <!-- 헤더 -->
     <div class="ph ph-row">
-      <div><div class="crumb">보호구 지급 › <b>지급수령증</b></div><h1>보호구 지급수령증</h1><p>산업안전보건법 제38조 · 이름 검색 → 수령자 추가 → 서명 → <b>일지 1장</b> 저장</p></div>
+      <div><div class="crumb">보호구 지급 › <b>지급수령증</b></div><h1>보호구 지급수령증</h1><p>산업안전보건법 제38조 · 수령자 전원을 <b>일지 1장</b>에 기록합니다</p></div>
       <button class="btn btn-s" onclick="ppeReset()">전체 초기화</button>
     </div>
 
     <!-- STEP1: 수령자 추가 -->
     <div class="card" style="margin-bottom:12px;border:2px solid #e2e8f0">
-      <div class="card-ttl" style="margin-bottom:12px">STEP 1. 수령자 검색 및 추가</div>
+      <div class="card-ttl" style="margin-bottom:12px"><span class="stp" aria-hidden="true">1</span>수령자 검색 및 추가</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
         <div class="fg" style="margin:0;flex:2;min-width:160px">
           <label class="fl">이름 검색</label>
@@ -1855,11 +1855,11 @@ input.apv-in[type=text]{width:110px}
           </div>
         </div>
         <div class="fg" style="margin:0;flex:2;min-width:120px">
-          <label class="fl">부서 (자동입력)</label>
+          <label class="fl">부서 <span class="fl-auto">자동 입력</span></label>
           <input class="fc" id="ppe-dept" readonly style="background:#F3F9ED;color:#345C12;font-weight:700">
         </div>
         <div class="fg" style="margin:0;flex:2;min-width:120px">
-          <label class="fl">입사일 (자동입력)</label>
+          <label class="fl">입사일 <span class="fl-auto">자동 입력</span></label>
           <input class="fc" id="ppe-join" readonly style="background:#F3F9ED">
         </div>
         <div class="fg" style="margin:0;flex:2;min-width:170px">
@@ -1867,7 +1867,7 @@ input.apv-in[type=text]{width:110px}
           <input class="fc" type="date" id="ppe-date">
         </div>
         <div style="padding-bottom:2px">
-          <button class="btn btn-p" onclick="ppeAddPerson()" style="white-space:nowrap">+ 수령자 추가</button>
+          <button class="btn btn-p" onclick="ppeAddPerson()" style="white-space:nowrap">수령자 추가</button>
         </div>
       </div>
       <!-- 물품 미리보기 (선택 직후) -->
@@ -1880,22 +1880,22 @@ input.apv-in[type=text]{width:110px}
 
     <!-- STEP2: 추가된 수령자 목록 -->
     <div class="card" style="margin-bottom:12px" id="ppe-list-card">
-      <div class="card-ttl" style="margin-bottom:10px">STEP 2. 수령자 목록 <span id="ppe-count" style="color:#64748b;font-weight:400;font-size:12px">(0명)</span></div>
+      <div class="card-ttl" style="margin-bottom:10px"><span class="stp" aria-hidden="true">2</span>수령자 목록 <span id="ppe-count" style="color:#64748b;font-weight:400;font-size:12px">(0명)</span></div>
       <div id="ppe-person-list">
-        <p style="color:#94a3b8;font-size:12px;text-align:center;padding:16px">수령자를 추가하세요</p>
+        <p style="color:#5A5650;font-size:13px;text-align:center;padding:16px">수령자를 추가하세요</p>
       </div>
     </div>
 
     <!-- STEP3: 서명 -->
     <div class="card" style="margin-bottom:12px" id="ppe-sig-card">
-      <div class="card-ttl" style="margin-bottom:5px">STEP 3. 수령자 서명</div>
-      <p style="font-size:11px;color:#64748b;margin:0 0 8px">보호구를 수령한 직원은 본인 서명란에 직접 서명해주세요. 수령자를 추가·삭제해도 기존 서명은 유지됩니다.</p>
+      <div class="card-ttl" style="margin-bottom:5px"><span class="stp" aria-hidden="true">3</span>수령자 서명</div>
+      <p style="font-size:13px;color:#5A5650;margin:0 0 8px">보호구를 수령한 직원은 본인 서명란에 직접 서명해주세요. 수령자를 추가·삭제해도 기존 서명은 유지됩니다.</p>
       <div id="ppe-sig-blocks"></div>
     </div>
 
     <!-- ★ v17.11 STEP4: 일지 미리보기 (교육일지 미리보기와 동일 패턴) -->
     <div class="card" style="margin-bottom:12px;display:none" id="ppe-preview-card">
-      <div class="card-ttl" style="margin-bottom:8px">STEP 4. 일지 미리보기 <span style="color:#64748b;font-weight:400;font-size:12px">— 수령자 전원이 아래 한 장의 일지에 기록됩니다</span></div>
+      <div class="card-ttl" style="margin-bottom:8px"><span class="stp" aria-hidden="true">4</span>일지 미리보기 <span style="color:#64748b;font-weight:400;font-size:12px">— 수령자 전원이 아래 한 장의 일지에 기록됩니다</span></div>
       <div id="ppe-preview" style="border:1px solid #e2e8f0;border-radius:8px;overflow:auto;max-height:520px;background:#f8fafc"></div>
     </div>
 
@@ -1904,7 +1904,7 @@ input.apv-in[type=text]{width:110px}
       <button class="btn btn-p" style="font-size:14px;padding:10px 32px" onclick="ppeGenAllPDF()">
         일지 PDF 저장 (1장)
       </button>
-      <p style="font-size:11px;color:#64748b;margin:0">수령자 전원이 <b>한 장의 일지</b>에 누적 기록되어 저장됩니다 (MSDS 교육일지와 동일 방식)</p>
+      <p style="font-size:13px;color:#5A5650;margin:0">수령자 전원이 <b>한 장의 일지</b>에 누적 기록되어 저장됩니다 (MSDS 교육일지와 동일 방식)</p>
     </div>
   </div>
 </div>
@@ -1984,7 +1984,7 @@ input.apv-in[type=text]{width:110px}
     </div>
   </div>
   <div style="text-align:right;margin-top:14px">
-    <button class="btn btn-p" onclick="chemGo(2)" style="padding:9px 22px">다음 →</button>
+    <button class="btn btn-p" onclick="chemGo(2)" style="padding:9px 22px">다음 단계</button>
   </div>
 </div>
 
@@ -2033,7 +2033,7 @@ input.apv-in[type=text]{width:110px}
   </div>
   <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px">
     <button class="btn btn-s" onclick="chemGo(1)">← 이전</button>
-    <button class="btn btn-p" onclick="chemGo(3)" style="padding:9px 22px">다음 →</button>
+    <button class="btn btn-p" onclick="chemGo(3)" style="padding:9px 22px">다음 단계</button>
   </div>
 </div>
 
@@ -2067,7 +2067,7 @@ input.apv-in[type=text]{width:110px}
   </div>
   <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px">
     <button class="btn btn-s" onclick="chemGo(2)">← 이전</button>
-    <button class="btn btn-p" onclick="chemGo(4)" style="padding:9px 22px">다음 →</button>
+    <button class="btn btn-p" onclick="chemGo(4)" style="padding:9px 22px">다음 단계</button>
   </div>
 </div>
 
@@ -2131,7 +2131,7 @@ input.apv-in[type=text]{width:110px}
   </div>
   <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px">
     <button class="btn btn-s" onclick="chemGo(3)">← 이전</button>
-    <button class="btn btn-p" onclick="chemGo(5)" style="padding:9px 22px">다음 →</button>
+    <button class="btn btn-p" onclick="chemGo(5)" style="padding:9px 22px">다음 단계</button>
   </div>
 </div>
 
@@ -12542,7 +12542,7 @@ function renderPersonList(){
   const cnt=document.getElementById('ppe-count');
   if(cnt) cnt.textContent=`(${ppePersons.length}명)`;
   if(!ppePersons.length){
-    el.innerHTML='<p style="color:#94a3b8;font-size:12px;text-align:center;padding:16px">수령자를 추가하세요</p>';
+    el.innerHTML='<p style="color:#5A5650;font-size:13px;text-align:center;padding:16px">수령자를 추가하세요</p>';
     return;
   }
   el.innerHTML=`<table style="width:100%;border-collapse:collapse">
@@ -21606,6 +21606,11 @@ button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,inpu
 #adm-pane-ppe .adm-tbl tr:hover input[type=date],#adm-pane-chem .adm-tbl tr:hover input[type=date],#adm-pane-ppe .adm-tbl input[type=date]:focus,#adm-pane-chem .adm-tbl input[type=date]:focus{border-color:#CFE5BA !important;background:#fff !important}
 #adm-pane-ppe .adm-tbl tr:hover input[type=date]::-webkit-calendar-picker-indicator,#adm-pane-chem .adm-tbl tr:hover input[type=date]::-webkit-calendar-picker-indicator{opacity:.6}
 #adm-pane-ppe .adm-tbl tbody tr:hover td,#adm-pane-chem .adm-tbl tbody tr:hover td{background:#F3F9ED}
+</style>
+<style id="bm-design-p8">
+/* 시안 8 — 보호구 작성 화면 단계 표시를 교육일지와 같은 초록 번호 동그라미로 */
+#pg-ppe .card-ttl{font-size:18px !important;font-weight:700 !important;color:#1E1E1C}
+#pg-ppe .card-ttl .stp{display:inline-flex;width:24px;height:24px;border-radius:50%;background:#67AF28;color:#fff;font-size:13px;font-weight:700;align-items:center;justify-content:center;margin-right:8px;flex:0 0 auto}
 </style>
 </body>
 </html>
