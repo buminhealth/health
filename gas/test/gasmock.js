@@ -14,6 +14,8 @@ class Blob {
   getBytes() { return toSigned(this.buf); }
   getDataAsString() { return this.buf.toString('utf8'); }
   setName(n) { return new Blob(this.buf, this.mime, n); }   // 실제 getBlob()은 사본이라 파일 이름은 안 바뀜
+  getName() { return this.name; }
+  getContentType() { return this.mime; }
 }
 class Iter { constructor(a) { this.a = a; this.i = 0; } hasNext() { return this.i < this.a.length; } next() { return this.a[this.i++]; } }
 class DFile {
@@ -110,6 +112,8 @@ function makeEnv() {
       fetch(u, opt) {
         const ex = /docs\.google\.com\/spreadsheets\/d\/([^/]+)\/export\?format=xlsx/.exec(u);
         if (ex) { this.exports = (this.exports || []).concat(ex[1]); return { getResponseCode: () => 200, getBlob: () => new Blob(Buffer.from('PK-xlsx-' + ex[1]), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') }; }
+        const exp = /docs\.google\.com\/spreadsheets\/d\/([^/]+)\/export\?format=pdf/.exec(u);
+        if (exp) { this.pdfExports = (this.pdfExports || []).concat(exp[1]); return { getResponseCode: () => 200, getBlob: () => new Blob(Buffer.from('%PDF-report-' + exp[1]), 'application/pdf') }; }
         const fb = this.__fb;
         fb.calls.push(u);
         const resp = (code, obj) => ({ getResponseCode: () => code, getContentText: () => JSON.stringify(obj) });
@@ -216,7 +220,7 @@ function makeEnv() {
 function load(codePath) {
   const m = makeEnv();
   const ctx = vm.createContext(m.env);
-  vm.runInContext(fs.readFileSync(codePath, 'utf8') + '\n;this.__api={doGet,doPost,sha256Hex_,sendReminders_,nhRows_,nhWrite_,nhMarkEducated_,dailyCheck,fbConfigFromInput_};', ctx);
+  vm.runInContext(fs.readFileSync(codePath, 'utf8') + '\n;this.__api={doGet,doPost,sha256Hex_,sendReminders_,nhRows_,nhWrite_,nhMarkEducated_,dailyCheck,eduStatus_,eduCacheClear_,fbConfigFromInput_};', ctx);
   return Object.assign(m, { ctx, api: ctx.__api });
 }
 module.exports = { load };

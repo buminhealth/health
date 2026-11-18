@@ -2198,6 +2198,7 @@ input.apv-in[type=text]{width:110px}
         </div>
       </div>
       <div class="adm-topbar-right">
+        <form class="adm-top-find" role="search" onsubmit="event.preventDefault(); var v=this.q.value; admSwitchPane('find'); BMFIND.run(v); this.q.value='';"><input name="q" type="search" placeholder="직원 · 일지 찾기" aria-label="직원 · 일지 찾기 (이름 또는 사번)" autocomplete="off"></form>
         <span class="adm-topbar-user" id="adm-topbar-user">보건관리자</span>
         <button class="adm-topbar-btn"
           onclick="window.open('https://docs.google.com/spreadsheets/d/1kFRIyXZX8aTgQR2w5MC0Ty66B9ltKrWj3Wz96D0mKIs/edit#gid=0','_blank')"
@@ -2216,6 +2217,9 @@ input.apv-in[type=text]{width:110px}
         <div class="adm-sidebar-section">결재 · 현황</div>
         <div class="adm-nav-item" data-pane="dash" onclick="admSwitchPane('dash')">
           <span class="adm-nav-label">대시보드</span>
+        </div>
+        <div class="adm-nav-item" data-pane="find" onclick="admSwitchPane('find')">
+          <span class="adm-nav-label">직원 · 일지 찾기</span>
         </div>
         <div class="adm-nav-item active" data-pane="apv" onclick="admSwitchPane('apv')">
           <span class="adm-nav-label">결재 관리</span>
@@ -2257,6 +2261,9 @@ input.apv-in[type=text]{width:110px}
           <span class="adm-nav-label">신규입사 알림</span>
           <span class="adm-nav-badge" id="adm-nav-nh-badge"></span>
         </div>
+        <div class="adm-nav-item" data-pane="report" onclick="admSwitchPane('report')">
+          <span class="adm-nav-label">연간 보고서</span>
+        </div>
         <div class="adm-nav-item" data-pane="cfg" onclick="admSwitchPane('cfg'); BMDASH.settings();">
           <span class="adm-nav-label">설정</span>
         </div>
@@ -2271,6 +2278,15 @@ input.apv-in[type=text]{width:110px}
        
         <!-- ── 대시보드 pane (v20.3) — 내용은 BMDASH.open()이 그림 ── -->
         <section class="adm-pane" id="adm-pane-dash"><div id="dash-body" class="dash"></div></section>
+        <!-- v21.25 직원 · 일지 통합 검색 · 연간 보고서 — 내용은 BMFIND · BMREPORT -->
+        <section class="adm-pane" id="adm-pane-find"><div class="fd-wrap">
+          <div class="fd-head"><b>직원 · 일지 찾기</b><span>이름 일부나 사번 하나로 소속 · 교육 이수 · 일지 PDF · 보호구 · 부서이동 · 신규입사 알림을 한 화면에 (퇴사자 포함)</span></div>
+          <form id="fd-form" class="fd-form" role="search" onsubmit="event.preventDefault(); BMFIND.run(document.getElementById('fd-q').value)">
+            <input id="fd-q" type="search" placeholder="이름 또는 사번" aria-label="이름 또는 사번" autocomplete="off">
+            <button type="submit">찾기</button>
+          </form>
+          <div id="fd-out"></div></div></section>
+        <section class="adm-pane" id="adm-pane-report"><div id="rp-body" class="fd-wrap"></div></section>
 
         <!-- ── AI 위험성평가 pane (v21.0) — 내용은 BMRISK.admin()이 그림 ── -->
         <section class="adm-pane" id="adm-pane-risk">
@@ -4814,6 +4830,8 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
     if(p.deadline && p.status !== '이수') t += '<div style="font-size:12px;color:' + (p.overdue ? '#A3302A;font-weight:700' : '#5A5650') + '">기한 ' + esc(p.deadline) + (p.overdue ? ' · 초과' : '') + '</div>';
     if(p.status === '제외') t += '<div style="font-size:12px;color:#5A5650">' + esc(p.excluded.reason) + ' · ' + esc(p.excluded.by) + ' ' + esc(p.excluded.date) + '</div>';
     if(p.moved && p.status !== '이수' && p.status !== '제외') t += '<div style="font-size:12px;color:#A3302A">부서 이동: ' + esc(p.moved) + '에서 받은 교육에 이 부서 물질이 없음 → 1회 교육 필요</div>';
+    if(p.moveCheck) t += '<div class="mv-need">이동 확인 필요 · ' + esc(p.moveCheck.from) + ' → ' + esc(p.moveCheck.to) + ' (' + esc(p.moveCheck.date) + ')</div>';
+    if(p.moveOk) t += '<div style="font-size:12px;color:#3B7322">부서이동 확인: ' + esc(p.moveOk.how) + (p.moveOk.by ? ' · ' + esc(p.moveOk.by) + ' ' + esc(String(p.moveOk.at || '').slice(0, 10)) : '') + '</div>';
     if(p.onLeave) t += '<div style="font-size:12px;color:#5A5650">휴직 중 (교육은 1회만 · 복직 후 따로 필요 없음)</div>';
     if(p.rule) t += '<div style="font-size:12px;color:#5A5650">대상 규칙 ' + p.rule + ' 적용</div>';
     if(p.status === '제외' && p.kept) t += '<div style="font-size:12px;color:#5A5650">이전 교육 기록 ' + p.kept.n + '건 보존 (최근 ' + esc(p.kept.last) + ') · 지금 부서 기준 해당 없음</div>';
@@ -4832,7 +4850,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
         return '<tr' + (p.status === '제외' ? ' style="background:#FAFAF8;color:#8A867E"' : '') + '>' +
           (sel ? '<td style="' + td + '">' + ('<input type="checkbox" data-pick="' + edu.people.indexOf(p) + '" aria-label="' + esc(p.name) + ' 선택">') + '</td>' : '') + '<td style="' + td + '"><b>' + esc(p.name) + '</b>' + (p.onLeave ? ' <span style="font-size:11px;font-weight:800;color:#6B675F;background:#F1EFEA;padding:1px 6px;border-radius:4px">휴직</span>' : '') + '<div style="font-size:12px;color:#5A5650">' + esc(p.dept) + (p.job ? ' · ' + esc(p.job) : '') + (p.unit ? ' · <b style="color:#3F7518">근무지 ' + esc(p.unit) + '</b>' : '') + '</div></td><td style="' + td + '">' + esc(p.no) + '</td><td style="' + td + ';white-space:nowrap">' + esc(p.joinDate) + '</td>' +
           '<td style="' + td + ';white-space:nowrap">' + (p.need === '특별' ? '특별안전보건' : 'MSDS') + '</td><td style="' + td + '">' + statusCell(p) + '</td><td style="' + td + ';white-space:nowrap">' + esc(p.lastEdu || '-') + (sel && (p.records || (p.manualRows || []).length) ? ' <button type="button" class="eb-link" data-recs="' + edu.people.indexOf(p) + '" title="이 직원의 교육 기록 · 일지 보기">기록</button>' : '') + '</td>' +
-          '<td style="' + td + ';white-space:nowrap">' + (sel && (p.manualRows || []).length ? '<button data-mdel="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:#A3302A;margin-right:4px" title="수기로 넣은 교육 기록 삭제 (백업 보관)">수기 기록 삭제</button>' : '') + (!canAct ? '' : (p.included
+          '<td style="' + td + ';white-space:nowrap">' + (canAct && p.moveCheck ? '<button data-mok="' + i + '" class="mv-btn" title="새 부서 물질 교육 없이 기존 교육으로 충분하다고 확인 (기록이 남음)">기존 교육으로 충분</button>' : '') + (sel && (p.manualRows || []).length ? '<button data-mdel="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:#A3302A;margin-right:4px" title="수기로 넣은 교육 기록 삭제 (백업 보관)">수기 기록 삭제</button>' : '') + (!canAct ? '' : (p.included
             ? '<button data-unx="' + i + '" style="padding:5px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;cursor:pointer">포함 해제</button>'
             : p.status === '제외'
             ? (p.excluded.route === '신규입사 회신' || p.excluded.route === '대상 규칙'
@@ -4844,6 +4862,17 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       }).join('') + '</table></div>';
   }
   function bindPeople(host, list, after){
+    // v21.25 부서이동 확인: 기존 교육으로 충분 → 확인 기록(부서이동확인 시트) · 표시가 사라짐
+    host.querySelectorAll('[data-mok]').forEach(function(b){ b.onclick = async function(){
+      var p = list[+b.getAttribute('data-mok')], m = p.moveCheck || {};
+      var how = prompt(p.name + ' 님 · ' + (m.from || '') + ' → ' + (m.to || '') + ' (' + (m.date || '') + ' 이동)\n\n새 부서 물질 교육 없이 기존 교육으로 충분하다고 확인합니다. 확인 내용을 고칠 수 있습니다.', '기존 교육으로 충분 (이전 부서 교육에 같은 물질 포함)');
+      if(how === null) return;
+      b.disabled = true;
+      var x = await BMAUTH.post('edu.moveOk', { no: p.no, name: p.name, dept: p.dept, how: how });
+      b.disabled = false;
+      say(x.success ? p.name + ' 님 부서이동 확인을 기록했습니다' : (x.error || '실패'), x.success ? 'ok' : 'err');
+      if(x.success){ after(); try{ if(window.bmEduChanged) bmEduChanged(); }catch(_){} }
+    }; });
     host.querySelectorAll('[data-x]').forEach(function(b){ b.onclick = async function(){
       var p = list[+b.getAttribute('data-x')];
       var reason = (prompt(p.name + ' 님을 교육 대상에서 제외합니다.\n사유를 적어 주세요 (예: 행정 업무만, 물질 취급 안 함)') || '').trim();
@@ -5123,7 +5152,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
     edu = r;
     // v20.4: 화면만 새 버전이고 서버(Code.gs)가 이전 버전이면 새 기능이 조용히 실패 → 맨 위에 배포 안내
     edu.old = !r.serverVersion || r.serverVersion < EDU_SERVER_MIN;
-    var T = { total: 0, done: 0, progress: 0, missing: 0, overdue: 0, excluded: 0, newChem: 0 };
+    var T = { total: 0, done: 0, progress: 0, missing: 0, overdue: 0, excluded: 0, newChem: 0, moveCheck: 0 };
     r.depts.forEach(function(d){ Object.keys(T).forEach(function(k){ T[k] += d[k] || 0; }); });
     // v21.11 숫자 카드를 누르면 직원별 현황이 그 상태로 바뀜
     var kpiB = function(st, l, n, sub, color){ return '<button type="button" class="eb-kpi" data-kst="' + st + '" aria-pressed="' + (eduTab === 'people' && ef.st === (st === 'new' ? '' : st) && st !== '' ? 'true' : 'false') + '"><span class="l">' + l + '</span><span class="n" style="color:' + (color || '#1E1E1C') + '">' + n + '</span><span class="s">' + (sub || '') + '</span></button>'; };
@@ -5135,7 +5164,8 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       '<div class="eb-kpis">' +
         kpiB('', '교육 대상', T.total, '재직 · 휴직 · 제외 ' + T.excluded + '명') + kpiB('이수', '이수', T.done, T.total ? Math.round(T.done / T.total * 100) + '%' : '', '#345C12') +
         kpiB('진행중', '특별교육 진행중', T.progress, '16시간 미달', '#2B4C7E') + kpiB('미이수', '미이수', T.missing, '기한 초과 ' + T.overdue + '명', T.missing ? '#A3302A' : '') +
-        kpiB('new', '새 물질 교육 대기', T.newChem, r.rules.newChemDays ? r.rules.newChemDays + '일 안에' : '취급 전 교육', T.newChem ? '#6E4A00' : '') + '</div>' +
+        kpiB('new', '새 물질 교육 대기', T.newChem, r.rules.newChemDays ? r.rules.newChemDays + '일 안에' : '취급 전 교육', T.newChem ? '#6E4A00' : '') +
+        kpiB('move', '부서이동 확인', T.moveCheck, '이동 뒤 교육 · 확인 전', T.moveCheck ? '#A3302A' : '') + '</div>' +
       '<details class="eb-basis"><summary>집계 기준 · 지금 직원(재직 + 휴직), 퇴사자 제외</summary><div>대상: 화학물질 사용 부서의 <b>지금 직원(재직 + 휴직)</b>. 퇴사자는 숫자에서 빠지고, 퇴사자 일지는 [교육 기록 · 일지] 탭이나 결재 관리에서 이름으로 찾습니다. 기본은 모두 대상이며 <b>관리자 · 부서장이 \'취급 안 함\'으로 확인한 사람만 제외</b>, 일지를 쓴 사람은 대상입니다. 특별교육은 현장 교육 + 공통 온라인 8시간 ≥ 16시간이면 이수, 남은 시간은 첫 교육일부터 3개월 안에. 부서를 옮긴 사람은 예전 부서 기록의 물질이 지금 부서 물질을 모두 포함하면 이수로 봅니다.</div></details>' +
       sharedBar() +
       '<div class="eb-tabs" role="tablist" aria-label="교육 현황 보기">' +
@@ -5320,9 +5350,12 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
     if(!box || !edu) return;
     var order = { '미이수': 0, '진행중': 1, '이수': 2, '제외': 3 };
     var q = ef.q.toLowerCase();
+    var soon7 = new Date(new Date((edu.today || '2000-01-01') + 'T12:00:00Z').getTime() + 7 * 86400e3).toISOString().slice(0, 10);
     var all = edu.people.filter(function(p){ return !ef.dept || p.dept === ef.dept; });
     var list = all.filter(function(p){
-      if(ef.st && (ef.st === 'todo' ? !(p.status === '미이수' || p.status === '진행중') : p.status !== ef.st)) return false;
+      if(ef.st === 'move'){ if(!p.moveCheck) return false; }   // v21.25
+      else if(ef.st === 'soon'){ if(p.status === '이수' || p.status === '제외' || !(p.overdue || (p.deadline && p.deadline <= soon7))) return false; }
+      else if(ef.st && (ef.st === 'todo' ? !(p.status === '미이수' || p.status === '진행중') : p.status !== ef.st)) return false;
       if(q && String(p.name || '').toLowerCase().indexOf(q) < 0 && String(p.no || '').indexOf(q) < 0) return false;
       if(ef.need && p.need !== ef.need) return false;
       if(ef.from && !(p.lastEdu && p.lastEdu >= ef.from)) return false;
@@ -5334,7 +5367,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
     var o = function(v, l, cur){ return '<option value="' + esc(v) + '"' + (cur === v ? ' selected' : '') + '>' + esc(l) + '</option>'; };
     var title = '<div class="eb-listhd"><b>' + esc(ef.dept || '전체 부서') + ' · 찾은 ' + list.length + '명</b>' +
       '<span class="eb-mute">이 범위 직원 ' + all.length + '명 (휴직 ' + leave + '명 포함)</span>' +
-      '<span class="eb-listopt"><label>상태 <select id="ef-st">' + o('todo', '할 일 (미이수 · 진행중)', ef.st) + o('', '전체', ef.st) + o('미이수', '미이수', ef.st) + o('진행중', '진행중', ef.st) + o('이수', '이수', ef.st) + o('제외', '제외', ef.st) + '</select></label>' +
+      '<span class="eb-listopt"><label>상태 <select id="ef-st">' + o('todo', '할 일 (미이수 · 진행중)', ef.st) + o('', '전체', ef.st) + o('미이수', '미이수', ef.st) + o('진행중', '진행중', ef.st) + o('이수', '이수', ef.st) + o('제외', '제외', ef.st) + o('soon', '기한 초과 · 7일 안', ef.st) + o('move', '부서이동 확인 필요', ef.st) + '</select></label>' +
       '<label class="eb-chk"><input id="ef-leave" type="checkbox"' + (ef.leave ? ' checked' : '') + '> 휴직자만</label></span></div>';
     var none = !list.length && q ? '<div style="padding:10px 12px;margin-top:8px;border:1px dashed #DDDBD5;border-radius:6px;font-size:13px;color:#5A5650">지금 직원(재직 · 휴직)에 \'' + esc(ef.q) + '\'가 없습니다. 퇴사자라면 <button type="button" id="ef-former" style="' + BTNs + '">교육 기록 · 일지에서 찾기</button> 또는 결재 관리에서 이름으로 일지를 볼 수 있습니다.</div>' : '';
     var empty = !list.length && !q ? '<div class="eb-note" style="background:#fff;border-color:#DDDBD5">이 조건에 맞는 직원이 없습니다. 상태를 [전체]로 바꾸거나 [초기화]를 누르세요.</div>' : '';
@@ -5361,7 +5394,9 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       peopleTable(list, true);
     bindPeople(host, list, function(){ deptSection(host); });
   }
-  window.BMEDU = { dupes: dupes, board: board, deptSection: deptSection };
+  // v21.25 대시보드 · 통합 검색에서 교육 현황을 그 조건으로 열기
+  function preset(st, q){ ef.st = st || ''; ef.q = q || ''; ef.dept = ''; eduDept = ''; ef.need = ''; eduTab = 'people'; try{ localStorage.setItem('bm_edu_tab', 'people'); }catch(_){} }
+  window.BMEDU = { dupes: dupes, board: board, deptSection: deptSection, preset: preset };
 })();
 
 /* ★★★ v20.3 — 관리자 대시보드 · 설정 (최종시안 A-8 왼쪽 메뉴와 맞춤)
@@ -5370,7 +5405,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.24';
+  var SERVER_EXPECT = 'v21.25';
   // v21.10: 'v21.9' < 'v21.10'을 글자 순서가 아니라 숫자로 비교
   function bmVerLess(a, b){
     var p = function(v){ return (String(v).match(/v?(\d+(?:\.\d+)*)/) || [,'0'])[1].split('.').map(Number); };
@@ -5410,6 +5445,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
   function go(pane, after){
     try{ admSwitchPane(pane); }catch(_){}
     if(pane === 'nh' && window.BMSTAFF) BMSTAFF.openNh();
+    if(pane === 'ledger' && window.BMLEDGER) BMLEDGER.open();
     if(after) setTimeout(after, 350);
   }
   function openApv(key){
@@ -5449,6 +5485,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
 
     host.innerHTML =
       '<div class="dash-top"><b>대시보드</b><span>' + today + ' 기준 · 숫자나 줄을 누르면 해당 메뉴로 이동합니다</span></div>' +
+      '<div class="dash-today" id="dash-today" role="group" aria-label="오늘 할 일"><b class="dt-h">오늘 할 일</b><span class="dt-load">확인 중…</span></div>' +
       '<div class="adm-kpi dash-kpis">' +
         kpi('결재 대기', wait.length, '건', '대상자 ' + people + '명', wait.length ? 'hot' : '', 'apv-pending') +
         kpi('반려', rj.length, '건', '부서 다시 작성 대기', rj.length ? 'bad' : '', 'apv-rejected') +
@@ -5467,6 +5504,30 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
           (recent.length ? recent.map(function(x){ return row(x.tag, x.cls, x.title, x.sub, x.act); }).join('') : '<div class="dash-empty">이 PC에 받아 둔 기록이 없습니다. 결재 관리에서 [더보기 → 새로고침]을 누르세요.</div>') + '</section>' +
       '</div>';
     bind(host);
+
+    // v21.25 오늘 할 일: 흩어진 숫자를 한 줄로 · 누르면 그 화면(필요하면 그 조건으로)
+    post('dash.today', {}).then(function(r){
+      if(my !== seq) return;
+      var box = document.getElementById('dash-today');
+      if(!box) return;
+      if(!r.success){ box.innerHTML = '<b class="dt-h">오늘 할 일</b><span class="dt-load">' + esc(/unknown op/.test(r.error || '') ? '서버(Code.gs)를 v21.25 이상으로 배포하면 표시됩니다' : (r.error || '불러오지 못했습니다')) + '</span>'; return; }
+      var chip = function(n, label, act, hot, always){
+        if(!n && !always) return '';
+        return '<button type="button" class="dt-chip' + (n ? (hot ? ' hot' : ' on') : ' zero') + '" data-go="' + act + '"><b>' + n + '</b><span>' + label + '</span></button>';
+      };
+      var total = wait.length + (r.nhNoReply || 0) + (r.eduOver || 0) + (r.eduSoon || 0) + (r.moveCheck || 0) + (r.ledger || 0) + (r.nhEduWait || 0) + (r.newChem || 0);
+      box.innerHTML = '<b class="dt-h">오늘 할 일</b>' +
+        chip(wait.length, '결재 대기', 'apv-pending', true, true) +
+        chip(r.nhNoReply || 0, '신규입사 미회신', 'nh', true, true) +
+        chip(r.nhEduWait || 0, '신규입사 교육 대기', 'nh', false) +
+        chip(r.eduOver || 0, '교육 기한 초과', 'edu:soon', true, true) +
+        chip(r.eduSoon || 0, '7일 안 교육 기한', 'edu:soon', false, true) +
+        chip(r.moveCheck || 0, '부서이동 확인', 'edu:move', true, true) +
+        chip(r.newChem || 0, '새 물질 교육 대기', 'edu:', false) +
+        chip(r.ledger || 0, '대장 반영 대기 물질', 'ledger', true, true) +
+        (total ? '' : '<span class="dt-done">오늘 처리할 일이 없습니다</span>');
+      bind(box);
+    });
 
     post('edu.status', {}).then(function(r){
       if(my !== seq) return;
@@ -5507,6 +5568,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
         var a = el.getAttribute('data-go');
         if(a.indexOf('apv:') === 0) return openApv(a.slice(4));
         if(a === 'apv-pending' || a === 'apv-rejected') return go('apv', function(){ try{ apvKpiFilter(a.slice(4)); }catch(_){} });
+        if(a.indexOf('edu:') === 0){ try{ if(window.BMEDU && BMEDU.preset) BMEDU.preset(a.slice(4)); }catch(_){} return go('edu'); }
         go(a);
       };
     });
@@ -17041,6 +17103,8 @@ function admSwitchPane(name){
   if(name === 'dash' && window.BMDASH) setTimeout(function(){ try{ BMDASH.open(); }catch(_){} }, 0);   // v20.3 대시보드
   try{ if(window.BMDASH) BMDASH.primeNh(); }catch(_){}
   if(name === 'edu' && window.BMEDU) setTimeout(function(){ try{ BMEDU.board(); }catch(_){} }, 0);   // v20.0 교육 이수 현황판
+  if(name === 'report' && window.BMREPORT) setTimeout(function(){ try{ BMREPORT.open(); }catch(_){} }, 0);   // v21.25 연간 보고서
+  if(name === 'find' && window.BMFIND) setTimeout(function(){ try{ BMFIND.focus(); }catch(_){} }, 0);
   // nav-item active 토글
   document.querySelectorAll('.adm-nav-item').forEach(el=>{
     el.classList.toggle('active', el.dataset.pane===name);
@@ -21318,6 +21382,154 @@ button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,inpu
 #eb-pane-rec thead th{color:#345C12 !important;font-size:13px !important;font-weight:600 !important}
 @media (max-width:760px){ #eb-fbar .ef-wide input{width:100%} .eb-listopt{margin-left:0} }
 @media (prefers-reduced-motion:reduce){ .eb-menu{animation:none} .eb-kpi{transition:none} }
+</style>
+<script>
+/* v21.25 직원 · 일지 통합 검색 (BMFIND) · 연간 보고서 (BMREPORT) */
+(function(){
+  var esc = function(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
+  var post = function(op, b){ return window.BMAUTH ? BMAUTH.post(op, b || {}).catch(function(e){ return { success: false, error: e.message }; }) : Promise.resolve({ success: false, error: '로그인 필요' }); };
+  var oldSrv = function(e){ return /unknown op/.test(e || '') ? '서버(Code.gs)를 v21.25 이상으로 배포하세요' : (e || '실패'); };
+  var last = null, seq = 0;
+  var ST = { '이수': 'ok', '진행중': 'wait', '미이수': 'rj', '제외': '' };
+  function tbl(head, rows){
+    if(!rows.length) return '';
+    return '<div class="fd-tw"><table class="fd-t"><thead><tr>' + head.map(function(h){ return '<th>' + h + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      rows.map(function(r){ return '<tr>' + r.map(function(c){ return '<td>' + c + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>';
+  }
+  function sec(title, n, body, emptyText){
+    return '<section class="fd-sec"><h4>' + title + ' <small>' + n + '</small></h4>' + (n ? body : '<div class="fd-none">' + emptyText + '</div>') + '</section>';
+  }
+  function card(p, i){
+    var e = p.edu;
+    var eduLine = e
+      ? '<span class="apv-st ' + (ST[e.status] || '') + '">' + esc(e.status) + '</span> ' + (e.need === '특별' ? '특별안전보건교육' : 'MSDS 교육') +
+        (e.lastEdu ? ' · 최근 ' + esc(e.lastEdu) : '') + (e.need === '특별' && e.hours ? ' · ' + e.hours + '/16시간' : '') +
+        (e.deadline && e.status !== '이수' ? ' · 기한 ' + esc(e.deadline) + (e.overdue ? ' <b class="fd-red">초과</b>' : '') : '') +
+        (e.excluded ? ' · 제외: ' + esc(e.excluded) : '') + (e.moveCheck ? ' · <b class="fd-red">부서이동 확인 필요</b>' : '') +
+        (e.moveOk ? ' · 부서이동 확인: ' + esc(e.moveOk.how) : '')
+      : (p.status === '퇴사' ? '퇴사 — 지금 교육 대상 아님 (아래 기록은 보존)' : '교육 대상 부서 아님 (또는 대상 규칙으로 빠짐)');
+    var stc = p.status === '퇴사' ? 'rj' : (p.status === '휴직' ? 'wait' : 'ok');
+    var apv = function(j){ return j.rejected ? '<span class="apv-st rj">반려</span>' : (j.approved ? '<span class="apv-st ok">결재완료</span>' : '<span class="apv-st wait">결재 대기</span>'); };
+    var pdfBtn = function(kind, j){ return j ? '<button type="button" class="fd-pdf" data-pdf="' + i + ':' + kind + ':' + j + '">PDF 보기</button>' : ''; };
+    var recs = p.recs.map(function(r){ return [esc(r.ds) + (r.de && r.de !== r.ds ? '~' + esc(r.de.slice(5)) : ''), esc(r.type), esc(r.dept), r.hrs ? r.hrs + '시간' : '', r.manual ? '<span class="fd-mute">수기</span>' : esc(r.sig || '')]; });
+    var jr = p.journals.map(function(j, k){ return [esc(j.date), esc(j.type), esc(j.dept), apv(j), j.pdf ? pdfBtn('j', k + 1) : '<span class="fd-mute">PDF 이름 없음</span>']; });
+    var pp = p.ppe.map(function(r, k){ return [esc(r.date), esc(r.dept), esc(r.items), r.pdf ? pdfBtn('p', k + 1) : '']; });
+    var mv = p.moves.map(function(m){ return [esc(m.date), esc(m.from) + ' → ' + esc(m.to), m.confirm ? esc(m.confirm) : '<span class="fd-mute">새 부서 교육 또는 확인으로 정리</span>']; });
+    var nh = p.nh.map(function(o){ return [esc(o.status), esc(o.dept), esc(o.join), esc(o.sent), esc(o.reply) + (o.handles ? ' (' + esc(o.handles) + ')' : '')]; });
+    return '<article class="fd-card">' +
+      '<header><div><b class="fd-nm">' + esc(p.name) + '</b> <span class="apv-st ' + stc + '">' + esc(p.status) + '</span>' +
+        '<div class="fd-sub">' + esc(p.dept) + (p.rawDept && p.rawDept !== p.dept ? ' (인사: ' + esc(p.rawDept) + ')' : '') + ' · 사번 ' + esc(p.no || '-') + ' · 입사 ' + esc(p.joinDate || '-') + (p.leaveDate ? ' · 퇴사 ' + esc(p.leaveDate) : '') + (p.position ? ' · ' + esc(p.position) : '') + '</div></div>' +
+        (e ? '<button type="button" class="fd-go" data-edu="' + i + '">교육 현황에서 보기</button>' : '') + '</header>' +
+      '<div class="fd-edu">' + eduLine + '</div>' +
+      sec('교육 기록 (교육이력대장)', recs.length, tbl(['교육일', '구분', '부서', '시간', '서명'], recs), '교육 기록이 없습니다.') +
+      sec('교육일지 PDF', jr.length, tbl(['교육일', '종류', '부서', '결재', ''], jr), '시스템으로 낸 교육일지가 없습니다 (종이 · 수기 기록은 위 교육 기록에만 있음).') +
+      sec('보호구 지급', pp.length, tbl(['지급일', '부서', '물품', ''], pp), '보호구 지급 기록이 없습니다.') +
+      (mv.length ? sec('부서이동', mv.length, tbl(['반영일', '이동', '확인'], mv), '') : '') +
+      (nh.length ? sec('신규입사 알림', nh.length, tbl(['상태', '부서', '입사일', '알림', '회신'], nh), '') : '') +
+      '</article>';
+  }
+  async function run(q){
+    q = String(q || '').trim();
+    var out = document.getElementById('fd-out'), inp = document.getElementById('fd-q');
+    if(inp) inp.value = q;
+    if(!out) return;
+    if(!q){ out.innerHTML = ''; return; }
+    var my = ++seq;
+    out.innerHTML = '<div class="fd-empty">찾는 중…</div>';
+    var r = await post('search.person', { q: q });
+    if(my !== seq) return;
+    if(!r.success){ out.innerHTML = '<div class="fd-empty err">' + esc(oldSrv(r.error)) + '</div>'; return; }
+    last = r.people;
+    if(!r.people.length){ out.innerHTML = '<div class="fd-empty">\'' + esc(q) + '\'에 맞는 직원이 없습니다. 직원목록 시트(인사 사이트 동기화) 기준이며 퇴사자도 포함합니다.</div>'; return; }
+    out.innerHTML = '<div class="fd-count">' + r.people.length + '명' + (r.more ? ' — 20명까지만 보여 줍니다. 이름을 더 넣거나 사번으로 찾으세요.' : '') + '</div>' + r.people.map(card).join('');
+    out.querySelectorAll('[data-pdf]').forEach(function(b){ b.onclick = function(){
+      var a = b.getAttribute('data-pdf').split(':'), p = last[+a[0]], x = a[1] === 'j' ? p.journals[+a[2] - 1] : p.ppe[+a[2] - 1];
+      if(x && x.pdf && typeof openPdfFromGitHub === 'function') openPdfFromGitHub(x.pdf, x.ym || undefined);
+    }; });
+    out.querySelectorAll('[data-edu]').forEach(function(b){ b.onclick = function(){
+      var p = last[+b.getAttribute('data-edu')];
+      try{ if(window.BMEDU && BMEDU.preset) BMEDU.preset('', p.no || p.name); }catch(_){}
+      admSwitchPane('edu');
+    }; });
+  }
+  function focus(){ var i = document.getElementById('fd-q'); if(i) try{ i.focus(); }catch(_){} }
+
+  // ── 연간 보고서
+  var busy = false;
+  function open(){
+    var host = document.getElementById('rp-body');
+    if(!host || busy) return;
+    var y = new Date(Date.now() + 9 * 3600e3).getUTCFullYear();
+    host.innerHTML = '<div class="fd-head"><b>연간 보건관리 보고서</b><span>감독 · 점검 대응용 — 한 해의 교육 · 물질 변동 · 보호구 지급을 엑셀과 PDF 한 부로</span></div>' +
+      '<div class="rp-card"><div class="rp-row"><label>연도 <select id="rp-year">' + [y, y - 1, y - 2].map(function(v){ return '<option value="' + v + '">' + v + '년</option>'; }).join('') + '</select></label>' +
+      '<button type="button" id="rp-go" class="rp-go">보고서 만들기</button></div>' +
+      '<ul class="rp-what"><li><b>PDF (요약 장표)</b>: 요약 · 월별 교육 · 부서별 이수율 · 화학물질 변동 · 보호구 지급 집계</li>' +
+      '<li><b>엑셀</b>: 위 내용 + 교육 실시 내역 · 보호구 지급 내역 · 신규입사 · 부서이동 명단</li>' +
+      '<li>지금 시트(월별 백업과 같은 원본) 기준이며, 드라이브 「부민보건관리_월별백업 (비공개)」 → <b>연간 보고서</b> 폴더에 저장됩니다. 다시 만들면 같은 연도 파일은 최신본으로 바뀝니다.</li>' +
+      '<li>이수 현황은 <b>만드는 날 기준</b>, 교육 실시 · 물질 변동 · 보호구는 <b>그 연도</b> 기준입니다.</li></ul>' +
+      '<div id="rp-out"></div></div>';
+    document.getElementById('rp-go').onclick = make;
+  }
+  async function make(){
+    if(busy) return;
+    var out = document.getElementById('rp-out'), btn = document.getElementById('rp-go'), y = document.getElementById('rp-year').value;
+    busy = true; btn.disabled = true; btn.textContent = '만드는 중…';
+    out.innerHTML = '<div class="fd-empty">' + esc(y) + '년 보고서를 만드는 중입니다 (1분 안팎).</div>';
+    var r = await post('report.annual', { year: y });
+    busy = false; btn.disabled = false; btn.textContent = '보고서 만들기';
+    if(!r.success){ out.innerHTML = '<div class="fd-empty err">' + esc(oldSrv(r.error)) + '</div>'; return; }
+    var s = r.summary || {};
+    out.innerHTML = '<div class="rp-done"><b>' + esc(r.year) + '년 보고서를 만들었습니다</b>' +
+      '<div class="rp-kpi">' + [['교육 대상', s.total + '명'], ['이수율', s.rate], ['교육 실시 (연인원)', s.edu + '명'], ['특별 · MSDS', s.special + ' · ' + s.msds], ['신규 사용 · 중단 물질', s.chemNew + ' · ' + s.chemStop], ['보호구 지급', s.ppe + '건'], ['신규입사 · 부서이동', s.nh + ' · ' + s.moves]]
+        .map(function(k){ return '<div><span>' + k[0] + '</span><b>' + esc(k[1]) + '</b></div>'; }).join('') + '</div>' +
+      '<div class="rp-links"><a href="' + esc(r.pdfUrl) + '" target="_blank" rel="noopener">PDF 열기</a><a href="' + esc(r.xlsxUrl) + '" target="_blank" rel="noopener">엑셀 열기</a><a href="' + esc(r.folderUrl) + '" target="_blank" rel="noopener">드라이브 폴더</a></div></div>';
+  }
+  window.BMFIND = { run: run, focus: focus };
+  window.BMREPORT = { open: open, make: make };
+})();
+</script>
+<style id="bm-v2125">
+.dash-today{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:12px 0 14px;padding:10px 12px;background:#fff;border:1px solid var(--bm-line,#DDDBD5);border-radius:8px}
+.dash-today .dt-h{font-size:14px;color:#1E1E1C;margin-right:4px}
+.dash-today .dt-load,.dash-today .dt-done{font-size:13px;color:#5A5650}
+.dt-chip{display:inline-flex;align-items:baseline;gap:6px;padding:7px 12px;border:1px solid #DDDBD5;border-radius:999px;background:#fff;font:inherit;font-size:13px;color:#45423D;cursor:pointer}
+.dt-chip b{font-size:16px;color:#1E1E1C}
+.dt-chip.hot{border-color:#F1C4BE;background:#FBEFED}.dt-chip.hot b{color:#A3302A}
+.dt-chip.on{border-color:#CFE5BA;background:#F3F9ED}.dt-chip.on b{color:#345C12}
+.dt-chip.zero{color:#8A867E}.dt-chip.zero b{color:#8A867E;font-weight:600}
+.dt-chip:hover,.dt-chip:focus-visible{border-color:#67AF28;outline:none}
+.mv-need{font-size:12px;color:#A3302A;font-weight:700}
+.mv-btn{padding:5px 10px;border:1px solid #67AF28;border-radius:4px;background:#fff;font:inherit;font-size:13px;color:#345C12;cursor:pointer;margin-right:4px}
+.adm-top-find input{height:32px;width:200px;padding:0 10px;border:1px solid #DDDBD5;border-radius:6px;font:inherit;font-size:13px;box-sizing:border-box}
+@media (max-width:900px){.adm-top-find{display:none}}
+.fd-wrap{padding:4px 2px}
+.fd-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;margin-bottom:12px}.fd-head b{font-size:20px;color:#1E1E1C}.fd-head span{font-size:13px;color:#5A5650}
+.fd-form{display:flex;gap:8px;margin-bottom:14px}
+.fd-form input{flex:1;max-width:420px;min-width:0;height:40px;padding:0 12px;border:1px solid #C6C3BB;border-radius:6px;font:inherit;font-size:15px;box-sizing:border-box}
+.fd-form button{height:40px;padding:0 18px;border:0;border-radius:6px;background:#3F7518;color:#fff;font:inherit;font-weight:700;cursor:pointer}
+.fd-empty{padding:14px;border:1px dashed #DDDBD5;border-radius:8px;color:#5A5650;font-size:14px;background:#fff}.fd-empty.err{color:#A3302A;border-color:#F1C4BE}
+.fd-count{font-size:13px;color:#5A5650;margin-bottom:8px}
+.fd-card{background:#fff;border:1px solid #DDDBD5;border-radius:8px;padding:14px 16px;margin-bottom:12px}
+.fd-card header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.fd-nm{font-size:18px;color:#1E1E1C}.fd-sub{font-size:13px;color:#5A5650;margin-top:3px}
+.fd-go{padding:6px 12px;border:1px solid #67AF28;border-radius:6px;background:#fff;color:#345C12;font:inherit;font-size:13px;cursor:pointer}
+.fd-edu{margin:10px 0 4px;padding:8px 10px;background:#F7F6F3;border-radius:6px;font-size:14px;color:#45423D}
+.fd-red{color:#A3302A}.fd-mute{color:#8A867E;font-size:12px}
+.fd-sec{margin-top:12px}.fd-sec h4{margin:0 0 6px;font-size:14px;color:#345C12}.fd-sec h4 small{font-weight:400;color:#5A5650;margin-left:4px}
+.fd-none{font-size:13px;color:#8A867E}
+.fd-tw{overflow-x:auto}.fd-t{border-collapse:collapse;width:100%;font-size:13px}
+.fd-t th{text-align:left;padding:6px 8px;background:#EEF6E6;color:#345C12;font-weight:600;white-space:nowrap}
+.fd-t td{padding:6px 8px;border-bottom:1px solid #ECEBE7;vertical-align:top}
+.fd-pdf{padding:4px 10px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
+.rp-card{background:#fff;border:1px solid #DDDBD5;border-radius:8px;padding:16px}
+.rp-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.rp-row select{height:38px;margin-left:6px;padding:0 8px;border:1px solid #C6C3BB;border-radius:6px;font:inherit}
+.rp-go{height:38px;padding:0 18px;border:0;border-radius:6px;background:#3F7518;color:#fff;font:inherit;font-weight:700;cursor:pointer}.rp-go:disabled{opacity:.6}
+.rp-what{margin:12px 0;padding-left:18px;font-size:13px;color:#45423D;line-height:1.7}
+.rp-done{margin-top:6px;padding:12px;border:1px solid #CFE5BA;background:#F3F9ED;border-radius:8px}
+.rp-kpi{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:10px 0}
+.rp-kpi div{background:#fff;border:1px solid #DDDBD5;border-radius:6px;padding:8px 10px}.rp-kpi span{display:block;font-size:12px;color:#5A5650}.rp-kpi b{font-size:16px}
+.rp-links{display:flex;gap:8px;flex-wrap:wrap}.rp-links a{padding:8px 14px;border:1px solid #3F7518;border-radius:6px;color:#3F7518;text-decoration:none;font-size:13px;font-weight:700;background:#fff}
+@media (max-width:760px){.fd-head b{font-size:18px}.dt-chip{padding:6px 10px}}
 </style>
 </body>
 </html>

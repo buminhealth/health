@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.24 (2026-11-18)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.25 (2026-11-18)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -173,7 +173,10 @@ function doPost(e) {
       case 'fs.get':    result = requireLogin_(s) || fsGet_(req, s); break;
       case 'fs.put':    result = requireLogin_(s) || fsPut_(req, s); break;
       case 'fs.trash':  result = requireAdmin_(s) || fsTrash_(req); break;
-      case 'fs.folder': result = requireAdmin_(s) || fsFolder_(req); break;   // v21.22 일지를 못 찾을 때 드라이브 폴더 바로 열기   // v21.8 수정 PDF로 바꾼 뒤 예전 PDF 휴지통으로
+      case 'fs.folder': result = requireAdmin_(s) || fsFolder_(req); break;   // v21.22 일지를 못 찾을 때 드라이브 폴더 바로 열기
+      case 'dash.today':    result = requireAdmin_(s) || dashToday_(); break;          // v21.25 대시보드 '오늘 할 일'
+      case 'search.person': result = requireAdmin_(s) || searchPerson_(req); break;    // v21.25 직원 · 일지 통합 검색 (퇴사자 포함)
+      case 'report.annual': result = requireAdmin_(s) || annualReport_(req); break;    // v21.25 연간 보건관리 보고서 (엑셀 + PDF)
       case 'rec.has':   result = requireLogin_(s) || recHas_(req, s); break;
       case 'backup.status': case 'backup.run': case 'backup.schedule':
                         result = requireAdmin_(s) || backupOp_(req); break;
@@ -196,7 +199,7 @@ function doPost(e) {
       case 'help.ask': case 'help.meta': case 'help.lawRefresh': case 'help.faqList': case 'help.faqSave': case 'kosha.status': case 'kosha.setKey': case 'kosha.saveApis': case 'kosha.test':
                         result = helpOp_(req, s); break;
       case 'edu.dupes': case 'edu.dedupe': case 'edu.status': case 'edu.exclude': case 'edu.askMail': case 'edu.newChem':
-      case 'edu.rules': case 'edu.saveRules': case 'dept.saveMap': case 'edu.manual': case 'edu.unit': case 'edu.manualDelete':
+      case 'edu.rules': case 'edu.saveRules': case 'dept.saveMap': case 'edu.manual': case 'edu.unit': case 'edu.manualDelete': case 'edu.moveOk':
                         result = eduOp_(req, s); break;
       default:          result = { success: false, error: 'unknown op: ' + req.op };
     }
@@ -3480,6 +3483,7 @@ function eduStatus_(s) {
     .map(e => Object.assign({}, e, { dept: deptAlias_(e.dept) }))
     .filter((e, i, a) => !/^\d{6,}$/.test(e.empNo) || a.map(x => x.empNo).lastIndexOf(e.empNo) === i);   // 직원목록에 같은 사번 줄이 두 번 → 아래(최근) 줄 한 명
   const own = ledgerOwners_(recs, emps);
+  const lastMove = moveLatest_(), mvc = moveConfirms_();   // v21.25 부서이동 확인
   const people = [];
   emps.forEach(e => {
     if (s.role === 'dept' && !sameDept_(e.dept, s.dept)) return;
@@ -3535,6 +3539,21 @@ function eduStatus_(s) {
       else { p.status = '미이수'; p.deadline = isNew ? addDays_(e.joinDate, EDU_PERIOD_DAYS) : ''; }
     }
     if (p.deadline && p.status !== '이수' && today > p.deadline) p.overdue = true;
+    /* v21.25 부서이동 확인: 인사 사이트 동기화로 기록된 이동(부서이동기록) 뒤에
+       · 새 부서에서 교육 기록이 있으면 → 확인 끝 (새 부서 교육)
+       · 관리자 · 부서장이 [기존 교육으로 충분]을 눌렀으면 → 확인 끝 (미이수였다면 이수로)
+       · 둘 다 없으면 → '이동 확인 필요' */
+    const mv = lastMove[pkey_(e.empNo, e.name)];
+    if (mv && sameDept_(deptAlias_(mv.to), e.dept)) {
+      const base = { from: mv.from, to: mv.to, date: mv.date };
+      const fresh = all.some(r => !r.bulk && (baseDept_(r.dept) === baseDept_(e.dept) || (un && baseDept_(r.dept) === baseDept_(un.unit))) && r.ds >= mv.date);
+      const cf = mvc[pkey_(e.empNo, e.name) + '|' + normDept_(e.dept) + '|' + mv.date];
+      if (fresh) p.moveOk = Object.assign(base, { how: '새 부서에서 교육' });
+      else if (cf) {
+        p.moveOk = Object.assign(base, cf);
+        if (p.status === '미이수' && all.length) { p.status = '이수'; p.byMove = true; delete p.deadline; delete p.overdue; }
+      } else p.moveCheck = base;
+    }
     // 새 물질 교육
     p.newChem = newChems.filter(n => (sameDept_(n.dept, e.dept) || (n.dept === '병동' && (WARDS.some(w => sameDept_(w, e.dept)) || /병동/.test(e.dept))))
                                    && !(e.joinDate && e.joinDate >= n.date))
@@ -3547,7 +3566,8 @@ function eduStatus_(s) {
   });
   const depts = {};
   people.forEach(p => {
-    const d = depts[p.dept] = depts[p.dept] || { dept: p.dept, need: p.need, total: 0, done: 0, progress: 0, missing: 0, overdue: 0, excluded: 0, newChem: 0, staff: 0, leave: 0 };
+    const d = depts[p.dept] = depts[p.dept] || { dept: p.dept, need: p.need, total: 0, done: 0, progress: 0, missing: 0, overdue: 0, excluded: 0, newChem: 0, staff: 0, leave: 0, moveCheck: 0 };
+    if (p.moveCheck) d.moveCheck++;
     d.staff++;                       // v21.9 이 부서 직원(재직 + 휴직, 제외 포함) — 인사 사이트 인원과 맞춰 보기용
     if (p.onLeave) d.leave++;
     if (p.status === '제외') { d.excluded++; return; }
@@ -3580,6 +3600,241 @@ function eduRulesInfo_() {
   try { SS.getSheetByName('부서인증').getDataRange().getDisplayValues().slice(1).forEach(r => { if (String(r[0]).trim()) appDepts[String(r[0]).trim()] = 1; }); } catch (_) {}
   return { success: true, rules: rules, hits: st.ruleHits || [], jobs: jobs, deptMap: deptMap, appDepts: Object.keys(appDepts).sort(),
            summary: st.depts.reduce((a, d) => ({ total: a.total + d.total, done: a.done + d.done, missing: a.missing + d.missing + d.progress, excluded: a.excluded + d.excluded }), { total: 0, done: 0, missing: 0, excluded: 0 }) };
+}
+
+// ════════════════════════════════════════════════════════════════
+// v21.25 부서이동 확인 · 오늘 할 일 · 통합 검색 · 연간 보고서
+// ════════════════════════════════════════════════════════════════
+const MOVE_SHEET = '부서이동기록';
+const MVC_SHEET = '부서이동확인', MVC_HEADER = ['사번', '이름', '새 부서', '이전 부서', '이동일', '확인 내용', '확인자', '확인일시'];
+function pkey_(no, name) { const n = String(no || '').replace(/^'/, '').trim(); return /^\d{6,}$/.test(n) ? 'no:' + n : 'nm:' + String(name || '').trim(); }
+function deptMoves_() {
+  const sh = SS.getSheetByName(MOVE_SHEET);
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, 6).getDisplayValues().filter(r => String(r[2]).trim())
+    .map(r => ({ date: String(r[0]).trim().slice(0, 10), no: String(r[1]).replace(/^'/, '').trim(), name: String(r[2]).trim(),
+                 from: String(r[3]).trim(), to: String(r[4]).trim(), note: String(r[5] || '') }));
+}
+function moveLatest_() {
+  const m = {};
+  deptMoves_().forEach(x => { const k = pkey_(x.no, x.name); if (!m[k] || m[k].date <= x.date) m[k] = x; });
+  return m;
+}
+function moveConfirms_() {
+  const sh = SS.getSheetByName(MVC_SHEET), m = {};
+  if (!sh || sh.getLastRow() < 2) return m;
+  sh.getRange(2, 1, sh.getLastRow() - 1, MVC_HEADER.length).getDisplayValues().forEach((r, i) => {
+    if (!String(r[1]).trim()) return;
+    m[pkey_(r[0], r[1]) + '|' + normDept_(deptAlias_(r[2])) + '|' + String(r[4]).trim().slice(0, 10)] = { how: r[5], by: r[6], at: r[7], row: i + 2 };
+  });
+  return m;
+}
+// [기존 교육으로 충분] — 관리자 · 그 부서장 / undo: 확인 취소
+function eduMoveOk_(req, s) {
+  const name = String(req.name || '').trim(), dept = String(req.dept || '').trim(), no = String(req.no || '').trim();
+  if (!name || !dept) return { success: false, error: '직원을 고르세요' };
+  if (s.role === 'dept' && !sameDept_(dept, s.dept)) return { success: false, status: 403, error: '다른 부서 직원입니다' };
+  const mv = moveLatest_()[pkey_(no, name)];
+  if (!mv || !sameDept_(deptAlias_(mv.to), dept)) return { success: false, error: '이 부서로 옮긴 부서이동 기록이 없습니다' };
+  const key = pkey_(no, name) + '|' + normDept_(dept) + '|' + mv.date;
+  const old = moveConfirms_()[key];
+  const sh = eduSheet_(MVC_SHEET, MVC_HEADER);
+  if (req.undo) {
+    if (!old) return { success: false, error: '취소할 확인 기록이 없습니다' };
+    sh.deleteRow(old.row);
+    return { success: true, undone: true };
+  }
+  if (old) return { success: true, already: true };
+  const how = String(req.how || '').trim() || '기존 교육으로 충분 (이전 부서 교육에 같은 물질 포함)';
+  const by = s.role === 'admin' ? '보건관리자' : (deptHead_(s.dept) || s.dept + ' 부서장');
+  sh.appendRow(["'" + no, name, dept, mv.from, mv.date, how, by, nowKst_()].map((v, i) => i === 0 ? v : safeCell_(v)));
+  return { success: true, from: mv.from, date: mv.date };
+}
+
+// 대시보드 '오늘 할 일' (결재 대기는 화면이 가진 기록으로 셈)
+function dashToday_() {
+  const st = eduStatusCached_({ role: 'admin' });
+  const out = { success: true, today: todayKst_(), nhNoReply: 0, nhEduWait: 0, eduOver: 0, eduSoon: 0, moveCheck: 0, newChem: 0, ledger: 0 };
+  const soon = addDays_(out.today, 7);
+  (st.people || []).forEach(p => {
+    if (p.moveCheck) out.moveCheck++;
+    if (p.newChemPending) out.newChem++;
+    if (p.status === '이수' || p.status === '제외') return;
+    if (p.overdue) out.eduOver++;
+    else if (p.deadline && p.deadline <= soon) out.eduSoon++;
+  });
+  try {
+    nhReconcile_(st);
+    nhRows_().forEach(o => {
+      if (o['상태'] === '회신대기' || o['상태'] === '이메일없음') out.nhNoReply++;
+      else if (o['상태'] === '취급-교육대기') out.nhEduWait++;
+    });
+  } catch (_) {}
+  try { out.ledger = clLedgerPending_(clLedgerRows_(), clLedgerDecisions_()).length; } catch (_) {}
+  return out;
+}
+
+function recJson_(path) {
+  try {
+    const f = getFile_(path);
+    if (!f) return [];
+    const j = JSON.parse(f.getBlob().getDataAsString('UTF-8'));
+    return Array.isArray(j) ? j : (j && Array.isArray(j.records) ? j.records : []);
+  } catch (_) { return []; }
+}
+// 직원 · 일지 통합 검색: 이름 일부 또는 사번 → 부서 · 재직 · 교육 판정 · 교육 기록 · 일지 PDF · 보호구 · 부서이동 · 신규입사 알림 (퇴사자 포함)
+function searchPerson_(req) {
+  const q = String(req.q || '').trim();
+  if (!q || (q.length < 2 && !/^\d+$/.test(q))) return { success: false, error: '이름 2글자 이상 또는 사번을 넣으세요' };
+  const emps = (readEmployees_() || []).filter(e => e.name.indexOf(q) >= 0 || String(e.empNo || '').indexOf(q) >= 0);
+  const seen = {}, hits = [];
+  emps.reverse().forEach(e => { let k = pkey_(e.empNo, e.name); if (k.indexOf('nm:') === 0) k += '|' + e.dept; if (!seen[k]) { seen[k] = 1; hits.push(e); } });   // 같은 사번 줄이 여러 개면 아래(최근) 줄
+  hits.reverse();
+  const more = hits.length > 20;
+  const list = hits.slice(0, 20);
+  if (!list.length) return { success: true, q: q, people: [] };
+  const st = eduStatusCached_({ role: 'admin' });
+  const recs = ledgerRows_(), moves = deptMoves_(), mvc = moveConfirms_();
+  const jEdu = recJson_('records/edu_records.json'), jPpe = recJson_('records/ppe_records.json');
+  let nh = []; try { nh = nhRows_(); } catch (_) {}
+  const people = list.map(e => {
+    const no = String(e.empNo || '').trim(), hasNo = /^\d{6,}$/.test(no), dept = deptAlias_(e.dept);
+    const me = r => hasNo && /^\d{6,}$/.test(String(r.no || r.empNo || '').trim()) ? String(r.no || r.empNo).trim() === no : r.name === e.name;
+    const myMoves = moves.filter(m => (hasNo && m.no === no) || (!hasNo && m.name === e.name)).sort((a, b) => b.date.localeCompare(a.date));
+    const depts = [dept].concat(myMoves.map(m => deptAlias_(m.from)), myMoves.map(m => deptAlias_(m.to)));
+    const inDepts = d => depts.some(x => sameDept_(x, deptAlias_(d)));
+    const p = (st.people || []).find(x => hasNo ? String(x.no) === no : (x.name === e.name && sameDept_(x.dept, dept)));
+    const jr = {};
+    jEdu.filter(r => r && (hasNo && r.empNo ? String(r.empNo) === no : (r.name === e.name && inDepts(r.dept)))).forEach(r => {
+      const k = (r.pdfFileName || '') + '|' + r.dateStart + '|' + r.type;
+      if (!jr[k]) jr[k] = { date: r.dateStart || '', type: r.type || '', dept: r.dept || '', pdf: r.pdfFileName || '', ym: r.pdfYm || '', approved: !!r.approved, rejected: !!r.rejected, submitted: String(r.submitted || '').slice(0, 10) };
+    });
+    return {
+      no: no, name: e.name, dept: dept, rawDept: e.dept, status: isResigned_(e) ? '퇴사' : (/휴직/.test(e.status || '') ? '휴직' : '재직'),
+      joinDate: e.joinDate || '', leaveDate: e.leaveDate || '', position: e.position || '',
+      edu: p ? { status: p.status, need: p.need, lastEdu: p.lastEdu, deadline: p.deadline || '', overdue: !!p.overdue, hours: p.hours || 0,
+                 excluded: p.excluded ? p.excluded.reason : '', moveCheck: p.moveCheck || null, moveOk: p.moveOk || null } : null,
+      recs: recs.filter(me).map(r => ({ ds: r.ds, de: r.de, type: r.type, dept: r.dept, hrs: r.hrs, chem: r.chem, manual: r.manual, sig: r.sig })).sort((a, b) => String(b.ds).localeCompare(String(a.ds))),
+      journals: Object.keys(jr).map(k => jr[k]).sort((a, b) => String(b.date).localeCompare(String(a.date))),
+      ppe: jPpe.filter(r => r && (hasNo && r.empNo ? String(r.empNo) === no : (r.name === e.name && inDepts(r.dept)))).map(r => ({ date: r.date || r.dateStart || '', dept: r.dept || '', items: r.itemsStr ? r.itemsStr : Array.isArray(r.items) ? r.items.map(i => (i.name || i.item || '') + (i.qty ? 'x' + i.qty : '')).join(', ') : String(r.items || r.item || ''), pdf: r.pdfFileName || '', ym: r.pdfYm || '' }))
+        .sort((a, b) => String(b.date).localeCompare(String(a.date))),
+      moves: myMoves.map(m => {
+        const cf = mvc[pkey_(m.no, m.name) + '|' + normDept_(deptAlias_(m.to)) + '|' + m.date];
+        return { date: m.date, from: m.from, to: m.to, confirm: cf ? cf.how + ' · ' + cf.by + ' ' + String(cf.at).slice(0, 10) : '' };
+      }),
+      nh: nh.filter(o => o['상태'] !== NH_DELETED && (hasNo ? String(o['사번']) === no : (o['이름'] === e.name && inDepts(o['부서']))))
+        .map(o => ({ status: o['상태'], dept: o['부서'], join: o['입사일'], sent: String(o['최초발송'] || '').slice(0, 10), reply: String(o['회신일시'] || '').slice(0, 10), handles: o['취급여부'] }))
+    };
+  });
+  return { success: true, q: q, more: more, people: people };
+}
+
+/* 연간 보건관리 보고서 — 지금 시트(월별 백업과 같은 원본)로 그 해 교육 · 물질 변동 · 보호구 지급을 모아
+   엑셀(요약 + 상세) · PDF(요약 장표) 두 파일을 드라이브 「월별백업」 폴더 안 '연간 보고서'에 저장 */
+function annualReport_(req) {
+  const year = String(req.year || todayKst_().slice(0, 4)).trim();
+  if (!/^20\d\d$/.test(year)) return { success: false, error: '연도를 확인하세요 (예: 2026)' };
+  const inY = d => String(d || '').slice(0, 4) === year;
+  const today = todayKst_();
+  const st = eduStatus_({ role: 'admin' });
+  const T = { total: 0, done: 0, progress: 0, missing: 0, overdue: 0, excluded: 0, moveCheck: 0 };
+  (st.depts || []).forEach(d => Object.keys(T).forEach(k => { T[k] += d[k] || 0; }));
+  const recs = ledgerRows_().filter(r => inY(r.ds));
+  const sp = recs.filter(r => r.special), ms = recs.filter(r => !r.special);
+  const persons = rs => Object.keys(rs.reduce((m, r) => { m[pkey_(r.no, r.name)] = 1; return m; }, {})).length;
+  let ledger = []; try { ledger = clLedgerRows_().filter(o => o.status !== '삭제' && (inY(o.start) || inY(o.stop))); } catch (_) {}
+  const ppeSh = SS.getSheetByName('보호구이력대장');
+  let ppe = [];
+  if (ppeSh && ppeSh.getLastRow() >= 2) {
+    const v = ppeSh.getDataRange().getDisplayValues(), h = v[0].map(x => String(x).trim()), c = k => h.indexOf(k);
+    ppe = v.slice(1).filter(r => inY(r[c('지급일')])).map(r => ({ date: r[c('지급일')], dept: r[c('부서')], name: r[c('이름')], items: r[c('지급물품')] }));
+  }
+  let nh = []; try { nh = nhRows_().filter(o => o['상태'] !== NH_DELETED && inY(o['입사일'])); } catch (_) {}
+  const moves = deptMoves_().filter(m => inY(m.date)), mvc = moveConfirms_();
+  const pct = (a, b) => b ? Math.round(a / b * 1000) / 10 + '%' : '-';
+  const cnt = (arr, f) => arr.filter(f).length;
+
+  const summary = [['항목', '값', '비고'],
+    ['보고 연도', year, '작성일 ' + today],
+    ['[교육 이수 현황 — 작성일 기준]', '', ''],
+    ['교육 대상 (재직 · 휴직)', T.total, '제외 ' + T.excluded + '명 별도'],
+    ['이수', T.done, '이수율 ' + pct(T.done, T.total)],
+    ['특별교육 진행중', T.progress, '16시간 미달'],
+    ['미이수', T.missing, '기한 초과 ' + T.overdue + '명'],
+    ['부서이동 확인 필요', T.moveCheck, ''],
+    ['[' + year + '년 교육 실시]', '', ''],
+    ['교육 실시 (연인원)', recs.length, '실인원 ' + persons(recs) + '명'],
+    ['  MSDS 교육', ms.length, '실인원 ' + persons(ms) + '명'],
+    ['  특별안전보건교육', sp.length, '실인원 ' + persons(sp) + '명'],
+    ['  수기(종이) 기록', cnt(recs, r => r.manual), ''],
+    ['교육 실시 부서', Object.keys(recs.reduce((m, r) => { m[normDept_(r.dept)] = 1; return m; }, {})).length, ''],
+    ['[' + year + '년 신규입사 · 부서이동]', '', ''],
+    ['신규입사 알림', nh.length, '교육완료 ' + cnt(nh, o => o['상태'] === '취급-교육완료') + ' · 미취급 ' + cnt(nh, o => o['상태'] === '미취급') + ' · 대기 ' + cnt(nh, o => /대기|이메일없음/.test(o['상태']))],
+    ['부서이동', moves.length, '확인 완료 ' + cnt(moves, m => mvc[pkey_(m.no, m.name) + '|' + normDept_(deptAlias_(m.to)) + '|' + m.date]) + '건 (새 부서 교육으로 끝난 경우는 교육 실시에 포함)'],
+    ['[' + year + '년 화학물질 · 보호구]', '', ''],
+    ['신규 사용 물질 (부서별)', cnt(ledger, o => inY(o.start)), '신규사용 · 중단 대장 기준'],
+    ['사용 중단 물질 (부서별)', cnt(ledger, o => inY(o.stop)), ''],
+    ['보호구 지급 (건)', ppe.length, '지급 인원 ' + Object.keys(ppe.reduce((m, r) => { m[r.name + '|' + r.dept] = 1; return m; }, {})).length + '명']];
+  const monthly = [['월', 'MSDS 교육 (명)', '특별안전보건교육 (명)', '합계', '총 교육시간', '보호구 지급 (건)', '신규 사용 물질', '사용 중단 물질']];
+  for (let m = 1; m <= 12; m++) {
+    const ym = year + '-' + ('0' + m).slice(-2), inM = d => String(d || '').slice(0, 7) === ym;
+    const rm = recs.filter(r => inM(r.ds));
+    monthly.push([m + '월', cnt(rm, r => !r.special), cnt(rm, r => r.special), rm.length, rm.reduce((a, r) => a + (r.hrs || 0), 0),
+                  cnt(ppe, r => inM(r.date)), cnt(ledger, o => inM(o.start)), cnt(ledger, o => inM(o.stop))]);
+  }
+  const byDept = [['부서', '교육', '대상', '이수', '진행중', '미이수', '이수율', '기한 초과', '제외', year + '년 교육 (연인원)']];
+  (st.depts || []).forEach(d => byDept.push([d.dept, d.need === '특별' ? '특별안전보건' : 'MSDS', d.total || 0, d.done || 0, d.progress || 0, d.missing || 0, pct(d.done || 0, d.total || 0), d.overdue || 0, d.excluded || 0,
+    cnt(recs, r => sameDept_(deptAlias_(r.dept), d.dept))]));
+  const chem = [['부서', '물질명', '업체', '신규사용일', '사용중단일', '상태', '출처']].concat(
+    ledger.sort((a, b) => String(a.dept).localeCompare(String(b.dept), 'ko')).map(o => [o.dept, o.name, o.sup || '', o.start || '', o.stop || '', o.status, o.src || '']));
+  const ppeAgg = {};
+  ppe.forEach(r => { const k = r.dept; (ppeAgg[k] = ppeAgg[k] || { n: 0, items: {} }).n++; String(r.items || '').split(/[,·]/).map(x => x.trim()).filter(Boolean).forEach(it => { const nm = it.replace(/\s*[x×]\s*\d+$/, ''); ppeAgg[k].items[nm] = (ppeAgg[k].items[nm] || 0) + 1; }); });
+  const ppeSum = [['부서', '지급 (건)', '주요 물품']].concat(Object.keys(ppeAgg).sort((a, b) => a.localeCompare(b, 'ko')).map(k =>
+    [k, ppeAgg[k].n, Object.keys(ppeAgg[k].items).sort((a, b) => ppeAgg[k].items[b] - ppeAgg[k].items[a]).slice(0, 5).map(x => x + ' ' + ppeAgg[k].items[x]).join(', ')]));
+
+  const name = '보건관리_연간보고서_' + year;
+  const ss = SpreadsheetApp.create(name);
+  const first = ss.getSheets()[0], used = {};
+  const put = (title, rows, widths) => {
+    const sh = ss.insertSheet(xlsxSheetName_(title, used));
+    if (rows.length && rows[0].length) sh.getRange(1, 1, rows.length, rows[0].length).setValues(rows.map(r => r.map(v => v == null ? '' : v)));
+    try { sh.setFrozenRows(1); sh.getRange(1, 1, 1, rows[0].length).setFontWeight('bold').setBackground('#E2F0D5'); (widths || []).forEach((w, i) => sh.setColumnWidth(i + 1, w)); } catch (_) {}
+    return sh;
+  };
+  put('요약', summary, [240, 90, 420]);
+  put('월별', monthly);
+  put('부서별 이수율', byDept, [150]);
+  put('화학물질 변동', chem, [120, 220, 120]);
+  put('보호구 지급 집계', ppeSum, [150, 80, 400]);
+  try { ss.deleteSheet(first); } catch (_) {}
+  SpreadsheetApp.flush();
+  const exportAs = (fmt, extra) => {
+    const res = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=' + fmt + (extra || ''),
+      { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) throw new Error((fmt === 'pdf' ? 'PDF' : '엑셀') + ' 변환 실패 (HTTP ' + res.getResponseCode() + ')');
+    return res.getBlob();
+  };
+  const dir = backupSub_(backupRoot_(), '연간 보고서');
+  const save = blob => {   // 같은 이름 예전 파일은 휴지통으로 (다시 만들면 최신본 하나)
+    const it = dir.getFilesByName(blob.getName()); while (it.hasNext()) it.next().setTrashed(true);
+    return dir.createFile(blob);
+  };
+  let pdf, xlsx;
+  try {
+    pdf = save(exportAs('pdf', '&size=A4&portrait=true&fitw=true&gridlines=false&sheetnames=true&printtitle=true&pagenum=CENTER').setName(name + '.pdf'));
+    // 엑셀에는 상세 명단도 (교육 실시 내역 · 보호구 지급 · 신규입사 · 부서이동)
+    put('교육 실시 내역', [['교육일', '종료일', '구분', '부서', '사번', '이름', '시간', '물질', '서명']].concat(recs.map(r => [r.ds, r.de, r.type, r.dept, "'" + (r.no || ''), r.name, r.hrs, r.chem, r.sig])));
+    put('보호구 지급 내역', [['지급일', '부서', '이름', '지급물품']].concat(ppe.map(r => [r.date, r.dept, r.name, r.items])));
+    put('신규입사', [['입사일', '부서', '이름', '상태', '최초발송', '회신일시', '취급', '교육일지']].concat(nh.map(o => [o['입사일'], o['부서'], o['이름'], o['상태'], o['최초발송'], o['회신일시'], o['취급여부'], o['교육일지제출일']])));
+    put('부서이동', [['이동일', '사번', '이름', '이전 부서', '새 부서', '확인']].concat(moves.map(m => { const cf = mvc[pkey_(m.no, m.name) + '|' + normDept_(deptAlias_(m.to)) + '|' + m.date]; return [m.date, "'" + m.no, m.name, m.from, m.to, cf ? cf.how + ' · ' + cf.by : '']; })));
+    SpreadsheetApp.flush();
+    xlsx = save(exportAs('xlsx').setName(name + '.xlsx'));
+  } finally {
+    try { DriveApp.getFileById(ss.getId()).setTrashed(true); } catch (_) {}
+  }
+  setAdminCfg({ key: 'report_last', value: today + ' ' + year + '년' });
+  return { success: true, year: year, pdfUrl: pdf.getUrl(), xlsxUrl: xlsx.getUrl(), folderUrl: dir.getUrl(), name: name,
+           summary: { total: T.total, done: T.done, rate: pct(T.done, T.total), edu: recs.length, special: sp.length, msds: ms.length, chemNew: cnt(ledger, o => inY(o.start)), chemStop: cnt(ledger, o => inY(o.stop)), ppe: ppe.length, nh: nh.length, moves: moves.length } };
 }
 
 function eduExclude_(req, s) {
@@ -3757,6 +4012,7 @@ function eduStatusCached_(s) {
 function eduOp_(req, s) {
   if (req.op === 'edu.status') return requireLogin_(s) || (req.fresh ? eduStatus_(s) : eduStatusCached_(s));
   if (req.op === 'edu.exclude') { const d = requireLogin_(s); if (d) return d; const r = eduExclude_(req, s); if (r.success) eduCacheClear_(); return r; }
+  if (req.op === 'edu.moveOk') { const d = requireLogin_(s); if (d) return d; const r = eduMoveOk_(req, s); if (r.success) eduCacheClear_(); return r; }
   const deny = requireAdmin_(s);
   if (deny) return deny;
   if (req.op === 'edu.askMail') return eduAskMail_(req);

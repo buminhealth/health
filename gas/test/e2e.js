@@ -329,11 +329,11 @@ function check(name, cond, extra) {
              disp: getComputedStyle(document.getElementById('admin-main')).display };
   });
   check('옛 일지 PDF: 드라이브에 없으면 공개 저장소에서 읽음 (관리자)', v203.miss === '%PDF-1.4 old' && ghOldHits >= 1, [v203.miss, ghOldHits]);
-  check('관리자 메뉴: A-8 순서 (대시보드 … 신규입사 알림 · 설정)', ['대시보드', '결재 관리', '교육 현황', '보호구 지급 현황', '화학물질 보고서 검토', '위험성평가', '신규사용 · 중단 대장', '물질 마스터 점검', 'AI MSDS 검토', '직원정보관리', '신규입사 알림', '설정', '홈으로 나가기'].join() === v203.nav.join(), v203.nav);
+  check('관리자 메뉴: A-8 순서 (대시보드 · 직원 · 일지 찾기 … 신규입사 알림 · 연간 보고서 · 설정)', ['대시보드', '직원 · 일지 찾기', '결재 관리', '교육 현황', '보호구 지급 현황', '화학물질 보고서 검토', '위험성평가', '신규사용 · 중단 대장', '물질 마스터 점검', 'AI MSDS 검토', '직원정보관리', '신규입사 알림', '연간 보고서', '설정', '홈으로 나가기'].join() === v203.nav.join(), v203.nav);
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.24 \(2026-11-18\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.25 \(2026-11-18\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
   check('서버 버전 비교: v21.9 서버는 v21.10 앱에서 배포 필요로 (글자 순서 아님)', await page.evaluate(() => { try { return bmVerLess('v21.9 (2026-11-03)', 'v21.10') && !bmVerLess('v21.10 (2026-11-04)', 'v21.10') && !bmVerLess('v22.0', 'v21.10'); } catch (e) { return String(e); } }) === true);
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
@@ -523,7 +523,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.24'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.25'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -2254,6 +2254,74 @@ function check(name, cond, extra) {
     const srvList = Array.isArray(srv) ? srv : srv.records;
     check('주소 이전: 로그인하면 이 PC 기록을 서버에 합친 뒤 새 주소로 (?nh 유지)', srvList.some(r => r.recordId === 'mv61') && landed === NEW + '?nh=abc', [landed, srvList.length]);
     await ctx2.close();
+  }
+
+  // ── v21.25 오늘 할 일 · 부서이동 확인 · 직원 · 일지 찾기 · 연간 보고서
+  {
+    const post = (b) => JSON.parse(g.api.doPost({ postData: { contents: JSON.stringify(b) } }).text);
+    const SA = g.ctx.SpreadsheetApp.getActiveSpreadsheet();
+    const e1 = empRow('126888001', '이동직원', '71병동', '재직', '간호사6급'); empSh.appendRow(e1);
+    const e2 = empRow('126888002', '이동새교육', '71병동', '재직', '간호사6급'); empSh.appendRow(e2);
+    const e3 = empRow('126888003', '퇴사직원', '61병동', '퇴사', '간호사6급'); empSh.appendRow(e3);
+    if (!led.rows.length) led.rows.push(LH);
+    const LHn = led.rows[0];
+    const L2 = (type, dept, ds, no, nm) => LHn.map(h => ({ '순번': 900, '제출일시': ds + 'T01:00Z', '교육구분': type, '교육부서': dept, '취급물질': '뉴젠자임폼', '교육시작일': ds, '교육종료일': ds, '교육일수': '1', '총교육시간': '1시간', '사번': no, '성명': nm, '입사일': '', '서명여부': '✓ 서명완료' }[h] ?? ''));
+    led.rows.push(L2('MSDS교육', '61병동', '2026-03-02', '126888001', '이동직원'), L2('MSDS교육', '61병동', '2026-03-02', '126888002', '이동새교육'),
+                  L2('MSDS교육', '71병동', '2026-11-10', '126888002', '이동새교육'), L2('MSDS교육', '61병동', '2025-05-01', '126888003', '퇴사직원'));
+    const mvs = g.sheets['부서이동기록'] || SA.insertSheet('부서이동기록');
+    mvs.rows = [['반영일', '사번', '이름', '이전 부서', '새 부서', '비고'], ['2026-11-04', "'126888001", '이동직원', '61병동', '71병동', '인사 사이트 동기화'], ['2026-11-04', "'126888002", '이동새교육', '61병동', '71병동', '인사 사이트 동기화']];
+    g.api.eduCacheClear_();
+    const st = post({ op: 'edu.status', fresh: true, t: tk.a });
+    const P = nm => st.people.find(p => p.name === nm) || {};
+    check('부서이동 v21.25: 이동 뒤 새 부서 교육 · 확인이 없으면 이동 확인 필요 · 새 부서 교육이 있으면 확인 끝 · 부서 집계', !!P('이동직원').moveCheck && P('이동직원').moveCheck.from === '61병동' && !P('이동새교육').moveCheck && P('이동새교육').moveOk && /새 부서/.test(P('이동새교육').moveOk.how) && st.depts.find(d => d.dept === '71병동').moveCheck >= 1, [P('이동직원'), P('이동새교육').moveOk]);
+    const td = post({ op: 'dash.today', t: tk.a }), tdD = post({ op: 'dash.today', t: tk.d });
+    check('오늘 할 일 v21.25: 서버가 미회신 · 기한 초과/임박 · 부서이동 · 대장 반영 대기를 한 번에 (관리자만)', td.success && td.moveCheck >= 1 && ['nhNoReply', 'eduOver', 'eduSoon', 'ledger', 'nhEduWait', 'newChem'].every(k => typeof td[k] === 'number') && !tdD.success, td);
+    // 화면: 대시보드 줄 → 부서이동 확인 → [기존 교육으로 충분] → 통합 검색 → 연간 보고서
+    const p3 = await ctx.newPage(); const err3 = [];
+    p3.on('pageerror', e => err3.push(e.message)); p3.on('dialog', d => d.accept());
+    await p3.goto(`http://localhost:${PORT}/index.html`); await p3.waitForTimeout(1500);
+    await p3.evaluate(() => goTab('admin')); await p3.fill('#admin-pw', 'admin-pass-1'); await p3.evaluate(() => adminLogin());
+    await p3.waitForSelector('#admin-main', { state: 'visible' });
+    await p3.evaluate(() => admSwitchPane('dash'));
+    await p3.waitForSelector('#dash-today .dt-chip', { timeout: 15000 });
+    const bar = await p3.evaluate(() => ({ chips: [...document.querySelectorAll('#dash-today .dt-chip')].map(b => b.textContent + '>' + b.getAttribute('data-go')), y: document.getElementById('dash-today').getBoundingClientRect().top, k: document.querySelector('#dash-body .dash-kpis').getBoundingClientRect().top }));
+    check('오늘 할 일 화면 v21.25: 대시보드 맨 위 한 줄 · 결재 대기 · 미회신 · 기한 · 부서이동 · 대장 반영 대기 숫자 버튼', bar.chips.length >= 6 && bar.chips.some(c => /부서이동 확인>edu:move/.test(c)) && bar.chips.some(c => /결재 대기>apv-pending/.test(c)) && bar.chips.some(c => /대장 반영 대기 물질>ledger/.test(c)) && bar.y < bar.k, bar);
+    await p3.click('#dash-today [data-go="edu:move"]');
+    await p3.waitForSelector('#eb-list [data-mok]', { timeout: 20000 });
+    const ml = await p3.evaluate(() => ({ pane: document.querySelector('#adm-pane-edu').classList.contains('active'), st: document.getElementById('ef-st').value, rows: [...document.querySelectorAll('#eb-list tr')].slice(1).map(tr => tr.textContent.replace(/\s+/g, ' ').slice(0, 120)), kpi: !!document.querySelector('#edu-board [data-kst="move"]') }));
+    check('부서이동 화면 v21.25: 대시보드에서 누르면 교육 현황이 [부서이동 확인 필요]로 열림 · 이동 경로 표시 · 확인 버튼 · 숫자 카드', ml.pane && ml.st === 'move' && ml.rows.length >= 1 && ml.rows.every(r => /이동 확인 필요/.test(r)) && ml.rows.some(r => /이동직원.*61병동 → 71병동/.test(r)) && ml.kpi, ml);
+    await p3.click('#eb-list [data-mok]');
+    await p3.waitForFunction(() => !document.querySelector('#eb-list [data-mok]'), null, { timeout: 15000 }).catch(() => {});
+    const after = post({ op: 'edu.status', fresh: true, t: tk.a });
+    const mvc = (g.sheets['부서이동확인'] || { rows: [] }).rows;
+    check('부서이동 v21.25: [기존 교육으로 충분] → 확인 기록(부서이동확인 시트 · 확인자) · 표시 사라짐', !after.people.find(p => p.name === '이동직원').moveCheck && /기존 교육으로 충분/.test(after.people.find(p => p.name === '이동직원').moveOk.how) && mvc.length === 2 && mvc[1][6] === '보건관리자', [after.people.find(p => p.name === '이동직원'), mvc[1]]);
+    const again = post({ op: 'edu.moveOk', no: '126888001', name: '이동직원', dept: '71병동', t: tk.a }), wrong = post({ op: 'edu.moveOk', no: '126888001', name: '이동직원', dept: '71병동', t: tk.d });
+    check('부서이동 v21.25: 두 번 눌러도 한 줄 · 다른 부서 계정은 못 함', again.already && wrong.status === 403 && mvc.length === 2, [again, wrong.status]);
+    // 통합 검색
+    const sr = post({ op: 'search.person', q: '이동직원', t: tk.a }), sq = post({ op: 'search.person', q: '퇴사직', t: tk.a }), sn = post({ op: 'search.person', q: '126888003', t: tk.a }), sd = post({ op: 'search.person', q: '이동직원', t: tk.d }), s1 = post({ op: 'search.person', q: '이', t: tk.a });
+    const me = sr.people && sr.people[0] || {};
+    check('직원 · 일지 찾기 v21.25: 이름 → 부서 · 교육 판정 · 교육 기록 · 부서이동(확인 내용) · 퇴사자도(이름 · 사번) · 관리자만 · 한 글자 막음', sr.success && me.dept === '71병동' && me.edu && me.edu.status === '이수' && me.recs.length === 1 && me.moves.length === 1 && /기존 교육으로 충분/.test(me.moves[0].confirm) && sq.people.length === 1 && sq.people[0].status === '퇴사' && sq.people[0].recs.length === 1 && !sq.people[0].edu && sn.people.length === 1 && sn.people[0].name === '퇴사직원' && !sd.success && !s1.success, [me, sq.people && sq.people[0] && sq.people[0].status]);
+    await p3.fill('.adm-top-find input', '이동직원'); await p3.press('.adm-top-find input', 'Enter');
+    await p3.waitForSelector('#fd-out .fd-card', { timeout: 15000 });
+    const fd = await p3.evaluate(() => ({ pane: document.getElementById('adm-pane-find').classList.contains('active'), cards: document.querySelectorAll('#fd-out .fd-card').length, t: document.getElementById('fd-out').textContent.replace(/\s+/g, ' '), nav: !!document.querySelector('.adm-nav-item[data-pane="find"]') }));
+    check('직원 · 일지 찾기 화면 v21.25: 위쪽 찾기 칸 → 찾기 화면 · 카드에 판정 · 교육 기록 · 부서이동 · 메뉴', fd.pane && fd.cards === 1 && /이수/.test(fd.t) && /교육 기록/.test(fd.t) && /61병동 → 71병동/.test(fd.t) && /교육일지 PDF/.test(fd.t) && fd.nav, fd);
+    await p3.click('#fd-out [data-edu]');
+    await p3.waitForSelector('#eb-list', { timeout: 15000 });
+    await p3.waitForTimeout(800);
+    const fe = await p3.evaluate(() => ({ q: (document.getElementById('ef-q') || {}).value, rows: [...document.querySelectorAll('#eb-list tr')].slice(1).map(tr => tr.textContent.replace(/\s+/g, ' ').slice(0, 60)) }));
+    check('직원 · 일지 찾기 v21.25: [교육 현황에서 보기] → 교육 현황이 그 직원으로 열림', fe.rows.length === 1 && /이동직원/.test(fe.rows[0]), fe);
+    // 연간 보고서
+    const pdf0 = (g.ctx.UrlFetchApp.pdfExports || []).length;
+    const rpt = post({ op: 'report.annual', year: '2026', t: tk.a }), rptD = post({ op: 'report.annual', year: '2026', t: tk.d }), rptBad = post({ op: 'report.annual', year: '19', t: tk.a });
+    check('연간 보고서 v21.25: 엑셀 + PDF 저장 · 요약 숫자 · 관리자만 · 연도 확인', rpt.success && /drive/.test(rpt.pdfUrl) && /drive/.test(rpt.xlsxUrl) && (g.ctx.UrlFetchApp.pdfExports || []).length === pdf0 + 1 && rpt.summary.edu >= 3 && typeof rpt.summary.rate === 'string' && !rptD.success && !rptBad.success, [rpt.summary, rpt.error, rptD.success, rptBad.error]);
+    const rpt2 = post({ op: 'report.annual', year: '2026', t: tk.a });
+    await p3.evaluate(() => admSwitchPane('report'));
+    await p3.waitForSelector('#rp-go'); await p3.click('#rp-go');
+    await p3.waitForSelector('#rp-out .rp-done', { timeout: 20000 });
+    const rp = await p3.evaluate(() => ({ links: [...document.querySelectorAll('#rp-out .rp-links a')].map(a => a.textContent), kpi: document.querySelectorAll('#rp-out .rp-kpi div').length }));
+    check('연간 보고서 화면 v21.25: 연도 고르고 [보고서 만들기] → 요약 숫자 · PDF · 엑셀 · 폴더 링크 · 다시 만들어도 성공', rp.links.join() === 'PDF 열기,엑셀 열기,드라이브 폴더' && rp.kpi >= 6 && rpt2.success, rp);
+    check('v21.25 화면 스크립트 오류 없음', err3.length === 0, err3);
+    await p3.close();
   }
 
   await ctx.unrouteAll({ behavior: 'ignoreErrors' });
