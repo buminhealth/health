@@ -8259,6 +8259,8 @@ function fmtDate(v){
   return s.slice(0,10);
 }
 
+// 시안 5 — 관리자 표의 서명: '✓ 서명완료' 글자 대신 둥근 표시 (시트 값은 그대로)
+function bmSigBadge(v){ const s = fmtSigned(v), ok = /서명완료/.test(s); return '<span class="sig-pill' + (ok ? ' ok' : '') + '">' + (ok ? '서명 완료' : '미서명') + '</span>'; }
 function fmtSigned(v){
   if(!v) return '✓ 서명완료';
   const s=String(v);
@@ -13153,7 +13155,7 @@ function renderAdminTable(data){
       <td><input type="date" style="width:130px" value="${(r.joinDate||'').slice(0,10)}" onchange="updateEduRec(${i},'joinDate',this.value)"></td>
       <td><input type="date" style="width:130px;font-weight:600" value="${(r.dateStart||'').slice(0,10)}" onchange="updateEduRec(${i},'dateStart',this.value)" title="교육일 수정 가능"></td>
       <td style="text-align:center"><input type="text" style="width:70px;text-align:center" value="${r.totalHours||''}" onchange="updateEduRec(${i},'totalHours',this.value)"></td>
-      <td style="text-align:center"><span class="${(r.signed||'').includes('✓')?'sig-ok':''}">${r.signed||''}</span></td>
+      <td style="text-align:center">${r.signed ? bmSigBadge(r.signed) : ''}</td>
       <td style="text-align:center" class="row-act">
         <button onclick="viewEduRecord(${i})" title="창으로 보기" style="color:#3F7518">보기</button>
         <button onclick="downloadEduPdfFromAdmin(${i})" title="PDF 출력 (PC 다운로드)" style="color:#3F7518">PDF</button>
@@ -14575,7 +14577,7 @@ function renderPpeAdminTable(data){
         }
         return r.items || r.chem || '';
       })()}" onchange="updatePpeRec(${i},'items',this.value)"></td>
-      <td style="text-align:center;color:#3F7518;font-weight:700">${fmtSigned(r.signed)}</td>
+      <td style="text-align:center">${bmSigBadge(r.signed)}</td>
       <td style="text-align:center" class="row-act">
         <button onclick="viewPpeRecord(${i})" title="창으로 보기" style="color:#3F7518">보기</button>
         <button onclick="downloadPpePdfFromAdmin(${i})" title="PDF 출력 (PC 다운로드)" style="color:#3F7518">PDF</button>
@@ -21595,6 +21597,15 @@ button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,inpu
 </style>
 <style id="bm-design-p4">
 .fl-auto{font-size:12px;font-weight:500;color:#5A5650;margin-left:6px}
+</style>
+<style id="bm-design-p5">
+.sig-pill{display:inline-block;padding:2px 10px;border-radius:999px;background:#ECEBE7;color:#45423D;font-size:12.5px;font-weight:600 !important;white-space:nowrap}
+.sig-pill.ok{background:#EEF6E6;color:#3F7518}
+#adm-pane-ppe .adm-tbl input[type=date],#adm-pane-chem .adm-tbl input[type=date]{border:1px solid transparent !important;background:transparent !important;font-weight:400 !important;font-size:13px !important;color:#1E1E1C !important;padding:4px 6px !important}
+#adm-pane-ppe .adm-tbl input[type=date]::-webkit-calendar-picker-indicator,#adm-pane-chem .adm-tbl input[type=date]::-webkit-calendar-picker-indicator{opacity:0}
+#adm-pane-ppe .adm-tbl tr:hover input[type=date],#adm-pane-chem .adm-tbl tr:hover input[type=date],#adm-pane-ppe .adm-tbl input[type=date]:focus,#adm-pane-chem .adm-tbl input[type=date]:focus{border-color:#CFE5BA !important;background:#fff !important}
+#adm-pane-ppe .adm-tbl tr:hover input[type=date]::-webkit-calendar-picker-indicator,#adm-pane-chem .adm-tbl tr:hover input[type=date]::-webkit-calendar-picker-indicator{opacity:.6}
+#adm-pane-ppe .adm-tbl tbody tr:hover td,#adm-pane-chem .adm-tbl tbody tr:hover td{background:#F3F9ED}
 </style>
 </body>
 </html>
