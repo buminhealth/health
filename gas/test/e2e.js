@@ -315,7 +315,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.20 \(2026-11-17\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.21 \(2026-11-18\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
   check('서버 버전 비교: v21.9 서버는 v21.10 앱에서 배포 필요로 (글자 순서 아님)', await page.evaluate(() => { try { return bmVerLess('v21.9 (2026-11-03)', 'v21.10') && !bmVerLess('v21.10 (2026-11-04)', 'v21.10') && !bmVerLess('v22.0', 'v21.10'); } catch (e) { return String(e); } }) === true);
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
@@ -505,7 +505,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.20'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.21'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -1371,6 +1371,28 @@ function check(name, cond, extra) {
     T.splice(0, T.length);
   }
   check('자동 확인을 반복해도 신규입사 메일 중복 없음', mail.sent.filter(m => m.to === 'head61@bumin.co.kr' && !/재알림/.test(m.subject)).length === 1);
+  // v21.21 회신이 두 번 와도 보건관리자 메일은 한 번 · 답을 바꾸면 '회신 변경' 메일 한 번 (끝나면 알림 줄 되돌림)
+  {
+    const dupA = vm.runInContext(`(function(){
+      const o = nhRows_().find(x => x['상태'] === '회신대기' && !x['회신일시']); if (!o) return null;
+      const bak = JSON.stringify(o), s = { role: 'admin' }, n0 = MailApp.sent.length;
+      const a1 = nhAnswer_({ id: o['알림ID'], handles: true }, s), a2 = nhAnswer_({ id: o['알림ID'], handles: true }, s);
+      const n1 = MailApp.sent.length;
+      const a3 = nhAnswer_({ id: o['알림ID'], handles: false }, s);
+      const n2 = MailApp.sent.length, subj = MailApp.sent[n2 - 1].subject;
+      const b = JSON.parse(bak); b._row = o._row; nhWrite_(b);
+      return { first: a1.success && !a1.already, second: !!a2.already, oneMail: n1 - n0 === 1, changeMail: n2 - n1 === 1, subj: subj };
+    })()`, g.ctx);
+    check('신규입사 회신 두 번(버튼 두 번 · 링크 다시) → 보건관리자 메일 한 번 · 답을 바꾸면 회신 변경 메일', dupA && dupA.first && dupA.second && dupA.oneMail && dupA.changeMail && /회신 변경/.test(dupA.subj), dupA);
+    const reSent = vm.runInContext(`(function(){
+      const o = nhRows_().find(x => x['상태'] === '회신대기'); if (!o) return null;
+      const bak = JSON.stringify(o); o['회신일시'] = '2026-11-01 09:00:00'; o['취급여부'] = '예'; nhWrite_(o);
+      const n0 = MailApp.sent.length, r = nhAnswer_({ id: o['알림ID'], handles: true }, { role: 'admin' });
+      const out = { already: !!r.already, status: r.status, mailed: MailApp.sent.length - n0 };
+      const b = JSON.parse(bak); b._row = o._row; nhWrite_(b); return out;
+    })()`, g.ctx);
+    check('다시 보내 회신대기로 돌아간 알림(예전 회신 기록 있음)은 새 회신으로 받음 · 메일 한 번', reSent && !reSent.already && reSent.status !== '회신대기' && reSent.mailed === 1, reSent);
+  }
 
   // 17-9. v21.8 신규입사 알림 골라서 삭제 · 되살리기
   {
@@ -1527,7 +1549,7 @@ function check(name, cond, extra) {
     check('관리요령 v21.8: 부서는 AI 추출 불가 · AI에 MSDS PDF만 보냄', gx[0].status === 403 && sentPdf[0].inline_data.mime_type === 'application/pdf' && /관리요령/.test(sentPdf[1].text), gx[0].status);
     check('관리요령 v21.8: 그림문자 번호로 정리(감탄 부호 → GHS07, 없는 번호 버림) · H · P 코드 번호 지움', gx[1].success && gd.pictos.map(x => x.code).join() === 'GHS02,GHS07' && gd.h[0] === '고인화성 액체 및 증기' && gd.p.prevent[0].indexOf('P210') < 0 && gd.signal === '위험', gd.pictos);
     check('관리요령 v21.8: 보호구는 8번 단어로(방독 · 보안경), 8번에 없는 손은 P280 → 확인 필요, 신체 해당없음', gd.ppe.resp === 'gas' && gd.ppe.eye && gd.ppe.hand && !gd.ppe.body && gd.ppe.check.length === 1 && /손/.test(gd.ppe.check[0]), gd.ppe);
-    check('관리요령 v21.8: 초안은 시트에 보관되지만 로그인 없이는 안 보임', !!g.sheets['관리요령'] && g.sheets['관리요령'].rows.length === 2 && gx[2].success && !gx[2].data['테스트소독제'], gx[2]);
+    check('관리요령 v21.18: 초안도 시트에 보관 · 로그인 없이 출력용으로 받음 (관리자 확인 전 표시 ok:false)', !!g.sheets['관리요령'] && g.sheets['관리요령'].rows.length === 2 && gx[2].success && gx[2].data['테스트소독제'] && gx[2].data['테스트소독제'].ok === false, gx[2].data && Object.keys(gx[2].data));
     const gs = await page.evaluate(a => Promise.all([BMAUTH.post('guide.save', { name: '테스트소독제', data: a.d, ok: true, t: a.dt }), BMAUTH.post('guide.save', { name: '테스트소독제', data: a.d, ok: true, t: a.at })]).then(async r => r.concat([await BMAUTH.post('guide.get', { names: ['테스트소독제'], t: '' })])), { d: gd, dt: tD, at: tA });
     check('관리요령 v21.8: 관리자 확인 · 저장 → 로그인 없이 출력 자료 받음 (부서는 저장 불가)', gs[0].status === 403 && gs[1].success && gs[2].data['테스트소독제'] && gs[2].data['테스트소독제'].ok && g.sheets['관리요령'].rows.length === 2, gs[2]);
     const gui = await page.evaluate(async () => {
@@ -1554,9 +1576,9 @@ function check(name, cond, extra) {
     const one = gui.one, pages = (one.match(/class="pg"/g) || []).length;
     check('관리요령 화면 v21.8: MSDS 상세 버튼 3개 가로(작게 34px · 13px) · 교육 대상 안내는 버튼 아래', gui.btns.join('|') === '교육일지 작성|관리요령 출력' || gui.btns.join('|') === 'PDF 원본보기|교육일지 작성|관리요령 출력' ? (gui.bh <= 36 && gui.fs === '13px' && gui.below) : false, gui);
     check('관리요령 화면 v21.8: 로그인 없이 출력 창 (이 물질만 · 우리 부서 전체 · 보호구 일람표 체크), 관리자 편집칸 없음', gui.dlg && gui.opts === 2 && gui.ppeChk && !gui.editor, gui);
-    check('관리요령 A4 v21.8: 제목 · 그림문자 2개 → 물질명 왼쪽 큰 칸 · 경고(감탄 부호 아님) · 신호어 위험', /화학물질 작업공정별 관리요령/.test(one) && /flex:0 0 170px/.test(one) && />경고</.test(one) && !/감탄/.test(one) && />위험</.test(one), one.length);
+    check('관리요령 A4 v21.8: 제목 · 그림문자 2개 → 물질명 왼쪽 큰 칸 · 경고(감탄 부호 아님) · 신호어 위험', /화학물질 작업공정별 관리요령/.test(one) && /flex:0 0 150px/.test(one) && />경고</.test(one) && !/감탄/.test(one) && />위험</.test(one), one.length);
     const hUl = (one.match(/<ul[^>]*>(.*?)<\/ul>/) || [])[1] || '';
-    check('관리요령 A4 v21.8: 유해위험 문구 2개 → 최소 4개(보충 문구) · 짝수 두 칸 · • 글머리', (hUl.match(/<li>• /g) || []).length === 4 && /졸음/.test(hUl) && /grid-template-columns:repeat\(2/.test(one), hUl.slice(0, 200));
+    check('관리요령 A4 v21.8: 유해위험 문구 2개 → 최소 4개(보충 문구) · 짝수 두 칸 · • 글머리', (hUl.match(/<li[^>]*>• /g) || []).length === 4 && /졸음/.test(hUl) && /grid-template-columns:repeat\(2/.test(one), hUl.slice(0, 200));
     check('관리요령 A4 v21.8: 예방 3줄 · 보호구 원형 그림(방독 · 보안경 · 장갑) · 응급조치 · 사고시 · 공급자 · 개정일 · 보호구 일람표', (one.match(/• 열·스파크|• 용기를 단단히|• 용기와 수용설비/g) || []).length === 3 && !/보호장갑·보안경을 착용하시오<br>/.test(one.split('대응')[0].split('예방')[2] || '') &&
       /alt="방독마스크"/.test(one) && /alt="보안경"/.test(one) && /alt="보호장갑"/.test(one) && !/alt="보호의"/.test(one) && /• 즉시 다량의 물로/.test(one) && /• 점화원을 제거하시오/.test(one) && /긴급전화 051-000-0000/.test(one) && /MSDS 최종 개정 2025-01-02/.test(one) && pages === 2 && /화학물질별 적절한 보호구/.test(one), pages);
     check('관리요령 A4 v21.8: 관리 정보 · 허용기준 · 부서 표시 없음 · 확인 필요 표시는 출력에 없음', !/허용기준|관리 정보|관리정보|확인 필요/.test(one), '');
@@ -1579,11 +1601,13 @@ function check(name, cond, extra) {
     const gAdm = await page.evaluate(async () => {
       await BMAUTH.adminLogin('admin-pass-1');
       BMGUIDE.open('테스트소독제'); await new Promise(z => setTimeout(z, 1200));
-      const v = { editor: !!document.getElementById('gd-ed'), flag: (document.getElementById('gd-ed') || {}).textContent || '', pics: document.querySelectorAll('#gd-ed [data-pic]:checked').length };
+      const closedFirst = !document.getElementById('gd-ed'), tg = document.getElementById('gd-edit-tg');
+      if (tg) { tg.click(); await new Promise(z => setTimeout(z, 300)); }
+      const v = { closedFirst, toggle: !!tg, editor: !!document.getElementById('gd-ed'), flag: (document.getElementById('gd-ed') || {}).textContent || '', pics: document.querySelectorAll('#gd-ed [data-pic]:checked').length };
       BMGUIDE.close();
       return v;
     });
-    check('관리요령 관리자 v21.8: 편집 칸 · 그림문자 체크 · 보호구 확인 필요 표시 (관리자 화면만)', gAdm.editor && gAdm.pics === 2 && /확인 필요/.test(gAdm.flag) && /MSDS에서 AI로 뽑기/.test(gAdm.flag), gAdm);
+    check('관리요령 관리자 v21.18: [내용 고치기]로 편집 칸 열림 · 그림문자 체크 · 보호구 확인 필요 표시 · MSDS 다시 읽기 (관리자 화면만)', gAdm.closedFirst && gAdm.toggle && gAdm.editor && gAdm.pics === 2 && /확인 필요/.test(gAdm.flag) && /MSDS 다시 읽기/.test(gAdm.flag), gAdm);
   }
 
   // 19. v21.1 AI 도우미 · 안전보건공단 OPEN API · 법령 본문
@@ -2019,7 +2043,7 @@ function check(name, cond, extra) {
     const L1 = post({ op: 'ledger.list', t: ta });
     const xy = L1.rows.find(o => /Xylenes/.test(o.name)) || {};
     check('대장 v21.11: 종이 대장 올리기 — 날짜 여러 모양 읽기 · 같은 줄 건너뜀 · 물질명 없는 줄 뺌 · 업체 없어도 됨 · 반영 시작일', im.success && im.added === 5 && im.skipped === 1 && im.bad === 1 && L1.from === '2026-01-01' &&
-      xy.start === '2019-03-04' && xy.sup === '' && xy.src === '종이 대장' && L1.rows.find(o => o.name === '에탄올 83%').start === '2021-06-01' && L1.rows.filter(o => o.stop).length === 1 && g.sheets['신규사용중단대장'].rows.length === 6, [im, L1.rows.map(o => o.name + ' ' + o.start + '~' + o.stop)]);
+      xy.start === '2019-03-04' && xy.sup === '' && /^종이 대장( · 대장\.xlsx)?$/.test(xy.src) && L1.rows.find(o => o.name === '에탄올 83%').start === '2021-06-01' && L1.rows.filter(o => o.stop).length === 1 && g.sheets['신규사용중단대장'].rows.length === 6, [im, L1.rows.map(o => o.name + ' ' + o.start + '~' + o.stop)]);
     const rec = (id, o) => Object.assign({ recordId: id, docNo: 'CR-' + id, type: '화학물질보고서', submitted: '2026-11-05T01:00:00.000Z', isNew: false, isStop: false }, o);
     const reps = [
       rec('r1', { isNew: true, tag: '신규', dept: '병리과', product: 'Xylenes', newDept: '병리과', newProduct: 'Xylenes', newSups: '㈜ 강동그룹(051-111-2222)', newDate: '2026-11-03', name: '김병리' }),
@@ -2068,7 +2092,9 @@ function check(name, cond, extra) {
       productMap['메탄올'] = { name: '메탄올', departments: ['진단검사의학과'], components: [], icons: [] };
       goTab('admin'); admSwitchPane('ledger'); await BMLEDGER.open(); await new Promise(z => setTimeout(z, 200));
       const b = document.getElementById('ledger-body');
-      const v = { kpi: b.querySelector('.lg-kpi').textContent, wait: b.querySelectorAll('tr.w').length, sub: [...b.querySelectorAll('.lg-tbl td')].filter(td => /padding-left:\s*24px/.test(td.getAttribute('style') || '')).length,
+      const grp = b.querySelectorAll('[data-grp]').length, sub0 = b.querySelectorAll('.lg-tbl tr.sub').length;
+      const gb = b.querySelector('[data-grp]'); if (gb) { gb.click(); await new Promise(z => setTimeout(z, 200)); }
+      const v = { kpi: b.querySelector('.lg-kpi').textContent, wait: b.querySelectorAll('tr.w').length, grp, sub0, sub: b.querySelectorAll('.lg-tbl tr.sub').length,
                   badge: document.getElementById('adm-nav-ledger-badge').textContent, nav: !!document.querySelector('.adm-nav-item[data-pane="ledger"]') };
       const fixedNew = () => [...document.querySelectorAll('body > div')].filter(d => /z-index: ?9999/.test(d.getAttribute('style') || '') && /Xylenes/.test(d.textContent));
       b.querySelector('[data-view]').click(); await new Promise(z => setTimeout(z, 800));
@@ -2089,7 +2115,7 @@ function check(name, cond, extra) {
       return v;
     });
     const L7 = post({ op: 'ledger.list', t: ta });
-    check('대장 화면 v21.11: 관리자 메뉴 · 지표 4칸 · 반영 대기 줄(승인 · 반려 · 제외) · 같은 물질 묶어 보기', ui.nav && /전체 물질/.test(ui.kpi) && /반영 대기/.test(ui.kpi) && ui.wait === 1 && ui.badge === '1' && ui.sub >= 2, ui);
+    check('대장 화면 v21.18: 관리자 메뉴 · 지표 4칸 · 반영 대기 줄(승인 · 반려 · 제외) · 같은 물질은 접어 두고 누르면 부서별 줄', ui.nav && /전체 물질/.test(ui.kpi) && /반영 대기/.test(ui.kpi) && ui.wait === 1 && ui.badge === '1' && ui.grp >= 1 && ui.sub0 === 0 && ui.sub >= 2, ui);
     check('대장 화면 v21.11: 반영 대기 줄 · 승인 창의 [보고서 보기] → 부서가 작성한 보고서 그대로 (제품 · 업체 · 사용일)', /Xylenes/.test(ui.view) && /E사/.test(ui.view) && /2026-11-08/.test(ui.view) && ui.view2, (ui.view || '').slice(0, 200));
     check('대장 화면 v21.11: 승인 창 — 다른 업체 같은 이름 → 업체 변경 기본 · 승인하면 옛 줄 중단 + E사 줄', /어느 경우인가요/.test(ui.modal) && ui.def === 'changed' && ui.after === 0 &&
       L7.rows.some(o => o.sup === 'E사' && o.start === '2026-11-08' && o.name === 'Xylenes (혼합 자일렌)') && L7.rows.some(o => o.sup === '㈜ 강동그룹' && o.stop === '2026-11-07'), [ui.def, ui.after]);

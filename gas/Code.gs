@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.20 (2026-11-17)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.21 (2026-11-18)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -2002,12 +2002,24 @@ function nhList_(s, req) {
   return { success: true, data: rows.filter(o => sameDept_(o['부서'], s.dept) && (o['상태'] === '회신대기' || o['상태'] === '이메일없음' || o['상태'] === '취급-교육대기')) };
 }
 
+/* v21.21 같은 회신이 두 번 들어와도(버튼 두 번 누름 · 메일 링크로 다시 회신) 보건관리자 메일은 한 번만
+   · 이미 같은 답으로 회신한 알림이면 기록 · 메일 없이 그대로 성공 (already)
+   · 답을 바꾼 경우만 다시 기록하고 '회신 변경' 메일 · 동시에 두 번 와도 잠금으로 하나씩 */
 function nhAnswer_(req, s) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return { success: false, error: '서버가 바쁩니다. 잠시 후 다시 시도하세요.' };
+  try { return nhAnswerLocked_(req, s); } finally { lock.releaseLock(); }
+}
+function nhAnswerLocked_(req, s) {
   const o = nhRows_().find(x => x['알림ID'] === req.id);
   if (!o) return { success: false, status: 404, error: '알림을 찾을 수 없습니다' };
   if (s.role !== 'admin' && !sameDept_(o['부서'], s.dept)) return { success: false, status: 403, error: '다른 부서 알림입니다' };
   if (o['상태'] === NH_DELETED) return { success: false, status: 410, error: '보건관리실에서 삭제한 알림입니다' };
   const handles = req.handles === true;
+  const prevAns = String(o['취급여부'] || '');
+  const answered = !!o['회신일시'] && o['상태'] !== '회신대기' && o['상태'] !== '이메일없음';   // 다시 보내 회신대기로 돌아간 알림은 새 회신으로 받음
+  if (answered && prevAns === (handles ? '예' : '아니오')) return { success: true, status: o['상태'], already: true };
+  const changed = answered && !!prevAns;
   o['회신일시'] = nowKst_();
   o['취급여부'] = handles ? '예' : '아니오';
   o['회신메모'] = String(req.memo || '').slice(0, 300);
@@ -2017,7 +2029,7 @@ function nhAnswer_(req, s) {
   if (cfg.adminEmail) {
     try {
       MailApp.sendEmail({ to: cfg.adminEmail, name: '부민병원 보건관리',
-        subject: '[보건관리] 신규입사 회신 - ' + o['부서'] + ' ' + o['이름'] + ' (취급: ' + o['취급여부'] + ')',
+        subject: '[보건관리] 신규입사 ' + (changed ? '회신 변경' : '회신') + ' - ' + o['부서'] + ' ' + o['이름'] + ' (취급: ' + o['취급여부'] + ')',
         htmlBody: '<p>' + o['부서'] + ' ' + o['이름'] + ' (입사 ' + o['입사일'] + ')</p><p>유해화학물질 취급: <b>' + o['취급여부'] + '</b>' +
                   (o['회신메모'] ? '<br>메모: ' + o['회신메모'].replace(/[<>&]/g, '') : '') + '</p><p>관리자 모드 → 직원정보관리에서 확인하세요.</p>' });
     } catch (e) { /* 메일 실패는 회신 기록에 영향 없음 */ }
