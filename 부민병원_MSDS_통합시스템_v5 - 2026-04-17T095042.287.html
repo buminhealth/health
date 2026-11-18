@@ -2431,7 +2431,7 @@ input.apv-in[type=text]{width:110px}
               <!-- ★ 표준 버튼 행 (4개 탭 동일) ★ -->
               <div class="bm-std-action-row" data-tab="edu" style="background:#fff;border-radius:10px;padding:10px 14px;margin-bottom:10px;border:1px solid #e2e8f0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                 <button type="button" onclick="handleTabAction('edu','refresh')" style="padding:7px 14px;background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="클라우드 → 로컬 Hard Sync">새로고침</button>
-                <button type="button" onclick="BM.forcePushToGitHub('edu')" style="padding:7px 14px;background:#7c3aed;color:#fff;border:1px solid #7c3aed;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="로컬 데이터를 GitHub records.json에 강제 업로드 (다른 origin/기기에서도 보이게 함)">GitHub 푸시</button>
+                <button type="button" onclick="BM.forcePushToGitHub('edu')" style="padding:7px 14px;background:#7c3aed;color:#fff;border:1px solid #7c3aed;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="이 PC 기록을 서버에 다시 저장 (다른 PC에서도 보이게)">서버에 다시 저장</button>
                 <button type="button" onclick="BM.forcePullFromGitHub('edu')" style="padding:7px 14px;background:#A3302A;color:#fff;border:1px solid #A3302A;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;margin-left:4px" title="로컬 캐시 완전 초기화 + GitHub에서 강제로 다시 받아오기 (Grace Period 무시)">강제 재동기화</button>
                 <button type="button" onclick="handleTabAction('edu','dedupe')"  style="padding:7px 14px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="recordId 기준 중복 자동 정리">중복정리</button>
                 <button type="button" onclick="handleTabAction('edu','delete')"  style="padding:7px 14px;background:#fee2e2;color:#A3302A;border:1px solid #ef4444;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="선택된 항목 영구 삭제">선택삭제</button>
@@ -2511,7 +2511,7 @@ input.apv-in[type=text]{width:110px}
               <!-- ★ 표준 버튼 행 (4개 탭 동일) ★ -->
               <div class="bm-std-action-row" data-tab="ppe" style="background:#fff;border-radius:10px;padding:10px 14px;margin-bottom:10px;border:1px solid #e2e8f0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                 <button type="button" onclick="handleTabAction('ppe','refresh')" style="padding:7px 14px;background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="클라우드 → 로컬 Hard Sync">새로고침</button>
-                <button type="button" onclick="BM.forcePushToGitHub('ppe')" style="padding:7px 14px;background:#7c3aed;color:#fff;border:1px solid #7c3aed;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="로컬 데이터를 GitHub records.json에 강제 업로드">GitHub 푸시</button>
+                <button type="button" onclick="BM.forcePushToGitHub('ppe')" style="padding:7px 14px;background:#7c3aed;color:#fff;border:1px solid #7c3aed;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="이 PC 기록을 서버에 다시 저장 (다른 PC에서도 보이게)">서버에 다시 저장</button>
                 <button type="button" onclick="BM.forcePullFromGitHub('edu')" style="padding:7px 14px;background:#A3302A;color:#fff;border:1px solid #A3302A;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;margin-left:4px" title="로컬 캐시 완전 초기화 + GitHub에서 강제로 다시 받아오기 (Grace Period 무시)">강제 재동기화</button>
                 <button type="button" onclick="handleTabAction('ppe','dedupe')"  style="padding:7px 14px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="recordId 기준 중복 자동 정리">중복정리</button>
                 <button type="button" onclick="handleTabAction('ppe','delete')"  style="padding:7px 14px;background:#fee2e2;color:#A3302A;border:1px solid #ef4444;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="선택된 항목 영구 삭제">선택삭제</button>
@@ -2619,7 +2619,7 @@ input.apv-in[type=text]{width:110px}
               <!-- ★ 표준 버튼 행 (4개 탭 동일) ★ -->
               <div class="bm-std-action-row" data-tab="chem" style="background:#fff;border-radius:10px;padding:10px 14px;margin-bottom:10px;border:1px solid #e2e8f0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                 <button type="button" onclick="handleTabAction('chem','refresh')" style="padding:7px 14px;background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="클라우드 → 로컬 Hard Sync">새로고침</button>
-                <button type="button" onclick="BM.forcePushToGitHub('chem')" style="padding:7px 14px;background:#7c3aed;color:#fff;border:1px solid #7c3aed;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="로컬 데이터를 GitHub records.json에 강제 업로드">GitHub 푸시</button>
+                <button type="button" onclick="BM.forcePushToGitHub('chem')" style="padding:7px 14px;background:#7c3aed;color:#fff;border:1px solid #7c3aed;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap" title="이 PC 기록을 서버에 다시 저장 (다른 PC에서도 보이게)">서버에 다시 저장</button>
                 <button type="button" onclick="BM.forcePullFromGitHub('edu')" style="padding:7px 14px;background:#A3302A;color:#fff;border:1px solid #A3302A;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;margin-left:4px" title="로컬 캐시 완전 초기화 + GitHub에서 강제로 다시 받아오기 (Grace Period 무시)">강제 재동기화</button>
                 <button type="button" onclick="handleTabAction('chem','dedupe')"  style="padding:7px 14px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="recordId 기준 중복 자동 정리">중복정리</button>
                 <button type="button" onclick="handleTabAction('chem','delete')"  style="padding:7px 14px;background:#fee2e2;color:#A3302A;border:1px solid #ef4444;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap"  title="선택된 항목 영구 삭제">선택삭제</button>
@@ -21551,6 +21551,47 @@ button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,inpu
 #admin-main .adm-pane>.adm-card>.adm-card-header{padding:0 0 14px !important;border:0 !important;background:transparent !important}
 #admin-main .adm-pane>.adm-card>.adm-card-body{padding:0 !important}
 @media (max-width:760px){#admin-main .adm-content{padding:14px 12px !important}#admin-main .adm-topbar{padding:8px 12px !important}}
+</style>
+<script>
+/* 시안 3 — 보호구 지급 현황 · 화학물질 보고서 검토 도구 줄을 결재 관리 · 교육 현황과 같은 방식으로:
+   자주 쓰는 [CSV 출력] [PDF 출력]만 밖에, 나머지는 [더보기] 안, [선택 삭제]는 빨강으로 맨 끝, '※ 비로그인 시…' 문구 삭제 */
+(function(){
+  function tidy(tab){
+    var ar = document.querySelector('.bm-std-action-row[data-tab="' + tab + '"]');
+    if(!ar || ar.getAttribute('data-tidy')) return;
+    ar.setAttribute('data-tidy', '1'); ar.classList.add('bm-tidy');
+    var keep = /^(CSV 출력|PDF 출력)$/;
+    var more = document.createElement('details'); more.className = 'eb-work eb-more bm-more';
+    more.innerHTML = '<summary class="eb-btn">더보기</summary><div class="eb-menu" role="menu"></div>';
+    var mm = more.querySelector('.eb-menu'), del = null;
+    Array.prototype.slice.call(ar.children).forEach(function(el){
+      if(el.tagName === 'SPAN'){ el.remove(); return; }
+      if(el.tagName !== 'BUTTON') return;
+      var tx = el.textContent.trim();
+      if(/선택\s*삭제/.test(tx)){ el.textContent = '선택 삭제'; del = el; return; }
+      if(keep.test(tx)) return;
+      el.removeAttribute('style'); el.setAttribute('role', 'menuitem');
+      if(/재동기화/.test(tx)) el.classList.add('bm-more-danger');
+      mm.appendChild(el);
+    });
+    ar.appendChild(more);
+    if(del) ar.appendChild(del);
+    more.addEventListener('click', function(ev){ if(ev.target.closest('.eb-menu button')) more.open = false; });
+    document.addEventListener('click', function(ev){ if(more.open && !more.contains(ev.target)) more.open = false; });
+  }
+  function run(){ tidy('ppe'); tidy('chem'); }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
+})();
+</script>
+<style id="bm-design-p3">
+.adm-pane .bm-std-action-row.bm-tidy{justify-content:flex-start}
+.adm-pane .bm-std-action-row.bm-tidy>.bm-more{order:7}
+.adm-pane .bm-std-action-row.bm-tidy>button[onclick*="delete"]{order:8;margin-left:auto !important}
+.adm-pane .bm-std-action-row .bm-more>summary{height:34px;font-size:13px;font-weight:700;color:#45423D;border-color:#DDDBD5;border-radius:6px}
+.adm-pane .bm-std-action-row .bm-more .eb-menu{top:40px;left:0;right:auto}
+.adm-pane .bm-std-action-row .bm-more .eb-menu button{all:unset !important;display:block !important;padding:9px 12px !important;border-radius:4px !important;font-size:14px !important;color:#1E1E1C !important;cursor:pointer !important;white-space:nowrap !important}
+.adm-pane .bm-std-action-row .bm-more .eb-menu button:hover,.adm-pane .bm-std-action-row .bm-more .eb-menu button:focus-visible{background:#F3F9ED !important}
+.adm-pane .bm-std-action-row .bm-more .eb-menu button.bm-more-danger{color:#A3302A !important}
 </style>
 </body>
 </html>
