@@ -3863,8 +3863,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
         td(o['부서']) + td(o['이름']) + td(o['입사일']) + td(o['교육기한']) + td((o['최초발송'] || '').slice(0, 10)) +
         td(o['재알림횟수'] && o['재알림횟수'] !== '0' ? o['재알림횟수'] + '회' : '') + td((o['회신일시'] || '').slice(0, 10)) +
         td(o['취급여부']) +
-        '<td style="' + cell + '">' + esc(o['교육일지제출일']) +   // v21.23 일지 종류가 모자라면 이유 · 자동 정리 메모
-          (/^(일지 종류 확인|회신 전 교육일지|교육 현황 이수|중복 알림)/.test(o['회신메모'] || '') ? '<div style="font-size:11px;color:' + (/^일지 종류/.test(o['회신메모']) ? '#A3302A' : '#5A5650') + ';margin-top:2px">' + esc(o['회신메모']) + '</div>' : '') + '</td>' +
+        td(o['교육일지제출일']) +
         (delView ? td((o['삭제일시'] || '').slice(0, 16)) :
         '<td style="' + cell + '">' + (can ? '<button data-nh="' + esc(o['알림ID']) + '" style="' + BTN + '">재발송</button>' : '') + '</td>') + '</tr>';
     }).join('') + '</table>';
@@ -4282,7 +4281,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
   }
   function eduName(){ return eduTab() === 'edu1' ? '특별안전보건교육일지' : 'MSDS 교육일지'; }
   function need(){ var s = sess(), n = window.BM_NEED; return (s && n && n.dept === s.dept) ? n : null; }
-  function mixed(){ var n = need(); return !!(n && n.sp && n.ms); }
+  function mixed(){ return false; }   // v21.24 섞인 부서도 특별안전보건교육 하나로 갈음 — 메뉴 두 개 쓰지 않음
   var needBusy = false;
   function loadNeed(){   // v21.23 우리 부서 교육 대상자의 교육 종류 (교육대상규칙 포함) — 부서 로그인 때 한 번
     var s = sess();
@@ -4299,7 +4298,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       var before = eduTab();
       window.BM_NEED = n;
       navEdu();
-      if(before !== eduTab() || mixed()){ try{ render(); }catch(_){} }
+      if(before !== eduTab()){ try{ render(); }catch(_){} }
       var cur = ['edu1', 'edu2'].filter(function(k){ var el = document.getElementById('pg-' + k); return el && el.style.display !== 'none' && el.offsetParent; })[0];
       if(cur) kindNote(cur);
     }).catch(function(){}).then(function(){ needBusy = false; });
@@ -4424,13 +4423,6 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       return;
     }
     if(!s || s.role !== 'dept') return;
-    if(mixed()){   // v21.23 한 부서에 특별 · MSDS 대상이 섞여 있으면(직종별 규칙) 두 가지 모두
-      [['edu1', '특별교육일지', '특별교육'], ['edu2', 'MSDS 교육일지', 'MSDS교육']].forEach(function(x){
-        var el = document.getElementById('tab-' + x[0]); if(!el) return;
-        el.style.display = ''; el.querySelector('.tbl').textContent = x[1]; el.querySelector('.tbs').textContent = x[2]; el.title = s.dept + ' · ' + x[1];
-      });
-      return;
-    }
     var keep = eduTab(), drop = keep === 'edu1' ? 'edu2' : 'edu1';
     var d = document.getElementById('tab-' + drop); if(d) d.style.display = 'none';
     var k = document.getElementById('tab-' + keep);
@@ -4442,11 +4434,9 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
     if(!el) return;
     if(!s || s.role !== 'dept'){ el.style.display = 'none'; return; }
     var sp = t === 'edu1', n = need();
-    var head = n ? ('<b>' + esc(s.dept) + ': ' + (mixed() ? '특별안전보건교육 대상 ' + n.sp + '명 · MSDS 교육 대상 ' + n.ms + '명 — 이 화면은 ' + (sp ? '특별안전보건교육일지' : 'MSDS 교육일지') + '입니다.'
-                                                  : (sp ? '특별안전보건교육 대상 부서 (교육 대상 규칙 · 관리대상 물질 기준) — 특별안전보건교육일지' : 'MSDS 교육 대상 부서 — MSDS 교육일지') + '로 작성합니다.') + '</b>')
+    var head = n ? ('<b>' + esc(s.dept) + ': ' + (sp ? '특별안전보건교육 대상 부서 (교육 대상 규칙 · 관리대상 물질 기준) — 특별안전보건교육일지' : 'MSDS 교육 대상 부서 — MSDS 교육일지') + '로 작성합니다.' +
+                    (sp && n.ms ? ' (MSDS 교육 대상 직원도 특별안전보건교육으로 갈음)' : '') + '</b>')
                  : '<b>' + esc(s.dept) + ': 관리대상 · 특별관리 물질이 ' + (sp ? '있어 특별안전보건교육일지' : '없어 MSDS 교육일지') + '로 작성합니다.</b>';
-    var other = n ? (sp ? n.msNames : n.spNames) : [];
-    if(n && mixed() && other.length) head += '<span style="color:#A3302A">아직 안 받은 ' + (sp ? 'MSDS 교육' : '특별안전보건교육') + ' 대상: ' + esc(other.slice(0, 6).join(', ')) + (other.length > 6 ? ' 외 ' + (other.length - 6) + '명' : '') + ' — [' + (sp ? 'MSDS 교육일지' : '특별교육일지') + '] 메뉴에서 작성하세요.</span>';
     el.innerHTML = head +
       '<span>교육 실시자: ' + esc(bmInstr(s.dept, '부서의 장')) + (s.head ? ' (부서인증 시트 부서장)' : ' · 부서장 이름은 부서인증 시트에 넣으면 자동 입력') + '</span>';
     el.style.display = 'block';
@@ -5380,7 +5370,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.23';
+  var SERVER_EXPECT = 'v21.24';
   // v21.10: 'v21.9' < 'v21.10'을 글자 순서가 아니라 숫자로 비교
   function bmVerLess(a, b){
     var p = function(v){ return (String(v).match(/v?(\d+(?:\.\d+)*)/) || [,'0'])[1].split('.').map(Number); };
@@ -6546,7 +6536,7 @@ function bmTruthy(v){
    · 받기 전(또는 실패)에는 예전처럼 물질 표시로 판단 */
 function bmDeptNeedsSpecial(dept){
   var n = window.BM_NEED;
-  if(n && n.dept === dept && (n.sp || n.ms)) return n.sp >= n.ms;
+  if(n && n.dept === dept && (n.sp || n.ms)) return n.sp > 0;   // 특별 대상이 한 명이라도 있으면 특별교육 하나로 (MSDS 교육 갈음)
   return CHEMS.some(c=>(c.departments||[]).includes(dept)&&(bmTruthy(c.targetManage)||bmTruthy(c.specialManage)));
 }
 function renderList(dept){

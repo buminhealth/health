@@ -197,12 +197,12 @@ function check(name, cond, extra) {
     goTab('edu2'); goTab('home');
     const mixedTabs = [vis('tab-edu1'), vis('tab-edu2')];
     goTab('edu2');
-    const mixedNote = document.getElementById('e2-kind').textContent, mixedPage = document.getElementById('pg-edu2').style.display;
+    const mixedNote = document.getElementById('e1-kind').textContent, mixedPage = document.getElementById('pg-edu2').style.display;
     window.BM_NEED = keep; goTab('home'); goTab('edu2');
     return { loaded, rule, mixedTabs, mixedNote, mixedPage };
   });
   check('교육일지 종류 v21.23: 로그인 때 교육 현황(규칙 포함) 기준을 받음 · 규칙상 특별이면 특별교육일지로', need.loaded && need.loaded.ms >= 1 && need.rule.tab === 'edu1' && need.rule.page === 'block' && /특별안전보건교육 대상 부서/.test(need.rule.note), need);
-  check('교육일지 종류 v21.23: 특별 · MSDS 대상이 섞인 부서는 메뉴 두 가지 · 안 받은 특별교육 대상 이름 안내', JSON.stringify(need.mixedTabs) === '[true,true]' && need.mixedPage === 'block' && /특별이/.test(need.mixedNote), need);
+  check('교육일지 종류 v21.24: 특별 · MSDS 대상이 섞인 부서도 특별교육일지 하나 (MSDS 교육 갈음 안내)', JSON.stringify(need.mixedTabs) === '[true,false]' && need.mixedPage === 'none' && /갈음/.test(need.mixedNote), need);
 
   // 4. 기록 저장 (자기 부서 + 다른 부서 섞어서 보냄)
   const w1 = await page.evaluate(async () => {
@@ -333,7 +333,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.23 \(2026-11-18\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.24 \(2026-11-18\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
   check('서버 버전 비교: v21.9 서버는 v21.10 앱에서 배포 필요로 (글자 순서 아님)', await page.evaluate(() => { try { return bmVerLess('v21.9 (2026-11-03)', 'v21.10') && !bmVerLess('v21.10 (2026-11-04)', 'v21.10') && !bmVerLess('v22.0', 'v21.10'); } catch (e) { return String(e); } }) === true);
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
@@ -523,7 +523,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.23'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.24'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
