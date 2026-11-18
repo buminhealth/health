@@ -5016,7 +5016,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
   /* v20.3 부서 명단: 상태 필터 · 전체 선택 · 선택한 직원 일괄 수기 이수 / 근무지 지정 */
   var eduFilter = 'todo';
   var EDU_SERVER_MIN = 'v20.4';
-  var OLD_MSG = '서버(Code.gs)가 이전 버전이라 이 기능을 쓸 수 없습니다. 최신 Code.gs를 Apps Script에 붙여넣고 [배포 → 배포 관리 → → 새 버전]으로 배포하세요.';
+  var OLD_MSG = '서버(Code.gs)가 이전 버전이라 이 기능을 쓸 수 없습니다. 최신 Code.gs를 Apps Script에 붙여넣고 [배포 → 배포 관리 → 연필(수정) → 새 버전]으로 배포하세요.';
   var BTNs = 'padding:6px 11px;border:1px solid #C6C3BB;border-radius:4px;background:#fff;font:inherit;font-size:13px;font-weight:700;cursor:pointer';
   var INs = 'height:32px;padding:0 6px;border:1px solid #C6C3BB;border-radius:4px;font:inherit;font-size:13px;box-sizing:border-box;background:#fff';
   function deptToolbar(all){
@@ -5595,7 +5595,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
         '<dt>서버 주소</dt><dd>' + esc(String(C.url || D.url || '').replace(/^https:\/\/script\.google\.com\/macros\/s\//, '…/').slice(0, 48)) + '</dd>' +
         '<dt>서버 버전</dt><dd id="cfg-ver">확인 중…</dd>' +
         '<dt>로그인</dt><dd>' + (ss ? (ss.role === 'admin' ? '보건관리자' : esc(ss.dept)) + ' · ' + new Date(ss.exp).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + '까지' : '<span class="cfg-bad">로그인 안 됨</span>') + '</dd></dl>' +
-        '<p>Code.gs를 고친 뒤에는 Apps Script에서 <b>배포 → 배포 관리 → → 새 버전</b>으로 다시 배포해야 반영됩니다. GitHub 자동 배포는 gas/배포안내.md 참고.</p></section>' +
+        '<p>Code.gs를 고친 뒤에는 Apps Script에서 <b>배포 → 배포 관리 → 연필(수정) → 새 버전</b>으로 다시 배포해야 반영됩니다. GitHub 자동 배포는 gas/배포안내.md 참고.</p></section>' +
       '<section class="cfg-c"><h4>AI (Gemini) 키</h4><dl><dt>상태</dt><dd id="cfg-ai">확인 중…</dd><dt>모델</dt><dd id="cfg-ai-m">-</dd></dl>' +
         '<p>키는 화면에 저장하지 않고 서버(스크립트 속성)에만 저장됩니다. [AI MSDS 검토] 화면 위쪽 칸이나 시트 메뉴 <b>[보건관리 시스템 → ⑥ Gemini AI 키 저장]</b>에서 넣으세요. 모델은 관리자설정 시트의 \'AI모델\'로 바꿀 수 있습니다.</p>' +
         '<button type="button" class="cfg-b" data-c="ai">AI MSDS 검토 열기</button></section>' +
@@ -21611,6 +21611,13 @@ button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,inpu
 /* 시안 8 — 보호구 작성 화면 단계 표시를 교육일지와 같은 초록 번호 동그라미로 */
 #pg-ppe .card-ttl{font-size:18px !important;font-weight:700 !important;color:#1E1E1C}
 #pg-ppe .card-ttl .stp{display:inline-flex;width:24px;height:24px;border-radius:50%;background:#67AF28;color:#fff;font-size:13px;font-weight:700;align-items:center;justify-content:center;margin-right:8px;flex:0 0 auto}
+</style>
+<style id="bm-design-p9">
+/* 시안 9 — 설정 · 대시보드 카드 제목을 16px 700으로 (내용과 구분) · 항목 이름 13px 회색 · 값 14px */
+#adm-pane-cfg .cfg-c h4,#adm-pane-cfg h4{font-size:16px !important;font-weight:700 !important;color:#1E1E1C !important}
+#adm-pane-dash .dash-card h3{font-weight:700 !important;color:#1E1E1C !important}
+#adm-pane-cfg .cfg-c dt{font-size:13px !important;color:#5A5650 !important;font-weight:400 !important}
+#adm-pane-cfg .cfg-c dd{font-size:14px !important;color:#1E1E1C !important}
 </style>
 </body>
 </html>
