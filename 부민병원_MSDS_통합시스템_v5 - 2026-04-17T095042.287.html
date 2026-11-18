@@ -1541,7 +1541,7 @@ input.apv-in[type=text]{width:110px}
 <!-- ══ 특별안전보건교육일지 ══ -->
 <div id="pg-edu1">
 <div class="ew">
-  <div class="ph"><div class="crumb">교육일지 › <b>특별안전보건교육일지</b></div><h1>특별안전보건교육일지 작성</h1><p>대상자 → 취급물질 · 일정 → 교육내용 → 일자별 서명 → 사진 → 확인 · 저장</p></div>
+  <div class="ph"><div class="crumb">교육일지 › <b>특별안전보건교육일지</b></div><h1>특별안전보건교육일지 작성</h1></div>
   <div class="ph-note" id="e1-kind" style="display:none"></div>
   <div class="stepbar">
     <div class="si"><div class="sn act" id="e1sn1">1</div><div class="st act" id="e1st1">대상자 검색</div></div>
@@ -1573,26 +1573,26 @@ input.apv-in[type=text]{width:110px}
     <!-- 자동입력 정보 (readonly) -->
     <div class="g3" style="margin-bottom:10px">
       <div class="fg">
-        <label class="fl">교육 부서 <span class="text-emerald-500 text-[10px]">(이름 선택 시 자동)</span></label>
+        <label class="fl">교육 부서 <span class="fl-auto">자동 입력</span></label>
         <select class="fc" id="e1-dept" onchange="e1DeptCh()"><option value="">선택…</option></select>
       </div>
       <div class="fg">
-        <label class="fl">입사일 <span class="text-emerald-500 text-[10px]">(자동)</span></label>
+        <label class="fl">입사일 <span class="fl-auto">자동 입력</span></label>
         <input class="fc" type="date" id="e1-join">
       </div>
-      <div class="fg bm-addp"><button class="btn btn-p" onclick="e1AddPart()">+ 대상자 추가</button></div>
+      <div class="fg bm-addp"><button class="btn btn-p" onclick="e1AddPart()">대상자 추가</button></div>
     </div>
     <div style="overflow-x:auto">
       <table class="ptbl">
         <thead><tr>
           <th style="width:28px">번호</th><th>성명</th>
-          <th style="width:94px">입사일</th><th style="width:26px">✕</th>
+          <th style="width:94px">입사일</th><th style="width:44px">삭제</th>
         </tr></thead>
         <tbody id="e1-ptbody"></tbody>
       </table>
     </div>
   </div>
-  <div class="brow"><button class="btn btn-p" onclick="e1Go(2)">다음 →</button></div>
+  <div class="brow"><button class="btn btn-p" onclick="e1Go(2)">다음 단계</button></div>
   </div>
 
   <!-- S2: 취급물질 · 일정 -->
@@ -1617,7 +1617,7 @@ input.apv-in[type=text]{width:110px}
     <div class="g4">
       <div class="fg"><label class="fl">시작일 *</label><input class="fc" type="date" id="e1-ds" onchange="e1DateCh()"></div>
       <div class="fg"><label class="fl">종료일 *</label><input class="fc" type="date" id="e1-de" onchange="e1DateCh()"></div>
-      <div class="fg"><label class="fl">교육 시간 <span class="text-emerald-500 text-[10px]">(시트 자동)</span></label><input class="fc" id="e1-time" placeholder="부서 선택 시 자동 입력"></div>
+      <div class="fg"><label class="fl">교육 시간 <span class="fl-auto">자동 입력</span></label><input class="fc" id="e1-time" placeholder="부서 선택 시 자동 입력"></div>
       <div class="fg"><label class="fl">교육 방법</label>
   <select class="fc" id="e1-mth">
     <option value="집체교육(강의식)">1. 집체교육(강의식)</option>
@@ -1637,7 +1637,7 @@ input.apv-in[type=text]{width:110px}
   </div>
   <div class="brow">
     <button class="btn btn-s" onclick="e1Go(1)">← 이전</button>
-    <button class="btn btn-p" onclick="e1Go(3)">다음 →</button>
+    <button class="btn btn-p" onclick="e1Go(3)">다음 단계</button>
   </div>
   </div>
 
@@ -1653,7 +1653,7 @@ input.apv-in[type=text]{width:110px}
   </div>
   <div class="brow">
     <button class="btn btn-s" onclick="e1Go(2)">← 이전</button>
-    <button class="btn btn-p" onclick="e1Go(4)">다음 →</button>
+    <button class="btn btn-p" onclick="e1Go(4)">다음 단계</button>
   </div>
   </div>
 
@@ -1665,7 +1665,7 @@ input.apv-in[type=text]{width:110px}
   </div>
   <div class="brow">
     <button class="btn btn-s" onclick="e1Go(3)">← 이전</button>
-    <button class="btn btn-p" onclick="e1Go(5)">다음 →</button>
+    <button class="btn btn-p" onclick="e1Go(5)">다음 단계</button>
   </div>
   </div>
 
@@ -1685,7 +1685,7 @@ input.apv-in[type=text]{width:110px}
   </div>
   <div class="brow">
     <button class="btn btn-s" onclick="e1Go(4)">← 이전</button>
-    <button class="btn btn-p" onclick="e1Go(6)">다음 →</button>
+    <button class="btn btn-p" onclick="e1Go(6)">다음 단계</button>
   </div>
   </div>
 
@@ -1721,7 +1721,7 @@ input.apv-in[type=text]{width:110px}
 <!-- ══ MSDS교육일지 ══ -->
 <div id="pg-edu2">
 <div class="ew">
-  <div class="ph"><div class="crumb">교육일지 › <b>MSDS 교육일지</b></div><h1>MSDS 교육일지 작성</h1><p>대상자 → 취급물질 · 일정 → 교육내용 → 근로자 서명 → 확인 · 저장</p></div>
+  <div class="ph"><div class="crumb">교육일지 › <b>MSDS 교육일지</b></div><h1>MSDS 교육일지 작성</h1></div>
   <div class="ph-note" id="e2-kind" style="display:none"></div>
   <div class="stepbar">
     <div class="si"><div class="sn act" id="e2sn1">1</div><div class="st act" id="e2st1">대상자 검색</div></div>
@@ -1744,13 +1744,13 @@ input.apv-in[type=text]{width:110px}
       <div class="fg"><label class="fl">교육 부서</label><select class="fc" id="e2-dept" onchange="e2DeptCh()"><option value="">선택…</option></select></div>
 
       <div class="fg"><label class="fl">입사일</label><input class="fc" type="date" id="e2-join"></div>
-      <div class="fg bm-addp"><button class="btn btn-p" onclick="e2AddPart()">+ 대상자 추가</button></div>
+      <div class="fg bm-addp"><button class="btn btn-p" onclick="e2AddPart()">대상자 추가</button></div>
     </div>
     <div style="overflow-x:auto">
-      <table class="ptbl"><thead><tr><th style="width:28px">번호</th><th>성명</th><th style="width:94px">입사일</th><th style="width:26px">✕</th></tr></thead><tbody id="e2-ptbody"></tbody></table>
+      <table class="ptbl"><thead><tr><th style="width:28px">번호</th><th>성명</th><th style="width:94px">입사일</th><th style="width:44px">삭제</th></tr></thead><tbody id="e2-ptbody"></tbody></table>
     </div>
   </div>
-  <div class="brow"><button class="btn btn-p" onclick="e2Go(2)">다음 →</button></div>
+  <div class="brow"><button class="btn btn-p" onclick="e2Go(2)">다음 단계</button></div>
   </div>
 
   <div id="e2s2" style="display:none">
@@ -1785,13 +1785,13 @@ input.apv-in[type=text]{width:110px}
       <div class="fg"><label class="fl">강사 소속 및 직위</label><input class="fc" id="e2-instr" placeholder="부서의 장" value="부서의 장"></div>
     </div>
   </div>
-  <div class="brow"><button class="btn btn-s" onclick="e2Go(1)">← 이전</button><button class="btn btn-p" onclick="e2Go(3)">다음 →</button></div>
+  <div class="brow"><button class="btn btn-s" onclick="e2Go(1)">← 이전</button><button class="btn btn-p" onclick="e2Go(3)">다음 단계</button></div>
   </div>
 
   <div id="e2s3" style="display:none">
   <div class="card"><div class="card-ttl">개별 교육내용</div><textarea class="fc" id="e2-indiv" rows="6"></textarea></div>
   <div class="card"><div class="card-ttl">공통 교육내용</div><textarea class="fc" id="e2-common" rows="6"></textarea></div>
-  <div class="brow"><button class="btn btn-s" onclick="e2Go(2)">← 이전</button><button class="btn btn-p" onclick="e2Go(4)">다음 →</button></div>
+  <div class="brow"><button class="btn btn-s" onclick="e2Go(2)">← 이전</button><button class="btn btn-p" onclick="e2Go(4)">다음 단계</button></div>
   </div>
 
   <!-- S4: 근로자 서명 -->
@@ -1802,7 +1802,7 @@ input.apv-in[type=text]{width:110px}
   </div>
   <div class="brow">
     <button class="btn btn-s" onclick="e2Go(3)">← 이전</button>
-    <button class="btn btn-p" onclick="e2Go(5)">다음 →</button>
+    <button class="btn btn-p" onclick="e2Go(5)">다음 단계</button>
   </div>
   </div>
 
@@ -8453,7 +8453,7 @@ function e1AddPart(){
   if(e1.parts.length===1&&e1.dept) applyDeptEdu('e1',e1.dept);
 }
 function e1RemPart(i){e1.parts.splice(i,1);renderE1Parts();}
-function renderE1Parts(){document.getElementById('e1-ptbody').innerHTML=e1.parts.map((p,i)=>`<tr><td class="text-center">${i+1}</td><td><input class="pi" value="${p.name}" oninput="e1.parts[${i}].name=this.value"></td><td><input class="pi" type="date" value="${p.join}" oninput="e1.parts[${i}].join=this.value"></td><td class="text-center"><button onclick="e1RemPart(${i})" style="background:none;border:none;color:#A3302A;cursor:pointer;font-size:13px;font-weight:700">✕</button></td></tr>`).join('');}
+function renderE1Parts(){document.getElementById('e1-ptbody').innerHTML=e1.parts.map((p,i)=>`<tr><td class="text-center">${i+1}</td><td><input class="pi" value="${p.name}" oninput="e1.parts[${i}].name=this.value"></td><td><input class="pi" type="date" value="${p.join}" oninput="e1.parts[${i}].join=this.value"></td><td class="text-center"><button onclick="e1RemPart(${i})" aria-label="${p.name||'대상자'} 삭제" style="background:none;border:none;color:#A3302A;cursor:pointer;font-size:13px;font-weight:700">✕</button></td></tr>`).join('');}
 function e2AddPart(){
   const name=document.getElementById('e2-nq').value.trim();
   if(!name){toast('이름을 입력하세요','err');return;}
@@ -8472,7 +8472,7 @@ function e2AddPart(){
   renderE2Parts();
 }
 function e2RemPart(i){e2.parts.splice(i,1);renderE2Parts();}
-function renderE2Parts(){document.getElementById('e2-ptbody').innerHTML=e2.parts.map((p,i)=>`<tr><td class="text-center">${i+1}</td><td><input class="pi" value="${p.name}" oninput="e2.parts[${i}].name=this.value"></td><td><input class="pi" type="date" value="${p.join}" oninput="e2.parts[${i}].join=this.value"></td><td class="text-center"><button onclick="e2RemPart(${i})" style="background:none;border:none;color:#A3302A;cursor:pointer;font-size:13px;font-weight:700">✕</button></td></tr>`).join('');}
+function renderE2Parts(){document.getElementById('e2-ptbody').innerHTML=e2.parts.map((p,i)=>`<tr><td class="text-center">${i+1}</td><td><input class="pi" value="${p.name}" oninput="e2.parts[${i}].name=this.value"></td><td><input class="pi" type="date" value="${p.join}" oninput="e2.parts[${i}].join=this.value"></td><td class="text-center"><button onclick="e2RemPart(${i})" aria-label="${p.name||'대상자'} 삭제" style="background:none;border:none;color:#A3302A;cursor:pointer;font-size:13px;font-weight:700">✕</button></td></tr>`).join('');}
 
 /* ══ 직원검색 (이름 먼저) ══ */
 function loadPpeItems(){
@@ -21592,6 +21592,9 @@ button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,inpu
 .adm-pane .bm-std-action-row .bm-more .eb-menu button{all:unset !important;display:block !important;padding:9px 12px !important;border-radius:4px !important;font-size:14px !important;color:#1E1E1C !important;cursor:pointer !important;white-space:nowrap !important}
 .adm-pane .bm-std-action-row .bm-more .eb-menu button:hover,.adm-pane .bm-std-action-row .bm-more .eb-menu button:focus-visible{background:#F3F9ED !important}
 .adm-pane .bm-std-action-row .bm-more .eb-menu button.bm-more-danger{color:#A3302A !important}
+</style>
+<style id="bm-design-p4">
+.fl-auto{font-size:12px;font-weight:500;color:#5A5650;margin-left:6px}
 </style>
 </body>
 </html>
