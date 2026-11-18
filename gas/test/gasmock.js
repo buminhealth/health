@@ -216,7 +216,7 @@ function makeEnv() {
 function load(codePath) {
   const m = makeEnv();
   const ctx = vm.createContext(m.env);
-  vm.runInContext(fs.readFileSync(codePath, 'utf8') + '\n;this.__api={doGet,doPost,sha256Hex_,sendReminders_,nhRows_,nhWrite_,dailyCheck,fbConfigFromInput_};', ctx);
+  vm.runInContext(fs.readFileSync(codePath, 'utf8') + '\n;this.__api={doGet,doPost,sha256Hex_,sendReminders_,nhRows_,nhWrite_,nhMarkEducated_,dailyCheck,fbConfigFromInput_};', ctx);
   return Object.assign(m, { ctx, api: ctx.__api });
 }
 module.exports = { load };

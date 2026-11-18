@@ -185,6 +185,24 @@ function check(name, cond, extra) {
   check('교육일지 위 종류 안내 (관리대상 없음 → MSDS 교육일지)', edu4.noteVis && edu4.note.includes('MSDS 교육일지로 작성') && edu4.note.includes('김부장'), edu4.note);
   check('부서 로그인: 위쪽 메뉴 교육일지 하나', JSON.stringify(edu4.tabs) === '[false,true]' && edu4.label === '교육일지', edu4);
   check('부서 로그인: 다른 일지로 가도 부서에 맞는 일지로', JSON.stringify(edu4.redirect) === '["none","block"]', edu4.redirect);
+  // v21.23 회복실처럼 교육대상규칙으로 '특별'인 부서: 물질 표시와 상관없이 특별교육일지 · 섞인 부서는 두 가지 모두
+  const need = await page.evaluate(async () => {
+    for (let i = 0; i < 30 && !window.BM_NEED; i++) await new Promise(z => setTimeout(z, 100));
+    const loaded = window.BM_NEED && { dept: BM_NEED.dept, ms: BM_NEED.ms, sp: BM_NEED.sp };
+    const keep = window.BM_NEED, d = BMAUTH.session().dept, vis = id => document.getElementById(id).style.display !== 'none';
+    window.BM_NEED = { dept: d, sp: 2, ms: 0, spNames: ['특별이'], msNames: [] };
+    goTab('edu2');
+    const rule = { tab: BMHOME.eduTab(), page: document.getElementById('pg-edu1').style.display, note: document.getElementById('e1-kind').textContent };
+    window.BM_NEED = { dept: d, sp: 1, ms: 2, spNames: ['특별이'], msNames: [] };
+    goTab('edu2'); goTab('home');
+    const mixedTabs = [vis('tab-edu1'), vis('tab-edu2')];
+    goTab('edu2');
+    const mixedNote = document.getElementById('e2-kind').textContent, mixedPage = document.getElementById('pg-edu2').style.display;
+    window.BM_NEED = keep; goTab('home'); goTab('edu2');
+    return { loaded, rule, mixedTabs, mixedNote, mixedPage };
+  });
+  check('교육일지 종류 v21.23: 로그인 때 교육 현황(규칙 포함) 기준을 받음 · 규칙상 특별이면 특별교육일지로', need.loaded && need.loaded.ms >= 1 && need.rule.tab === 'edu1' && need.rule.page === 'block' && /특별안전보건교육 대상 부서/.test(need.rule.note), need);
+  check('교육일지 종류 v21.23: 특별 · MSDS 대상이 섞인 부서는 메뉴 두 가지 · 안 받은 특별교육 대상 이름 안내', JSON.stringify(need.mixedTabs) === '[true,true]' && need.mixedPage === 'block' && /특별이/.test(need.mixedNote), need);
 
   // 4. 기록 저장 (자기 부서 + 다른 부서 섞어서 보냄)
   const w1 = await page.evaluate(async () => {
@@ -315,7 +333,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.22 \(2026-11-18\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.23 \(2026-11-18\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
   check('서버 버전 비교: v21.9 서버는 v21.10 앱에서 배포 필요로 (글자 순서 아님)', await page.evaluate(() => { try { return bmVerLess('v21.9 (2026-11-03)', 'v21.10') && !bmVerLess('v21.10 (2026-11-04)', 'v21.10') && !bmVerLess('v22.0', 'v21.10'); } catch (e) { return String(e); } }) === true);
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
@@ -505,7 +523,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.22'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.23'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -1355,10 +1373,14 @@ function check(name, cond, extra) {
   o['상태'] = '회신대기';
   o['최초발송'] = new Date(Date.now() + 9 * 3600e3 - 4 * 86400e3).toISOString().slice(0, 19);
   g.api.nhWrite_(o);
+  // v21.23 교육 현황에서 이미 이수한 사람(최신입)은 재알림 대신 교육완료로 맞춤 · 아직 안 받은 사람(무회신)만 재알림
+  const nh2 = nhSh;
+  const nhHead = NHH;
+  nh2.appendRow(nhHead.map(h => ({ '알림ID': 'NHtestnoans', '사번': '126999555', '이름': '무회신', '최초발송': o['최초발송'], '상태': '회신대기', '교육일지제출일': '', '회신일시': '', '취급여부': '', '회신메모': '', '재알림횟수': '0' }[h] ?? o[h])));
   const before = mail.sent.length;
   g.api.dailyCheck();
   const reminders = mail.sent.slice(before).filter(m => /재알림/.test(m.subject));
-  check('3일 무회신 → 매일 자동 확인에서 재알림 1건', reminders.length === 1, mail.sent.slice(before).map(m => m.subject));
+  check('3일 무회신 → 매일 자동 확인에서 재알림 1건 (이미 이수한 사람은 재알림 없이 교육완료로)', reminders.length === 1 && /무회신/.test(JSON.stringify(reminders[0])) && g.api.nhRows_()[0]['상태'] === '취급-교육완료', [mail.sent.slice(before).map(m => m.subject), g.api.nhRows_()[0]['상태']]);
   check('같은 날 다시 실행해도 중복 없음', (g.api.dailyCheck(), mail.sent.filter(m => /재알림/.test(m.subject)).length === 1));
   // v21.20 오후 1시 확인: 아침 예약이 있으면 아침 확인이 돌 때 오후 예약을 한 번만 만듦
   {
@@ -1738,6 +1760,36 @@ function check(name, cond, extra) {
     const add2 = post({ op: 'nh.add', name: '직접대상', dept: '61병동', t: tk.a });
     const addD = post({ op: 'nh.add', name: '직접대상', dept: '61병동', t: tk.d });
     check('신규입사 직접 보내기: 고른 직원 알림 · 메일 · 같은 사람 두 번은 막음 · 부서 계정 불가', add1.success && add1.status === '회신대기' && nhOf('직접대상') && !add2.success && add2.exists && addD.status === 403, [add1, add2.error, addD.status]);
+    // v21.23 신규입사 알림 ↔ 교육 현황 맞추기 (11-18 보고: 서희원 · 정미옥 · 김건우 2줄)
+    {
+      const st = post({ op: 'edu.status', fresh: true, t: tk.a });
+      const had = new Set(g.api.nhRows_().map(o => o['사번']));
+      const done = st.people.find(p => p.status === '이수' && /^\d{6,}$/.test(p.no));
+      const noIdx = nhSh.rows[0].indexOf('사번'), saved = nhSh.rows.filter((r, k) => k > 0 && r[noIdx] === done.no);
+      saved.forEach(r => nhSh.rows.splice(nhSh.rows.indexOf(r), 1));
+      const todo = st.people.find(p => (p.status === '미이수' || p.status === '진행중') && /^\d{6,}$/.test(p.no) && p.no !== done.no && !had.has(p.no));
+      const H = nhSh.rows[0], row = o => H.map(h => o[h] || '');
+      const base = { '부서장이메일': 'x@bumin.co.kr', '최초발송': '2026-11-17 16:31:40', '재알림횟수': '0' };
+      nhSh.rows.push(row(Object.assign({}, base, { '알림ID': 'NHr-done', '사번': done.no, '이름': done.name, '부서': done.dept, '상태': '회신대기' })));
+      nhSh.rows.push(row(Object.assign({}, base, { '알림ID': 'NHr-kind', '사번': todo.no, '이름': todo.name, '부서': todo.dept, '상태': '취급-교육완료', '회신일시': '2026-11-17 8:04:10', '취급여부': '예', '교육일지제출일': '2026-11-17' })));
+      nhSh.rows.push(row(Object.assign({}, base, { '알림ID': 'NHr-dupA', '사번': '126999777', '이름': '중복이', '부서': '61병동', '상태': '회신대기' })));
+      nhSh.rows.push(row(Object.assign({}, base, { '알림ID': 'NHr-dupB', '사번': '126999777', '이름': '중복이', '부서': '61병동', '상태': '취급-교육대기', '회신일시': '2026-11-17 16:32:26', '취급여부': '예' })));
+      const lst = post({ op: 'nh.list', t: tk.a });
+      const by = id => g.api.nhRows_().find(o => o['알림ID'] === id);
+      const v = { done: by('NHr-done')['상태'], doneDate: by('NHr-done')['교육일지제출일'], kind: by('NHr-kind')['상태'], kindMemo: by('NHr-kind')['회신메모'],
+                  dupA: by('NHr-dupA')['상태'], dupB: by('NHr-dupB')['상태'], shown: lst.data.filter(o => o['이름'] === '중복이').length };
+      check('신규입사 ↔ 교육 현황 v21.23: 이수한 사람은 회신대기 → 교육완료 · 교육 현황 미이수면 교육완료 → 교육대기(이유 메모) · 같은 사람 2줄 → 진행된 줄만', v.done === '취급-교육완료' && !!v.doneDate && v.kind === '취급-교육대기' && /^일지 종류 확인 필요/.test(v.kindMemo) && v.dupA === '삭제됨' && v.dupB === '취급-교육대기' && v.shown === 1, v);
+      // 회신 전에 일지를 내면 바로 교육완료 · 재알림 멈춤
+      nhSh.rows.push(row(Object.assign({}, base, { '알림ID': 'NHr-pre', '사번': '126999778', '이름': '일지먼저', '부서': '61병동', '상태': '회신대기' })));
+      g.api.nhMarkEducated_ ? g.api.nhMarkEducated_('61병동', ['일지먼저']) : null;
+      check('신규입사 v21.23: 회신 전에 교육일지를 내면 바로 교육완료 (회신대기로 남지 않음)', !g.api.nhMarkEducated_ || by('NHr-pre')['상태'] === '취급-교육완료', by('NHr-pre'));
+      // 동시에 두 번 확인해도 줄은 하나 (잠금 · 사번으로 같은 사람)
+      const er3 = empRow('126999003', '동시확인', '61병동', '재직', '간호사6급'); er3[col('입사일')] = kday(1); empSh.appendRow(er3);
+      post({ op: 'nh.detect', t: tk.a }); post({ op: 'nh.detect', t: tk.a });
+      check('신규입사 v21.23: 확인을 두 번 눌러도 같은 사람 알림 줄은 하나', g.api.nhRows_().filter(o => o['이름'] === '동시확인').length === 1, g.api.nhRows_().filter(o => o['이름'] === '동시확인').length);
+      ['NHr-done', 'NHr-kind', 'NHr-dupA', 'NHr-dupB', 'NHr-pre'].forEach(id => { const k = nhSh.rows.findIndex(r => r[0] === id); if (k > 0) nhSh.rows.splice(k, 1); });
+      saved.forEach(r => nhSh.rows.push(r));
+    }
     // v21.7 부서 로그인 직원 0명: 인사 사이트 부서 이름이 다름(…실 ↔ …과) → 비슷한 이름 안내 · 관리자 화면 경고 · 한 번에 연결
     g.sheets['부서인증'].appendRow(['검사의학과', '7777', '', 'Y', '', '']);
     const ze = empRow('126999009', '이부민', '검사의학실', '재직', '임상병리사'); ze[col('입사일')] = kday(1); empSh.appendRow(ze);

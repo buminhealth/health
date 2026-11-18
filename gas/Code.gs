@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.22 (2026-11-18)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.23 (2026-11-18)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -1922,10 +1922,19 @@ function deptEmail_(dept) {
 }
 
 const NH_LATE_DAYS = 30;   // 신규입사로 보는 최소 기간 (인사 사이트 등록이 늦어도 이 안이면 알림)
+/* v21.23 같은 사람 알림이 두 줄 생기던 문제 (11-17 16:31 정미옥 · 김건우 각 2줄 · 메일 2통)
+   · 확인이 동시에 두 번 돌면(버튼 두 번 · 두 화면 · 자동 확인과 겹침) 둘 다 '아직 없음'으로 보고 각자 줄을 만들었음
+   · 잠금으로 한 번에 하나만 · 사번이 있으면 사번으로 같은 사람 판단 · 이미 생긴 중복 줄은 nhDedupe_가 정리 */
+const nhKey_ = o => /^\d{6,}$/.test(String(o['사번'] || '').trim()) ? 'no:' + String(o['사번']).trim() : 'nm:' + o['이름'] + '|' + normDept_(deptAlias_(o['부서']));
 function detectNewHires_() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return [];
+  try { return detectNewHiresLocked_(); } finally { lock.releaseLock(); }
+}
+function detectNewHiresLocked_() {
   const cfg = sysCfg_();
   const map = handlingDepts_();
-  const existing = new Set(nhRows_().map(o => (o['사번'] || '') + '|' + o['이름'] + '|' + o['부서']));
+  const existing = new Set(nhRows_().map(nhKey_));   // 삭제한 알림도 포함 (삭제한 사람을 다시 만들지 않음)
   const today = new Date(todayKst_() + 'T00:00:00');
   // v21.6: 인사 사이트에 늦게 올라온 입사자(예: 10-19 입사 → 10-27 등록)도 잡도록 최소 NH_LATE_DAYS일 전까지 봄
   const from = new Date(today.getTime() - Math.max(cfg.newHireDays, NH_LATE_DAYS) * 86400000);
@@ -1944,7 +1953,7 @@ function detectNewHires_() {
     const chems = chemsForDept_(map, e.dept);
     if (!chems) return;
     if (todo && !todo[(e.empNo || '') + '|' + e.name] && !todo['|' + e.name + '|' + e.dept]) return;   // 대상 아님 · 이미 이수
-    const key = (e.empNo || '') + '|' + e.name + '|' + e.dept;
+    const key = nhKey_({ '사번': e.empNo, '이름': e.name, '부서': e.dept });
     if (existing.has(key)) return;
     existing.add(key);
     const o = { '알림ID': 'NH' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
@@ -2008,6 +2017,7 @@ function sendReminders_() {
 }
 
 function nhList_(s, req) {
+  if (s.role === 'admin') { try { nhReconcile_(); } catch (_) {} }   // v21.23 교육 현황과 맞춘 뒤 보여 줌
   const rows = nhRows_().map(o => { const c = Object.assign({}, o); delete c._row; return c; });
   if (s.role === 'admin') return { success: true, data: (req && req.deleted) ? rows : rows.filter(o => o['상태'] !== NH_DELETED) };
   return { success: true, data: rows.filter(o => sameDept_(o['부서'], s.dept) && (o['상태'] === '회신대기' || o['상태'] === '이메일없음' || o['상태'] === '취급-교육대기')) };
@@ -2049,15 +2059,74 @@ function nhAnswerLocked_(req, s) {
 }
 
 // 교육일지 저장 시: 같은 부서·이름의 '취급-교육대기' 알림을 교육완료로 표시
+//   v21.23 회신 전에 일지를 내도 교육완료 (일지를 냈다 = 취급함) · 재알림 멈춤 · 부서 확인 창에서도 빠짐
+//          일지 종류가 모자라면(특별교육 대상인데 MSDS 일지) 아래 nhReconcile_가 교육대기로 되돌리고 이유를 적음
 function nhMarkEducated_(dept, names) {
   if (!SS.getSheetByName(NH_SHEET)) return;
   const set = new Set(names.map(n => String(n).trim()));
   nhRows_().forEach(o => {
-    if (!sameDept_(o['부서'], dept) || !set.has(o['이름']) || o['교육일지제출일']) return;
+    if (!sameDept_(o['부서'], dept) || !set.has(o['이름'])) return;
+    if (o['상태'] === NH_DELETED || o['상태'] === '미취급' || o['상태'] === '취급-교육완료') return;
     o['교육일지제출일'] = todayKst_();
-    if (o['상태'] === '취급-교육대기') o['상태'] = '취급-교육완료';   // 회신 전 제출이면 회신 '예' 때 완료 처리
+    if (o['상태'] === '회신대기' || o['상태'] === '이메일없음') {
+      o['취급여부'] = o['취급여부'] || '예';
+      o['회신메모'] = '회신 전 교육일지 제출로 확인';
+    } else if (/^일지 종류 확인/.test(o['회신메모'] || '')) o['회신메모'] = '';
+    o['상태'] = '취급-교육완료';
     nhWrite_(o);
   });
+}
+
+/* v21.23 신규입사 알림 ↔ 교육 현황 맞추기 (두 화면이 다른 말을 하던 문제)
+   · 교육 현황 '이수'인데 알림이 회신대기 · 교육대기 → 교육완료 (일지 제출일도 채움)
+   · 알림은 교육완료인데 교육 현황은 미이수 · 진행중 (예: 특별교육 대상인데 MSDS 일지) → 교육대기로 되돌리고 이유를 메모
+   · 같은 사람 알림 여러 줄 → 진행이 가장 많이 된 줄만 두고 나머지는 '삭제됨'(되살리기 가능) */
+function nhDedupe_(rows) {
+  const best = {}, score = o => (o['회신일시'] ? 4 : 0) + (o['교육일지제출일'] ? 2 : 0) + (o['최초발송'] ? 1 : 0);
+  rows.forEach(o => {
+    if (o['상태'] === NH_DELETED) return;
+    const k = nhKey_(o), b = best[k];
+    if (!b) { best[k] = o; return; }
+    const keep = score(o) > score(b) ? o : b, drop = keep === o ? b : o;
+    best[k] = keep;
+    drop['삭제전상태'] = drop['상태'] || ''; drop['상태'] = NH_DELETED; drop['삭제일시'] = nowKst_();
+    drop['회신메모'] = '중복 알림 자동 정리 (남긴 줄: ' + keep['알림ID'] + ')';
+    drop._dirty = true;
+  });
+}
+function nhReconcile_(st) {
+  if (!SS.getSheetByName(NH_SHEET)) return 0;
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return 0;
+  try {
+    const rows = nhRows_();
+    nhDedupe_(rows);
+    st = st || eduStatus_({ role: 'admin' });
+    const byNo = {}, byNm = {};
+    (st.people || []).forEach(p => { if (/^\d{6,}$/.test(String(p.no || ''))) byNo[String(p.no)] = p; byNm[p.name + '|' + normDept_(p.dept)] = p; });
+    rows.forEach(o => {
+      if (o['상태'] === NH_DELETED || o['상태'] === '미취급') return;
+      const p = byNo[String(o['사번'] || '').trim()] || byNm[o['이름'] + '|' + normDept_(deptAlias_(o['부서']))];
+      if (!p || p.status === '제외') return;
+      const st0 = o['상태'], memo0 = o['회신메모'];
+      if (p.status === '이수') {
+        if (st0 === '회신대기' || st0 === '이메일없음' || st0 === '취급-교육대기') {
+          if (!o['교육일지제출일']) o['교육일지제출일'] = p.lastEdu || todayKst_();
+          if (st0 !== '취급-교육대기') { o['취급여부'] = o['취급여부'] || '예'; o['회신메모'] = '교육 현황 이수로 확인'; }
+          else if (/^일지 종류 확인/.test(memo0 || '')) o['회신메모'] = '';
+          o['상태'] = '취급-교육완료';
+        }
+      } else if (st0 === '취급-교육완료' && o['교육일지제출일']) {
+        o['상태'] = '취급-교육대기';
+        o['회신메모'] = '일지 종류 확인 필요: ' + (p.need === '특별' ? '특별안전보건교육 대상 — 낸 일지로는 ' : 'MSDS 교육 — ') + p.status +
+          (p.hours ? ' (' + p.hours + '/' + SPECIAL_HOURS + '시간)' : '');
+      }
+      if (o['상태'] !== st0 || o['회신메모'] !== memo0) o._dirty = true;
+    });
+    let n = 0;
+    rows.forEach(o => { if (o._dirty) { delete o._dirty; nhWrite_(o); n++; } });
+    return n;
+  } finally { lock.releaseLock(); }
 }
 
 function nhAdd_(req) {
@@ -2221,6 +2290,7 @@ function runAutoCheck_(forceFull) {
     setAdminCfg({ key: 'hr_last_check', value: today });
     out.created = detectNewHires_();
     setAdminCfg({ key: 'hr_last_error', value: '' });
+    try { out.reconciled = nhReconcile_(); } catch (_) {}   // v21.23 재알림 전에 교육 현황과 맞춤 (일지 낸 사람에게 재알림 안 감)
   } catch (e) {
     const msg = String(e.message || e);
     setAdminCfg({ key: 'hr_last_error', value: nowKst_() + ' ' + msg.slice(0, 300) });
