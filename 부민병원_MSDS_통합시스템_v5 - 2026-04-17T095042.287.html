@@ -3233,17 +3233,36 @@ input.apv-in[type=text]{width:110px}
       var unknown = list.filter(function(r){ return hasImg(r) && !confirmed[keyOf(r)] && !asked[keyOf(r)]; }).map(keyOf);
       if(unknown.length && s){
         unknown.forEach(function(x){ asked[x] = true; });
+        var okAll = true;
         try{
           for(var i = 0; i < unknown.length; i += 300){
             var r = await BMAUTH.post('rec.has', { path: PATHS[k], keys: unknown.slice(i, i + 300) });
-            if(r && r.success) r.keys.forEach(function(x){ confirmed[x] = true; });
+            if(r && r.success) r.keys.forEach(function(x){ confirmed[x] = true; }); else okAll = false;
           }
-        }catch(_){}
+        }catch(_){ okAll = false; }
+        // v21.31 서버 기록 파일에 없는 최근(30일) 기록 = 저장 중 실패한 것 → 다시 올림 (관리자가 지운 기록은 묘비로 걸러짐)
+        if(okAll) try{ await repush(k, list.filter(function(r){ return unknown.indexOf(keyOf(r)) >= 0 && !confirmed[keyOf(r)]; })); }catch(_){}
       }
       try{ localStorage.setItem(k, origGet.call(localStorage, k)); }catch(_){}   // setItem 후크가 확인된 서명만 비움
     }
   }
 
+  var repushed = {};
+  async function repush(k, recs){
+    var lim = new Date(Date.now() - 30 * 86400e3).toISOString().slice(0, 10);
+    recs = recs.filter(function(r){ var d = String(r.submitted || r.date || r.dateStart || '').slice(0, 10); return d >= lim && !repushed[keyOf(r)]; });
+    if(!recs.length || typeof BM === 'undefined') return;
+    var cat = k === 'bm_ppe_records' ? 'ppe' : (k === 'bm_edu_records' ? 'edu' : '');
+    if(!cat) return;
+    try{ if(BM.syncTombstonesFromGitHub) await BM.syncTombstonesFromGitHub(cat); }catch(_){}
+    if(BM.filterTombstoned) recs = BM.filterTombstoned(recs, cat);
+    if(!recs.length) return;
+    recs.forEach(function(r){ repushed[keyOf(r)] = 1; });
+    console.warn('[기록 다시 올림]', cat, recs.length + '건 — 서버 기록 파일에 없던 이 PC 기록');
+    if(cat === 'ppe' && typeof appendPpeRecordToGitHub === 'function') await appendPpeRecordToGitHub(recs);
+    if(cat === 'edu' && typeof appendEduRecordsToGitHub === 'function') await appendEduRecordsToGitHub(recs);
+  }
+  window.bmRepushForTest = repush;
   // 페이지를 새로 열면 메모리 캐시가 비어 있으므로, 서명이 비워진 기록이 있으면 서버에서 다시 받아 둠
   async function prefetch(){
     if(!(window.BMAUTH && BMAUTH.session()) || typeof readGitHubJSON !== 'function') return;
@@ -5435,7 +5454,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.30';
+  var SERVER_EXPECT = 'v21.31';
   // v21.10: 'v21.9' < 'v21.10'을 글자 순서가 아니라 숫자로 비교
   function bmVerLess(a, b){
     var p = function(v){ return (String(v).match(/v?(\d+(?:\.\d+)*)/) || [,'0'])[1].split('.').map(Number); };
@@ -17149,6 +17168,12 @@ function admSwitchPane(name){
   try{ if(window.BMDASH) BMDASH.primeNh(); }catch(_){}
   if(name === 'edu' && window.BMEDU) setTimeout(function(){ try{ BMEDU.board(); }catch(_){} }, 0);   // v20.0 교육 이수 현황판
   if(name === 'report' && window.BMREPORT) setTimeout(function(){ try{ BMREPORT.open(); }catch(_){} }, 0);   // v21.25 연간 보고서
+  if(name === 'ppe' && !window.__bmPpeRepaired && window.BMAUTH){   // v21.31 시트(보호구이력대장)에만 있는 지급 기록을 기록 파일로 복구
+    window.__bmPpeRepaired = true;
+    BMAUTH.post('ppe.repair', {}).then(function(x){
+      if(x && x.success && x.added){ try{ toast('보호구 기록 ' + x.added + '건을 시트에서 복구했습니다: ' + x.names.slice(0, 3).join(', ') + (x.added > 3 ? ' 외' : ''), 'ok'); handleTabAction('ppe', 'refresh'); }catch(_){} }
+    }).catch(function(){});
+  }
   if(name === 'find' && window.BMFIND) setTimeout(function(){ try{ BMFIND.focus(); }catch(_){} }, 0);
   // nav-item active 토글
   document.querySelectorAll('.adm-nav-item').forEach(el=>{
@@ -21719,6 +21744,8 @@ button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,inpu
       '<text x="' + (lw + w + 6) + '" y="' + (yy + 14) + '" font-size="11" fill="#1E1E1C">' + x.v + '</text>'; }).join('');
     return svgWrap(W, Hh, g);
   }
+  function nowMap(r){ var m = {}; (r.deptNow || []).forEach(function(d){ m[d.dept] = d; }); return m; }
+  function nowTxt(m, dept){ var d = m[dept]; return d && d.total ? pctTxt(d.rate) + ' <span style="color:#8A867E">(' + d.done + '/' + d.total + ')</span>' : '-'; }
   function heatInfo(r){
     var D = deptRows(r), mx = Math.max.apply(null, [1].concat(D.map(function(d){ return Math.max.apply(null, d.conducted); })));
     var qs = r.series.quarters.map(function(q){ return q; }), months = r.series.months;
@@ -21729,12 +21756,13 @@ button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,inpu
     var I = heatInfo(r), mc = r.series.months.map(function(m){ return m.label; });
     if(!I.D.length) return '<div class="rp-note">이 기간 부서별 기록이 없습니다.</div>';
     var cell = function(v){ var k = I.k(v); return k < 0 ? '<td class="z"></td>' : '<td style="background:' + HEAT[k] + ';color:' + (k >= 3 ? '#fff' : '#1E1E1C') + '" title="' + v + '명">' + v + '</td>'; };
-    return '<div class="rp-note">칸이 진할수록 교육 실시 인원이 많습니다. 오른쪽은 기간 안 교육 대상자(신규입사 · 부서이동) · 이수 · 이수율.</div><div class="fd-tw"><table class="rp-heat"><tr><th class="l">부서</th>' + mc.map(function(c){ return '<th>' + esc(c) + '</th>'; }).join('') +
-      (I.qs.length > 1 ? I.qs.map(function(q){ return '<th class="q">' + esc(q.label) + '</th>'; }).join('') : '') + '<th class="q">합계</th><th class="q">대상</th><th class="q">이수</th><th class="q">이수율</th></tr>' +
+    var now = nowMap(r);
+    return '<div class="rp-note">칸이 진할수록 교육 실시 인원이 많습니다. [대상 · 이수 · 이수율]은 이 기간 신규입사 · 부서이동자(없으면 -), [부서 이수율]은 지금 부서 직원 전체 기준입니다.</div><div class="fd-tw"><table class="rp-heat"><tr><th class="l">부서</th>' + mc.map(function(c){ return '<th>' + esc(c) + '</th>'; }).join('') +
+      (I.qs.length > 1 ? I.qs.map(function(q){ return '<th class="q">' + esc(q.label) + '</th>'; }).join('') : '') + '<th class="q">합계</th><th class="q">대상</th><th class="q">이수</th><th class="q">이수율</th><th class="q">부서 이수율</th></tr>' +
       I.D.map(function(d){
         var tot = d.conducted.reduce(function(a, b){ return a + b; }, 0), tt = d.target.reduce(function(a, b){ return a + b; }, 0), dn = d.done.reduce(function(a, b){ return a + b; }, 0);
         return '<tr><td class="l">' + esc(d.dept) + '</td>' + d.conducted.map(cell).join('') + (I.qs.length > 1 ? I.qs.map(function(q){ return '<td class="q">' + (I.qIdx(q).reduce(function(a, i){ return a + d.conducted[i]; }, 0) || '') + '</td>'; }).join('') : '') +
-          '<td class="q"><b>' + tot + '</b></td><td class="q">' + (tt || '') + '</td><td class="q">' + (tt ? dn : '') + '</td><td class="q">' + (tt ? pctTxt(dn / tt * 100) : '') + '</td></tr>';
+          '<td class="q"><b>' + tot + '</b></td><td class="q">' + tt + '</td><td class="q">' + dn + '</td><td class="q">' + (tt ? pctTxt(dn / tt * 100) : '<span title="이 기간 신규입사 · 부서이동 대상자 없음">-</span>') + '</td><td class="q">' + nowTxt(now, d.dept) + '</td></tr>';
       }).join('') + '</table></div>';
   }
   function chartList(r, W){   // 다운로드 문서의 [참고] 그래프 (제목 · SVG · 높이)
@@ -21842,9 +21870,9 @@ button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,inpu
     var I = heatInfo(r);
     if(I.D.length){
       var mc = S.months.map(function(m){ return m.label; }), qh = I.qs.length > 1 ? I.qs.map(function(q){ return q.label; }) : [];
-      var head = ['부서'].concat(mc, qh, ['합계', '대상', '이수', '이수율']);
+      var head = ['부서'].concat(mc, qh, ['합계', '대상', '이수', '이수율', '부서 이수율']), nm = nowMap(r);
       var rows = I.D.map(function(d){ var tot = d.conducted.reduce(function(a, b){ return a + b; }, 0), tt = d.target.reduce(function(a, b){ return a + b; }, 0), dn = d.done.reduce(function(a, b){ return a + b; }, 0);
-        return [d.dept].concat(d.conducted.map(function(v){ return v ? String(v) : ''; }), I.qs.length > 1 ? I.qs.map(function(q){ return String(I.qIdx(q).reduce(function(a, k){ return a + d.conducted[k]; }, 0) || ''); }) : [], [String(tot), tt ? String(tt) : '', tt ? String(dn) : '', tt ? pctTxt(dn / tt * 100) : '']); });
+        return [d.dept].concat(d.conducted.map(function(v){ return v ? String(v) : ''; }), I.qs.length > 1 ? I.qs.map(function(q){ return String(I.qIdx(q).reduce(function(a, k){ return a + d.conducted[k]; }, 0) || ''); }) : [], [String(tot), String(tt), String(dn), tt ? pctTxt(dn / tt * 100) : '-', nm[d.dept] && nm[d.dept].total ? pctTxt(nm[d.dept].rate) + ' (' + nm[d.dept].done + '/' + nm[d.dept].total + ')' : '-']); });
       var wd = 16, rest = (100 - wd) / (head.length - 1);
       body += wP(wRun('부서별 · 월별 · 분기별 교육 실시 인원 (칸이 진할수록 많음)', { b: true }), { before: 160, after: 60, keep: true });
       body += wTable(head, rows, [wd].concat(head.slice(1).map(function(){ return rest; })), { sz: head.length > 14 ? 14 : 16, left: 0, headFill: 'EEF6E6',

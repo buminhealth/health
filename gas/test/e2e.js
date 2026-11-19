@@ -333,7 +333,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.30 \(2026-11-19\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.31 \(2026-11-19\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
   check('서버 버전 비교: v21.9 서버는 v21.10 앱에서 배포 필요로 (글자 순서 아님)', await page.evaluate(() => { try { return bmVerLess('v21.9 (2026-11-03)', 'v21.10') && !bmVerLess('v21.10 (2026-11-04)', 'v21.10') && !bmVerLess('v22.0', 'v21.10'); } catch (e) { return String(e); } }) === true);
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
@@ -523,7 +523,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.30'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.31'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -2337,6 +2337,29 @@ function check(name, cond, extra) {
     const pdf0 = (g.ctx.UrlFetchApp.pdfExports || []).length;
     const rpt = post({ op: 'report.annual', year: '2026', t: tk.a }), rptD = post({ op: 'report.annual', year: '2026', t: tk.d }), rptBad = post({ op: 'report.annual', year: '19', t: tk.a });
     check('연간 보고서 v21.25: 엑셀 + PDF 저장 · 요약 숫자 · 관리자만 · 연도 확인', rpt.success && /drive/.test(rpt.pdfUrl) && /drive/.test(rpt.xlsxUrl) && (g.ctx.UrlFetchApp.pdfExports || []).length === pdf0 + 1 && rpt.summary.edu >= 3 && typeof rpt.summary.rate === 'string' && !rptD.success && !rptBad.success, [rpt.summary, rpt.error, rptD.success, rptBad.error]);
+    // v21.31 보호구: 시트(보호구이력대장)에만 있고 기록 파일에 빠진 지급(서희원 고글) → 복구 · 관리자가 지운 기록은 안 되살림 · PDF 연결
+    {
+      const PS = g.sheets['보호구이력대장'] || SA.insertSheet('보호구이력대장');
+      if (!PS.rows.length) PS.rows.push(['순번', '제출일시', '부서', '이름', '지급물품', '지급일', '지급자', '서명여부', '제출계정']);
+      const PH = PS.rows[0], prow = o => PH.map(h => o[h] ?? '');
+      const sub = new Date(Date.now() + 9 * 3600e3 - 2 * 86400e3).toISOString().slice(0, 19).replace('T', ' '), pd = sub.slice(0, 10);
+      PS.rows.push(prow({ '순번': 90, '제출일시': sub, '부서': '61병동', '이름': '복구가', '지급물품': '고글', '지급일': pd, '지급자': '안전관리자', '서명여부': '✓ 서명완료', '제출계정': '61병동' }));
+      PS.rows.push(prow({ '순번': 91, '제출일시': sub, '부서': '61병동', '이름': '묘비가', '지급물품': '고글', '지급일': pd, '지급자': '안전관리자', '서명여부': '✓ 서명완료', '제출계정': '61병동' }));
+      PS.rows.push(prow({ '순번': 92, '제출일시': '2020-01-01 09:00:00', '부서': '61병동', '이름': '옛수동', '지급물품': '고글', '지급일': '2020-01-01', '지급자': '안전관리자', '서명여부': '✓ 서명완료', '제출계정': '' }));
+      g.sheets['관리자설정'].appendRow(['ppe_deleted_ids', JSON.stringify(['x_1|dev_a|묘비가|61병동|' + pd]), '']);
+      post({ op: 'fs.put', path: '보호구/' + pd.slice(0, 7) + '/보호구지급수령증-61병동-복구가-' + pd + '.pdf', content: Buffer.from('%PDF-ppe').toString('base64'), t: tk.a });
+      const rp1 = post({ op: 'ppe.repair', t: tk.a }), rp2 = post({ op: 'ppe.repair', t: tk.a }), rpD = post({ op: 'ppe.repair', t: tk.d });
+      const pj = JSON.parse(Buffer.from(post({ op: 'fs.get', path: 'records/ppe_records.json', t: tk.a }).content, 'base64').toString('utf8'));
+      const pl = Array.isArray(pj) ? pj : pj.records, got = pl.filter(r => r.name === '복구가');
+      check('보호구 복구 v21.31: 시트에만 있는 최근 지급 → 기록 파일 (물품 · 서명 · PDF 연결) · 한 번만 · 관리자가 지운 기록 · 예전 수동 줄은 안 건드림 · 관리자만',
+        rp1.success && rp1.added === 1 && got.length === 1 && got[0].itemsStr === '고글' && /서명완료/.test(got[0].signed) && /복구가/.test(got[0].pdfFileName) && got[0].dept === '61병동' &&
+        rp2.added === 0 && !pl.some(r => r.name === '묘비가' || r.name === '옛수동') && !rpD.success, [rp1, got, rp2.added]);
+      // 이 PC에만 있고 서버에 없는 최근 기록 → 다시 올림
+      const rr = await p3.evaluate(async () => { const rec = { recordId: 'rp-test-1', submitted: new Date().toISOString().slice(0, 10) + '_1', type: '보호구지급', name: '재전송가', dept: '61병동', date: new Date().toISOString().slice(0, 10), items: [{ name: '고글', qty: 1 }], itemsStr: '고글×1', signed: '✓ 서명완료' };
+        await window.bmRepushForTest('bm_ppe_records', [rec]); return true; });
+      const pj2 = JSON.parse(Buffer.from(post({ op: 'fs.get', path: 'records/ppe_records.json', t: tk.a }).content, 'base64').toString('utf8'));
+      check('보호구 v21.31: 저장 중 서버에 못 올라간 이 PC 기록은 다음에 열 때 다시 올림', rr && (Array.isArray(pj2) ? pj2 : pj2.records).some(r => r.recordId === 'rp-test-1'), (Array.isArray(pj2) ? pj2 : pj2.records).length);
+    }
     // v21.27 월 보고서 (결재 양식) — 서버
     const mm = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7), yy = +mm.slice(0, 4), mo = +mm.slice(5, 7);
     const mr = post({ op: 'report.monthly', year: yy, month: mo, t: tk.a }), mrD = post({ op: 'report.monthly', year: yy, month: mo, t: tk.d }), mrBad = post({ op: 'report.monthly', year: yy, month: 13, t: tk.a });
@@ -2366,6 +2389,8 @@ function check(name, cond, extra) {
       tabs: [...document.querySelectorAll('#rp-out [data-rt]')].map(b => b.textContent.replace(/\s*\d+$/, '').trim()), tabBody: document.getElementById('rp-tabbody').textContent.slice(0, 40),
       preview: document.getElementById('rp-preview').hidden, docInPreview: !!document.querySelector('#rp-preview #rp-doc'),
       btns: [...document.querySelectorAll('#rp-tools button')].map(b => b.textContent) }));
+    const hx = await p3.evaluate(() => ({ th: [...document.querySelectorAll('#rp-out .rp-heat th')].map(x => x.textContent), dash: [...document.querySelectorAll('#rp-out .rp-heat tr')].slice(1).map(tr => [...tr.children].slice(-2).map(td => td.textContent)) }));
+    check('교육 보고서 v21.31: 부서별 표에 부서 이수율(지금 직원 전체) · 기간 대상자가 없으면 이수율 칸 -', hx.th.slice(-1)[0] === '부서 이수율' && hx.dash.every(x => x[0] !== '' && x[1] !== ''), hx);
     check('교육 보고서 화면 v21.28: 기간(지난달 바로 조회 · 바로가기) · 통계 8칸 · 그래프 · 부서별 표 · 명단/미이수/보호구/화학물질/월별 탭 · 결재 양식은 미리보기로만',
       scr.nav === '교육 보고서' && first.on === '지난달' && /-01$/.test(first.from) && scr.kpis.length === 8 && scr.charts >= 4 && scr.heat && scr.tabs.join() === '교육자 명단,미이수자,보호구 지급,화학물질 보고서,월별 · 분기별 표' && scr.preview && scr.docInPreview &&
       scr.btns.join() === '한글 파일 (.docx),PDF,인쇄,본문 복사,엑셀,보고서 미리보기', [first, scr]);

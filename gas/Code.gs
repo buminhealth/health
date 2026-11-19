@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.30 (2026-11-19)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.31 (2026-11-19)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -177,6 +177,7 @@ function doPost(e) {
       case 'dash.today':    result = requireAdmin_(s) || dashToday_(); break;          // v21.25 대시보드 '오늘 할 일'
       case 'search.person': result = requireAdmin_(s) || searchPerson_(req); break;    // v21.25 직원 · 일지 통합 검색 (퇴사자 포함)
       case 'report.annual': result = requireAdmin_(s) || annualReport_(req); break;    // v21.25 연간 보건관리 보고서 (엑셀 + PDF)
+      case 'ppe.repair': result = requireAdmin_(s) || ppeRepair_(); break;   // v21.31 시트에만 있는 보호구 기록 → 기록 파일로 복구
       case 'report.monthly': case 'report.period': result = requireAdmin_(s) || monthlyReport_(req); break;  // v21.27 월 보고서 · v21.28 기간(from ~ to)
       case 'rec.has':   result = requireLogin_(s) || recHas_(req, s); break;
       case 'backup.status': case 'backup.run': case 'backup.schedule':
@@ -2338,7 +2339,8 @@ function runAutoCheck_(forceFull) {
     setAdminCfg({ key: 'hr_last_check', value: today });
     out.created = detectNewHires_();
     setAdminCfg({ key: 'hr_last_error', value: '' });
-    try { eduCacheClear_(); out.reconciled = nhReconcile_(null, true); } catch (_) {}   // v21.23 재알림 전에 교육 현황과 맞춤 (일지 낸 사람에게 재알림 안 감) · 직원 동기화 뒤라 새로 계산
+    try { eduCacheClear_(); out.reconciled = nhReconcile_(null, true); } catch (_) {}
+    try { out.ppeRepaired = ppeRepair_().added; } catch (_) {}   // v21.31 시트에만 있는 보호구 기록 복구   // v21.23 재알림 전에 교육 현황과 맞춤 (일지 낸 사람에게 재알림 안 감) · 직원 동기화 뒤라 새로 계산
   } catch (e) {
     const msg = String(e.message || e);
     setAdminCfg({ key: 'hr_last_error', value: nowKst_() + ' ' + msg.slice(0, 300) });
@@ -3478,6 +3480,60 @@ function ruleMatch_(r, e) {
    ③ 사번 주인이 같은 이름 → 그 사람 (부서를 옮긴 경우 — 부서 이동 판정은 covers가 함)
    그 외(다른 부서 동명이인 · 퇴사자 사번)는 아무에게도 붙이지 않음 */
 const baseDept_ = d => normDept_(deptAlias_(d)).replace(/\(.*\)$/, '');
+/* v21.31 보호구 기록 복구: 지급수령증은 ①기록 파일(ppe_records.json · 화면들이 읽음)과 ②보호구이력대장 시트에 따로 저장됨.
+   ①이 실패하면(서희원 11-17 고글) 시트에만 남아 부서현황 · 관리자 화면에 안 보였음 → 최근 180일 · 시스템 제출 줄 중 기록 파일에 없는 사람을 채움
+   · 관리자가 지운 기록(묘비 ppe_deleted_ids)은 되살리지 않음 · 일지 PDF는 드라이브 보호구/연-월 폴더에서 이름으로 찾아 연결 */
+function ppeRepair_() {
+  const sh = SS.getSheetByName('보호구이력대장');
+  if (!sh || sh.getLastRow() < 2) return { success: true, added: 0, names: [] };
+  const v = sh.getDataRange().getDisplayValues(), h = v[0].map(x => String(x).trim()), c = k => h.indexOf(k);
+  if (c('이름') < 0 || c('지급일') < 0) return { success: true, added: 0, names: [] };
+  const cutoff = addDays_(todayKst_(), -180);
+  const path = 'records/ppe_records.json', file = getFile_(path);
+  let cur = { records: [] };
+  try { if (file) cur = JSON.parse(file.getBlob().getDataAsString('UTF-8')) || cur; } catch (_) { return { success: false, error: '보호구 기록 파일을 읽지 못했습니다' }; }
+  const list = recordList_(cur, 'records') || [];
+  const day = d => String(d || '').slice(0, 10);
+  const have = new Set(list.map(r => String(r.name || '').trim() + '|' + day(r.date || r.dateStart)));
+  // 묘비: 관리자가 지운 기록 (날짜가 하루 어긋나 저장된 예전 묘비도 같이)
+  const tomb = new Set();
+  try {
+    const cfg = getAdminCfg().data || {};
+    JSON.parse(cfg['ppe_deleted_ids'] || '[]').forEach(id => { const a = String(id).split('|'); if (a.length >= 5) { tomb.add(a[2] + '|' + a[4]); tomb.add(a[2] + '|' + addDays_(a[4], 1)); } });
+  } catch (_) {}
+  const add = [];
+  v.slice(1).forEach(r => {
+    const date = day(r[c('지급일')]), sub = String(r[c('제출일시')] || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || day(sub) < cutoff) return;
+    if (c('제출계정') < 0 || !String(r[c('제출계정')] || '').trim()) return;   // 시스템으로 제출한 줄만 (예전 수동 줄 제외)
+    const names = String(r[c('이름')] || '').split('|').map(x => x.trim()), depts = String(r[c('부서')] || '').split(/\s*,\s*/);
+    const items = String(r[c('지급물품')] || '');
+    names.forEach((nm, i) => {
+      if (!nm) return;
+      const k = nm + '|' + date;
+      if (have.has(k) || tomb.has(k)) return;
+      have.add(k);
+      const dept = (depts[i] || depts[0] || '').trim();
+      const pdf = ppeFindPdf_(nm, date, sub);
+      add.push({ recordId: 'sheet|' + sub + '|' + nm + '|' + dept + '|' + date, submitted: sub, type: '보호구지급', name: nm, dept: dept, date: date, dateStart: date,
+                 items: [], itemsStr: /object Object/.test(items) ? '' : items, giver: c('지급자') >= 0 ? (r[c('지급자')] || '안전관리자') : '안전관리자',
+                 signed: c('서명여부') >= 0 ? r[c('서명여부')] : '', pdfFileName: pdf ? pdf.name : '', pdfYm: pdf ? pdf.ym : '', restored: '시트에서 복구 ' + todayKst_() });
+    });
+  });
+  if (!add.length) return { success: true, added: 0, names: [] };
+  const body = recordShape_(cur, list.concat(add), 'records');
+  writeFile_(path, Utilities.newBlob(JSON.stringify(body)).getBytes(), 'application/json', '');
+  return { success: true, added: add.length, names: add.map(x => x.dept + ' ' + x.name + ' ' + x.date) };
+}
+function ppeFindPdf_(name, date, submitted) {
+  const yms = [String(submitted || '').slice(0, 7), date.slice(0, 7)].filter((x, i, a) => /^\d{4}-\d{2}$/.test(x) && a.indexOf(x) === i);
+  for (const ym of yms) {
+    let hit = null;
+    getFolders_(['보호구', ym]).forEach(f => { const it = f.getFiles(); while (it.hasNext() && !hit) { const x = it.next(), n = x.getName(); if (/^보호구지급수령증-/.test(n) && n.indexOf(name) >= 0 && /\.pdf$/i.test(n)) hit = n; } });
+    if (hit) return { name: hit, ym: ym };
+  }
+  return null;
+}
 function viaKind_(r) { return r.bulk ? '수기 일괄' : (r.manual ? '수기(종이)' : '교육일지'); }
 function ledgerOwners_(recs, emps) {
   const valid = no => /^\d{6,}$/.test(String(no || ''));
@@ -4054,6 +4110,7 @@ function monthlyReport_(req) {
     byType: { '특별': typeStat('특별'), 'MSDS': typeStat('MSDS') },
     targets: targets.map(x => ({ name: x.name, dept: x.dept, need: x.need, kind: x.kind, date: x.date, done: x.done })),
     roster: roster, missing: missing, ppe: ppe, chem: chem,
+    deptNow: (st.depts || []).map(d => ({ dept: d.dept, total: d.total || 0, done: d.done || 0, rate: pct(d.done || 0, d.total || 0) })),   // v21.31 부서 전체 이수율 (지금 직원 기준)
     series: { months: months, quarters: quarters.map(q => { const c = Object.assign({}, q); delete c.idx; return c; }), year: total, total: total, depts: depts }
   };
   // 한 달 보고서는 결재 문서의 [참고] 그래프를 그 해 1월 ~ 그 달 추이로 (화면은 고른 기간 그대로)
