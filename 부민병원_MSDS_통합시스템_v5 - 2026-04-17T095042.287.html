@@ -13852,7 +13852,9 @@ function buildEduPreviewHTML(group, currentRecordId, opts){
   const time = m0.time || m0.totalHours || '-';
   const place = m0.place || '-';
   const method = m0.method || '-';
-  const instructor = m0.instructor || '-';
+  const instrRaw = String(m0.instructor || '').trim();
+  const instrNm = instrRaw.includes('/') ? instrRaw.split('/')[0].trim() : (/부서의\s*장|부서장/.test(instrRaw) ? '' : instrRaw);
+  const instructor = (instrNm ? instrNm + ' · ' : '') + '부서의 장';   // v21.35 소속·직위는 항상 '부서의 장'
   const indiv = m0.indiv || '';
   const common = m0.common || '';
   const fmt = t => (t||'').replace(/\n/g,'<br>');
@@ -13931,6 +13933,33 @@ function buildEduPreviewHTML(group, currentRecordId, opts){
 
   const partRows = partRowsSingle;  // 기존 변수 호환
 
+  const contentTbl = (indiv || common || instructor !== '-') ? `
+  <table style="width:100%;border-collapse:collapse;margin-bottom:1px">
+    <colgroup><col style="width:60px"><col></colgroup>
+    <tr>
+      <td colspan="2" style="background:${P.navy};color:#fff;padding:7px 12px;font-weight:700;font-size:12px;text-align:center;letter-spacing:1.5px;border:1.2px solid ${P.navy};font-family:${FF}">교 육 내 용</td>
+    </tr>
+    ${indiv ? `<tr>
+      <td style="border:1.2px solid ${P.borderHd};border-bottom:none;padding:9px 6px;vertical-align:middle;font-weight:700;background:${P.bgHead};font-size:12px;text-align:center;color:${P.navy};width:60px;font-family:${FF}">개별<br>내용</td>
+      <td style="border:1.2px solid ${P.border};border-left:none;border-bottom:none;padding:10px 12px;vertical-align:middle;font-size:12px;font-weight:400;line-height:1.75;color:${P.txt};font-family:${FF}">${fmt(indiv)}</td>
+    </tr>` : ''}
+    ${common ? `<tr>
+      <td style="border:1.2px solid ${P.borderHd};border-bottom:none;padding:9px 6px;vertical-align:middle;font-weight:700;background:${P.bgHead};font-size:12px;text-align:center;color:${P.navy};font-family:${FF}">공통<br>내용</td>
+      <td style="border:1.2px solid ${P.border};border-left:none;border-bottom:none;padding:10px 12px;vertical-align:middle;font-size:12px;font-weight:400;line-height:1.75;color:${P.txt};font-family:${FF}">${fmt(common)}</td>
+    </tr>` : ''}
+    ${instructor && instructor !== '-' ? `<tr>
+      <td style="border:1.2px solid ${P.borderHd};padding:9px 6px;vertical-align:middle;font-weight:700;background:${P.bgHead};font-size:12px;text-align:center;color:${P.navy};font-family:${FF}">강사<br>소속·직위</td>
+      <td style="border:1.2px solid ${P.border};border-left:none;padding:10px 12px;font-size:12px;font-weight:400;color:${P.txt};line-height:1.75;font-family:${FF};vertical-align:middle">${instructor}</td>
+    </tr>` : ''}
+  </table>` : '';
+  // v21.35 특별교육일지: 교육 내용 옆 교육 사진 칸(4등분) — 새로 쓰는 일지와 같은 배치 (예전 일지 미리보기 · 다시 만들기 · 결재본에도)
+  const sidePhotos = !isE2 ? (m0.photos || []).filter(Boolean) : [];
+  const contentHtml = sidePhotos.length
+    ? `<div style="display:grid;grid-template-columns:58% 42%;margin-bottom:1px;border:1.2px solid ${P.border}">
+        <div style="border-right:1.2px solid ${P.border}">${contentTbl || '<div style="padding:12px;color:' + P.txtGray + '">교육 내용 없음</div>'}</div>
+        <div style="display:flex;flex-direction:column"><div style="background:${P.navy};color:#fff;padding:7px 12px;font-weight:700;font-size:12px;text-align:center;letter-spacing:1.5px;font-family:${FF}">교 육 사 진</div>
+          <div style="padding:6px;flex:1;display:flex;flex-direction:column">${bmPhotoGrid(sidePhotos, 260, P)}</div></div></div>`
+    : contentTbl;
   return `
 <div style="padding:20px 26px 22px;width:100%;max-width:780px;font-family:${FF};color:${P.txt};background:#fff;box-sizing:border-box;margin:0 auto">
 
@@ -13976,25 +14005,7 @@ function buildEduPreviewHTML(group, currentRecordId, opts){
   </table>
 
   <!-- 교육내용 (개별/공통/강사) -->
-  ${(indiv || common || instructor !== '-') ? `
-  <table style="width:100%;border-collapse:collapse;margin-bottom:1px">
-    <colgroup><col style="width:60px"><col></colgroup>
-    <tr>
-      <td colspan="2" style="background:${P.navy};color:#fff;padding:7px 12px;font-weight:700;font-size:12px;text-align:center;letter-spacing:1.5px;border:1.2px solid ${P.navy};font-family:${FF}">교 육 내 용</td>
-    </tr>
-    ${indiv ? `<tr>
-      <td style="border:1.2px solid ${P.borderHd};border-bottom:none;padding:9px 6px;vertical-align:middle;font-weight:700;background:${P.bgHead};font-size:12px;text-align:center;color:${P.navy};width:60px;font-family:${FF}">개별<br>내용</td>
-      <td style="border:1.2px solid ${P.border};border-left:none;border-bottom:none;padding:10px 12px;vertical-align:middle;font-size:12px;font-weight:400;line-height:1.75;color:${P.txt};font-family:${FF}">${fmt(indiv)}</td>
-    </tr>` : ''}
-    ${common ? `<tr>
-      <td style="border:1.2px solid ${P.borderHd};border-bottom:none;padding:9px 6px;vertical-align:middle;font-weight:700;background:${P.bgHead};font-size:12px;text-align:center;color:${P.navy};font-family:${FF}">공통<br>내용</td>
-      <td style="border:1.2px solid ${P.border};border-left:none;border-bottom:none;padding:10px 12px;vertical-align:middle;font-size:12px;font-weight:400;line-height:1.75;color:${P.txt};font-family:${FF}">${fmt(common)}</td>
-    </tr>` : ''}
-    ${instructor && instructor !== '-' ? `<tr>
-      <td style="border:1.2px solid ${P.borderHd};padding:9px 6px;vertical-align:middle;font-weight:700;background:${P.bgHead};font-size:12px;text-align:center;color:${P.navy};font-family:${FF}">강사<br>소속·직위</td>
-      <td style="border:1.2px solid ${P.border};border-left:none;padding:10px 12px;font-size:12px;font-weight:400;color:${P.txt};line-height:1.75;font-family:${FF};vertical-align:middle">${instructor}</td>
-    </tr>` : ''}
-  </table>` : ''}
+  ${contentHtml}
 
   <!-- 안전보건교육 대상자 서명 -->
   <div style="background:${P.navy};color:#fff;font-weight:700;font-size:12px;padding:9px 0;text-align:center;letter-spacing:3px;border-radius:3px;margin-top:14px;margin-bottom:0;font-family:${FF}">
@@ -14016,7 +14027,7 @@ function buildEduPreviewHTML(group, currentRecordId, opts){
   ${(() => {
     // ★ 사진 섹션 (e1만, members[0].photos에 저장됨)
     const photos = (m0.photos || []).filter(Boolean);
-    if(!isE2 && photos.length > 0){
+    if(!isE2 && photos.length > 0 && !sidePhotos.length){
       return `
       <div style="background:${P.navy};color:#fff;font-weight:700;font-size:12px;padding:9px 0;text-align:center;letter-spacing:3px;border-radius:3px;margin-top:14px;margin-bottom:0;font-family:${FF}">
         교육 현장 사진 (${photos.length}장)

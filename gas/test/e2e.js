@@ -2391,6 +2391,14 @@ function check(name, cond, extra) {
     });
     check('교육일지 양식 v21.33: 사진 1장은 칸 전체 · 2장 위 두 칸 · 3장 세 칸 · 4장 네 칸 · 강사 소속·직위 부서의 장 · 일지 높이 A4 이상',
       JSON.stringify(jf.one.cells) === '["1/1/3/3"]' && JSON.stringify(jf.two.cells) === '["1/1/2/2","1/2/2/3"]' && jf.three.cells.length === 3 && jf.four.cells.length === 4 && jf.four.cells[3] === '2/2/3/3' && jf.one.pos === '부서의 장' && jf.one.h >= 1123, jf);
+    // v21.35 예전 특별교육일지(기록에서 다시 그림 · 미리보기 · 결재본): 사진은 교육 내용 옆 4등분 칸 · 강사 소속·직위 부서의 장
+    const oldj = await p3.evaluate(() => {
+      const px = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
+      const g = { type: '특별안전보건교육', dept: '회복실', dateStart: '2026-11-16', members: [{ name: '시험', photos: [px, px], instructor: '이현진', indiv: '○ 내용', common: '○ 공통' }] };
+      const d = document.createElement('div'); d.innerHTML = buildEduPreviewHTML(g, null); document.body.appendChild(d);
+      const v = { side: /교 육 사 진/.test(d.textContent), cells: [...d.querySelectorAll('[style*="grid-area"]')].map(x => x.style.gridArea.replace(/\s/g, '')), bottom: /교육 현장 사진/.test(d.textContent), instr: (d.innerText.match(/소속·직위\s*([^\n]+)/) || [])[1] };
+      d.remove(); return v; });
+    check('예전 특별교육일지 v21.35: 다시 만들기 · 미리보기도 사진은 교육 내용 옆 4등분(2장 = 위 두 칸) · 강사 소속·직위 부서의 장', oldj.side && JSON.stringify(oldj.cells) === '["1/1/2/2","1/2/2/3"]' && !oldj.bottom && /부서의 장/.test(oldj.instr || ''), oldj);
     // v21.27 월 보고서 (결재 양식) — 서버
     const mm = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7), yy = +mm.slice(0, 4), mo = +mm.slice(5, 7);
     const mr = post({ op: 'report.monthly', year: yy, month: mo, t: tk.a }), mrD = post({ op: 'report.monthly', year: yy, month: mo, t: tk.d }), mrBad = post({ op: 'report.monthly', year: yy, month: 13, t: tk.a });
