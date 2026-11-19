@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.29 (2026-11-19)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.30 (2026-11-19)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -1826,7 +1826,7 @@ function clearHrCredentials() {
 // ════════════════════════════════════════════════════════════════
 const NH_SHEET = '신규입사알림';
 const NH_HEADER = ['알림ID','생성일시','사번','이름','부서','입사일','취급물질','부서장이메일','최초발송','최근재알림',
-                   '재알림횟수','회신일시','취급여부','회신메모','교육일지제출일','상태','교육기한','삭제전상태','삭제일시'];
+                   '재알림횟수','회신일시','취급여부','회신메모','교육일지제출일','상태','교육기한','삭제전상태','삭제일시','구분','이전부서'];   // v21.30 구분: 비우면 신규입사 · '부서이동' (입사일 칸 = 이동일)
 // v21.8 관리자 삭제: 시트에서 지우지 않고 상태 '삭제됨' (재알림 · 부서 화면 · 대시보드에서 빠짐, 다시 감지돼도 새로 만들지 않음, 되살리기 가능)
 const NH_DELETED = '삭제됨';
 const EDU_PERIOD_DAYS = 3;   // 입사일로부터 3일 안에 교육
@@ -1929,7 +1929,9 @@ const NH_LATE_DAYS = 30;   // 신규입사로 보는 최소 기간 (인사 사�
 /* v21.23 같은 사람 알림이 두 줄 생기던 문제 (11-17 16:31 정미옥 · 김건우 각 2줄 · 메일 2통)
    · 확인이 동시에 두 번 돌면(버튼 두 번 · 두 화면 · 자동 확인과 겹침) 둘 다 '아직 없음'으로 보고 각자 줄을 만들었음
    · 잠금으로 한 번에 하나만 · 사번이 있으면 사번으로 같은 사람 판단 · 이미 생긴 중복 줄은 nhDedupe_가 정리 */
-const nhKey_ = o => /^\d{6,}$/.test(String(o['사번'] || '').trim()) ? 'no:' + String(o['사번']).trim() : 'nm:' + o['이름'] + '|' + normDept_(deptAlias_(o['부서']));
+const nhKey_ = o => (o['구분'] === '부서이동' ? 'mv:' + String(o['입사일'] || '') + ':' : '') +   // v21.30 부서이동 알림은 이동마다 따로 (신규입사 알림과 겹치지 않음)
+  (/^\d{6,}$/.test(String(o['사번'] || '').trim()) ? 'no:' + String(o['사번']).trim() : 'nm:' + o['이름'] + '|' + normDept_(deptAlias_(o['부서'])));
+const nhKind_ = o => o['구분'] === '부서이동' ? '부서이동' : '신규입사';
 function detectNewHires_() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return [];
@@ -1943,9 +1945,9 @@ function detectNewHiresLocked_() {
   // v21.6: 인사 사이트에 늦게 올라온 입사자(예: 10-19 입사 → 10-27 등록)도 잡도록 최소 NH_LATE_DAYS일 전까지 봄
   const from = new Date(today.getTime() - Math.max(cfg.newHireDays, NH_LATE_DAYS) * 86400000);
   // 교육 현황과 같은 기준(교육대상규칙 · 근무지 · 개별 제외 · 이수 기록)으로 '교육 대상이면서 아직 안 받은 사람'만 알림
-  let todo = null;
+  let todo = null, st = null;
   try {
-    const st = eduStatus_({ role: 'admin' });
+    st = eduStatus_({ role: 'admin' });
     todo = {};
     (st.people || []).forEach(p => { if (p.status === '미이수' || p.status === '진행중') { todo[(p.no || '') + '|' + p.name] = p; todo['|' + p.name + '|' + p.dept] = p; } });
   } catch (_) { todo = null; }
@@ -1971,6 +1973,32 @@ function detectNewHiresLocked_() {
     nhWrite_(o);
     created.push({ name: o['이름'], dept: o['부서'], status: o['상태'] });
   });
+  /* v21.30 부서이동자도 같은 확인 요청 (예전엔 신규입사자만 → 부서이동으로 새 교육이 필요한 사람에게 알림이 없었음)
+     · 교육 현황 '이동 확인 필요'인 사람 = 화학물질 부서로 옮겼는데 기존 기록이 새 부서 물질을 포함하지 않고 확인도 안 된 사람
+     · 이동일이 최근 NH_LATE_DAYS일 안 · 새 부서 부서장에게 메일 + 부서 화면 확인 요청 · 교육 기한 = 이동일 + EDU_PERIOD_DAYS */
+  try {
+    const fromYmd = Utilities.formatDate(from, TZ, 'yyyy-MM-dd');
+    const need = {};
+    ((st && st.people) || []).forEach(p => { if (p.moveCheck) need[pkey_(p.no, p.name)] = p; });
+    deptMoves_().forEach(m => {
+      if (m.date < fromYmd) return;
+      const p = need[pkey_(m.no, m.name)];
+      if (!p || p.moveCheck.date !== m.date || !sameDept_(p.dept, deptAlias_(m.to))) return;
+      const o = { '알림ID': 'NH' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+                  '생성일시': nowKst_(), '사번': p.no, '이름': p.name, '부서': p.dept, '입사일': m.date, '구분': '부서이동', '이전부서': m.from,
+                  '취급물질': (chemsForDept_(map, p.dept) || []).slice(0, 30).join(', '), '부서장이메일': deptEmail_(p.dept), '재알림횟수': '0',
+                  '교육기한': addDays_(m.date, EDU_PERIOD_DAYS) };
+      const key = nhKey_(o);
+      if (existing.has(key)) return;
+      existing.add(key);
+      nhSheet_().appendRow(NH_HEADER.map(h => safeCell_(o[h] || '')));
+      o._row = nhSheet_().getLastRow();
+      o['상태'] = nhSend_(o, false) ? '회신대기' : '이메일없음';
+      if (o['상태'] === '회신대기') o['최초발송'] = nowKst_();
+      nhWrite_(o);
+      created.push({ name: o['이름'], dept: o['부서'], status: o['상태'], kind: '부서이동', from: m.from });
+    });
+  } catch (_) {}
   return created;
 }
 
@@ -1985,20 +2013,23 @@ function nhSend_(o, isReminder) {
   const cfg = sysCfg_();
   const link = cfg.appUrl ? cfg.appUrl + (cfg.appUrl.indexOf('?') >= 0 ? '&' : '?') + 'nh=' + encodeURIComponent(o['알림ID']) : '';
   const esc = v => String(v || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const mv = o['구분'] === '부서이동';
   const html =
     '<div style="font-family:sans-serif;font-size:14px;line-height:1.6">' +
     (isReminder ? '<p style="color:#b91c1c"><b>[재알림] 아직 회신이 없어 다시 보내드립니다.</b></p>' : '') +
-    '<p>' + esc(o['부서']) + ' 부서장님, 유해화학물질 사용 부서에 신규 입사자가 있습니다.</p>' +
+    (mv ? '<p>' + esc(o['부서']) + ' 부서장님, 유해화학물질 사용 부서로 <b>부서이동</b>한 직원이 있습니다. 이전 부서 교육에 이 부서 물질이 없어 <b>작업내용 변경 시 교육</b>이 필요합니다.</p>'
+        : '<p>' + esc(o['부서']) + ' 부서장님, 유해화학물질 사용 부서에 신규 입사자가 있습니다.</p>') +
     '<table style="border-collapse:collapse" cellpadding="6" border="1">' +
     '<tr><th align="left">이름</th><td>' + esc(o['이름']) + '</td></tr>' +
-    '<tr><th align="left">입사일</th><td>' + esc(o['입사일']) + '</td></tr>' +
-    '<tr><th align="left">교육 기한</th><td><b>' + esc(o['교육기한'] || addDays_(o['입사일'], EDU_PERIOD_DAYS)) + '</b> (입사일로부터 ' + EDU_PERIOD_DAYS + '일)</td></tr>' +
+    (mv ? '<tr><th align="left">이전 부서</th><td>' + esc(o['이전부서']) + '</td></tr>' : '') +
+    '<tr><th align="left">' + (mv ? '이동일' : '입사일') + '</th><td>' + esc(o['입사일']) + '</td></tr>' +
+    '<tr><th align="left">교육 기한</th><td><b>' + esc(o['교육기한'] || addDays_(o['입사일'], EDU_PERIOD_DAYS)) + '</b> (' + (mv ? '이동일' : '입사일') + '로부터 ' + EDU_PERIOD_DAYS + '일)</td></tr>' +
     '<tr><th align="left">부서 사용 물질</th><td>' + esc(o['취급물질']) + '</td></tr></table>' +
     '<p>이 직원이 위 물질을 <b>취급하는지</b> 확인해 주세요. 취급하면 기한 안에 MSDS 교육을 하고 교육일지를 작성해 주세요.</p>' +
     (link ? '<p><a href="' + esc(link) + '" style="display:inline-block;background:#1c3557;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">확인하기</a></p>'
           : '<p>앱에 부서 PIN으로 로그인하면 확인 요청이 표시됩니다.</p>') +
     '<p style="color:#64748b;font-size:12px">부민병원 보건관리실 · 이 메일에 답장하지 말고 위 버튼으로 회신해 주세요.</p></div>';
-  const opts = { to: o['부서장이메일'], subject: (isReminder ? '[재알림] ' : '') + '[보건관리] 신규 입사자 유해화학물질 취급 확인 요청 - ' + o['이름'],
+  const opts = { to: o['부서장이메일'], subject: (isReminder ? '[재알림] ' : '') + '[보건관리] ' + (mv ? '부서이동자' : '신규 입사자') + ' 유해화학물질 취급 확인 요청 - ' + o['이름'],
                  htmlBody: html, name: '부민병원 보건관리' };
   if (cfg.adminEmail) opts.replyTo = cfg.adminEmail;
   MailApp.sendEmail(opts);
@@ -2054,8 +2085,8 @@ function nhAnswerLocked_(req, s) {
   if (cfg.adminEmail) {
     try {
       MailApp.sendEmail({ to: cfg.adminEmail, name: '부민병원 보건관리',
-        subject: '[보건관리] 신규입사 ' + (changed ? '회신 변경' : '회신') + ' - ' + o['부서'] + ' ' + o['이름'] + ' (취급: ' + o['취급여부'] + ')',
-        htmlBody: '<p>' + o['부서'] + ' ' + o['이름'] + ' (입사 ' + o['입사일'] + ')</p><p>유해화학물질 취급: <b>' + o['취급여부'] + '</b>' +
+        subject: '[보건관리] ' + nhKind_(o) + ' ' + (changed ? '회신 변경' : '회신') + ' - ' + o['부서'] + ' ' + o['이름'] + ' (취급: ' + o['취급여부'] + ')',
+        htmlBody: '<p>' + o['부서'] + ' ' + o['이름'] + (nhKind_(o) === '부서이동' ? ' (부서이동 ' + o['입사일'] + ' · ' + o['이전부서'] + '에서)' : ' (입사 ' + o['입사일'] + ')') + '</p><p>유해화학물질 취급: <b>' + o['취급여부'] + '</b>' +
                   (o['회신메모'] ? '<br>메모: ' + o['회신메모'].replace(/[<>&]/g, '') : '') + '</p><p>관리자 모드 → 직원정보관리에서 확인하세요.</p>' });
     } catch (e) { /* 메일 실패는 회신 기록에 영향 없음 */ }
   }
@@ -2122,6 +2153,7 @@ function nhReconcile_(st, force) {
       if (o['상태'] === NH_DELETED || o['상태'] === '미취급') return;
       const p = byNo[String(o['사번'] || '').trim()] || byNm[o['이름'] + '|' + normDept_(deptAlias_(o['부서']))];
       if (!p || p.status === '제외') return;
+      if (!sameDept_(deptAlias_(o['부서']), p.dept) && !(p.unit && sameDept_(deptAlias_(o['부서']), p.unit))) return;   // v21.30 이동 전 부서 알림은 그대로 둠
       const st0 = o['상태'], memo0 = o['회신메모'];
       if (p.status === '이수') {
         if (st0 === '회신대기' || st0 === '이메일없음' || st0 === '취급-교육대기') {
@@ -3268,7 +3300,7 @@ function exclMap_() {
   try {   // 신규입사 알림에서 '취급 안 함'으로 회신한 직원
     nhRows_().forEach(o => {
       if (o['상태'] !== '미취급') return;
-      const x = { reason: '신규입사 회신: 취급 안 함', by: o['부서'] + ' 부서장', date: String(o['회신일시'] || '').slice(0, 10), route: '신규입사 회신' };
+      const x = { reason: nhKind_(o) + ' 회신: 취급 안 함', by: o['부서'] + ' 부서장', date: String(o['회신일시'] || '').slice(0, 10), route: '신규입사 회신' };
       const k1 = eduKey_(o['사번'], o['이름'], o['부서']), k2 = 'nm:' + o['이름'] + '|' + normDept_(o['부서']);
       if (!out[k1]) out[k1] = x;
       if (!out[k2]) out[k2] = x;
@@ -3712,7 +3744,7 @@ function dashToday_() {
     const all = nhRows_().filter(o => o['상태'] !== NH_DELETED);
     out.nhTotal = all.length;
     out.nhWait = all.filter(o => ['회신대기', '이메일없음', '취급-교육대기'].indexOf(o['상태']) >= 0)
-      .map(o => ({ '상태': o['상태'], '부서': o['부서'], '이름': o['이름'], '입사일': o['입사일'], '교육기한': o['교육기한'] }));
+      .map(o => ({ '상태': o['상태'], '부서': o['부서'], '이름': o['이름'], '입사일': o['입사일'], '교육기한': o['교육기한'], '구분': o['구분'] || '', '이전부서': o['이전부서'] || '' }));
   } catch (_) {}
   return out;
 }

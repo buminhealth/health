@@ -333,7 +333,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.29 \(2026-11-19\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.30 \(2026-11-19\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
   check('서버 버전 비교: v21.9 서버는 v21.10 앱에서 배포 필요로 (글자 순서 아님)', await page.evaluate(() => { try { return bmVerLess('v21.9 (2026-11-03)', 'v21.10') && !bmVerLess('v21.10 (2026-11-04)', 'v21.10') && !bmVerLess('v22.0', 'v21.10'); } catch (e) { return String(e); } }) === true);
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
@@ -523,7 +523,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.29'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.30'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -1392,7 +1392,7 @@ function check(name, cond, extra) {
     check('신규입사 확인: 아침 7시 확인이 오후 1시 확인 예약을 한 번만 만듦 (늦게 등록된 입사자를 그날 안에)', pm.length === 1 && pm[0].hour === 13, T.map(t => t.fn + '@' + t.hour));
     T.splice(0, T.length);
   }
-  check('자동 확인을 반복해도 신규입사 메일 중복 없음', mail.sent.filter(m => m.to === 'head61@bumin.co.kr' && !/재알림/.test(m.subject)).length === 1);
+  check('자동 확인을 반복해도 신규입사 메일 중복 없음 · v21.30 부서이동(엔에이 71→61, 교육 기록 없음) 메일도 한 번만', mail.sent.filter(m => m.to === 'head61@bumin.co.kr' && !/재알림|부서이동자/.test(m.subject)).length === 1 && mail.sent.filter(m => /부서이동자 유해화학물질 취급 확인 요청 - 엔에이/.test(m.subject)).length === 1, mail.sent.filter(m => m.to === 'head61@bumin.co.kr').map(m => m.subject));
   // v21.21 회신이 두 번 와도 보건관리자 메일은 한 번 · 답을 바꾸면 '회신 변경' 메일 한 번 (끝나면 알림 줄 되돌림)
   {
     const dupA = vm.runInContext(`(function(){
@@ -2276,6 +2276,18 @@ function check(name, cond, extra) {
     const P = nm => st.people.find(p => p.name === nm) || {};
     check('부서이동 v21.25: 이동 뒤 새 부서 교육 · 확인이 없으면 이동 확인 필요 · 새 부서 교육이 있으면 확인 끝 · 부서 집계', !!P('이동직원').moveCheck && P('이동직원').moveCheck.from === '9병동' && !P('이동새교육').moveCheck && P('이동새교육').moveOk && /새 부서/.test(P('이동새교육').moveOk.how) && st.depts.find(d => d.dept === '61병동').moveCheck >= 1, [P('이동직원'), P('이동새교육').moveOk]);
     check('부서이동 v21.29: 이전 기록이 지금 부서 물질을 이미 포함해 이수면 자동 확인 끝 (확인 필요 · 미이수로 안 보임)', P('왕복이동').status === '이수' && !P('왕복이동').moveCheck && P('왕복이동').moveOk && P('왕복이동').moveOk.auto && /수기 일괄|교육일지/.test((P('왕복이동').via || {}).kind || ''), P('왕복이동'));
+    // v21.30 부서이동으로 새 교육이 필요한 사람에게도 확인 요청 (새 부서 부서장 메일 · 부서 화면) — 예전엔 신규입사자만
+    { const DM = g.sheets['부서이동기록']; DM.rows[1][0] = new Date(Date.now() + 9 * 3600e3 - 5 * 86400e3).toISOString().slice(0, 10); g.api.eduCacheClear_(); }
+    const mv0 = mail.sent.length;
+    const dt1 = post({ op: 'nh.detect', t: tk.a }), dt2 = post({ op: 'nh.detect', t: tk.a });
+    const mvRowNh = g.api.nhRows_().filter(o => o['이름'] === '이동직원');
+    const mvMail = mail.sent.slice(mv0).filter(m => /부서이동자 유해화학물질 취급 확인 요청 - 이동직원/.test(m.subject));
+    const dlist = post({ op: 'nh.list', t: tk.d });
+    check('부서이동 알림 v21.30: 이동 확인 필요인 사람 → 새 부서 부서장 메일(이전 부서 · 이동일 · 기한) · 부서 화면 확인 요청 · 한 번만 · 같은 물질로 자동 확인된 사람은 없음',
+      (dt1.created || []).some(c => c.name === '이동직원' && c.kind === '부서이동' && c.from === '9병동') && !(dt2.created || []).some(c => c.name === '이동직원') && mvRowNh.length === 1 && mvRowNh[0]['구분'] === '부서이동' && mvRowNh[0]['이전부서'] === '9병동' &&
+      mvMail.length === 1 && /이전 부서/.test(mvMail[0].htmlBody) && /이동일/.test(mvMail[0].htmlBody) && dlist.data.some(o => o['이름'] === '이동직원' && o['구분'] === '부서이동') && !g.api.nhRows_().some(o => o['이름'] === '왕복이동' && o['구분'] === '부서이동'),
+      [dt1.created, mvRowNh.map(o => [o['구분'], o['이전부서'], o['상태']]), mvMail.map(m => m.subject)]);
+    { const DM = g.sheets['부서이동기록']; DM.rows[1][0] = '2026-11-04'; g.api.eduCacheClear_(); }
     const td = post({ op: 'dash.today', t: tk.a }), tdD = post({ op: 'dash.today', t: tk.d });
     check('오늘 할 일 v21.25: 서버가 미회신 · 기한 초과/임박 · 부서이동 · 대장 반영 대기를 한 번에 (관리자만)', td.success && td.moveCheck >= 1 && ['nhNoReply', 'eduOver', 'eduSoon', 'ledger', 'nhEduWait', 'newChem'].every(k => typeof td[k] === 'number') && !tdD.success, td);
     // 화면: 대시보드 줄 → 부서이동 확인 → [기존 교육으로 충분] → 통합 검색 → 연간 보고서

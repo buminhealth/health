@@ -3876,7 +3876,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
         '<td style="' + cell + ';font-weight:800;color:' + (NH_COLORS[o['상태']] || (delView ? '#8B8780' : '#334155')) + '">' + esc(o['상태']) +
           (delView && o['삭제전상태'] ? ' <span style="font-weight:400;color:#5A5650">(' + esc(o['삭제전상태']) + ')</span>' : '') +
           (overdue(o) ? ' <span style="color:#A3302A">기한초과</span>' : '') + '</td>' +
-        td(o['부서']) + td(o['이름']) + td(o['입사일']) + td(o['교육기한']) + td((o['최초발송'] || '').slice(0, 10)) +
+        td(o['부서']) + '<td style="' + cell + '">' + esc(o['이름']) + (o['구분'] === '부서이동' ? ' <span style="font-size:11px;font-weight:700;color:#2B4C7E;background:#E8EFF8;padding:1px 6px;border-radius:4px" title="' + esc(o['이전부서']) + '에서 이동 · 입사일 칸은 이동일">부서이동</span>' : '') + '</td>' + td(o['입사일']) + td(o['교육기한']) + td((o['최초발송'] || '').slice(0, 10)) +
         td(o['재알림횟수'] && o['재알림횟수'] !== '0' ? o['재알림횟수'] + '회' : '') + td((o['회신일시'] || '').slice(0, 10)) +
         td(o['취급여부']) +
         td(o['교육일지제출일']) +
@@ -3945,8 +3945,9 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
     var items = r.data.map(function(o){
       var waiting = o['상태'] === '회신대기' || o['상태'] === '이메일없음';
       return '<div style="border:1px solid ' + (o['알림ID'] === focusId ? '#3F7518' : '#e2e8f0') + ';border-radius:10px;padding:12px;margin-bottom:10px">' +
-        '<div style="font-weight:800;color:#3F7518">' + esc(o['이름']) + ' <span style="font-weight:400;color:#5A5650;font-size:12px">입사 ' + esc(o['입사일']) + '</span></div>' +
-        (o['교육기한'] ? '<div style="font-size:12px;color:#A3302A;font-weight:700">교육 기한: ' + esc(o['교육기한']) + ' (입사일로부터 3일)</div>' : '') +
+        '<div style="font-weight:800;color:#3F7518">' + esc(o['이름']) + ' <span style="font-weight:400;color:#5A5650;font-size:12px">' + (o['구분'] === '부서이동' ? '부서이동 ' + esc(o['입사일']) + ' · ' + esc(o['이전부서']) + '에서' : '입사 ' + esc(o['입사일'])) + '</span></div>' +
+        (o['구분'] === '부서이동' ? '<div style="font-size:12px;color:#45423D">이전 부서 교육에 이 부서 물질이 없어 새 부서 물질 교육(작업내용 변경 시)이 필요합니다.</div>' : '') +
+        (o['교육기한'] ? '<div style="font-size:12px;color:#A3302A;font-weight:700">교육 기한: ' + esc(o['교육기한']) + ' (' + (o['구분'] === '부서이동' ? '이동일' : '입사일') + '로부터 3일)</div>' : '') +
         '<div style="font-size:12px;color:#475569;margin:4px 0 8px">부서 사용 물질: ' + esc(o['취급물질']) + '</div>' +
         (waiting
           ? '<div style="font-size:13px;margin-bottom:6px">이 직원이 위 물질을 취급하나요?</div>' +
@@ -3956,7 +3957,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       '</div>';
     }).join('');
     ov.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:440px;width:100%;max-height:85vh;overflow:auto;padding:20px;font-family:\'Nanum Gothic\',sans-serif">' +
-      '<div style="font-size:16px;font-weight:800;color:#3F7518;margin-bottom:4px">신규 입사자 확인 요청</div>' +
+      '<div style="font-size:16px;font-weight:800;color:#3F7518;margin-bottom:4px">' + (r.data.every(function(o){ return o['구분'] === '부서이동'; }) ? '부서이동자 확인 요청' : (r.data.some(function(o){ return o['구분'] === '부서이동'; }) ? '신규 입사자 · 부서이동자 확인 요청' : '신규 입사자 확인 요청')) + '</div>' +
       '<div style="font-size:12px;color:#5A5650;margin-bottom:12px">유해화학물질 취급 여부를 알려주세요. 취급하면 MSDS 교육 후 교육일지를 작성합니다.</div>' +
       items + '<div style="text-align:right"><button id="bm-nh-close" style="' + BTN + '">나중에</button></div></div>';
     document.body.appendChild(ov);
@@ -4381,8 +4382,9 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       ((r && r.success && r.data) || []).forEach(function(o){
         nh[o['알림ID']] = o;
         var due = o['교육기한'] ? ' · 교육 기한 ' + esc(o['교육기한']) : '';
-        if(o['상태'] === '취급-교육대기') rows.push(row('작성 필요', 'warn', eduName() + ' · ' + esc(o['이름']), '입사 ' + esc(o['입사일']) + due, '작성', 'nh:' + o['알림ID']));
-        else rows.push(row('확인 필요', 'bad', '신규 입사자 취급 확인 · ' + esc(o['이름']), '입사 ' + esc(o['입사일']) + due, '확인하기', 'nh:' + o['알림ID']));
+        var mvx = o['구분'] === '부서이동', when = mvx ? '부서이동 ' + esc(o['입사일']) + ' · ' + esc(o['이전부서']) + '에서' : '입사 ' + esc(o['입사일']);
+        if(o['상태'] === '취급-교육대기') rows.push(row('작성 필요', 'warn', eduName() + ' · ' + esc(o['이름']), when + due, '작성', 'nh:' + o['알림ID']));
+        else rows.push(row('확인 필요', 'bad', (mvx ? '부서이동자' : '신규 입사자') + ' 취급 확인 · ' + esc(o['이름']), when + due, '확인하기', 'nh:' + o['알림ID']));
       });
     }catch(_){}
     try{
@@ -5433,7 +5435,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.29';
+  var SERVER_EXPECT = 'v21.30';
   // v21.10: 'v21.9' < 'v21.10'을 글자 순서가 아니라 숫자로 비교
   function bmVerLess(a, b){
     var p = function(v){ return (String(v).match(/v?(\d+(?:\.\d+)*)/) || [,'0'])[1].split('.').map(Number); };
@@ -5598,7 +5600,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       var list = data.filter(function(o){ return NH_WAIT.indexOf(o['상태']) >= 0; }).reverse().slice(0, 5);
       box.innerHTML = list.length ? list.map(function(o){
         var over = o['교육기한'] && today > o['교육기한'];
-        return row(esc(o['상태']), over ? 'rj' : 'wait', esc(o['부서']) + ' · ' + esc(o['이름']), '입사 ' + esc(o['입사일']) + (o['교육기한'] ? ' · 교육 기한 ' + esc(o['교육기한']) + (over ? ' (초과)' : '') : ''), 'nh');
+        return row(esc(o['상태']), over ? 'rj' : 'wait', esc(o['부서']) + ' · ' + esc(o['이름']), (o['구분'] === '부서이동' ? '부서이동 ' : '입사 ') + esc(o['입사일']) + (o['교육기한'] ? ' · 교육 기한 ' + esc(o['교육기한']) + (over ? ' (초과)' : '') : ''), 'nh');
       }).join('') : '<div class="dash-empty">회신을 기다리는 신규 입사자가 없습니다.</div>';
       bind(box); bind(k);
     });
