@@ -2360,6 +2360,22 @@ function check(name, cond, extra) {
       const pj2 = JSON.parse(Buffer.from(post({ op: 'fs.get', path: 'records/ppe_records.json', t: tk.a }).content, 'base64').toString('utf8'));
       check('보호구 v21.31: 저장 중 서버에 못 올라간 이 PC 기록은 다음에 열 때 다시 올림', rr && (Array.isArray(pj2) ? pj2 : pj2.records).some(r => r.recordId === 'rp-test-1'), (Array.isArray(pj2) ? pj2 : pj2.records).length);
     }
+    // v21.32 교육일지 취급물질: '병동' 공통 물질(뉴젠자임폼)은 병동만 · 템플릿 이름은 MSDS 목록 제품으로 대신(회복실 소다라임 3→2) · 특별교육 공정 항목은 그대로
+    const chips = await p3.evaluate(() => {
+      const keepC = CHEMS.slice(), keepE = Object.assign({}, DEPT_EDU);
+      CHEMS.length = 0;
+      [['뉴젠자임폼', ['병동', '외래', '수술실', ' 혈관센터', '중환자실']], ['소다라임 1.2kg', ['회복실']], ['소다라임 1.0L', ['회복실']], ['Xylenes', ['병리과']], ['CR-13', ['시설관리팀']], ['Acetone', ['진단검사의학과']]].forEach(c => CHEMS.push({ name: c[0], departments: c[1] }));
+      DEPT_EDU['회복실'] = { time: '09:00~13:00 (4시간*2)', chemicals: ['소다라임'] };
+      DEPT_EDU['시설관리팀'] = { time: '09:00~16:00(6시간*5)', chemicals: ['관리대상물질(8).밀폐공간작업(8)', '압력용기(8)'] };
+      DEPT_EDU['진단검사의학과'] = { time: '09:00~13:00 (4시간*2)' };
+      const get = (pf, d) => { buildChemCheckboxes(pf, d); return [...document.querySelectorAll('#' + pf + '-chem-grid input')].map(i => i.value); };
+      const out = { rec: get('e1', '회복실'), fac: get('e1', '시설관리팀'), lab: get('e1', '진단검사의학과'), path2: get('e2', '병리과'), ward: get('e2', '61병동'), vasc: get('e1', '혈관센터'), ward6: get('e1', '6병동') };
+      CHEMS.length = 0; keepC.forEach(c => CHEMS.push(c)); Object.keys(DEPT_EDU).forEach(k => delete DEPT_EDU[k]); Object.assign(DEPT_EDU, keepE);
+      return out;
+    });
+    check('교육일지 취급물질 v21.32: 뉴젠자임폼은 병동 · 쓰는 부서만 (시설관리팀 · 진단검사의학과 · 병리과 X) · 회복실은 MSDS 목록 2개 · 공정 항목 유지',
+      JSON.stringify(chips.rec) === '["소다라임 1.2kg","소다라임 1.0L"]' && JSON.stringify(chips.fac) === '["관리대상물질(8)","밀폐공간작업(8)","압력용기(8)","CR-13"]' && JSON.stringify(chips.lab) === '["Acetone"]' &&
+      JSON.stringify(chips.path2) === '["Xylenes"]' && chips.ward.indexOf('뉴젠자임폼') >= 0 && chips.vasc.indexOf('뉴젠자임폼') >= 0 && chips.ward6.indexOf('뉴젠자임폼') >= 0, chips);
     // v21.27 월 보고서 (결재 양식) — 서버
     const mm = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7), yy = +mm.slice(0, 4), mo = +mm.slice(5, 7);
     const mr = post({ op: 'report.monthly', year: yy, month: mo, t: tk.a }), mrD = post({ op: 'report.monthly', year: yy, month: mo, t: tk.d }), mrBad = post({ op: 'report.monthly', year: yy, month: 13, t: tk.a });

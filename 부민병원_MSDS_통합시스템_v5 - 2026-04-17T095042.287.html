@@ -6661,12 +6661,12 @@ function bmTruthy(v){
 function bmDeptNeedsSpecial(dept){
   var n = window.BM_NEED;
   if(n && n.dept === dept && (n.sp || n.ms)) return n.sp > 0;   // 특별 대상이 한 명이라도 있으면 특별교육 하나로 (MSDS 교육 갈음)
-  return CHEMS.some(c=>(c.departments||[]).includes(dept)&&(bmTruthy(c.targetManage)||bmTruthy(c.specialManage)));
+  return CHEMS.some(c=>bmDeptChems(dept).indexOf(c.name)>=0&&(bmTruthy(c.targetManage)||bmTruthy(c.specialManage)));
 }
 function renderList(dept){
   const con=document.getElementById('gridContainer');con.innerHTML='';
   const casOf=p=>(p.components||[]).map(c=>c.casNumber||c.cas||'').join(' ');
-  const filtered=CHEMS.filter(p=>{const dm=dept==='all'||p.departments.includes(dept);const sm=!srchQ||p.name.toLowerCase().includes(srchQ)||(p.manufacturer||'').toLowerCase().includes(srchQ)||casOf(p).includes(srchQ);return dm&&sm;});
+  const filtered=CHEMS.filter(p=>{const dm=dept==='all'||p.departments.some(d=>bmSameDept(d,dept)||(bmIsWard(dept)&&String(d).trim()==='병동'));const sm=!srchQ||p.name.toLowerCase().includes(srchQ)||(p.manufacturer||'').toLowerCase().includes(srchQ)||casOf(p).includes(srchQ);return dm&&sm;});
   const cnt=document.getElementById('ms-cnt');
   if(cnt) cnt.innerHTML=(srchQ?'검색 결과 ':(dept==='all'?'전체 ':bmEsc(dept)+' '))+'<b>'+filtered.length+'</b>종';
   filtered.sort((a,b)=>a.name.localeCompare(b.name)).forEach(p=>{
@@ -6793,15 +6793,36 @@ function e2DeptCh(){
   applyDeptEdu('e2', dept);
 }
 
+/* v21.32 부서 이름 맞추기 · 병동 판단 (gas/Code.gs의 sameDept_ · chemsForDept_와 같은 규칙)
+   · '진단검사의학과' ↔ '진단검사의학실'처럼 끝말(실 · 과 · 팀)만 다른 이름은 같은 부서
+   · chemicals 시트의 '병동' 공통 물질(뉴젠자임폼)은 병동(세부 병동 · 이름이 ~병동)에만 — 예전엔 모든 부서에 들어갔음 */
+function bmDeptKey(s){ return String(s||'').replace(/\s+/g,'').replace(/(실|과|팀)$/,''); }
+function bmSameDept(a,b){ a=String(a||'').trim(); b=String(b||'').trim(); return !!a && (a===b || bmDeptKey(a)===bmDeptKey(b)); }
+function bmIsWard(d){ d=String(d||'').trim(); return d==='병동' || WARD_EXPAND.includes(d) || /병동(\(.*\))?$/.test(d.replace(/\s+/g,'')); }
+function bmEduKey(dept, src){   // 교육 템플릿(특별교육대장 · MSDS교육대장 · 내장값)에서 이 부서 줄 찾기 — 병동은 세부 병동 없으면 '병동'
+  const k = resolveDeptEdu(dept, src);
+  if((src&&src[k]) || FALLBACK_EDU[k]) return k;
+  const pool = Object.keys(src||{}).concat(Object.keys(FALLBACK_EDU));
+  return pool.find(x=>bmSameDept(x, dept)) || k;
+}
+function bmDeptChems(dept){   // MSDS 목록(chemicals 시트)에서 이 부서가 쓰는 제품
+  const ward = bmIsWard(dept);
+  return CHEMS.filter(c=>(c.departments||[]).some(d=>bmSameDept(d, dept) || (ward && String(d).trim()==='병동'))).map(c=>c.name);
+}
 function buildChemCheckboxes(pfx, dept){
   const src = pfx==='e1' ? DEPT_EDU : MSDS_EDU;
-  const eduKey = resolveDeptEdu(dept, src);
-  const eduChems=(src[eduKey]&&src[eduKey].chemicals)||(FALLBACK_EDU[eduKey]&&FALLBACK_EDU[eduKey].chemicals)||
-                 (DEPT_EDU['병동']&&DEPT_EDU['병동'].chemicals)||(FALLBACK_EDU['병동']&&FALLBACK_EDU['병동'].chemicals)||[];
-  const chemItems=CHEMS.filter(c=>c.departments.includes(dept)||c.departments.includes(eduKey)||c.departments.includes('병동')).map(c=>c.name);
+  const eduKey = bmEduKey(dept, src), ward = bmIsWard(dept);
+  const has = a => Array.isArray(a) && a.length;
+  const eduChems=(has(src[eduKey]&&src[eduKey].chemicals) && src[eduKey].chemicals)||(has(FALLBACK_EDU[eduKey]&&FALLBACK_EDU[eduKey].chemicals) && FALLBACK_EDU[eduKey].chemicals)||
+                 (ward && ((DEPT_EDU['병동']&&DEPT_EDU['병동'].chemicals)||(FALLBACK_EDU['병동']&&FALLBACK_EDU['병동'].chemicals)))||[];
+  const chemItems=bmDeptChems(dept);
   // ★ 마침표로 연결된 공정 항목 분리 예: "관리대상물질(8).밀폐공간작업(8)"
   const splitDot=arr=>{const out=[];arr.forEach(item=>{if(/\(\d+\)\.[^\s]/.test(item)){item.split('.').forEach(p=>{const t=p.trim();if(t)out.push(t);});}else{out.push(item);}});return out;};
-  const all=[...new Set([...splitDot(eduChems),...chemItems])];
+  /* v21.32 템플릿 물질 이름은 MSDS 목록이 있으면 그 제품으로 대신 (회복실 '소다라임' + '소다라임 1.2kg' · '소다라임 1.0L' 3개 → 2개)
+     · 특별교육 공정 항목(밀폐공간작업(8) · 압력용기(8) 등 괄호 시간)은 그대로 · MSDS 목록이 비어 있는 부서는 템플릿 이름 그대로 */
+  const isProcess = s => /\(\d+(\.\d+)?\)\s*$/.test(String(s).trim());
+  const tpl = splitDot(eduChems).map(s=>String(s).trim()).filter(Boolean).filter(s=>!chemItems.length || isProcess(s));
+  const all=[...new Set([...tpl,...chemItems])];
   const grid=document.getElementById(pfx+'-chem-grid');
   if(!all.length){grid.innerHTML='<p class="text-xs text-slate-400">해당 부서의 취급물질을 직접 선택하거나 입력하세요.</p>';return;}
   grid.innerHTML=all.map((n,i)=>`
@@ -6872,7 +6893,7 @@ function updateChemSel(pfx){
 
 function applyDeptEdu(prefix, dept){
   const src = prefix==='e1' ? DEPT_EDU : MSDS_EDU;
-  const eduKey = resolveDeptEdu(dept, src);
+  const eduKey = bmEduKey(dept, src);
 
   // ★ 병동 계열: DEPT_EDU·MSDS_EDU·FALLBACK 순서로 데이터 합성
   // 특별교육 시트에 세부 병동이 없어도 MSDS 시트 데이터로 보완
@@ -6881,7 +6902,7 @@ function applyDeptEdu(prefix, dept){
     ? (prefix==='e1' ? MSDS_EDU[eduKey]||MSDS_EDU['병동']||{}
                      : DEPT_EDU[eduKey]||DEPT_EDU['병동']||{})
     : {};
-  const fb        = FALLBACK_EDU[eduKey] || FALLBACK_EDU['병동'] || {};
+  const fb        = FALLBACK_EDU[eduKey] || (bmIsWard(dept) ? FALLBACK_EDU['병동'] : null) || {};
 
   // 우선순위: gasMain(해당 시트) > gasCross(반대 시트) > fb(내장값)
   const merge = (o1, o2, o3) => {
