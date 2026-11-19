@@ -2369,6 +2369,7 @@ input.apv-in[type=text]{width:110px}
             <button type="button" onclick="handleTabAction('apv','pdf')">목록 PDF 출력</button>
             <button type="button" onclick="handleTabAction('apv','dedupe')" title="recordId 기준 중복 자동 정리">중복정리</button>
             <button type="button" onclick="bmBakeAllApproved()" title="예전에 결재한 일지를 도장이 찍힌 결재본 PDF로 바꿔 저장">결재본 만들기 (예전 결재)</button>
+            <button type="button" onclick="apvRebuildSelected()" title="선택한 일지를 기록(서명 · 사진)으로 지금 양식(사진 4등분 · 서명 칸 · A4 비율)에 맞춰 다시 만들어 최종본으로 바꿈">선택 일지 새 양식으로 다시 만들기</button>
             <label><input type="checkbox" id="apv-archive-mode" onchange="apvToggleArchive()"> 옛 일지까지 전체 검색</label>
             <span id="apv-archive-status"></span>
           </div>
@@ -7391,6 +7392,24 @@ function bmPhotoGrid(list, minH, P){
   return `<div style="flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:5px;min-height:${minH}px">` +
     photos.map((p, i) => `<div style="grid-area:${areas[i]};border:1px solid ${P.border};background-color:#f4f6f9;background-image:url('${p}');background-size:contain;background-position:center;background-repeat:no-repeat;min-height:0"></div>`).join('') + `</div>`;
 }
+/* v21.37 일지 양식 화면 맞춤: 일지는 늘 A4 원래 폭으로 그리고 화면(창 · 휴대폰) 폭이 좁으면 통째로 축소
+   → 좁은 창에서 표가 찌그러져 '교육일' 날짜가 '대상 물질' 칸에 겹치던 문제 · PDF를 만드는 영역(#pdf-area · data-bm-nofit)은 건드리지 않음 */
+function bmFitPages(){
+  document.querySelectorAll('[data-bm-page]').forEach(function(el){
+    if(el.closest('#pdf-area,[data-bm-nofit]')) return;
+    var p = el.parentElement; if(!p || !p.offsetParent) return;
+    var cs = getComputedStyle(p), avail = p.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0);
+    var nat = parseFloat(el.getAttribute('data-bm-page')) || el.offsetWidth;
+    var z = avail > 0 ? Math.min(1, avail / nat) : 1;
+    el.style.zoom = z < 0.995 ? String(Math.round(z * 1000) / 1000) : '';
+  });
+}
+(function(){
+  var tm = null, run = function(){ clearTimeout(tm); tm = setTimeout(bmFitPages, 60); };
+  window.addEventListener('resize', run);
+  var start = function(){ try{ new MutationObserver(function(ms){ if(ms.some(function(m){ return m.addedNodes.length; })) run(); }).observe(document.body, { childList: true, subtree: true }); }catch(_){} run(); };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+})();
 /* v21.36 서명 칸 배치
    · 특별교육: 날짜별 서명 블록(그 날짜 아래로 사람들)을 한 줄에 2일씩 — 1일이면 한 줄 전체 · 5일이면 3줄(마지막은 반 칸)
    · MSDS: 1명이면 한 줄 · 2명 이상이면 한 줄에 2명씩 아래로 */
@@ -9226,7 +9245,7 @@ function e1RenderPreview(){
   const wrap = document.getElementById('e1-preview');
   if(!wrap) return;
   try {
-    wrap.innerHTML = `<div style="transform-origin:top left;transform:scale(0.85);width:117.65%">${e1BuildPdfHTML()}</div>`;
+    wrap.innerHTML = `${e1BuildPdfHTML()}`;   // v21.37 화면 폭에 맞춰 자동 축소 (bmFitPages)
   } catch(e) {
     wrap.innerHTML = `<div style="color:#A3302A;font-size:12px;padding:20px;text-align:center">미리보기 생성 실패: ${e.message}</div>`;
     console.error('e1RenderPreview error:', e);
@@ -9236,7 +9255,7 @@ function e2RenderPreview(){
   const wrap = document.getElementById('e2-preview');
   if(!wrap) return;
   try {
-    wrap.innerHTML = `<div style="transform-origin:top left;transform:scale(0.85);width:117.65%">${e2BuildPdfHTML()}</div>`;
+    wrap.innerHTML = `${e2BuildPdfHTML()}`;   // v21.37 화면 폭에 맞춰 자동 축소 (bmFitPages)
   } catch(e) {
     wrap.innerHTML = `<div style="color:#A3302A;font-size:12px;padding:20px;text-align:center">미리보기 생성 실패: ${e.message}</div>`;
     console.error('e2RenderPreview error:', e);
@@ -9352,7 +9371,7 @@ function e1BuildPdfHTML(){
   const sigSection = bmSigPairs(e1.dates.map((d, di) => makeDateBlock(d, di)));   // v21.36 한 줄에 2일 · 1일이면 한 줄 전체
 
   return `
-  <div style="padding:18px 22px;width:794px;min-height:1123px;display:flex;flex-direction:column;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;color:${P.txt};background:#fff;box-sizing:border-box;font-size:12px">
+  <div data-bm-page="794" style="padding:18px 22px;width:794px;min-height:1123px;display:flex;flex-direction:column;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;color:${P.txt};background:#fff;box-sizing:border-box;font-size:12px">
     <div style="display:flex;align-items:center;border-bottom:2px solid ${P.navy};padding-bottom:9px;margin-bottom:8px;gap:14px">
       <div style="flex:1;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
         <div style="font-size:34px;font-weight:800;letter-spacing:3px;color:${P.navy};line-height:64px">특별안전보건교육일지</div>
@@ -9601,7 +9620,7 @@ function e2BuildPdfHTML(){
   }
 
   return `
-  <div style="padding:20px 26px 22px;width:750px;min-height:1061px;display:flex;flex-direction:column;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;color:${P.txt};background:#fff;box-sizing:border-box">
+  <div data-bm-page="750" style="padding:20px 26px 22px;width:750px;min-height:1061px;display:flex;flex-direction:column;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;color:${P.txt};background:#fff;box-sizing:border-box">
     <div style="margin-bottom:14px">
       <div style="display:flex;align-items:center;padding-bottom:9px;border-bottom:2px solid ${P.navy};width:100%;gap:14px">
         <div style="flex:1;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
@@ -12839,7 +12858,7 @@ function ppeBuildPreview(){
   }
   if(card) card.style.display='block';
   try{
-    wrap.innerHTML = `<div style="transform-origin:top left;transform:scale(0.85);width:117.65%">${ppeBuildLedgerHTML(ppePersons)}</div>`;
+    wrap.innerHTML = `${ppeBuildLedgerHTML(ppePersons)}`;   // v21.37 화면 폭에 맞춰 자동 축소 (bmFitPages)
   }catch(e){
     wrap.innerHTML = `<div style="color:#dc2626;font-size:12px;padding:20px;text-align:center">미리보기 생성 실패: ${e.message}</div>`;
     console.error('ppeBuildPreview error:', e);
@@ -13547,6 +13566,22 @@ function showEduChangeHistory(idx){
    관리자가 교육일 · 이름 등을 고친 뒤: 서버 기록(서명 · 사진 포함)으로 PDF를 다시 만들어 고친 이름으로 저장
    → 같은 PDF를 쓰던 기록(여러 명 일지)의 PDF 이름을 새 것으로 → 예전 PDF는 드라이브 휴지통(30일 보관)
    결재 도장은 PDF에 굽지 않고 볼 때 · 받을 때 찍으므로 결재완료 기록도 그대로 결재본으로 보임 */
+// v21.37 결재 관리: 고른 일지들을 새 양식으로 한꺼번에 (서명 이미지가 기록에 없는 옛 일지는 건너뜀 — 서명이 빠진 PDF가 되지 않게)
+async function apvRebuildSelected(){
+  const keys = [...((typeof apvState !== 'undefined' && apvState.selected) || [])];
+  if(!keys.length){ toast('다시 만들 일지를 목록에서 체크하세요', 'err'); return; }
+  if(!confirm('선택한 일지 ' + keys.length + '건을 지금 양식(사진 4등분 · 서명 칸 · A4 비율)으로 다시 만들어 최종본으로 바꿀까요?\n\n· 서명 · 사진은 기록에 저장된 그대로 들어갑니다\n· 예전 PDF는 드라이브 휴지통으로 (30일 안에 되살릴 수 있음)\n· 결재된 일지는 도장도 다시 찍힙니다\n· 서명 이미지가 기록에 없는 옛 일지는 건너뜁니다')) return;
+  let ok = 0, skip = 0, fail = 0;
+  for(let i = 0; i < keys.length; i++){
+    const g = apvState.groups.find(x => x.groupKey === keys[i]);
+    if(!g || !g.members || !g.members[0]){ fail++; continue; }
+    toast('새 양식으로 다시 만드는 중… ' + (i + 1) + ' / ' + keys.length, 'info');
+    const cat = String(g.type || '').indexOf('보호구') >= 0 ? 'ppe' : 'edu';
+    const r = await bmReissuePdf(cat, g.members[0], { yes: true, needSig: true });
+    if(r === 'skip') skip++; else if(r) ok++; else fail++;
+  }
+  toast('새 양식으로 다시 만들기: 완료 ' + ok + '건' + (skip ? ' · 서명 기록 없어 건너뜀 ' + skip + '건' : '') + (fail ? ' · 실패 ' + fail + '건' : ''), fail ? 'err' : 'ok');
+}
 async function bmReissuePdf(cat, rec, opts){
   opts = opts || {};
   const isPpe = cat === 'ppe';
@@ -13582,6 +13617,7 @@ async function bmReissuePdf(cat, rec, opts){
       const probe = Object.assign({}, g);
       try{ const b = await apvResolvePdfBytes(probe); if(b && probe.pdfYm) (isPpe ? ['보호구', '교육일지'] : ['교육일지']).forEach(f => oldPaths.push(f + '/' + probe.pdfYm + '/' + me.pdfFileName)); }catch(_){}
     }
+    if(opts.needSig && !g.members.some(m => m.sigImg || (m.sigsByDay && Object.keys(m.sigsByDay).some(d => Object.keys(m.sigsByDay[d] || {}).length)))) return 'skip';   // v21.37 서명 없는 옛 기록 보호
     const pdf = await _apvRenderGroupPdf(g);
     const names = mates.map(m => m.name).filter(Boolean);
     const nmStr = names.length <= 1 ? (names[0] || '무명') : names[0] + '외' + (names.length - 1) + '명';
@@ -13972,7 +14008,7 @@ function buildEduPreviewHTML(group, currentRecordId, opts){
           <div style="padding:6px;flex:1;display:flex;flex-direction:column">${bmPhotoGrid(sidePhotos, 260, P)}</div></div></div>`
     : contentTbl;
   return `
-<div style="padding:20px 26px 22px;width:100%;max-width:780px;font-family:${FF};color:${P.txt};background:#fff;box-sizing:border-box;margin:0 auto">
+<div data-bm-page="780" style="padding:20px 26px 22px;width:780px;font-family:${FF};color:${P.txt};background:#fff;box-sizing:border-box;margin:0 auto">
 
   <!-- 제목 + 결재 -->
   <div style="margin-bottom:14px">
@@ -14085,7 +14121,7 @@ function buildPpePreviewHTML(record){
   }
 
   return `
-<div style="padding:26px 28px;width:100%;max-width:700px;font-family:${FF};background:#fff;margin:0 auto">
+<div data-bm-page="700" style="padding:26px 28px;width:700px;font-family:${FF};background:#fff;margin:0 auto;box-sizing:border-box">
   <div style="text-align:center;border-bottom:3px solid ${N};padding-bottom:12px;margin-bottom:4px">
     <div style="font-size:22px;font-weight:900;letter-spacing:6px;color:${N}">보호구 지급수령증</div>
     <div style="font-size:10px;color:#888;margin-top:4px">산업안전보건법 제38조 | 인당의료재단 부민병원</div>
@@ -21964,7 +22000,7 @@ button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,inpu
     if(typeof html2canvas === 'undefined' || !window.jspdf){ msg('PDF 도구를 불러오지 못했습니다 (인터넷 연결 확인) — [인쇄]에서 PDF로 저장하세요', true); return; }
     busy = true; msg('PDF 만드는 중…');
     var holder = document.createElement('div');
-    holder.style.cssText = 'position:absolute;left:-10000px;top:0;width:794px';
+    holder.style.cssText = 'position:absolute;left:-10000px;top:0;width:794px'; holder.setAttribute('data-bm-nofit', '1');
     holder.innerHTML = '<div class="rp-doc">' + docHtml(rep) + '</div>';
     document.body.appendChild(holder);
     var doc = holder.firstChild;

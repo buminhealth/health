@@ -2417,6 +2417,19 @@ function check(name, cond, extra) {
     });
     check('서명 칸 v21.36: 특별 1일 = 한 줄 · 2일 = 한 줄 반반 · 5일 = 3줄 · MSDS 1명 한 줄 · 5명 = 한 줄에 2명(2 · 2 · 1) · 제목 34px',
       sg.one.rows.length === 0 && JSON.stringify(sg.two.rows) === '[2]' && JSON.stringify(sg.five.rows) === '[2,2,2]' && JSON.stringify(sg.m1) === '[1]' && JSON.stringify(sg.m5) === '[2,2,1]' && sg.one.title === '34px', sg);
+    // v21.37 좁은 화면: 일지 미리보기는 A4 원래 폭으로 그리고 통째로 축소 (칸 겹침 없음) · 예전 일지 일괄 새 양식(서명 없는 옛 기록은 건너뜀)
+    await p3.setViewportSize({ width: 600, height: 900 });
+    const nar = await p3.evaluate(async () => {
+      const g = { type: '특별안전보건교육', dept: '시설관리팀', chem: 'CR-13', dateStart: '2026-11-16', dateEnd: '2026-11-20', members: [{ name: '시험', instructor: '이성웅', indiv: '○', common: '○', eduDates: ['2026-11-16', '2026-11-17'], sigsByDay: {} }] };
+      _showDataModal('일지', buildEduPreviewHTML(g, null)); await new Promise(r => setTimeout(r, 400));
+      const m = document.getElementById('data-view-modal'), pg = m.querySelector('[data-bm-page]');
+      const over = [...m.querySelectorAll('td')].filter(td => td.scrollWidth > td.clientWidth + 2 && td.textContent.trim()).length;
+      m.remove();
+      return { zoom: pg && pg.style.zoom, over, btn: !!document.querySelector('button[onclick="apvRebuildSelected()"]'), skip: typeof bmReissuePdf === 'function' ? await bmReissuePdf('edu', { recordId: 'fix-1', name: '정정시험', dept: '61병동', type: 'MSDS교육', dateStart: '2026-03-03' }, { yes: true, needSig: true }) : 'none' };
+    });
+    await p3.setViewportSize({ width: 1440, height: 900 });
+    check('좁은 화면 v21.37: 일지 미리보기 통째로 축소(600px → 약 0.6배) · 칸 넘침 0 · [선택 일지 새 양식으로 다시 만들기] · 서명 없는 옛 기록은 건너뜀',
+      nar.zoom && +nar.zoom < 0.8 && nar.over === 0 && nar.btn && (nar.skip === 'skip' || nar.skip === false), nar);
     // v21.27 월 보고서 (결재 양식) — 서버
     const mm = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7), yy = +mm.slice(0, 4), mo = +mm.slice(5, 7);
     const mr = post({ op: 'report.monthly', year: yy, month: mo, t: tk.a }), mrD = post({ op: 'report.monthly', year: yy, month: mo, t: tk.d }), mrBad = post({ op: 'report.monthly', year: yy, month: 13, t: tk.a });
