@@ -7446,7 +7446,20 @@ function bmSigTwoCol(people, P, FF, rowH){   // people: [{name, join, date, sigH
   }
   return `<table style="width:100%;border-collapse:collapse;table-layout:fixed"><thead><tr>${head}<th style="width:10px;border:0;background:#fff"></th>${head}</tr></thead><tbody>${rows}</tbody></table>`;
 }
+// v21.39 지금 양식(사진 4등분 · 서명 칸 · A4 비율)으로 만든 PDF 표시 — 예전 양식 PDF를 알아보는 데 씀
+const BM_LAYOUT_TAG = 'BM-LAYOUT-2135';
+async function bmPdfIsNewLayout(bytes){
+  try{
+    if(typeof PDFLib === 'undefined') return true;   // 판별 못 하면 저장본 그대로
+    const doc = await PDFLib.PDFDocument.load(bytes instanceof ArrayBuffer ? bytes.slice(0) : new Uint8Array(bytes), { updateMetadata: false, ignoreEncryption: true });
+    return String(doc.getCreator() || '').indexOf('BM-LAYOUT') >= 0;
+  }catch(_){ return true; }
+}
+function bmGroupHasSig(g){
+  return (g.members || []).some(m => m.sigImg || (m.sigsByDay && Object.keys(m.sigsByDay).some(d => Object.keys(m.sigsByDay[d] || {}).length)));
+}
 async function pdfRenderPagesProtected(area, cv, pdf, pw, ph, scale, fillSinglePage){
+  try{ pdf.setProperties({ creator: BM_LAYOUT_TAG }); }catch(_){}
   const ih = (cv.height/cv.width) * pw;
 
   /* v21.33 A4 비율: 예전엔 한 장보다 짧으면 세로로 늘려(글자가 길쭉해짐) 채웠음 → 늘리지 않음 (일지 자체가 A4 높이로 칸을 채움)
@@ -10759,6 +10772,19 @@ async function apvDownloadPdf(groupKey){
     }
   }
 
+  // v21.39 예전 양식으로 저장된 일지는 기록(사진 · 서명)으로 지금 양식을 그려 내려받음
+  if(!String(group.type || '').includes('보호구') && bmGroupHasSig(group) && window.jspdf && window.html2canvas){
+    try{
+      const b = await apvResolvePdfBytes(group);
+      if(b && !(await bmPdfIsNewLayout(b))){
+        let out = (await _apvRenderGroupPdf(group)).output('arraybuffer');
+        if(group.approved){ const st = await apvStampToImage(group.approvedAt); const bl = st ? await _getStampedPdfBlob(group, st, out) : null; if(bl) out = await bl.arrayBuffer(); }
+        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([out], { type: 'application/pdf' })); a.download = group.pdfFileName;
+        document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+        return;
+      }
+    }catch(e){ console.warn('지금 양식 내려받기:', e); }
+  }
   // ★ 결재완료면 도장 합성 PDF 다운로드 (apvReprint 활용)
   if(group.approved){
     return await apvReprint(groupKey);
@@ -11333,14 +11359,22 @@ async function apvOpenViewer(key){
   if(!bytes && (g.members||[]).length && window.jspdf && window.html2canvas){
     try{ const pdf = await _apvRenderGroupPdf(g); bytes = pdf.output('arraybuffer'); made = true; }catch(e){ console.warn('apvOpenViewer 재생성:', e); }
   }
+  // v21.39 예전 양식으로 저장된 일지: 저장된 기록(사진 · 서명)으로 지금 양식을 그려 바로 보여 줌
+  let oldBytes = null;
+  if(bytes && !made && !String(g.type || '').includes('보호구') && bmGroupHasSig(g) && window.jspdf && window.html2canvas && !(await bmPdfIsNewLayout(bytes))){
+    try{ const pdf = await _apvRenderGroupPdf(g); oldBytes = bytes; bytes = pdf.output('arraybuffer'); }catch(e){ console.warn('apvOpenViewer 새 양식:', e); oldBytes = null; }
+  }
   // v21.5: 결재완료면 교육 현황 미리보기와 같이 결재란에 관리자 도장을 찍은 PDF를 보여 줌 (결재 전은 도장 없는 원본)
-  if(bytes && g.approved){
+  const stampIt = async (b) => {
+    if(!b || !g.approved) return b;
     try{
       const stampPng = await apvStampToImage(g.approvedAt);
-      const blob = stampPng ? await _getStampedPdfBlob(g, stampPng, bytes) : null;
-      if(blob) bytes = await blob.arrayBuffer();
+      const blob = stampPng ? await _getStampedPdfBlob(g, stampPng, b) : null;
+      if(blob) return await blob.arrayBuffer();
     }catch(e){ console.warn('apvOpenViewer 도장:', e); }
-  }
+    return b;
+  };
+  bytes = await stampIt(bytes);
   if(apvViewKey !== key) return;   // 그 사이 다른 줄을 누름
   const hd = v.querySelector('.apv-v-hd b');
   if(hd) hd.textContent = (g.approved ? '결재본(도장) · ' : 'PDF 원본(결재 전) · ') + hd.textContent.replace(/^PDF 원본 · /, '');
@@ -11359,6 +11393,11 @@ async function apvOpenViewer(key){
   ob.disabled = false; pb.disabled = false;
   ob.onclick = () => window.open(apvViewUrl, '_blank');
   pb.onclick = () => { try{ document.getElementById('apv-v-frame').contentWindow.print(); }catch(e){ window.open(apvViewUrl, '_blank'); } };
+  // v21.39 예전 양식 일지는 안내 · 버튼 없이 바로 지금 양식으로 (내려받기도 보이는 그대로)
+  if(oldBytes){
+    const nm = g.pdfFileName || ((g.dept || '') + '-' + (g.dateStart || '') + '.pdf');
+    on('down', () => { const a = document.createElement('a'); a.href = apvViewUrl; a.download = nm; document.body.appendChild(a); a.click(); a.remove(); });
+  }
 }
 
 async function apvBatchApprove(){
@@ -11571,6 +11610,10 @@ async function apvMergeDownload() {
                     if (pdfBytes) rebuiltCount++;
                 }
                 if (!pdfBytes) throw new Error('GitHub 미존재 + 재생성 실패 (records 부족 또는 토큰 미설정)');
+                // v21.39 예전 양식 저장본은 지금 양식으로 그려 넣음
+                if (!String(group.type || '').includes('보호구') && bmGroupHasSig(group) && window.html2canvas && !(await bmPdfIsNewLayout(pdfBytes))) {
+                    try { pdfBytes = (await _apvRenderGroupPdf(group)).output('arraybuffer'); } catch (e) { console.warn('지금 양식 묶음:', e); }
+                }
                 const pdfDoc = await PDFDocument.load(pdfBytes);
                 const page = pdfDoc.getPages()[0];
                 const { width, height } = page.getSize();
@@ -11789,6 +11832,7 @@ async function _apvRenderGroupPdf(group){
   const cv = await html2canvas(area.firstElementChild, {scale:2, useCORS:true, allowTaint:true, logging:false, windowWidth:780});
   const {jsPDF} = window.jspdf;
   const pdf = new jsPDF('p','mm','a4');
+  try{ pdf.setProperties({ creator: BM_LAYOUT_TAG }); }catch(_){}
   const pw = pdf.internal.pageSize.getWidth();
   const ph = pdf.internal.pageSize.getHeight();
   const ratio = pw / cv.width;

@@ -2440,6 +2440,17 @@ function check(name, cond, extra) {
       return { cs, z };
     });
     check('PC 화면 v21.38: 결재 목록 = 폭 따라 배치 바뀜(container) · 1440px 모니터에서 일지 보기 확대(>1)', pcw.none || (pcw.cs === 'inline-size' && pcw.z > 1), pcw);
+    // v21.39 예전 양식 PDF 알아보기: 지금 양식으로 만든 PDF에는 표시(BM-LAYOUT)가 있고, 표시 없는 저장본은 결재 관리 칸에서 기록으로 다시 그려 보여 줌
+    const LIB = process.env.PDF_LIBS || '/tmp/claude-0/-home-user-health/380d0980-4304-5ba9-83eb-14958bc872ed/scratchpad/pdfb/node_modules';
+    if (require('fs').existsSync(LIB + '/pdf-lib/dist/pdf-lib.min.js')) for (const [t, fp] of [['PDFLib', '/pdf-lib/dist/pdf-lib.min.js'], ['jspdf', '/jspdf/dist/jspdf.umd.min.js'], ['html2canvas', '/html2canvas/dist/html2canvas.min.js']]) if (!(await p3.evaluate(n => typeof window[n] !== 'undefined', t))) await p3.addScriptTag({ path: LIB + fp });
+    const lay = await p3.evaluate(async () => {
+      if (!window.jspdf || typeof PDFLib === 'undefined') return { skip: true };
+      const g = { type: '특별안전보건교육', dept: '회복실', dateStart: '2026-10-20', members: [{ name: '가', instructor: '김', indiv: '○', common: '○', sigImg: 'data:image/png;base64,iVBORw0KGgo=' }] };
+      const nw = (await _apvRenderGroupPdf(g)).output('arraybuffer');
+      const od = new window.jspdf.jsPDF('p', 'mm', 'a4').output('arraybuffer');
+      return { nw: await bmPdfIsNewLayout(nw), od: await bmPdfIsNewLayout(od), sig: bmGroupHasSig(g), nosig: bmGroupHasSig({ members: [{ name: '옛' }] }) };
+    });
+    check('예전 양식 PDF v21.39: 지금 양식 PDF는 표시 있음 · 예전 PDF는 없음 → 결재 관리에서 지금 양식으로 보여 줌 (서명 없는 옛 기록은 저장본 그대로)', lay.skip || (lay.nw === true && lay.od === false && lay.sig && !lay.nosig), lay);
     // v21.27 월 보고서 (결재 양식) — 서버
     const mm = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7), yy = +mm.slice(0, 4), mo = +mm.slice(5, 7);
     const mr = post({ op: 'report.monthly', year: yy, month: mo, t: tk.a }), mrD = post({ op: 'report.monthly', year: yy, month: mo, t: tk.d }), mrBad = post({ op: 'report.monthly', year: yy, month: 13, t: tk.a });
