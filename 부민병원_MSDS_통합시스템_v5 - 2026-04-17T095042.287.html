@@ -1283,7 +1283,7 @@ input.apv-in[type=text]{width:110px}
 .apv-menu button:hover{background:#F2F8EC}.apv-menu button.danger{color:#A3302A}.apv-menu button.danger:hover{background:#FBE5E2}
 .apv-menu label{padding:8px 10px;border-top:1px solid #ECEBE7;margin-top:4px;font-weight:600}
 .apv-menu #apv-archive-status{padding:0 10px 6px;font-size:12px;color:#5A5650}
-#apv-list{max-height:calc(100vh - var(--bm-top) - var(--bm-bot) - 330px);min-height:240px;overflow-y:auto}
+#apv-list{max-height:calc(100vh - var(--bm-top) - var(--bm-bot) - 330px);min-height:240px;overflow-y:auto;container-type:inline-size}
 #apv-list .apv-row{display:grid;grid-template-columns:22px 70px minmax(110px,1.1fr) minmax(90px,1fr) 44px 74px 112px;gap:10px;align-items:center;padding:9px 12px 9px 12px;border-bottom:1px solid #ECEBE7;font-size:14px;cursor:pointer}
 #apv-list .apv-head{position:sticky;top:0;z-index:5;background:#E2F0D5!important;color:var(--bm-g8);font-size:13px;font-weight:800;cursor:default;border-left:4px solid #E2F0D5}
 #apv-list .apv-row input{width:16px;height:16px;accent-color:var(--bm-g6)}
@@ -7400,8 +7400,9 @@ function bmFitPages(){
     var p = el.parentElement; if(!p || !p.offsetParent) return;
     var cs = getComputedStyle(p), avail = p.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0);
     var nat = parseFloat(el.getAttribute('data-bm-page')) || el.offsetWidth;
-    var z = avail > 0 ? Math.min(1, avail / nat) : 1;
-    el.style.zoom = z < 0.995 ? String(Math.round(z * 1000) / 1000) : '';
+    var max = el.closest('#data-view-modal,.bm-fit-grow') ? 1.4 : 1;   // 일지 보기 창은 큰 모니터에서 키움 · 작성 화면 미리보기는 원래 크기까지
+    var z = avail > 0 ? Math.min(max, avail / nat) : 1;
+    el.style.zoom = Math.abs(z - 1) > 0.005 ? String(Math.round(z * 1000) / 1000) : '';
   });
 }
 (function(){
@@ -10209,7 +10210,7 @@ function apvRender(){
       <input type="checkbox" ${isSelected?'checked':''} onchange="apvToggle('${g.groupKey}', this.checked)"
              title="${g.approved?'결재 완료됨 — 영구 삭제용으로만 선택 가능':'선택하여 결재 · 반려 · 삭제'}" aria-label="선택">
       <span class="apv-kind ${isMSDS?'m':'s'}">${typeShort}</span>
-      <span class="apv-dept"><b>${g.dept||'-'}</b><small>${dispDate}${g.totalHours||g.time?' · '+(g.totalHours||g.time):''}</small></span>
+      <span class="apv-dept"><b>${g.dept||'-'}</b><small>${dispDate}${g.totalHours||g.time?'<span class="apv-hrs"> · '+(g.totalHours||g.time)+'</span>':''}</small></span>
       <span class="apv-who">${memberStr}</span>
       <span class="apv-sig ${sigCount>=g.members.length?'ok':'warn'}">${sigCount}/${g.members.length}</span>
       <span>${apvStatusChip(g)}</span>
@@ -14184,7 +14185,7 @@ function _showDataModal(title, contentHtml, modalId){
   modal.onclick = e => { if(e.target===modal) cleanup(); };
 
   modal.innerHTML = `
-    <div style="background:#fff;border-radius:12px;max-width:760px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.25)">
+    <div style="background:#fff;border-radius:12px;max-width:${/data-bm-page/.test(contentHtml) ? 'min(1140px, 94vw)' : '760px'};width:100%;max-height:92vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.25)">
       <div style="background:#345C12;color:#fff;padding:14px 20px;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:1">
         <div style="font-size:15px;font-weight:800">${title}</div>
         <button class="data-modal-close" style="background:rgba(255,255,255,0.2);border:none;color:#fff;font-size:20px;width:30px;height:30px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
@@ -22260,6 +22261,24 @@ button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,inpu
 .rp-tabbody{background:#fff;border:1px solid #DDDBD5;border-top:0;border-radius:0 0 8px 8px;padding:10px 12px}
 .rp-pvhd{margin:18px 0 6px;font-size:13px;color:#45423D;font-weight:600}
 @media (max-width:900px){.rp-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.rp-grid{grid-template-columns:minmax(0,1fr)}}
+</style>
+<style id="bm-v2137-fit">
+/* v21.37 결재 목록: PC 창 · 해상도에 따라 — 목록 칸이 좁으면(오른쪽 PDF 원본 칸이 열린 1280px 화면 등) 두 단으로, 날짜 · 이름이 겹치지 않게 */
+#apv-list .apv-dept small{white-space:normal;line-height:1.35}
+#apv-list .apv-dept small .apv-hrs{white-space:nowrap}
+#apv-list .apv-who{white-space:normal;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:keep-all;overflow-wrap:anywhere}
+#apv-list .apv-ra{display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap}
+@container (max-width: 700px){
+  #apv-list .apv-row{grid-template-columns:20px 62px minmax(0,1.25fr) minmax(0,1fr) auto !important;grid-template-areas:"c k d w r" "c k d s t";gap:4px 8px !important;row-gap:4px !important}
+  #apv-list .apv-row > :nth-child(1){grid-area:c}#apv-list .apv-row > :nth-child(2){grid-area:k}#apv-list .apv-row > :nth-child(3){grid-area:d}
+  #apv-list .apv-row > :nth-child(4){grid-area:w}#apv-list .apv-row > :nth-child(5){grid-area:s;justify-self:start}#apv-list .apv-row > :nth-child(6){grid-area:t;justify-self:end}#apv-list .apv-row > :nth-child(7){grid-area:r}
+  #apv-list .apv-head > :nth-child(5),#apv-list .apv-head > :nth-child(6){display:none}
+  #apv-list .apv-ra button{min-width:40px;height:30px;padding:0 6px;font-size:12.5px}
+}
+@container (max-width: 430px){
+  #apv-list .apv-row{grid-template-columns:20px minmax(0,1fr) auto !important;grid-template-areas:"c d r" "c w r" "c s t" !important}
+  #apv-list .apv-row > :nth-child(2){display:none}
+}
 </style>
 </body>
 </html>

@@ -2430,6 +2430,16 @@ function check(name, cond, extra) {
     await p3.setViewportSize({ width: 1440, height: 900 });
     check('좁은 화면 v21.37: 일지 미리보기 통째로 축소(600px → 약 0.6배) · 칸 넘침 0 · [선택 일지 새 양식으로 다시 만들기] · 서명 없는 옛 기록은 건너뜀',
       nar.zoom && +nar.zoom < 0.8 && nar.over === 0 && nar.btn && (nar.skip === 'skip' || nar.skip === false), nar);
+    // v21.38 PC 모니터 폭: 결재 목록은 목록 폭에 맞춰 두 줄로 바뀌고(겹침 없음) · 넓은 모니터에서는 일지 보기 확대
+    const pcw = await p3.evaluate(async () => {
+      const L = document.getElementById('apv-list'); if (!L) return { none: true };
+      const cs = getComputedStyle(L).containerType;
+      const g = { type: 'MSDS교육', dept: '61병동', dateStart: '2026-11-16', members: [{ name: '가', instructor: '김', indiv: '○', common: '○' }] };
+      _showDataModal('일지', buildEduPreviewHTML(g, null)); await new Promise(r => setTimeout(r, 300));
+      const pg = document.querySelector('#data-view-modal [data-bm-page]'); const z = +(pg.style.zoom || 1); document.getElementById('data-view-modal').remove();
+      return { cs, z };
+    });
+    check('PC 화면 v21.38: 결재 목록 = 폭 따라 배치 바뀜(container) · 1440px 모니터에서 일지 보기 확대(>1)', pcw.none || (pcw.cs === 'inline-size' && pcw.z > 1), pcw);
     // v21.27 월 보고서 (결재 양식) — 서버
     const mm = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7), yy = +mm.slice(0, 4), mo = +mm.slice(5, 7);
     const mr = post({ op: 'report.monthly', year: yy, month: mo, t: tk.a }), mrD = post({ op: 'report.monthly', year: yy, month: mo, t: tk.d }), mrBad = post({ op: 'report.monthly', year: yy, month: 13, t: tk.a });
