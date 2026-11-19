@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.28 (2026-11-19)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.29 (2026-11-19)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -3446,6 +3446,7 @@ function ruleMatch_(r, e) {
    ③ 사번 주인이 같은 이름 → 그 사람 (부서를 옮긴 경우 — 부서 이동 판정은 covers가 함)
    그 외(다른 부서 동명이인 · 퇴사자 사번)는 아무에게도 붙이지 않음 */
 const baseDept_ = d => normDept_(deptAlias_(d)).replace(/\(.*\)$/, '');
+function viaKind_(r) { return r.bulk ? '수기 일괄' : (r.manual ? '수기(종이)' : '교육일지'); }
 function ledgerOwners_(recs, emps) {
   const valid = no => /^\d{6,}$/.test(String(no || ''));
   const byNo = {}, byNameDept = {};
@@ -3529,6 +3530,7 @@ function eduStatus_(s) {
     else if (ruleEx && !inc) ex = mine.some(here) ? null : ruleEx;
     const p = { no: e.empNo, name: e.name, dept: e.dept, joinDate: e.joinDate, need: di.need, records: mine.length,
                 lastEdu: mine.map(r => r.ds).sort().pop() || '', job: jobOf_(e.position) };
+    if (mine.length) { const lr = mine.slice().sort((a, b) => String(a.ds).localeCompare(String(b.ds))).pop(); p.via = { kind: viaKind_(lr), dept: deptAlias_(lr.dept), type: lr.special ? '특별' : 'MSDS' }; }
     if (/휴직/.test(e.status || '')) p.onLeave = true;
     if (rule && rule.decision === '대상') p.rule = ri + 1;
     if (inc) p.included = inc;
@@ -3565,6 +3567,10 @@ function eduStatus_(s) {
       else if (cf) {
         p.moveOk = Object.assign(base, cf);
         if (p.status === '미이수' && all.length) { p.status = '이수'; p.byMove = true; delete p.deadline; delete p.overdue; }
+      } else if (p.status === '이수') {
+        /* v21.29 김민상 사례: 중환자실(수기 이수) → 혈관센터 → 중환자실. 기존 기록이 지금 부서 물질을 이미 포함해 이수면
+           따로 확인할 것 없음 → 자동으로 확인 끝 (부서이동 확인 숫자 · 미이수처럼 보이던 표시 없앰) */
+        p.moveOk = Object.assign(base, { how: '기존 교육 기록이 지금 부서 물질 포함 (자동 확인)', auto: true });
       } else p.moveCheck = base;
     }
     // 새 물질 교육
@@ -3589,7 +3595,23 @@ function eduStatus_(s) {
     if (p.overdue) d.overdue++;
     if (p.newChemPending) d.newChem++;
   });
-  return { success: true, today: today, serverVersion: SERVER_VERSION, people: people, depts: Object.keys(depts).sort().map(k => depts[k]), ruleHits: hits,
+  // v21.29 퇴사자: 숫자에는 넣지 않고 [퇴사자도 보기]용으로만 (화학물질 쓰는 부서 · 교육 기록 유무 · 최근 교육 · 근거)
+  const resigned = [];
+  if (s.role === 'admin') {
+    const allRecBy = {};
+    recs.forEach(r => { const k = /^\d{6,}$/.test(String(r.no || '')) ? 'no:' + r.no : 'nm:' + r.name + '|' + baseDept_(r.dept); (allRecBy[k] = allRecBy[k] || []).push(r); });
+    const seenR = {};
+    (readEmployees_() || []).filter(e => e.dept && (isResigned_(e) || (e.leaveDate && e.leaveDate < today))).forEach(e => {
+      const d = deptAlias_(e.dept);
+      if (!info(d)) return;
+      const k = /^\d{6,}$/.test(String(e.empNo || '')) ? 'no:' + e.empNo : 'nm:' + e.name + '|' + baseDept_(d);
+      if (seenR[k]) return; seenR[k] = 1;
+      const rs = allRecBy[k] || [];
+      const lr = rs.slice().sort((a, b) => String(a.ds).localeCompare(String(b.ds))).pop();
+      resigned.push({ no: e.empNo, name: e.name, dept: d, joinDate: e.joinDate, leaveDate: e.leaveDate || '', records: rs.length, lastEdu: lr ? lr.ds : '', via: lr ? { kind: viaKind_(lr), dept: deptAlias_(lr.dept), type: lr.special ? '특별' : 'MSDS' } : null });
+    });
+  }
+  return { success: true, today: today, serverVersion: SERVER_VERSION, people: people, resigned: resigned, depts: Object.keys(depts).sort().map(k => depts[k]), ruleHits: hits,
            unitOptions: Object.keys(map).filter(k => k !== '병동').sort(),
            rules: { specialHours: SPECIAL_HOURS, online: SPECIAL_ONLINE, months: SPECIAL_MONTHS, newChemDays: NEWCHEM_DAYS } };
 }
@@ -3915,6 +3937,7 @@ function monthlyReport_(req) {
       const k = pkey_(m.no, m.name), p = pBy[k];
       if (!p || p.status === '제외' || !sameDept_(p.dept, deptAlias_(m.to))) return;
       if (mvc[k + '|' + normDept_(p.dept) + '|' + m.date]) return;   // 기존 교육으로 충분 — 교육 대상 아님
+      if (p.moveOk && p.moveOk.auto && p.moveOk.date === m.date) return;   // v21.29 기존 기록이 새 부서 물질 포함 — 교육 대상 아님
       const fresh = recsOf(k).filter(r => !r.bulk && baseDept_(r.dept) === baseDept_(p.dept) && r.ds >= m.date).map(r => r.ds).sort();
       add({ key: k, name: p.name, no: p.no, dept: p.dept, need: p.need, kind: '부서이동', date: m.date, from: m.from,
             done: fresh.length > 0, status: fresh.length ? '이수' : '미이수', lastEdu: fresh[0] || '' });

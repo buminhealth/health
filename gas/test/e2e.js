@@ -333,7 +333,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.28 \(2026-11-19\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.29 \(2026-11-19\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
   check('서버 버전 비교: v21.9 서버는 v21.10 앱에서 배포 필요로 (글자 순서 아님)', await page.evaluate(() => { try { return bmVerLess('v21.9 (2026-11-03)', 'v21.10') && !bmVerLess('v21.10 (2026-11-04)', 'v21.10') && !bmVerLess('v22.0', 'v21.10'); } catch (e) { return String(e); } }) === true);
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
@@ -523,7 +523,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.28'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.29'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -2260,20 +2260,22 @@ function check(name, cond, extra) {
   {
     const post = (b) => JSON.parse(g.api.doPost({ postData: { contents: JSON.stringify(b) } }).text);
     const SA = g.ctx.SpreadsheetApp.getActiveSpreadsheet();
-    const e1 = empRow('126888001', '이동직원', '71병동', '재직', '간호사6급'); empSh.appendRow(e1);
+    const e1 = empRow('126888001', '이동직원', '61병동', '재직', '간호사6급'); empSh.appendRow(e1);   // 9병동(다른 물질 기록) → 61병동
+    const e4 = empRow('126888004', '왕복이동', '71병동', '재직', '간호사6급'); empSh.appendRow(e4);   // v21.29 김민상 사례: 같은 물질 기록이 있는 부서로 되돌아옴
     const e2 = empRow('126888002', '이동새교육', '71병동', '재직', '간호사6급'); empSh.appendRow(e2);
     const e3 = empRow('126888003', '퇴사직원', '61병동', '퇴사', '간호사6급'); empSh.appendRow(e3);
     if (!led.rows.length) led.rows.push(LH);
     const LHn = led.rows[0];
     const L2 = (type, dept, ds, no, nm) => LHn.map(h => ({ '순번': 900, '제출일시': ds + 'T01:00Z', '교육구분': type, '교육부서': dept, '취급물질': '뉴젠자임폼', '교육시작일': ds, '교육종료일': ds, '교육일수': '1', '총교육시간': '1시간', '사번': no, '성명': nm, '입사일': '', '서명여부': '✓ 서명완료' }[h] ?? ''));
-    led.rows.push(L2('MSDS교육', '61병동', '2026-03-02', '126888001', '이동직원'), L2('MSDS교육', '61병동', '2026-03-02', '126888002', '이동새교육'),
-                  L2('MSDS교육', '71병동', '2026-11-10', '126888002', '이동새교육'), L2('MSDS교육', '61병동', '2025-05-01', '126888003', '퇴사직원'));
+    led.rows.push(Object.assign(L2('MSDS교육', '9병동', '2026-03-02', '126888001', '이동직원'), { [LHn.indexOf('취급물질')]: '다른물질' }), L2('MSDS교육', '61병동', '2026-03-02', '126888002', '이동새교육'),
+                  L2('MSDS교육', '71병동', '2026-11-10', '126888002', '이동새교육'), L2('MSDS교육', '61병동', '2025-05-01', '126888003', '퇴사직원'), L2('MSDS교육', '71병동', '2026-01-10', '126888004', '왕복이동'));
     const mvs = g.sheets['부서이동기록'] || SA.insertSheet('부서이동기록');
-    mvs.rows = [['반영일', '사번', '이름', '이전 부서', '새 부서', '비고'], ['2026-11-04', "'126888001", '이동직원', '61병동', '71병동', '인사 사이트 동기화'], ['2026-11-04', "'126888002", '이동새교육', '61병동', '71병동', '인사 사이트 동기화']];
+    mvs.rows = [['반영일', '사번', '이름', '이전 부서', '새 부서', '비고'], ['2026-11-04', "'126888001", '이동직원', '9병동', '61병동', '인사 사이트 동기화'], ['2026-11-04', "'126888004", '왕복이동', '61병동', '71병동', '인사 사이트 동기화'], ['2026-11-04', "'126888002", '이동새교육', '61병동', '71병동', '인사 사이트 동기화']];
     g.api.eduCacheClear_();
     const st = post({ op: 'edu.status', fresh: true, t: tk.a });
     const P = nm => st.people.find(p => p.name === nm) || {};
-    check('부서이동 v21.25: 이동 뒤 새 부서 교육 · 확인이 없으면 이동 확인 필요 · 새 부서 교육이 있으면 확인 끝 · 부서 집계', !!P('이동직원').moveCheck && P('이동직원').moveCheck.from === '61병동' && !P('이동새교육').moveCheck && P('이동새교육').moveOk && /새 부서/.test(P('이동새교육').moveOk.how) && st.depts.find(d => d.dept === '71병동').moveCheck >= 1, [P('이동직원'), P('이동새교육').moveOk]);
+    check('부서이동 v21.25: 이동 뒤 새 부서 교육 · 확인이 없으면 이동 확인 필요 · 새 부서 교육이 있으면 확인 끝 · 부서 집계', !!P('이동직원').moveCheck && P('이동직원').moveCheck.from === '9병동' && !P('이동새교육').moveCheck && P('이동새교육').moveOk && /새 부서/.test(P('이동새교육').moveOk.how) && st.depts.find(d => d.dept === '61병동').moveCheck >= 1, [P('이동직원'), P('이동새교육').moveOk]);
+    check('부서이동 v21.29: 이전 기록이 지금 부서 물질을 이미 포함해 이수면 자동 확인 끝 (확인 필요 · 미이수로 안 보임)', P('왕복이동').status === '이수' && !P('왕복이동').moveCheck && P('왕복이동').moveOk && P('왕복이동').moveOk.auto && /수기 일괄|교육일지/.test((P('왕복이동').via || {}).kind || ''), P('왕복이동'));
     const td = post({ op: 'dash.today', t: tk.a }), tdD = post({ op: 'dash.today', t: tk.d });
     check('오늘 할 일 v21.25: 서버가 미회신 · 기한 초과/임박 · 부서이동 · 대장 반영 대기를 한 번에 (관리자만)', td.success && td.moveCheck >= 1 && ['nhNoReply', 'eduOver', 'eduSoon', 'ledger', 'nhEduWait', 'newChem'].every(k => typeof td[k] === 'number') && !tdD.success, td);
     // 화면: 대시보드 줄 → 부서이동 확인 → [기존 교육으로 충분] → 통합 검색 → 연간 보고서
@@ -2289,22 +2291,31 @@ function check(name, cond, extra) {
     await p3.click('#dash-today [data-go="edu:move"]');
     await p3.waitForSelector('#eb-list [data-mok]', { timeout: 20000 });
     const ml = await p3.evaluate(() => ({ pane: document.querySelector('#adm-pane-edu').classList.contains('active'), st: document.getElementById('ef-st').value, rows: [...document.querySelectorAll('#eb-list tr')].slice(1).map(tr => tr.textContent.replace(/\s+/g, ' ').slice(0, 120)), kpi: !!document.querySelector('#edu-board [data-kst="move"]') }));
-    check('부서이동 화면 v21.25: 대시보드에서 누르면 교육 현황이 [부서이동 확인 필요]로 열림 · 이동 경로 표시 · 확인 버튼 · 숫자 카드', ml.pane && ml.st === 'move' && ml.rows.length >= 1 && ml.rows.every(r => /이동 확인 필요/.test(r)) && ml.rows.some(r => /이동직원.*61병동 → 71병동/.test(r)) && ml.kpi, ml);
+    check('부서이동 화면 v21.25: 대시보드에서 누르면 교육 현황이 [부서이동 확인 필요]로 열림 · 이동 경로 표시 · 확인 버튼 · 숫자 카드', ml.pane && ml.st === 'move' && ml.rows.length >= 1 && ml.rows.every(r => /이동 확인 필요/.test(r)) && ml.rows.some(r => /이동직원.*9병동 → 61병동/.test(r)) && ml.kpi, ml);
     await p3.click('#eb-list [data-mok]');
     await p3.waitForFunction(() => !document.querySelector('#eb-list [data-mok]'), null, { timeout: 15000 }).catch(() => {});
     const after = post({ op: 'edu.status', fresh: true, t: tk.a });
     const mvc = (g.sheets['부서이동확인'] || { rows: [] }).rows;
     check('부서이동 v21.25: [기존 교육으로 충분] → 확인 기록(부서이동확인 시트 · 확인자) · 표시 사라짐', !after.people.find(p => p.name === '이동직원').moveCheck && /기존 교육으로 충분/.test(after.people.find(p => p.name === '이동직원').moveOk.how) && mvc.length === 2 && mvc[1][6] === '보건관리자', [after.people.find(p => p.name === '이동직원'), mvc[1]]);
-    const again = post({ op: 'edu.moveOk', no: '126888001', name: '이동직원', dept: '71병동', t: tk.a }), wrong = post({ op: 'edu.moveOk', no: '126888001', name: '이동직원', dept: '71병동', t: tk.d });
-    check('부서이동 v21.25: 두 번 눌러도 한 줄 · 다른 부서 계정은 못 함', again.already && wrong.status === 403 && mvc.length === 2, [again, wrong.status]);
+    const again = post({ op: 'edu.moveOk', no: '126888001', name: '이동직원', dept: '61병동', t: tk.a }), wrong = post({ op: 'edu.moveOk', no: '126888001', name: '이동직원', dept: '61병동', t: tk.d });
+    check('부서이동 v21.25: 두 번 눌러도 한 줄 (그 부서 부서장도 확인 가능 · 이미 확인됨)', again.already && wrong.already && mvc.length === 2, [again, wrong]);
+    // v21.29 부서 명단: 부서를 고르면 '할 일'이 아니라 전원 · 이수 근거(수기 일괄 등) · 제외 사유 · 퇴사자 따로 · 기록 탭 안내
+    await p3.selectOption('#ef-st', 'todo'); await p3.selectOption('#ef-dept', '71병동'); await p3.waitForTimeout(400);
+    const dl = await p3.evaluate(() => ({ st: document.getElementById('ef-st').value, rows: [...document.querySelectorAll('#eb-list tr')].slice(1).map(tr => tr.textContent.replace(/\s+/g, ' ')), basis: (document.querySelector('#eb-list .eb-basisline') || {}).textContent || '' }));
+    await p3.check('#ef-resigned'); await p3.waitForTimeout(300);
+    await p3.selectOption('#ef-dept', '61병동'); await p3.waitForTimeout(300);
+    const rs = await p3.evaluate(() => document.getElementById('eb-list').textContent.replace(/\s+/g, ' '));
+    check('부서 명단 v21.29: 부서를 고르면 전원(이수 포함) · 최근 교육 아래 수기 일괄 표시 · 이수 근거 요약 · [퇴사자도 보기]는 숫자 밖 따로',
+      dl.st === '' && dl.rows.some(r => /왕복이동.*이수/.test(r) && /수기 일괄|교육일지/.test(r)) && /교육일지\(시스템\)/.test(dl.basis) && /퇴사자 · 61병동/.test(rs) && /퇴사직원/.test(rs), [dl, rs.slice(-300)]);
+    await p3.uncheck('#ef-resigned'); await p3.selectOption('#ef-dept', ''); await p3.selectOption('#ef-st', 'todo');
     // 통합 검색
     const sr = post({ op: 'search.person', q: '이동직원', t: tk.a }), sq = post({ op: 'search.person', q: '퇴사직', t: tk.a }), sn = post({ op: 'search.person', q: '126888003', t: tk.a }), sd = post({ op: 'search.person', q: '이동직원', t: tk.d }), s1 = post({ op: 'search.person', q: '이', t: tk.a });
     const me = sr.people && sr.people[0] || {};
-    check('직원 · 일지 찾기 v21.25: 이름 → 부서 · 교육 판정 · 교육 기록 · 부서이동(확인 내용) · 퇴사자도(이름 · 사번) · 관리자만 · 한 글자 막음', sr.success && me.dept === '71병동' && me.edu && me.edu.status === '이수' && me.recs.length === 1 && me.moves.length === 1 && /기존 교육으로 충분/.test(me.moves[0].confirm) && sq.people.length === 1 && sq.people[0].status === '퇴사' && sq.people[0].recs.length === 1 && !sq.people[0].edu && sn.people.length === 1 && sn.people[0].name === '퇴사직원' && !sd.success && !s1.success, [me, sq.people && sq.people[0] && sq.people[0].status]);
+    check('직원 · 일지 찾기 v21.25: 이름 → 부서 · 교육 판정 · 교육 기록 · 부서이동(확인 내용) · 퇴사자도(이름 · 사번) · 관리자만 · 한 글자 막음', sr.success && me.dept === '61병동' && me.edu && me.edu.status === '이수' && me.recs.length === 1 && me.moves.length === 1 && /기존 교육으로 충분/.test(me.moves[0].confirm) && sq.people.length === 1 && sq.people[0].status === '퇴사' && sq.people[0].recs.length === 1 && !sq.people[0].edu && sn.people.length === 1 && sn.people[0].name === '퇴사직원' && !sd.success && !s1.success, [me, sq.people && sq.people[0] && sq.people[0].status]);
     await p3.fill('.adm-top-find input', '이동직원'); await p3.press('.adm-top-find input', 'Enter');
     await p3.waitForSelector('#fd-out .fd-card', { timeout: 15000 });
     const fd = await p3.evaluate(() => ({ pane: document.getElementById('adm-pane-find').classList.contains('active'), cards: document.querySelectorAll('#fd-out .fd-card').length, t: document.getElementById('fd-out').textContent.replace(/\s+/g, ' '), nav: !!document.querySelector('.adm-nav-item[data-pane="find"]') }));
-    check('직원 · 일지 찾기 화면 v21.25: 위쪽 찾기 칸 → 찾기 화면 · 카드에 판정 · 교육 기록 · 부서이동 · 메뉴', fd.pane && fd.cards === 1 && /이수/.test(fd.t) && /교육 기록/.test(fd.t) && /61병동 → 71병동/.test(fd.t) && /교육일지 PDF/.test(fd.t) && fd.nav, fd);
+    check('직원 · 일지 찾기 화면 v21.25: 위쪽 찾기 칸 → 찾기 화면 · 카드에 판정 · 교육 기록 · 부서이동 · 메뉴', fd.pane && fd.cards === 1 && /이수/.test(fd.t) && /교육 기록/.test(fd.t) && /9병동 → 61병동/.test(fd.t) && /교육일지 PDF/.test(fd.t) && fd.nav, fd);
     await p3.click('#fd-out [data-edu]');
     await p3.waitForSelector('#eb-list', { timeout: 15000 });
     await p3.waitForTimeout(800);
