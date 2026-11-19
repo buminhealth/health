@@ -6820,9 +6820,10 @@ function buildChemCheckboxes(pfx, dept){
   const splitDot=arr=>{const out=[];arr.forEach(item=>{if(/\(\d+\)\.[^\s]/.test(item)){item.split('.').forEach(p=>{const t=p.trim();if(t)out.push(t);});}else{out.push(item);}});return out;};
   /* v21.32 템플릿 물질 이름은 MSDS 목록이 있으면 그 제품으로 대신 (회복실 '소다라임' + '소다라임 1.2kg' · '소다라임 1.0L' 3개 → 2개)
      · 특별교육 공정 항목(밀폐공간작업(8) · 압력용기(8) 등 괄호 시간)은 그대로 · MSDS 목록이 비어 있는 부서는 템플릿 이름 그대로 */
-  const isProcess = s => /\(\d+(\.\d+)?\)\s*$/.test(String(s).trim());
-  const tpl = splitDot(eduChems).map(s=>String(s).trim()).filter(Boolean).filter(s=>!chemItems.length || isProcess(s));
-  const all=[...new Set([...tpl,...chemItems])];
+  /* v21.33 취급물질은 chemicals 시트(MSDS 목록)만 기준 — 특별교육대장 · MSDS교육대장 · 내장 템플릿의 물질 이름은 쓰지 않음
+     (보건관리자가 특별교육대장 취급물질 칸을 지움 · 회복실 소다라임 · 뉴젠자임폼 기준을 chemicals 시트 부서 칸으로 일원화) */
+  void eduChems; void splitDot;
+  const all=[...new Set(chemItems)];
   const grid=document.getElementById(pfx+'-chem-grid');
   if(!all.length){grid.innerHTML='<p class="text-xs text-slate-400">해당 부서의 취급물질을 직접 선택하거나 입력하세요.</p>';return;}
   grid.innerHTML=all.map((n,i)=>`
@@ -7378,13 +7379,27 @@ async function bmShrinkStoredPdf(f){
   if(!put.ok){ let m = ''; try{ m = (await put.json()).message; }catch(_){} throw new Error('저장 실패 ' + (m || put.status)); }
   return { before: before.length, after: out.length };
 }
+// v21.33 교육 사진 칸: 4등분 (1장 = 칸 전체 · 2장 = 위 두 칸 · 3장 = 세 칸 · 4장 = 네 칸) — 비율 유지(잘리지 않음)
+function bmPhotoGrid(list, minH, P){
+  const photos = (list || []).filter(Boolean).slice(0, 4);
+  if(!photos.length) return `<div style="flex:1;min-height:${minH}px;display:flex;align-items:center;justify-content:center;color:${P.txtGray};font-size:11px">첨부사진 없음</div>`;
+  const areas = photos.length === 1 ? ['1 / 1 / 3 / 3'] : ['1 / 1 / 2 / 2', '1 / 2 / 2 / 3', '2 / 1 / 3 / 2', '2 / 2 / 3 / 3'];
+  return `<div style="flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:5px;min-height:${minH}px">` +
+    photos.map((p, i) => `<div style="grid-area:${areas[i]};border:1px solid ${P.border};background-color:#f4f6f9;background-image:url('${p}');background-size:contain;background-position:center;background-repeat:no-repeat;min-height:0"></div>`).join('') + `</div>`;
+}
 async function pdfRenderPagesProtected(area, cv, pdf, pw, ph, scale, fillSinglePage){
   const ih = (cv.height/cv.width) * pw;
 
-  // ── 한 페이지에 들어가면: A4 전체로 stretch (옵션) 또는 그대로
+  /* v21.33 A4 비율: 예전엔 한 장보다 짧으면 세로로 늘려(글자가 길쭉해짐) 채웠음 → 늘리지 않음 (일지 자체가 A4 높이로 칸을 채움)
+     · 조금(30% 안) 넘치면 글자 · 표를 같은 비율로 줄여 한 장에 · 그보다 길면(사람 · 일수가 많음) 서명 줄을 자르지 않고 여러 장 */
+  void fillSinglePage;
   if (ih <= ph) {
-    const finalH = fillSinglePage ? ph : ih;
-    pdf.addImage(pdfPageImg(cv), 'JPEG', 0, 0, pw, finalH, undefined, 'FAST');
+    pdf.addImage(pdfPageImg(cv), 'JPEG', 0, 0, pw, ih, undefined, 'FAST');
+    return;
+  }
+  if (ih <= ph * 1.3) {
+    const w = pw * ph / ih;
+    pdf.addImage(pdfPageImg(cv), 'JPEG', (pw - w) / 2, 0, w, ph, undefined, 'FAST');
     return;
   }
 
@@ -9248,7 +9263,7 @@ function e1BuildPdfHTML(){
   const place     = document.getElementById('e1-place').value || '-';
   const instrFull = document.getElementById('e1-instr').value || '-';
   const instrName = instrFull.includes('/') ? instrFull.split('/')[0].trim() : instrFull;
-  const instrPos  = instrFull.includes('/') ? instrFull.split('/')[1].trim() : '';
+  const instrPos  = '부서의 장';   // v21.33 소속·직위는 항상 '부서의 장'
   const indiv     = document.getElementById('e1-indiv').value;
   const common    = document.getElementById('e1-common').value;
   const minJoin   = e1.parts.map(p=>p.join).filter(Boolean).sort()[0]||'-';
@@ -9266,19 +9281,8 @@ function e1BuildPdfHTML(){
   const VAL  = `background:${P.bgWhite};border:1.2px solid ${P.border};padding:10px 13px;font-size:12px;font-weight:400;color:${P.txt};vertical-align:middle;line-height:1.5;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif`;
   const e1StampHtml = BuminApproval.renderStampOnly(e1.approval, {size:36});
 
-/* ★ v15.44: 결재 PDF 동일 방식 — <table><td><img max-width/max-height>로 object-fit 회피 */
-  const photos = e1.photos.filter(Boolean);
-  const photoHtml = photos.length
-    ? `<table style="width:100%;border-collapse:collapse">
-        <tr>
-          ${photos.slice(0,4).map(p => `
-            <td style="border:1px solid ${P.border};padding:4px;text-align:center;background:${P.bgWhite};vertical-align:middle;width:${100/Math.min(photos.length,4)}%">
-              <img src="${p}" style="max-width:100%;max-height:118px;display:block;margin:0 auto">
-            </td>`).join('')}
-        </tr>
-      </table>`
-    : `<div style="color:${P.txtGray};font-size:11px;text-align:center;padding:20px 0">첨부사진 없음</div>`;
-  
+  // v21.33 교육 사진: 사진 칸을 4등분 — 1장은 칸 전체 · 2장은 위 두 칸 · 3장은 세 칸 · 4장은 네 칸 (교육 내용 칸과 같은 높이)
+  const photoHtml = bmPhotoGrid(e1.photos, 230, P);
   function makeDateBlock(date, di){
     const dayLabel = `${date}  (${DAYS[new Date(date).getDay()]}요일)  —  ${di+1}일차`;
     let rows = '';
@@ -9323,7 +9327,7 @@ function e1BuildPdfHTML(){
   }
 
   return `
-  <div style="padding:18px 22px;width:794px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;color:${P.txt};background:#fff;box-sizing:border-box;font-size:12px">
+  <div style="padding:18px 22px;width:794px;min-height:1123px;display:flex;flex-direction:column;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;color:${P.txt};background:#fff;box-sizing:border-box;font-size:12px">
     <div style="display:flex;align-items:center;border-bottom:2px solid ${P.navy};padding-bottom:9px;margin-bottom:8px;gap:14px">
       <div style="flex:1;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
         <div style="font-size:24px;font-weight:700;letter-spacing:2px;color:${P.navy};line-height:1">특별안전보건교육일지</div>
@@ -9366,11 +9370,10 @@ function e1BuildPdfHTML(){
         </td>
       </tr>
     </table>
-    <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
-      <tr>
-        <td style="width:58%;vertical-align:top;border:1px solid ${P.border};padding:0">
+    <div style="display:grid;grid-template-columns:58% 42%;margin-bottom:8px;flex:1 0 auto;border:1px solid ${P.border}">
+        <div style="border-right:1px solid ${P.border};display:flex;flex-direction:column">
           <div style="background:${P.navy};color:#fff;padding:6px 10px;font-weight:700;font-size:12px;text-align:center;letter-spacing:2px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif">교 육 내 용</div>
-          <table style="width:100%;border-collapse:collapse">
+          <table style="width:100%;border-collapse:collapse;flex:1">
             <tr>
               <td style="border-right:1px solid ${P.border};border-bottom:1px solid ${P.border};padding:9px 6px;width:42px;font-weight:700;background:${P.bgHead};text-align:center;color:${P.navy};font-size:12px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle">개별<br>내용</td>
               <td style="padding:10px 12px;vertical-align:middle;line-height:1.75;border-bottom:1px solid ${P.border};color:${P.txt};font-size:12px;font-weight:400;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif">${fmt(indiv)}</td>
@@ -9380,13 +9383,12 @@ function e1BuildPdfHTML(){
               <td style="padding:10px 12px;vertical-align:middle;line-height:1.75;color:${P.txt};font-size:12px;font-weight:400;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif">${fmt(common)}</td>
             </tr>
           </table>
-        </td>
-        <td style="vertical-align:top;border:1px solid ${P.border};padding:0">
+        </div>
+        <div style="display:flex;flex-direction:column">
           <div style="background:${P.navy};color:#fff;padding:6px 10px;font-weight:700;font-size:12px;text-align:center;letter-spacing:2px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif">교 육 사 진</div>
-          <div style="padding:7px;display:flex;justify-content:center;align-items:stretch;height:140px">${photoHtml}</div>
-        </td>
-      </tr>
-    </table>
+          <div style="padding:6px;flex:1;display:flex;flex-direction:column">${photoHtml}</div>
+        </div>
+    </div>
     <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
       <tr>
         <td style="${LBL}">강&nbsp;사&nbsp;명</td><td style="${VAL}">${instrName}</td>
@@ -9395,7 +9397,7 @@ function e1BuildPdfHTML(){
     </table>
     <div style="background:${P.navy};color:#fff;font-weight:800;font-size:13px;padding:8px 0;text-align:center;letter-spacing:3px;border-radius:2px;margin-bottom:6px">안전보건교육 대상자 서명</div>
     ${sigSection}
-    <div style="margin-top:10px;padding-top:8px;border-top:1px solid ${P.border};display:flex;justify-content:space-between;font-size:10.5px;color:${P.txtGray}">
+    <div style="margin-top:auto;padding-top:8px;border-top:1px solid ${P.border};display:flex;justify-content:space-between;font-size:10.5px;color:${P.txtGray}">
       <div>본 교육일지는 관리자에게 제출하여 보관합니다.</div>
       <div>인당의료재단 부민병원</div>
     </div>
@@ -9531,7 +9533,9 @@ function e2BuildPdfHTML(){
   const time   = document.getElementById('e2-time').value  || '-';
   const mth    = document.getElementById('e2-mth').value   || '-';
   const place  = document.getElementById('e2-place').value || '-';
-  const instr  = document.getElementById('e2-instr').value || '-';
+  const instrRaw = document.getElementById('e2-instr').value || '';
+  const instrNm  = instrRaw.includes('/') ? instrRaw.split('/')[0].trim() : (/부서의\s*장|부서장/.test(instrRaw) ? '' : instrRaw.trim());
+  const instr  = (instrNm ? instrNm + ' · ' : '') + '부서의 장';   // v21.33 소속·직위는 항상 '부서의 장'
   const indiv  = document.getElementById('e2-indiv').value;
   const common = document.getElementById('e2-common').value;
   const fmt    = t => (t||'').replace(/\n/g,'<br>');
@@ -9554,12 +9558,13 @@ function e2BuildPdfHTML(){
     : `<span style="font-size:12px;font-weight:400;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif">${chem}</span>`;
 
   const plen = e2.parts.length || 1;
+  const e2RowH = Math.max(52, Math.min(90, Math.floor(560 / plen)));   // v21.33 인원이 적으면 서명 줄을 높여 A4 한 장을 채움 (서명하기도 편함)
   let partRows = '';
   for(let i=0;i<plen;i++){
     const p   = e2.parts[i];
     const sig = e2.sigData[i]||null;
     const bg  = i%2===0 ? P.bgWhite : P.bgStripe;
-    partRows += `<tr style="height:52px" data-sig-row="1">
+    partRows += `<tr style="height:${e2RowH}px" data-sig-row="1">
       <td style="border:1.2px solid ${P.border};text-align:center;font-size:12px;font-weight:700;color:${P.navy};background:${P.bgHead};width:36px;vertical-align:middle;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif">${p?i+1:''}</td>
       <td style="border:1.2px solid ${P.border};font-size:12px;font-weight:700;text-align:center;background:${bg};color:${P.txt};vertical-align:middle;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif">${p?.name||''}</td>
       <td style="border:1.2px solid ${P.border};font-size:12px;font-weight:400;text-align:center;background:${bg};color:${P.txtSub};vertical-align:middle;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;font-variant-numeric:tabular-nums">${p?.join||''}</td>
@@ -9570,7 +9575,7 @@ function e2BuildPdfHTML(){
   }
 
   return `
-  <div style="padding:20px 26px 22px;width:750px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;color:${P.txt};background:#fff;box-sizing:border-box">
+  <div style="padding:20px 26px 22px;width:750px;min-height:1061px;display:flex;flex-direction:column;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;color:${P.txt};background:#fff;box-sizing:border-box">
     <div style="margin-bottom:14px">
       <div style="display:flex;align-items:center;padding-bottom:9px;border-bottom:2px solid ${P.navy};width:100%;gap:14px">
         <div style="flex:1;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
@@ -9640,7 +9645,7 @@ function e2BuildPdfHTML(){
       </thead>
       <tbody>${partRows}</tbody>
     </table>
-    <div style="margin-top:12px;padding-top:8px;border-top:1.5px solid ${P.border};display:flex;justify-content:space-between">
+    <div style="margin-top:auto;padding-top:8px;border-top:1.5px solid ${P.border};display:flex;justify-content:space-between">
       <div style="font-size:11px;font-weight:400;color:${P.txtGray};font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif">본 교육일지는 관리자에게 제출하여 보관합니다.</div>
       <div style="font-size:11px;font-weight:400;color:${P.txtGray};font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif">인당의료재단 부민병원</div>
     </div>
@@ -14012,14 +14017,7 @@ function buildEduPreviewHTML(group, currentRecordId, opts){
       <div style="background:${P.navy};color:#fff;font-weight:700;font-size:12px;padding:9px 0;text-align:center;letter-spacing:3px;border-radius:3px;margin-top:14px;margin-bottom:0;font-family:${FF}">
         교육 현장 사진 (${photos.length}장)
       </div>
-      <table style="width:100%;border-collapse:collapse;border:1.2px solid ${P.border}">
-        <tr>
-          ${photos.slice(0,4).map(p => `
-            <td style="border:1.2px solid ${P.border};padding:6px;text-align:center;background:${P.bgWhite};vertical-align:middle;width:${100/Math.min(photos.length,4)}%">
-              <img src="${p}" style="max-width:100%;max-height:200px;display:block;margin:0 auto">
-            </td>`).join('')}
-        </tr>
-      </table>`;
+      <div style="border:1.2px solid ${P.border};padding:6px;height:340px;display:flex;flex-direction:column">${bmPhotoGrid(photos, 320, P)}</div>`;
     }
     return '';
   })()}

@@ -2373,9 +2373,23 @@ function check(name, cond, extra) {
       CHEMS.length = 0; keepC.forEach(c => CHEMS.push(c)); Object.keys(DEPT_EDU).forEach(k => delete DEPT_EDU[k]); Object.assign(DEPT_EDU, keepE);
       return out;
     });
-    check('교육일지 취급물질 v21.32: 뉴젠자임폼은 병동 · 쓰는 부서만 (시설관리팀 · 진단검사의학과 · 병리과 X) · 회복실은 MSDS 목록 2개 · 공정 항목 유지',
-      JSON.stringify(chips.rec) === '["소다라임 1.2kg","소다라임 1.0L"]' && JSON.stringify(chips.fac) === '["관리대상물질(8)","밀폐공간작업(8)","압력용기(8)","CR-13"]' && JSON.stringify(chips.lab) === '["Acetone"]' &&
+    check('교육일지 취급물질 v21.32: 뉴젠자임폼은 병동 · 쓰는 부서만 (시설관리팀 · 진단검사의학과 · 병리과 X) · 회복실은 MSDS 목록 2개 · v21.33 템플릿 물질 · 공정 이름은 쓰지 않고 chemicals 시트만',
+      JSON.stringify(chips.rec) === '["소다라임 1.2kg","소다라임 1.0L"]' && JSON.stringify(chips.fac) === '["CR-13"]' && JSON.stringify(chips.lab) === '["Acetone"]' &&
       JSON.stringify(chips.path2) === '["Xylenes"]' && chips.ward.indexOf('뉴젠자임폼') >= 0 && chips.vasc.indexOf('뉴젠자임폼') >= 0 && chips.ward6.indexOf('뉴젠자임폼') >= 0, chips);
+    // v21.33 교육일지 양식: 사진 4등분(1장 = 전체 · 2장 = 위 두 칸 …) · 강사 소속·직위 '부서의 장' · A4 높이
+    const jf = await p3.evaluate(() => {
+      const px = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
+      const keep = { photos: e1.photos, parts: e1.parts, dates: e1.dates, sig: e1.sigData, chems: e1.chems };
+      e1.parts = [{ name: '시험', join: '2026-11-16' }]; e1.dates = ['2026-11-16']; e1.sigData = {}; e1.chems = ['CR-13'];
+      document.getElementById('e1-instr').value = '이성웅';
+      const grid = n => { e1.photos = Array(n).fill(px); const d = document.createElement('div'); d.innerHTML = e1BuildPdfHTML(); document.body.appendChild(d);
+        const cells = [...d.querySelectorAll('[style*="grid-area"]')].map(x => x.style.gridArea.replace(/\s/g, '')); const pos = d.innerText.match(/소속·직위\s*([^\n]+)/); const h = d.firstElementChild.offsetHeight; d.remove(); return { cells, pos: pos && pos[1].trim(), h }; };
+      const out = { one: grid(1), two: grid(2), three: grid(3), four: grid(4) };
+      e1.photos = keep.photos; e1.parts = keep.parts; e1.dates = keep.dates; e1.sigData = keep.sig; e1.chems = keep.chems;
+      return out;
+    });
+    check('교육일지 양식 v21.33: 사진 1장은 칸 전체 · 2장 위 두 칸 · 3장 세 칸 · 4장 네 칸 · 강사 소속·직위 부서의 장 · 일지 높이 A4 이상',
+      JSON.stringify(jf.one.cells) === '["1/1/3/3"]' && JSON.stringify(jf.two.cells) === '["1/1/2/2","1/2/2/3"]' && jf.three.cells.length === 3 && jf.four.cells.length === 4 && jf.four.cells[3] === '2/2/3/3' && jf.one.pos === '부서의 장' && jf.one.h >= 1123, jf);
     // v21.27 월 보고서 (결재 양식) — 서버
     const mm = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7), yy = +mm.slice(0, 4), mo = +mm.slice(5, 7);
     const mr = post({ op: 'report.monthly', year: yy, month: mo, t: tk.a }), mrD = post({ op: 'report.monthly', year: yy, month: mo, t: tk.d }), mrBad = post({ op: 'report.monthly', year: yy, month: 13, t: tk.a });
