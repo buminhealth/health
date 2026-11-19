@@ -5454,7 +5454,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.31';
+  var SERVER_EXPECT = 'v21.34';
   // v21.10: 'v21.9' < 'v21.10'을 글자 순서가 아니라 숫자로 비교
   function bmVerLess(a, b){
     var p = function(v){ return (String(v).match(/v?(\d+(?:\.\d+)*)/) || [,'0'])[1].split('.').map(Number); };
@@ -6404,7 +6404,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 });
 
 /* 병동 → 세부 병동 매핑 */
-const WARD_EXPAND = ['51병동','61병동','71병동','6병동','7병동','8병동','9병동','응급실','중환자실','인공신장실'];   // ★ gas/Code.gs의 WARDS와 같게 유지 (신규입사 알림 대상 판정)
+const WARD_EXPAND = ['51병동','61병동','71병동','6병동','7병동','8병동','9병동','응급실','중환자실'];   // v21.34 인공신장실 뺌 (뉴젠자임폼 안 씀)   // ★ gas/Code.gs의 WARDS와 같게 유지 (신규입사 알림 대상 판정)
 
 function buildDeptSelects(){
   const depts=[...new Set(CHEMS.flatMap(c=>c.departments))].sort();
@@ -6822,8 +6822,12 @@ function buildChemCheckboxes(pfx, dept){
      · 특별교육 공정 항목(밀폐공간작업(8) · 압력용기(8) 등 괄호 시간)은 그대로 · MSDS 목록이 비어 있는 부서는 템플릿 이름 그대로 */
   /* v21.33 취급물질은 chemicals 시트(MSDS 목록)만 기준 — 특별교육대장 · MSDS교육대장 · 내장 템플릿의 물질 이름은 쓰지 않음
      (보건관리자가 특별교육대장 취급물질 칸을 지움 · 회복실 소다라임 · 뉴젠자임폼 기준을 chemicals 시트 부서 칸으로 일원화) */
-  void eduChems; void splitDot;
-  const all=[...new Set(chemItems)];
+  /* v21.34 단, 특별교육 공정 항목(밀폐공간작업(8) · 압력용기(8) 등 괄호 안 시간)은 부서 교육 템플릿(시트 → 없으면 내장값)에서 가져와 함께 (기본 체크) */
+  const isProcess = s => /\(\d+(\.\d+)?\)\s*$/.test(String(s).trim());
+  const procTpl = (has(src[eduKey]&&src[eduKey].chemicals) ? src[eduKey].chemicals : ((FALLBACK_EDU[eduKey]&&FALLBACK_EDU[eduKey].chemicals)||[]));
+  const proc = pfx==='e1' ? splitDot(procTpl).map(x=>String(x).trim()).filter(isProcess) : [];
+  void eduChems;
+  const all=[...new Set([...proc, ...chemItems])];
   const grid=document.getElementById(pfx+'-chem-grid');
   if(!all.length){grid.innerHTML='<p class="text-xs text-slate-400">해당 부서의 취급물질을 직접 선택하거나 입력하세요.</p>';return;}
   grid.innerHTML=all.map((n,i)=>`

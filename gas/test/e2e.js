@@ -333,7 +333,7 @@ function check(name, cond, extra) {
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.31 \(2026-11-19\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.34 \(2026-11-19\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
   check('서버 버전 비교: v21.9 서버는 v21.10 앱에서 배포 필요로 (글자 순서 아님)', await page.evaluate(() => { try { return bmVerLess('v21.9 (2026-11-03)', 'v21.10') && !bmVerLess('v21.10 (2026-11-04)', 'v21.10') && !bmVerLess('v22.0', 'v21.10'); } catch (e) { return String(e); } }) === true);
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
@@ -516,14 +516,14 @@ function check(name, cond, extra) {
   check('부서: 매핑 적용 ("간호부 71병동" → 71병동)', empDept('매핑대상') === '71병동' && ds2.unknownDepts.length === 0, empDept('매핑대상'));
   const stx = await page.evaluate(() => BMAUTH.post('emp.status', {}));
   const dc = n => (stx.deptCheck || []).find(d => d.dept === n) || {};
-  check("부서 점검: 인공신장실도 chemicals '병동' 물질 적용", dc('인공신장실').chems >= 1, dc('인공신장실'));
+  check("부서 점검 v21.34: 인공신장실은 chemicals '병동' 물질을 받지 않음 (뉴젠자임폼 안 씀)", !dc('인공신장실').chems, dc('인공신장실'));
   check('부서 점검: 61병동 로그인 ✓ · 메일 ✓', dc('61병동').login && dc('61병동').email, dc('61병동'));
   check("부서 점검: 61병동 물질 = 전용 1 + '병동' 공통 1", dc('61병동').chems === 2, dc('61병동'));
   check('부서 점검: 인공신장실 로그인 ✕ (PIN 없음)', dc('인공신장실').login === false);
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.31'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.34'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -2369,12 +2369,13 @@ function check(name, cond, extra) {
       DEPT_EDU['시설관리팀'] = { time: '09:00~16:00(6시간*5)', chemicals: ['관리대상물질(8).밀폐공간작업(8)', '압력용기(8)'] };
       DEPT_EDU['진단검사의학과'] = { time: '09:00~13:00 (4시간*2)' };
       const get = (pf, d) => { buildChemCheckboxes(pf, d); return [...document.querySelectorAll('#' + pf + '-chem-grid input')].map(i => i.value); };
-      const out = { rec: get('e1', '회복실'), fac: get('e1', '시설관리팀'), lab: get('e1', '진단검사의학과'), path2: get('e2', '병리과'), ward: get('e2', '61병동'), vasc: get('e1', '혈관센터'), ward6: get('e1', '6병동') };
+      const out = { rec: get('e1', '회복실'), fac: get('e1', '시설관리팀'), lab: get('e1', '진단검사의학과'), path2: get('e2', '병리과'), ward: get('e2', '61병동'), vasc: get('e1', '혈관센터'), ward6: get('e1', '6병동'), kidney: get('e1', '인공신장실') };
+      buildChemCheckboxes('e1', '시설관리팀'); out.facOn = document.querySelectorAll('#e1-chem-grid input:checked').length;
       CHEMS.length = 0; keepC.forEach(c => CHEMS.push(c)); Object.keys(DEPT_EDU).forEach(k => delete DEPT_EDU[k]); Object.assign(DEPT_EDU, keepE);
       return out;
     });
-    check('교육일지 취급물질 v21.32: 뉴젠자임폼은 병동 · 쓰는 부서만 (시설관리팀 · 진단검사의학과 · 병리과 X) · 회복실은 MSDS 목록 2개 · v21.33 템플릿 물질 · 공정 이름은 쓰지 않고 chemicals 시트만',
-      JSON.stringify(chips.rec) === '["소다라임 1.2kg","소다라임 1.0L"]' && JSON.stringify(chips.fac) === '["CR-13"]' && JSON.stringify(chips.lab) === '["Acetone"]' &&
+    check('교육일지 취급물질 v21.32: 뉴젠자임폼은 병동 · 쓰는 부서만 (시설관리팀 · 진단검사의학과 · 병리과 X) · 회복실은 MSDS 목록 2개 · 물질은 chemicals 시트만 · v21.34 시설관리팀 공정 항목은 포함(기본 체크) · 인공신장실 X',
+      JSON.stringify(chips.rec) === '["소다라임 1.2kg","소다라임 1.0L"]' && JSON.stringify(chips.fac) === '["관리대상물질(8)","밀폐공간작업(8)","압력용기(8)","CR-13"]' && chips.facOn === chips.fac.length && chips.kidney.indexOf('뉴젠자임폼') < 0 && JSON.stringify(chips.lab) === '["Acetone"]' &&
       JSON.stringify(chips.path2) === '["Xylenes"]' && chips.ward.indexOf('뉴젠자임폼') >= 0 && chips.vasc.indexOf('뉴젠자임폼') >= 0 && chips.ward6.indexOf('뉴젠자임폼') >= 0, chips);
     // v21.33 교육일지 양식: 사진 4등분(1장 = 전체 · 2장 = 위 두 칸 …) · 강사 소속·직위 '부서의 장' · A4 높이
     const jf = await p3.evaluate(() => {

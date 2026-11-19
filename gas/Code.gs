@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.31 (2026-11-19)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.34 (2026-11-19)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -294,7 +294,7 @@ function verifyToken_(t) {
 //  · chemicals 시트의 '병동'은 앱 화면과 같은 세부 병동 목록에 적용
 // ════════════════════════════════════════════════════════════════
 const DEPT_MAP_SHEET = '부서매핑';
-const WARDS = ['51병동','61병동','71병동','6병동','7병동','8병동','9병동','응급실','중환자실','인공신장실'];   // HTML의 WARD_EXPAND와 같게 유지
+const WARDS = ['51병동','61병동','71병동','6병동','7병동','8병동','9병동','응급실','중환자실'];   // HTML의 WARD_EXPAND와 같게 유지 · v21.34 인공신장실 뺌 (뉴젠자임폼 안 씀 · chemicals 시트에도 없음)
 
 function normDept_(v) {
   return String(v == null ? '' : v).replace(/\s+/g, '').replace(/（/g, '(').replace(/）/g, ')');
