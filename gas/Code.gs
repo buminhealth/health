@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.27 (2026-11-19)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.28 (2026-11-19)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -177,7 +177,7 @@ function doPost(e) {
       case 'dash.today':    result = requireAdmin_(s) || dashToday_(); break;          // v21.25 대시보드 '오늘 할 일'
       case 'search.person': result = requireAdmin_(s) || searchPerson_(req); break;    // v21.25 직원 · 일지 통합 검색 (퇴사자 포함)
       case 'report.annual': result = requireAdmin_(s) || annualReport_(req); break;    // v21.25 연간 보건관리 보고서 (엑셀 + PDF)
-      case 'report.monthly': result = requireAdmin_(s) || monthlyReport_(req); break;  // v21.27 월 보고서 (결재 양식 · 월별 · 분기별 · 연간 · 부서별)
+      case 'report.monthly': case 'report.period': result = requireAdmin_(s) || monthlyReport_(req); break;  // v21.27 월 보고서 · v21.28 기간(from ~ to)
       case 'rec.has':   result = requireLogin_(s) || recHas_(req, s); break;
       case 'backup.status': case 'backup.run': case 'backup.schedule':
                         result = requireAdmin_(s) || backupOp_(req); break;
@@ -3869,11 +3869,19 @@ function annualReport_(req) {
    · xlsx: true 면 엑셀(요약 · 명단 · 월별 · 부서별 · 보호구 · 화학물질)도 드라이브 '월 보고서'에 저장
    ════════════════════════════════════════════════════════════════ */
 function monthlyReport_(req) {
-  const year = parseInt(req.year, 10), month = parseInt(req.month, 10);
-  if (!(year >= 2020 && year <= 2100) || !(month >= 1 && month <= 12)) return { success: false, error: '연도 · 월을 확인하세요' };
-  const ymOf = (y, m) => y + '-' + ('0' + m).slice(-2);
-  const ym = ymOf(year, month);
-  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  // v21.28 기간 보고서: from ~ to (예전 year · month 요청도 그 달로 받음) · 최대 3년
+  const dre = /^\d{4}-\d{2}-\d{2}$/;
+  let from = String(req.from || '').slice(0, 10), to = String(req.to || '').slice(0, 10);
+  if (!from && req.year && req.month) {
+    const y0 = parseInt(req.year, 10), m0 = parseInt(req.month, 10);
+    if (!(y0 >= 2020 && y0 <= 2100) || !(m0 >= 1 && m0 <= 12)) return { success: false, error: '연도 · 월을 확인하세요' };
+    from = y0 + '-' + ('0' + m0).slice(-2) + '-01';
+    to = y0 + '-' + ('0' + m0).slice(-2) + '-' + ('0' + new Date(Date.UTC(y0, m0, 0)).getUTCDate()).slice(-2);
+  }
+  if (!dre.test(from) || !dre.test(to)) return { success: false, error: '기간(시작일 · 종료일)을 확인하세요' };
+  if (from > to) return { success: false, error: '시작일이 종료일보다 늦습니다' };
+  if ((Date.parse(to) - Date.parse(from)) / 86400000 > 1100) return { success: false, error: '기간은 3년까지 볼 수 있습니다' };
+  const inR = (d, a, b) => { d = String(d || '').slice(0, 10); return !!d && d >= a && d <= b; };
   const st = eduStatusCached_({ role: 'admin' });
   const people = st.people || [];
   const emps = (readEmployees_() || []).map(e => Object.assign({}, e, { dept: deptAlias_(e.dept) }));
@@ -3886,68 +3894,61 @@ function monthlyReport_(req) {
   people.forEach(p => { pBy[pkey_(p.no, p.name)] = p; });
   const recsOf = k => recs.filter(r => pkey_(r.no, r.name) === k);
 
-  // 그 달 교육 대상자
-  const targetsOf = (ymX) => {
+  // 기간 안 교육 대상자: 신규입사(입사일) + 부서이동(이동일)
+  const targetsOf = (a, b) => {
     const out = {}, list = [];
     const add = o => { if (out[o.key]) return; out[o.key] = o; list.push(o); };
     people.forEach(p => {
-      if (p.status === '제외' || String(p.joinDate || '').slice(0, 7) !== ymX) return;
+      if (p.status === '제외' || !inR(p.joinDate, a, b)) return;
       add({ key: pkey_(p.no, p.name), name: p.name, no: p.no, dept: p.dept, need: p.need, kind: '신규입사', date: p.joinDate,
             done: p.status === '이수', status: p.status, lastEdu: p.lastEdu || '', deadline: p.deadline || '' });
     });
-    // 퇴사한 신규입사자: 그 달 입사 · 교육 기록이 있으면 대상 · 이수로
-    emps.forEach(e => {
-      if (!isResigned_(e) || String(normDate_(e.joinDate) || '').slice(0, 7) !== ymX) return;
+    emps.forEach(e => {   // 퇴사한 신규입사자: 기간 안 입사 · 교육 기록이 있으면 대상 · 이수
+      if (!isResigned_(e) || !inR(normDate_(e.joinDate), a, b)) return;
       const k = pkey_(e.empNo, e.name), rs = recsOf(k);
       if (!rs.length || out[k]) return;
       add({ key: k, name: e.name, no: e.empNo, dept: e.dept, need: rs.some(r => r.special) ? '특별' : 'MSDS', kind: '신규입사', date: normDate_(e.joinDate),
             done: true, status: '이수', lastEdu: rs.map(r => r.ds).sort().pop(), resigned: true });
     });
     moves.forEach(m => {
-      if (m.date.slice(0, 7) !== ymX) return;
+      if (!inR(m.date, a, b)) return;
       const k = pkey_(m.no, m.name), p = pBy[k];
       if (!p || p.status === '제외' || !sameDept_(p.dept, deptAlias_(m.to))) return;
-      const cf = mvc[k + '|' + normDept_(p.dept) + '|' + m.date];
-      if (cf) return;   // 기존 교육으로 충분 — 교육 대상 아님
+      if (mvc[k + '|' + normDept_(p.dept) + '|' + m.date]) return;   // 기존 교육으로 충분 — 교육 대상 아님
       const fresh = recsOf(k).filter(r => !r.bulk && baseDept_(r.dept) === baseDept_(p.dept) && r.ds >= m.date).map(r => r.ds).sort();
       add({ key: k, name: p.name, no: p.no, dept: p.dept, need: p.need, kind: '부서이동', date: m.date, from: m.from,
             done: fresh.length > 0, status: fresh.length ? '이수' : '미이수', lastEdu: fresh[0] || '' });
     });
     return list;
   };
-  const conductedOf = (ymX) => recs.filter(r => String(r.ds || '').slice(0, 7) === ymX);
-  const moveKeys = {};
-  moves.forEach(m => { moveKeys[pkey_(m.no, m.name) + '|' + m.date.slice(0, 7)] = m; });
+  const conductedOf = (a, b) => recs.filter(r => inR(r.ds, a, b));
   const pct = (a, b) => b ? Math.round(a / b * 1000) / 10 : null;
   const persons = rs => Object.keys(rs.reduce((o, r) => { o[pkey_(r.no, r.name)] = 1; return o; }, {})).length;
 
-  const targets = targetsOf(ym), conducted = conductedOf(ym);
+  const targets = targetsOf(from, to), conducted = conductedOf(from, to);
   const typeStat = need => {
     const t = targets.filter(x => x.need === need), c = conducted.filter(r => (need === '특별') === !!r.special);
     return { target: t.length, done: t.filter(x => x.done).length, rate: pct(t.filter(x => x.done).length, t.length), rows: c.length, persons: persons(c) };
   };
   const joinOf = r => { const e = empBy[pkey_(r.no, r.name)]; return e ? normDate_(e.joinDate) || '' : ''; };
-  const roster = conducted.map(r => {
-    const mv = moveKeys[pkey_(r.no, r.name) + '|' + ym];
-    return { type: r.special ? '특별안전보건교육' : 'MSDS교육', special: r.special, moved: !!mv, dept: deptAlias_(r.dept), name: r.name, no: r.no,
-             join: joinOf(r), ds: r.ds, de: r.de, hrs: r.hrs, chem: r.chem, manual: r.manual };
-  }).sort((a, b) => (a.special - b.special) || String(a.ds).localeCompare(String(b.ds)) || String(a.dept).localeCompare(String(b.dept), 'ko') || String(a.name).localeCompare(String(b.name), 'ko'));
+  const movedIn = (r) => moves.some(m => pkey_(m.no, m.name) === pkey_(r.no, r.name) && inR(m.date, from, to) && String(r.ds) >= m.date && sameDept_(deptAlias_(m.to), deptAlias_(r.dept)));
+  const roster = conducted.map(r => ({ type: r.special ? '특별안전보건교육' : 'MSDS교육', special: r.special, moved: movedIn(r), dept: deptAlias_(r.dept), name: r.name, no: r.no,
+             join: joinOf(r), ds: r.ds, de: r.de, hrs: r.hrs, chem: r.chem, manual: r.manual }))
+    .sort((a, b) => (a.special - b.special) || String(a.ds).localeCompare(String(b.ds)) || String(a.dept).localeCompare(String(b.dept), 'ko') || String(a.name).localeCompare(String(b.name), 'ko'));
   const missing = targets.filter(x => !x.done).map(x => ({ name: x.name, no: x.no, dept: x.dept, need: x.need, kind: x.kind, date: x.date, status: x.status, deadline: x.deadline || '', from: x.from || '' }));
 
-  // 보호구 지급
   let ppe = [];
   const ppeSh = SS.getSheetByName('보호구이력대장');
   if (ppeSh && ppeSh.getLastRow() >= 2) {
     const v = ppeSh.getDataRange().getDisplayValues(), h = v[0].map(x => String(x).trim()), c = k => h.indexOf(k);
-    ppe = v.slice(1).filter(r => String(r[c('지급일')] || '').slice(0, 7) === ym && String(r[c('이름')] || '').trim())
+    ppe = v.slice(1).filter(r => inR(r[c('지급일')], from, to) && String(r[c('이름')] || '').trim())
       .map(r => ({ date: r[c('지급일')], dept: deptAlias_(r[c('부서')]), name: r[c('이름')], items: r[c('지급물품')], sig: c('서명여부') >= 0 ? r[c('서명여부')] : '' }))
       .sort((a, b) => String(a.date).localeCompare(String(b.date)));
   }
-  // 화학물질 보고서 (그 달 제출) · 대장 반영
   let chem = [];
   try {
     const dec = clLedgerDecisions_();
-    clLedgerReports_().filter(r => String(r.submitted || '').slice(0, 7) === ym).forEach(r => {
+    clLedgerReports_().filter(r => inR(r.submitted, from, to)).forEach(r => {
       const d = dec[r.recordId];
       clLedgerSides_(r).forEach(x => chem.push({ date: String(r.submitted || '').slice(0, 10), docNo: r.docNo || '', kind: x.side === 'new' ? '신규사용' : '사용중단',
         dept: deptAlias_(x.dept), name: x.name, useDate: x.date, status: d ? (d['처리'] === '승인' ? '대장 반영' : d['처리']) : '검토 대기' }));
@@ -3955,42 +3956,62 @@ function monthlyReport_(req) {
   } catch (_) {}
   chem.sort((a, b) => String(a.date).localeCompare(String(b.date)));
 
-  // 그래프용: 1월 ~ 고른 달
-  const months = [], deptAgg = {};
-  const dAdd = (dept, i, k) => { const d = deptAgg[dept] = deptAgg[dept] || { dept: dept, target: Array(month).fill(0), done: Array(month).fill(0), conducted: Array(month).fill(0) }; d[k][i]++; };
-  for (let m = 1; m <= month; m++) {
-    const yx = ymOf(year, m), tg = m === month ? targets : targetsOf(yx), cd = m === month ? conducted : conductedOf(yx);
-    months.push({ m: m, target: tg.length, done: tg.filter(x => x.done).length, conducted: persons(cd), rows: cd.length,
-                  special: persons(cd.filter(r => r.special)), msds: persons(cd.filter(r => !r.special)), rate: pct(tg.filter(x => x.done).length, tg.length) });
-    tg.forEach(x => { dAdd(x.dept, m - 1, 'target'); if (x.done) dAdd(x.dept, m - 1, 'done'); });
-    const seen = {};
-    cd.forEach(r => { const k = pkey_(r.no, r.name) + '|' + deptAlias_(r.dept); if (seen[k]) return; seen[k] = 1; dAdd(deptAlias_(r.dept), m - 1, 'conducted'); });
+  // 그래프 · 표: 기간 안 달마다 (달의 앞뒤는 기간으로 자름) · 분기 · 기간 누계 · 부서별
+  const fy = +from.slice(0, 4), fm = +from.slice(5, 7), ty = +to.slice(0, 4), tm = +to.slice(5, 7);
+  const multiYear = fy !== ty;
+  const months = [];
+  for (let y = fy, m = fm; y < ty || (y === ty && m <= tm); m === 12 ? (y++, m = 1) : m++) {
+    const ms = y + '-' + ('0' + m).slice(-2) + '-01', me = y + '-' + ('0' + m).slice(-2) + '-' + ('0' + new Date(Date.UTC(y, m, 0)).getUTCDate()).slice(-2);
+    months.push({ y: y, m: m, a: ms < from ? from : ms, b: me > to ? to : me, label: multiYear ? String(y).slice(2) + '.' + m + '월' : m + '월' });
   }
+  const deptAgg = {};
+  const dAdd = (dept, i, k) => { const d = deptAgg[dept] = deptAgg[dept] || { dept: dept, target: Array(months.length).fill(0), done: Array(months.length).fill(0), conducted: Array(months.length).fill(0) }; d[k][i]++; };
+  months.forEach((mo, i) => {
+    const tg = targetsOf(mo.a, mo.b), cd = conductedOf(mo.a, mo.b);
+    Object.assign(mo, { target: tg.length, done: tg.filter(x => x.done).length, conducted: persons(cd), rows: cd.length,
+                        special: persons(cd.filter(r => r.special)), msds: persons(cd.filter(r => !r.special)), rate: pct(tg.filter(x => x.done).length, tg.length) });
+    tg.forEach(x => { dAdd(x.dept, i, 'target'); if (x.done) dAdd(x.dept, i, 'done'); });
+    const seen = {};
+    cd.forEach(r => { const k = pkey_(r.no, r.name) + '|' + deptAlias_(r.dept); if (seen[k]) return; seen[k] = 1; dAdd(deptAlias_(r.dept), i, 'conducted'); });
+    delete mo.a; delete mo.b;
+  });
   const sum = (arr, k) => arr.reduce((a, x) => a + (x[k] || 0), 0);
-  const quarters = [1, 2, 3, 4].map(q => {
-    const ms = months.filter(x => Math.ceil(x.m / 3) === q);
-    return ms.length ? { q: q, target: sum(ms, 'target'), done: sum(ms, 'done'), conducted: sum(ms, 'conducted'), rate: pct(sum(ms, 'done'), sum(ms, 'target')) } : null;
-  }).filter(Boolean);
-  const yearTot = { target: sum(months, 'target'), done: sum(months, 'done'), conducted: sum(months, 'conducted'), rows: sum(months, 'rows'), rate: pct(sum(months, 'done'), sum(months, 'target')) };
+  const qMap = {}, quarters = [];
+  months.forEach((mo, i) => {
+    const key = mo.y + '-' + Math.ceil(mo.m / 3);
+    if (!qMap[key]) { qMap[key] = { y: mo.y, q: Math.ceil(mo.m / 3), label: (multiYear ? String(mo.y).slice(2) + '년 ' : '') + Math.ceil(mo.m / 3) + '분기', idx: [] }; quarters.push(qMap[key]); }
+    qMap[key].idx.push(i);
+  });
+  quarters.forEach(q => {
+    const ms = q.idx.map(i => months[i]);
+    Object.assign(q, { target: sum(ms, 'target'), done: sum(ms, 'done'), conducted: sum(ms, 'conducted'), rate: pct(sum(ms, 'done'), sum(ms, 'target')) });
+  });
+  const total = { target: targets.length, done: targets.filter(x => x.done).length, conducted: persons(conducted), rows: conducted.length, rate: pct(targets.filter(x => x.done).length, targets.length) };
   const depts = Object.keys(deptAgg).map(k => deptAgg[k]).sort((a, b) => a.dept.localeCompare(b.dept, 'ko'));
+  const oneMonth = months.length === 1 && from.slice(8) === '01' && to === from.slice(0, 8) + ('0' + new Date(Date.UTC(fy, fm, 0)).getUTCDate()).slice(-2);
+  const label = oneMonth ? fy + '년 ' + fm + '월' : from.replace(/-/g, '.') + ' ~ ' + to.replace(/-/g, '.');
+  const tag = oneMonth ? from.slice(0, 7) : from + '~' + to;
 
   const out = {
-    success: true, year: year, month: month, ym: ym, from: ym + '-01', to: ym + '-' + ('0' + lastDay).slice(-2), made: todayKst_(),
+    success: true, from: from, to: to, label: label, tag: tag, oneMonth: oneMonth, year: fy, month: fm, ym: tag, made: todayKst_(),
     summary: { target: targets.length, newHire: targets.filter(x => x.kind === '신규입사').length, moved: targets.filter(x => x.kind === '부서이동').length,
-               done: targets.filter(x => x.done).length, rate: pct(targets.filter(x => x.done).length, targets.length),
-               conducted: persons(conducted), rows: conducted.length },
+               done: total.done, rate: total.rate, conducted: total.conducted, rows: total.rows },
     byType: { '특별': typeStat('특별'), 'MSDS': typeStat('MSDS') },
     targets: targets.map(x => ({ name: x.name, dept: x.dept, need: x.need, kind: x.kind, date: x.date, done: x.done })),
     roster: roster, missing: missing, ppe: ppe, chem: chem,
-    series: { months: months, quarters: quarters, year: yearTot, depts: depts }
+    series: { months: months, quarters: quarters.map(q => { const c = Object.assign({}, q); delete c.idx; return c; }), year: total, total: total, depts: depts }
   };
+  // 한 달 보고서는 결재 문서의 [참고] 그래프를 그 해 1월 ~ 그 달 추이로 (화면은 고른 기간 그대로)
+  if (oneMonth && !req._inner && fm > 1) {
+    try { const y2 = monthlyReport_({ from: fy + '-01-01', to: to, _inner: true }); if (y2.success) out.ytd = { label: fy + '년 1월 ~ ' + fm + '월', series: y2.series }; } catch (_) {}
+  }
   if (req.xlsx) {
     try { Object.assign(out, monthlyXlsx_(out)); } catch (e) { out.xlsxError = String(e.message || e); }
   }
   return out;
 }
 function monthlyXlsx_(r) {
-  const name = '유해화학물질_교육결과_월보고_' + r.ym;
+  const name = '유해화학물질_교육결과_보고_' + r.tag.replace('~', '_');
   const ss = SpreadsheetApp.create(name);
   const first = ss.getSheets()[0], used = {};
   const put = (title, rows) => {
@@ -4000,16 +4021,16 @@ function monthlyXlsx_(r) {
   };
   const P = v => v == null ? '-' : v + '%';
   const S = r.summary, T = r.byType;
-  put('요약', [['항목', '값'], ['보고 월', r.ym], ['교육 실시 기간', r.from + ' ~ ' + r.to], ['교육 대상자', S.target + '명 (신규입사 ' + S.newHire + ' · 부서이동 ' + S.moved + ')'],
+  put('요약', [['항목', '값'], ['보고 기간', r.from + ' ~ ' + r.to], ['교육 대상자', S.target + '명 (신규입사 ' + S.newHire + ' · 부서이동 ' + S.moved + ')'],
     ['이수', S.done + '명'], ['이수율', P(S.rate)], ['교육 실시 (실인원)', S.conducted + '명'],
     ['특별안전보건교육 대상 · 이수 · 이수율', T['특별'].target + ' · ' + T['특별'].done + ' · ' + P(T['특별'].rate)], ['MSDS 교육 대상 · 이수 · 이수율', T['MSDS'].target + ' · ' + T['MSDS'].done + ' · ' + P(T['MSDS'].rate)],
     ['보호구 지급', r.ppe.length + '건'], ['화학물질 보고서', r.chem.length + '건'], ['작성일', r.made]]);
   put('교육자 명단', [['번호', '교육구분', '교육부서', '성명', '사번', '입사일', '교육일', '교육시간', '취급물질']].concat(r.roster.map((x, i) =>
     [i + 1, x.type + (x.moved ? '(부서이동)' : ''), x.dept, x.name, "'" + (x.no || ''), x.join, x.ds + (x.de && x.de !== x.ds ? '~' + x.de : ''), x.hrs ? x.hrs + '시간' : '', x.chem])));
   put('미이수자', [['성명', '부서', '교육', '구분', '입사 · 이동일', '기한', '상태']].concat(r.missing.map(x => [x.name, x.dept, x.need === '특별' ? '특별안전보건' : 'MSDS', x.kind, x.date, x.deadline, x.status])));
-  put('월별 현황', [['월', '교육 대상자', '이수', '이수율', '교육 실시 (실인원)', '특별', 'MSDS']].concat(r.series.months.map(m => [m.m + '월', m.target, m.done, P(m.rate), m.conducted, m.special, m.msds]))
-    .concat(r.series.quarters.map(q => [q.q + '분기', q.target, q.done, P(q.rate), q.conducted, '', ''])).concat([[r.year + '년 누계', r.series.year.target, r.series.year.done, P(r.series.year.rate), r.series.year.conducted, '', '']]));
-  const mh = r.series.months.map(m => m.m + '월');
+  put('월별 현황', [['구분', '교육 대상자', '이수', '이수율', '교육 실시 (실인원)', '특별', 'MSDS']].concat(r.series.months.map(m => [m.label, m.target, m.done, P(m.rate), m.conducted, m.special, m.msds]))
+    .concat(r.series.quarters.map(q => [q.label, q.target, q.done, P(q.rate), q.conducted, '', ''])).concat([['기간 누계', r.series.total.target, r.series.total.done, P(r.series.total.rate), r.series.total.conducted, '', '']]));
+  const mh = r.series.months.map(m => m.label);
   put('부서별 교육 실시', [['부서'].concat(mh, ['누계'])].concat(r.series.depts.map(d => [d.dept].concat(d.conducted, [d.conducted.reduce((a, b) => a + b, 0)]))));
   put('부서별 대상 · 이수', [['부서'].concat(mh.map(x => x + ' 대상'), mh.map(x => x + ' 이수'))].concat(r.series.depts.map(d => [d.dept].concat(d.target, d.done))));
   put('보호구 지급', [['지급일', '부서', '이름', '지급물품', '서명']].concat(r.ppe.map(x => [x.date, x.dept, x.name, x.items, x.sig])));
