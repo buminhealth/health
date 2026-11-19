@@ -329,11 +329,11 @@ function check(name, cond, extra) {
              disp: getComputedStyle(document.getElementById('admin-main')).display };
   });
   check('옛 일지 PDF: 드라이브에 없으면 공개 저장소에서 읽음 (관리자)', v203.miss === '%PDF-1.4 old' && ghOldHits >= 1, [v203.miss, ghOldHits]);
-  check('관리자 메뉴: A-8 순서 (대시보드 · 직원 · 일지 찾기 … 신규입사 알림 · 연간 보고서 · 설정)', ['대시보드', '직원 · 일지 찾기', '결재 관리', '교육 현황', '보호구 지급 현황', '화학물질 보고서 검토', '위험성평가', '신규사용 · 중단 대장', '물질 마스터 점검', 'AI MSDS 검토', '직원정보관리', '신규입사 알림', '연간 보고서', '설정', '홈으로 나가기'].join() === v203.nav.join(), v203.nav);
+  check('관리자 메뉴: A-8 순서 (대시보드 · 직원 · 일지 찾기 … 신규입사 알림 · 월 보고서 · 설정)', ['대시보드', '직원 · 일지 찾기', '결재 관리', '교육 현황', '보호구 지급 현황', '화학물질 보고서 검토', '위험성평가', '신규사용 · 중단 대장', '물질 마스터 점검', 'AI MSDS 검토', '직원정보관리', '신규입사 알림', '월 보고서', '설정', '홈으로 나가기'].join() === v203.nav.join(), v203.nav);
   check('대시보드: 결재 대기 줄 → 결재 관리로 이동 + PDF 보기 열림', v203.jump);
   check('관리자 메뉴: 0인 배지는 숨김', v203.zero === 0, v203.zero);
   check('대시보드: 요약 6칸 + 결재 대기 · 이수율 · 신규입사 · 최근 제출', v203.kpis === 6 && ['결재 대기 일지', '부서별 교육 이수율', '신규입사 알림', '최근 제출'].every(t => v203.dash.includes(t)) && /\d+%/.test(v203.dash), v203.dash.slice(0, 300));
-  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.26 \(2026-11-18\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
+  check('설정: 결재자 · 서버 버전 · AI 키', /결재자/.test(v203.cfg) && /v21\.27 \(2026-11-19\) 최신/.test(v203.cfg) && /AI \(Gemini\)/.test(v203.cfg), v203.cfg.slice(0, 300));
   check('서버 버전 비교: v21.9 서버는 v21.10 앱에서 배포 필요로 (글자 순서 아님)', await page.evaluate(() => { try { return bmVerLess('v21.9 (2026-11-03)', 'v21.10') && !bmVerLess('v21.10 (2026-11-04)', 'v21.10') && !bmVerLess('v22.0', 'v21.10'); } catch (e) { return String(e); } }) === true);
 
   // 7. 다른 부서는 61병동 PDF를 못 받음
@@ -523,7 +523,7 @@ function check(name, cond, extra) {
   await page.evaluate(() => BMSTAFF.open());
   await page.waitForFunction(() => document.getElementById('staff-body').textContent.includes('③ 부서 이름 점검'), null, { timeout: 15000 });
   check('관리자 화면: 부서 이름 점검표 표시', (await page.textContent('#staff-body')).includes('PIN 없음'));
-  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.26'));
+  check('관리자 화면: 서버 버전 표시', (await page.textContent('#staff-body')).includes('서버 버전: v21.27'));
 
   // 13-3. 인사 사이트 이상 감지 + 실패 메일 (v18.6)
   g.props.FB_PATH = 'employees_public';
@@ -2314,12 +2314,31 @@ function check(name, cond, extra) {
     const pdf0 = (g.ctx.UrlFetchApp.pdfExports || []).length;
     const rpt = post({ op: 'report.annual', year: '2026', t: tk.a }), rptD = post({ op: 'report.annual', year: '2026', t: tk.d }), rptBad = post({ op: 'report.annual', year: '19', t: tk.a });
     check('연간 보고서 v21.25: 엑셀 + PDF 저장 · 요약 숫자 · 관리자만 · 연도 확인', rpt.success && /drive/.test(rpt.pdfUrl) && /drive/.test(rpt.xlsxUrl) && (g.ctx.UrlFetchApp.pdfExports || []).length === pdf0 + 1 && rpt.summary.edu >= 3 && typeof rpt.summary.rate === 'string' && !rptD.success && !rptBad.success, [rpt.summary, rpt.error, rptD.success, rptBad.error]);
-    const rpt2 = post({ op: 'report.annual', year: '2026', t: tk.a });
+    // v21.27 월 보고서 (결재 양식) — 서버
+    const mm = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7), yy = +mm.slice(0, 4), mo = +mm.slice(5, 7);
+    const mr = post({ op: 'report.monthly', year: yy, month: mo, t: tk.a }), mrD = post({ op: 'report.monthly', year: yy, month: mo, t: tk.d }), mrBad = post({ op: 'report.monthly', year: yy, month: 13, t: tk.a });
+    const mvT = (mr.targets || []).find(x => x.name === '이동새교육'), mvOk = (mr.targets || []).find(x => x.name === '이동직원'), mvRow = (mr.roster || []).find(x => x.name === '이동새교육');
+    check('월 보고서 v21.27: 그 달 대상자 = 신규입사 + 부서이동(기존 교육으로 충분 확인자 제외) · 이수 · 교육자 명단(부서이동 표시) · 구분별 · 월별 · 분기별 · 부서별 · 관리자만',
+      mr.success && mr.from === mm + '-01' && mvT && mvT.kind === '부서이동' && mvT.done && !mvOk && mvRow && mvRow.moved && mr.summary.moved >= 1 && mr.summary.target === mr.summary.newHire + mr.summary.moved &&
+      mr.byType['특별'].target + mr.byType['MSDS'].target === mr.summary.target && mr.series.months.length === mo && mr.series.quarters.length === Math.ceil(mo / 3) && mr.series.depts.some(d => d.dept === '71병동') &&
+      Array.isArray(mr.ppe) && Array.isArray(mr.chem) && !mrD.success && !mrBad.success, [mr.summary, mr.byType, mvT, mvOk, mvRow, mrD.status, mrBad.error]);
+    const mx = post({ op: 'report.monthly', year: yy, month: mo, xlsx: true, t: tk.a });
+    check('월 보고서 v21.27: [엑셀 만들기] → 드라이브 월 보고서 폴더에 엑셀', mx.success && /drive/.test(mx.xlsxUrl) && /drive/.test(mx.folderUrl), [mx.xlsxUrl, mx.xlsxError]);
+    // 화면
     await p3.evaluate(() => admSwitchPane('report'));
-    await p3.waitForSelector('#rp-go'); await p3.click('#rp-go');
-    await p3.waitForSelector('#rp-out .rp-done', { timeout: 20000 });
-    const rp = await p3.evaluate(() => ({ links: [...document.querySelectorAll('#rp-out .rp-links a')].map(a => a.textContent), kpi: document.querySelectorAll('#rp-out .rp-kpi div').length }));
-    check('연간 보고서 화면 v21.25: 연도 고르고 [보고서 만들기] → 요약 숫자 · PDF · 엑셀 · 폴더 링크 · 다시 만들어도 성공', rp.links.join() === 'PDF 열기,엑셀 열기,드라이브 폴더' && rp.kpi >= 6 && rpt2.success, rp);
+    await p3.waitForSelector('#rp-go');
+    await p3.selectOption('#rp-year', String(yy)); await p3.selectOption('#rp-month', String(mo));
+    await p3.click('#rp-go');
+    await p3.waitForSelector('#rp-doc', { timeout: 20000 });
+    const rp = await p3.evaluate(() => { const d = document.getElementById('rp-doc'), t = d.innerText;
+      return { nav: document.querySelector('.adm-nav-item[data-pane="report"]').textContent.trim(), title: d.querySelector('.rp-title').textContent, arae: /- 아 래 -/.test(t),
+        items: ['1. 교육 대상자 : 총', '2. 교육실시 기간 :', '3. 교육 이수율 :', '4. 교육 구분별 현황', '5. 교육자 명단', '보호구 지급 :', '화학물질 보고서 :'].filter(k => t.indexOf(k) < 0),
+        moved: /\(부서이동\)/.test(t), head: [...d.querySelectorAll('#rp-bodytext table')[1].querySelectorAll('th')].map(x => x.textContent).join(','),
+        svgs: d.querySelectorAll('svg').length, heat: d.querySelectorAll('.rp-heat tr').length, end: /끝\./.test(t), tools: !document.getElementById('rp-tools').hidden,
+        btns: [...document.querySelectorAll('#rp-tools button')].map(b => b.textContent) }; });
+    check('월 보고서 화면 v21.27: 결재 양식(아래 · 1~4 · 교육자 명단 열 · 부서이동 표시 · 보호구 · 화학물질 · 붙임 끝) · 그래프(월별 · 이수율 · 분기별 · 부서별) · PDF · 인쇄 · 본문 복사 · 엑셀',
+      rp.nav === '월 보고서' && /안전보건교육 결과 보고/.test(rp.title) && rp.arae && !rp.items.length && rp.moved && rp.head === '번호,교육구분,교육부서,성명,입사일,교육일,교육시간,취급물질' &&
+      rp.svgs >= 4 && rp.heat >= 2 && rp.end && rp.tools && rp.btns.join() === 'PDF 저장,인쇄,본문 복사,엑셀 만들기', rp);
     check('v21.25 화면 스크립트 오류 없음', err3.length === 0, err3);
     await p3.close();
   }

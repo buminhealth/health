@@ -2262,7 +2262,7 @@ input.apv-in[type=text]{width:110px}
           <span class="adm-nav-badge" id="adm-nav-nh-badge"></span>
         </div>
         <div class="adm-nav-item" data-pane="report" onclick="admSwitchPane('report')">
-          <span class="adm-nav-label">연간 보고서</span>
+          <span class="adm-nav-label">월 보고서</span>
         </div>
         <div class="adm-nav-item" data-pane="cfg" onclick="admSwitchPane('cfg'); BMDASH.settings();">
           <span class="adm-nav-label">설정</span>
@@ -5405,7 +5405,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.26';
+  var SERVER_EXPECT = 'v21.27';
   // v21.10: 'v21.9' < 'v21.10'을 글자 순서가 아니라 숫자로 비교
   function bmVerLess(a, b){
     var p = function(v){ return (String(v).match(/v?(\d+(?:\.\d+)*)/) || [,'0'])[1].split('.').map(Number); };
@@ -21469,38 +21469,257 @@ button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,inpu
   }
   function focus(){ var i = document.getElementById('fd-q'); if(i) try{ i.focus(); }catch(_){} }
 
-  // ── 연간 보고서
-  var busy = false;
+  // ── v21.27 월 보고서 (보건관리자 결재 양식) — 연간 보고서를 대신함
+  var busy = false, rep = null;
+  var C_TGT = '#2B6CB0', C_DONE = '#5A9E22', C_GRID = '#E4E2DC', C_AX = '#8A867E';
+  var HEAT = ['#F3F9ED', '#D9EDC6', '#B5DB93', '#86C25A', '#5A9E22'];
+  var TB = 'border-collapse:collapse;width:100%;font-size:12.5px;margin:6px 0 4px';
+  var TH = 'border:1px solid #333;background:#EFEFEF;padding:5px 4px;text-align:center;font-weight:700';
+  var TD = 'border:1px solid #333;padding:5px 4px;text-align:center;vertical-align:middle';
+  var dot = function(d){ return String(d || '').replace(/-/g, '.'); };
+  var pctTxt = function(v){ return v == null ? '-' : (Math.round(v * 10) / 10) + '%'; };
   function open(){
     var host = document.getElementById('rp-body');
     if(!host || busy) return;
-    var y = new Date(Date.now() + 9 * 3600e3).getUTCFullYear();
-    host.innerHTML = '<div class="fd-head"><b>연간 보건관리 보고서</b><span>감독 · 점검 대응용 — 한 해의 교육 · 물질 변동 · 보호구 지급을 엑셀과 PDF 한 부로</span></div>' +
-      '<div class="rp-card"><div class="rp-row"><label>연도 <select id="rp-year">' + [y, y - 1, y - 2].map(function(v){ return '<option value="' + v + '">' + v + '년</option>'; }).join('') + '</select></label>' +
-      '<button type="button" id="rp-go" class="rp-go">보고서 만들기</button></div>' +
-      '<ul class="rp-what"><li><b>PDF (요약 장표)</b>: 요약 · 월별 교육 · 부서별 이수율 · 화학물질 변동 · 보호구 지급 집계</li>' +
-      '<li><b>엑셀</b>: 위 내용 + 교육 실시 내역 · 보호구 지급 내역 · 신규입사 · 부서이동 명단</li>' +
-      '<li>지금 시트(월별 백업과 같은 원본) 기준이며, 드라이브 「부민보건관리_월별백업 (비공개)」 → <b>연간 보고서</b> 폴더에 저장됩니다. 다시 만들면 같은 연도 파일은 최신본으로 바뀝니다.</li>' +
-      '<li>이수 현황은 <b>만드는 날 기준</b>, 교육 실시 · 물질 변동 · 보호구는 <b>그 연도</b> 기준입니다.</li></ul>' +
-      '<div id="rp-out"></div></div>';
-    document.getElementById('rp-go').onclick = make;
+    if(host.getAttribute('data-v') === '2127' && rep) return;
+    host.setAttribute('data-v', '2127');
+    var now = new Date(Date.now() + 9 * 3600e3), y = now.getUTCFullYear(), m = now.getUTCMonth();   // 기본: 지난달
+    if(m === 0){ y -= 1; m = 12; }
+    host.innerHTML = '<div class="fd-head"><b>월 보고서</b><span>매달 결재 올리는 「유해화학물질 취급 근로자 안전보건교육 결과 보고」 양식 — 교육 · 보호구 지급 · 화학물질 보고서 · 월별 · 분기별 · 연간 · 부서별 그래프</span></div>' +
+      '<div class="rp-card"><div class="rp-row">' +
+        '<label>연도 <select id="rp-year">' + [y + 1, y, y - 1, y - 2].filter(function(v){ return v <= now.getUTCFullYear(); }).map(function(v){ return '<option value="' + v + '"' + (v === y ? ' selected' : '') + '>' + v + '년</option>'; }).join('') + '</select></label>' +
+        '<label>월 <select id="rp-month">' + [1,2,3,4,5,6,7,8,9,10,11,12].map(function(v){ return '<option value="' + v + '"' + (v === m ? ' selected' : '') + '>' + v + '월</option>'; }).join('') + '</select></label>' +
+        '<button type="button" id="rp-go" class="rp-go">보고서 보기</button></div>' +
+        '<div id="rp-tools" class="rp-tools" hidden>' +
+          '<button type="button" id="rp-pdf" class="rp-go">PDF 저장</button>' +
+          '<button type="button" id="rp-print" class="rp-btn">인쇄</button>' +
+          '<button type="button" id="rp-copy" class="rp-btn" title="결재 문서 본문(아래 ~ 끝)을 복사해 그룹웨어에 붙여넣기">본문 복사</button>' +
+          '<button type="button" id="rp-xlsx" class="rp-btn">엑셀 만들기</button>' +
+          '<span id="rp-msg" class="rp-msg" role="status"></span></div>' +
+        '<ul class="rp-what"><li><b>교육 대상자</b> = 그 달 신규입사자 + 부서이동자 (교육 대상 부서 · 제외 · [기존 교육으로 충분] 확인자 빼고). <b>이수</b>는 보고서를 만드는 날 기준입니다.</li>' +
+        '<li><b>교육자 명단</b> = 그 달 교육일인 교육 기록 전체 (MSDS → 특별 순). PDF는 이 PC에 받고 드라이브 「보고서/월보고」에도 저장됩니다.</li></ul></div>' +
+      '<div id="rp-out"></div>';
+    document.getElementById('rp-go').onclick = load;
+    document.getElementById('rp-pdf').onclick = savePdf;
+    document.getElementById('rp-print').onclick = printDoc;
+    document.getElementById('rp-copy').onclick = copyBody;
+    document.getElementById('rp-xlsx').onclick = makeXlsx;
   }
-  async function make(){
+  function msg(t, err){ var el = document.getElementById('rp-msg'); if(el){ el.textContent = t || ''; el.style.color = err ? '#A3302A' : '#345C12'; } }
+  async function load(){
     if(busy) return;
-    var out = document.getElementById('rp-out'), btn = document.getElementById('rp-go'), y = document.getElementById('rp-year').value;
-    busy = true; btn.disabled = true; btn.textContent = '만드는 중…';
-    out.innerHTML = '<div class="fd-empty">' + esc(y) + '년 보고서를 만드는 중입니다 (1분 안팎).</div>';
-    var r = await post('report.annual', { year: y });
-    busy = false; btn.disabled = false; btn.textContent = '보고서 만들기';
-    if(!r.success){ out.innerHTML = '<div class="fd-empty err">' + esc(oldSrv(r.error)) + '</div>'; return; }
-    var s = r.summary || {};
-    out.innerHTML = '<div class="rp-done"><b>' + esc(r.year) + '년 보고서를 만들었습니다</b>' +
-      '<div class="rp-kpi">' + [['교육 대상', s.total + '명'], ['이수율', s.rate], ['교육 실시 (연인원)', s.edu + '명'], ['특별 · MSDS', s.special + ' · ' + s.msds], ['신규 사용 · 중단 물질', s.chemNew + ' · ' + s.chemStop], ['보호구 지급', s.ppe + '건'], ['신규입사 · 부서이동', s.nh + ' · ' + s.moves]]
-        .map(function(k){ return '<div><span>' + k[0] + '</span><b>' + esc(k[1]) + '</b></div>'; }).join('') + '</div>' +
-      '<div class="rp-links"><a href="' + esc(r.pdfUrl) + '" target="_blank" rel="noopener">PDF 열기</a><a href="' + esc(r.xlsxUrl) + '" target="_blank" rel="noopener">엑셀 열기</a><a href="' + esc(r.folderUrl) + '" target="_blank" rel="noopener">드라이브 폴더</a></div></div>';
+    var out = document.getElementById('rp-out'), btn = document.getElementById('rp-go');
+    var y = +document.getElementById('rp-year').value, m = +document.getElementById('rp-month').value;
+    busy = true; btn.disabled = true; btn.textContent = '불러오는 중…'; msg('');
+    out.innerHTML = '<div class="fd-empty">' + y + '년 ' + m + '월 보고서를 만드는 중…</div>';
+    var r = await post('report.monthly', { year: y, month: m });
+    busy = false; btn.disabled = false; btn.textContent = '보고서 보기';
+    if(!r.success){ rep = null; document.getElementById('rp-tools').hidden = true; out.innerHTML = '<div class="fd-empty err">' + esc(oldSrv(r.error)) + '</div>'; return; }
+    rep = r;
+    document.getElementById('rp-tools').hidden = false;
+    out.innerHTML = '<div class="rp-scroll"><div class="rp-doc" id="rp-doc">' + docHtml(r) + '</div></div>';
   }
+  // 결재 문서 본문 (붙여넣기 · 인쇄 · PDF 모두 이 모양)
+  function bodyHtml(r){
+    var S = r.summary, T = r.byType, M = r.ym.replace('-', '.');
+    var h = '<p style="margin:0 0 14px;line-height:1.8">산업안전보건법 및 관련 하위법령에 따라 유해화학물질을 취급·사용하는 근로자를 대상으로 특별안전보건교육 및 물질안전보건자료(MSDS) 교육을 실시하고 아래와 같이 결과를 보고드립니다.</p>' +
+      '<p style="text-align:center;margin:14px 0">- 아 래 -</p>' +
+      '<div style="line-height:1.9;padding-left:24px">' +
+      '<div>1. 교육 대상자 : 총 ' + S.target + '명 (신규입사자 ' + S.newHire + '명 , 부서이동: ' + S.moved + '명)</div>' +
+      '<div>2. 교육실시 기간 : ' + dot(r.from) + '~' + dot(r.to) + '</div>' +
+      '<div>3. 교육 이수율 : ' + (S.target ? pctTxt(S.rate) + ' (이수 ' + S.done + '명 / 대상 ' + S.target + '명)' : '해당 없음 (이 달 교육 대상자 없음)') + '</div>' +
+      '<div>4. 교육 구분별 현황 :</div></div>' +
+      '<table style="' + TB + '"><tr>' + ['구분', '교육 대상자', '이수', '이수율', '교육 실시 인원'].map(function(x){ return '<th style="' + TH + '">' + x + '</th>'; }).join('') + '</tr>' +
+      [['특별안전보건교육', T['특별']], ['MSDS 교육', T['MSDS']]].map(function(x){ var t = x[1]; return '<tr><td style="' + TD + '">' + x[0] + '</td><td style="' + TD + '">' + t.target + '명</td><td style="' + TD + '">' + t.done + '명</td><td style="' + TD + '">' + pctTxt(t.rate) + '</td><td style="' + TD + '">' + t.persons + '명</td></tr>'; }).join('') +
+      '<tr><td style="' + TD + ';font-weight:700">계</td><td style="' + TD + ';font-weight:700">' + S.target + '명</td><td style="' + TD + ';font-weight:700">' + S.done + '명</td><td style="' + TD + ';font-weight:700">' + pctTxt(S.rate) + '</td><td style="' + TD + ';font-weight:700">' + S.conducted + '명</td></tr></table>' +
+      '<div style="line-height:1.9;padding-left:24px;margin-top:10px">5. 교육자 명단 :</div>';
+    h += r.roster.length ? '<table style="' + TB + '"><tr>' + ['번호', '교육구분', '교육부서', '성명', '입사일', '교육일', '교육시간', '취급물질'].map(function(x){ return '<th style="' + TH + '">' + x + '</th>'; }).join('') + '</tr>' +
+      r.roster.map(function(x, i){
+        var two = x.de && x.de !== x.ds;
+        return '<tr><td style="' + TD + '">' + (i + 1) + '</td><td style="' + TD + '">' + (x.special ? '특별안전<br>보건교육' : 'MSDS교육') + (x.moved ? '<br>(부서이동)' : '') + '</td><td style="' + TD + '">' + esc(x.dept) + '</td><td style="' + TD + '">' + esc(x.name) + '</td>' +
+          '<td style="' + TD + '">' + esc(x.join || '-') + '</td><td style="' + TD + '">' + esc(x.ds) + (two ? '~<br>' + esc(x.de) : '') + '</td><td style="' + TD + '">' + (x.hrs ? x.hrs + '시간' : '') + '</td><td style="' + TD + ';text-align:left">' + esc(x.chem) + '</td></tr>';
+      }).join('') + '</table>' : '<div style="padding-left:40px;color:#555">이 달 교육 기록이 없습니다.</div>';
+    var n = 6;
+    if(r.missing.length){
+      h += '<div style="line-height:1.9;padding-left:24px;margin-top:10px">' + (n++) + '. 미이수자 : ' + r.missing.length + '명</div>' +
+        '<table style="' + TB + '"><tr>' + ['번호', '성명', '부서', '교육', '구분', '입사 · 이동일', '기한', '상태'].map(function(x){ return '<th style="' + TH + '">' + x + '</th>'; }).join('') + '</tr>' +
+        r.missing.map(function(x, i){ return '<tr><td style="' + TD + '">' + (i + 1) + '</td><td style="' + TD + '">' + esc(x.name) + '</td><td style="' + TD + '">' + esc(x.dept) + '</td><td style="' + TD + '">' + (x.need === '특별' ? '특별안전보건' : 'MSDS') + '</td><td style="' + TD + '">' + esc(x.kind) + (x.from ? '<br>(' + esc(x.from) + '에서)' : '') + '</td><td style="' + TD + '">' + esc(x.date) + '</td><td style="' + TD + '">' + esc(x.deadline || '-') + '</td><td style="' + TD + '">' + esc(x.status) + '</td></tr>'; }).join('') + '</table>';
+    }
+    var ppl = {}; r.ppe.forEach(function(x){ ppl[x.name + '|' + x.dept] = 1; });
+    h += '<div style="line-height:1.9;padding-left:24px;margin-top:10px">' + (n++) + '. 보호구 지급 : ' + r.ppe.length + '건 (' + Object.keys(ppl).length + '명)</div>' +
+      (r.ppe.length ? '<table style="' + TB + '"><tr>' + ['번호', '지급일', '부서', '성명', '지급물품'].map(function(x){ return '<th style="' + TH + '">' + x + '</th>'; }).join('') + '</tr>' +
+        r.ppe.map(function(x, i){ return '<tr><td style="' + TD + '">' + (i + 1) + '</td><td style="' + TD + '">' + esc(x.date) + '</td><td style="' + TD + '">' + esc(x.dept) + '</td><td style="' + TD + '">' + esc(x.name) + '</td><td style="' + TD + ';text-align:left">' + esc(x.items) + '</td></tr>'; }).join('') + '</table>' : '');
+    h += '<div style="line-height:1.9;padding-left:24px;margin-top:10px">' + (n++) + '. 화학물질 보고서 : ' + r.chem.length + '건 (신규사용 ' + r.chem.filter(function(x){ return x.kind === '신규사용'; }).length + ' · 사용중단 ' + r.chem.filter(function(x){ return x.kind === '사용중단'; }).length + ')</div>' +
+      (r.chem.length ? '<table style="' + TB + '"><tr>' + ['번호', '제출일', '구분', '부서', '물질명', '사용 · 중단일', '처리'].map(function(x){ return '<th style="' + TH + '">' + x + '</th>'; }).join('') + '</tr>' +
+        r.chem.map(function(x, i){ return '<tr><td style="' + TD + '">' + (i + 1) + '</td><td style="' + TD + '">' + esc(x.date) + '</td><td style="' + TD + '">' + esc(x.kind) + '</td><td style="' + TD + '">' + esc(x.dept) + '</td><td style="' + TD + ';text-align:left">' + esc(x.name) + '</td><td style="' + TD + '">' + esc(x.useDate) + '</td><td style="' + TD + '">' + esc(x.status) + '</td></tr>'; }).join('') + '</table>' : '');
+    var att = [];
+    if(r.roster.some(function(x){ return x.special; })) att.push('특별안전보건교육_' + M + ' 1부');
+    if(r.roster.some(function(x){ return !x.special; })) att.push('MSDS교육_' + M + ' 1부');
+    var L = ['가', '나', '다'];
+    h += '<div style="margin-top:22px;line-height:1.9">' + (att.length ? att.map(function(a, i){ return (i ? '<span style="display:inline-block;width:52px"></span>' : '붙임 : ') + L[i] + '.' + a + (i === att.length - 1 ? '.&nbsp;&nbsp;&nbsp;&nbsp;끝.' : '') + '<br>'; }).join('') : '끝.') + '</div>';
+    return h;
+  }
+  function docHtml(r){
+    return '<h1 class="rp-title">유해화학물질 취급 근로자 안전보건교육 결과 보고</h1><div class="rp-sub">' + r.year + '년 ' + r.month + '월 · 작성일 ' + esc(r.made) + '</div>' +
+      '<div id="rp-bodytext">' + bodyHtml(r) + '</div>' + chartsHtml(r);
+  }
+  // ── 그래프 (SVG · 막대 위에 마우스를 올리면 숫자)
+  function nice(max){ var raw = Math.max(1, max) / 4, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p; var st = Math.max(1, (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p); return st * 4; }   // 눈금 4칸이 1 · 2 · 5 단위로 떨어지게
+  function legend(items){ return '<div class="rp-leg">' + items.map(function(x){ return '<span><i style="background:' + x[1] + '"></i>' + x[0] + '</span>'; }).join('') + '</div>'; }
+  function columns(cats, series, W, H){
+    var pl = 36, pr = 8, pt = 10, pb = 26, iw = W - pl - pr, ih = H - pt - pb;
+    var max = nice(Math.max(1, Math.max.apply(null, series.map(function(s){ return Math.max.apply(null, s.values.concat([0])); }))));
+    var band = iw / cats.length, bw = Math.min(24, (band * 0.7 - 2 * (series.length - 1)) / series.length), gw = bw * series.length + 2 * (series.length - 1);
+    var y = function(v){ return pt + ih - v / max * ih; };
+    var g = '';
+    for(var k = 0; k <= 4; k++){ var v = max * k / 4, yy = y(v); g += '<line x1="' + pl + '" x2="' + (W - pr) + '" y1="' + yy + '" y2="' + yy + '" stroke="' + C_GRID + '" stroke-width="1"/><text x="' + (pl - 6) + '" y="' + (yy + 4) + '" text-anchor="end" font-size="10" fill="' + C_AX + '">' + Math.round(v) + '</text>'; }
+    cats.forEach(function(c, i){
+      var x0 = pl + band * i + (band - gw) / 2;
+      series.forEach(function(s, j){
+        var v = s.values[i] || 0, x = x0 + j * (bw + 2), top = y(v), h = pt + ih - top;
+        if(h > 0){ var r = Math.min(4, h, bw / 2); g += '<path d="M' + x + ',' + (pt + ih) + 'V' + (top + r) + 'Q' + x + ',' + top + ' ' + (x + r) + ',' + top + 'H' + (x + bw - r) + 'Q' + (x + bw) + ',' + top + ' ' + (x + bw) + ',' + (top + r) + 'V' + (pt + ih) + 'Z" fill="' + s.color + '"><title>' + esc(c) + ' ' + esc(s.name) + ' ' + v + '명</title></path>'; }
+        else g += '<rect x="' + x + '" y="' + pt + '" width="' + bw + '" height="' + ih + '" fill="transparent"><title>' + esc(c) + ' ' + esc(s.name) + ' 0명</title></rect>';
+      });
+      g += '<text x="' + (pl + band * i + band / 2) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="#45423D">' + esc(c) + '</text>';
+    });
+    g += '<line x1="' + pl + '" x2="' + (W - pr) + '" y1="' + (pt + ih) + '" y2="' + (pt + ih) + '" stroke="' + C_AX + '" stroke-width="1"/>';
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" style="display:block">' + g + '</svg>';
+  }
+  function rateLine(cats, vals, W, H){
+    var pl = 36, pr = 30, pt = 12, pb = 24, iw = W - pl - pr, ih = H - pt - pb, band = iw / cats.length;
+    var x = function(i){ return pl + band * i + band / 2; }, y = function(v){ return pt + ih - v / 100 * ih; };
+    var g = '';
+    [0, 50, 100].forEach(function(v){ g += '<line x1="' + pl + '" x2="' + (W - pr) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="' + C_GRID + '"/><text x="' + (pl - 6) + '" y="' + (y(v) + 4) + '" text-anchor="end" font-size="10" fill="' + C_AX + '">' + v + '%</text>'; });
+    var seg = [], d = '';
+    vals.forEach(function(v, i){ if(v == null){ if(seg.length) d += 'M' + seg.join('L'); seg = []; return; } seg.push(x(i) + ',' + y(v)); });
+    if(seg.length) d += 'M' + seg.join('L');
+    if(d) g += '<path d="' + d + '" fill="none" stroke="' + C_DONE + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+    var lastI = -1;
+    vals.forEach(function(v, i){ if(v == null) return; lastI = i; g += '<circle cx="' + x(i) + '" cy="' + y(v) + '" r="4" fill="' + C_DONE + '" stroke="#fff" stroke-width="2"><title>' + esc(cats[i]) + ' 이수율 ' + pctTxt(v) + '</title></circle>'; });
+    if(lastI >= 0) g += '<text x="' + (x(lastI) + 8) + '" y="' + (y(vals[lastI]) - 6) + '" font-size="11" font-weight="700" fill="#1E1E1C">' + pctTxt(vals[lastI]) + '</text>';
+    cats.forEach(function(c, i){ g += '<text x="' + x(i) + '" y="' + (H - 7) + '" text-anchor="middle" font-size="11" fill="#45423D">' + esc(c) + '</text>'; });
+    if(lastI < 0) g += '<text x="' + (W / 2) + '" y="' + (pt + ih / 2) + '" text-anchor="middle" font-size="12" fill="' + C_AX + '">교육 대상자가 있는 달이 없습니다</text>';
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" style="display:block">' + g + '</svg>';
+  }
+  function smallTable(head, rows){
+    return '<table class="rp-tbl"><tr>' + head.map(function(x){ return '<th>' + x + '</th>'; }).join('') + '</tr>' + rows.map(function(r){ return '<tr>' + r.map(function(c, i){ return '<td' + (i ? '' : ' class="l"') + '>' + c + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>';
+  }
+  function chartsHtml(r){
+    var S = r.series, W = 674;
+    var mc = S.months.map(function(m){ return m.m + '월'; }), qc = S.quarters.map(function(q){ return q.q + '분기'; });
+    var h = '<div class="rp-pb"></div><h2 class="rp-h2">[참고] 교육 현황 그래프 · ' + r.year + '년 1월 ~ ' + r.month + '월</h2>' +
+      '<div class="rp-blk"><h3>전체 · 연간 (' + r.year + '년 누계)</h3><div class="rp-tiles">' +
+        [['교육 대상자', S.year.target + '명'], ['이수', S.year.done + '명'], ['이수율', pctTxt(S.year.rate)], ['교육 실시 (월별 실인원 합)', S.year.conducted + '명']].map(function(t){ return '<div><span>' + t[0] + '</span><b>' + t[1] + '</b></div>'; }).join('') + '</div></div>' +
+      '<div class="rp-blk"><h3>전체 · 월별 교육 대상자 · 교육 실시 인원</h3>' + legend([['교육 대상자 (신규입사 · 부서이동)', C_TGT], ['교육 실시 인원', C_DONE]]) +
+        columns(mc, [{ name: '교육 대상자', color: C_TGT, values: S.months.map(function(m){ return m.target; }) }, { name: '교육 실시 인원', color: C_DONE, values: S.months.map(function(m){ return m.conducted; }) }], W, 200) + '</div>' +
+      '<div class="rp-blk"><h3>전체 · 월별 이수율</h3>' + rateLine(mc, S.months.map(function(m){ return m.rate; }), W, 150) + '</div>' +
+      '<div class="rp-blk"><h3>전체 · 분기별</h3>' + legend([['교육 대상자', C_TGT], ['교육 실시 인원', C_DONE]]) +
+        columns(qc, [{ name: '교육 대상자', color: C_TGT, values: S.quarters.map(function(q){ return q.target; }) }, { name: '교육 실시 인원', color: C_DONE, values: S.quarters.map(function(q){ return q.conducted; }) }], W, 170) + '</div>' +
+      '<div class="rp-blk">' + smallTable(['구분', '교육 대상자', '이수', '이수율', '교육 실시', '특별', 'MSDS'],
+        S.months.map(function(m){ return [m.m + '월', m.target, m.done, pctTxt(m.rate), m.conducted, m.special, m.msds]; })
+          .concat(S.quarters.map(function(q){ return ['<b>' + q.q + '분기</b>', q.target, q.done, pctTxt(q.rate), q.conducted, '', '']; }))
+          .concat([['<b>' + r.year + '년 누계</b>', '<b>' + S.year.target + '</b>', '<b>' + S.year.done + '</b>', '<b>' + pctTxt(S.year.rate) + '</b>', '<b>' + S.year.conducted + '</b>', '', '']])) + '</div>';
+    // 부서별: 월별 · 분기별 · 연간 교육 실시 인원 (진할수록 많음) + 대상 · 이수 · 이수율
+    var D = S.depts.filter(function(d){ return d.conducted.concat(d.target).some(function(v){ return v; }); });
+    var mx = Math.max.apply(null, [1].concat(D.map(function(d){ return Math.max.apply(null, d.conducted); })));
+    var cell = function(v){ if(!v) return '<td class="z"></td>'; var k = Math.min(4, Math.floor(v / mx * 4.999)); return '<td style="background:' + HEAT[k] + ';color:' + (k >= 3 ? '#fff' : '#1E1E1C') + '" title="' + v + '명">' + v + '</td>'; };
+    var qsum = function(arr, q){ return arr.slice((q - 1) * 3, q * 3).reduce(function(a, b){ return a + b; }, 0); };
+    var qs = S.quarters.map(function(q){ return q.q; });
+    h += '<div class="rp-blk"><h3>부서별 · 월별 · 분기별 · 연간 교육 실시 인원</h3><div class="rp-note">칸이 진할수록 교육 실시 인원이 많습니다. 오른쪽은 ' + r.year + '년 교육 대상자(신규입사 · 부서이동) · 이수 · 이수율.</div>' +
+      (D.length ? '<table class="rp-heat"><tr><th class="l">부서</th>' + mc.map(function(c){ return '<th>' + c + '</th>'; }).join('') + qs.map(function(q){ return '<th class="q">' + q + '분기</th>'; }).join('') + '<th class="q">연간</th><th class="q">대상</th><th class="q">이수</th><th class="q">이수율</th></tr>' +
+        D.map(function(d){
+          var tot = d.conducted.reduce(function(a, b){ return a + b; }, 0), tt = d.target.reduce(function(a, b){ return a + b; }, 0), dn = d.done.reduce(function(a, b){ return a + b; }, 0);
+          return '<tr><td class="l">' + esc(d.dept) + '</td>' + d.conducted.map(cell).join('') + qs.map(function(q){ return '<td class="q">' + (qsum(d.conducted, q) || '') + '</td>'; }).join('') +
+            '<td class="q"><b>' + tot + '</b></td><td class="q">' + (tt || '') + '</td><td class="q">' + (tt ? dn : '') + '</td><td class="q">' + (tt ? pctTxt(dn / tt * 100) : '') + '</td></tr>';
+        }).join('') + '</table>' : '<div class="rp-note">부서별 기록이 없습니다.</div>') + '</div>';
+    // 부서별 연간 막대 (많은 순)
+    var bars = D.map(function(d){ return { dept: d.dept, v: d.conducted.reduce(function(a, b){ return a + b; }, 0) }; }).filter(function(x){ return x.v; }).sort(function(a, b){ return b.v - a.v; });
+    if(bars.length){
+      var bm = Math.max.apply(null, bars.map(function(x){ return x.v; })), rowH = 20, Hh = bars.length * rowH + 8, lw = 120;
+      var g = bars.map(function(x, i){ var w = Math.max(2, (W - lw - 50) * x.v / bm), yy = 4 + i * rowH; return '<text x="' + (lw - 8) + '" y="' + (yy + 13) + '" text-anchor="end" font-size="11" fill="#45423D">' + esc(x.dept) + '</text>' +
+        '<path d="M' + lw + ',' + (yy + 3) + 'H' + (lw + w - 4) + 'Q' + (lw + w) + ',' + (yy + 3) + ' ' + (lw + w) + ',' + (yy + 7) + 'V' + (yy + 13) + 'Q' + (lw + w) + ',' + (yy + 17) + ' ' + (lw + w - 4) + ',' + (yy + 17) + 'H' + lw + 'Z" fill="' + C_DONE + '"><title>' + esc(x.dept) + ' ' + x.v + '명</title></path>' +
+        '<text x="' + (lw + w + 6) + '" y="' + (yy + 14) + '" font-size="11" fill="#1E1E1C">' + x.v + '</text>'; }).join('');
+      h += '<div class="rp-blk"><h3>부서별 · ' + r.year + '년 교육 실시 인원 (많은 순)</h3><svg viewBox="0 0 ' + W + ' ' + Hh + '" width="100%" role="img" style="display:block">' + g + '</svg></div>';
+    }
+    return h;
+  }
+  // ── 저장 · 인쇄 · 복사 · 엑셀
+  var fileBase = function(){ return '유해화학물질_교육결과_월보고_' + rep.ym; };
+  async function savePdf(){
+    if(!rep || busy) return;
+    if(typeof html2canvas === 'undefined' || !window.jspdf){ msg('PDF 도구를 불러오지 못했습니다 (인터넷 연결 확인) — [인쇄]에서 PDF로 저장하세요', true); return; }
+    var doc = document.getElementById('rp-doc'); busy = true; msg('PDF 만드는 중…');
+    try{
+      var cv = await html2canvas(doc, { scale: 2, backgroundColor: '#ffffff', useCORS: true, windowWidth: doc.scrollWidth });
+      var top0 = doc.getBoundingClientRect().top, W = doc.offsetWidth, scale = cv.width / W;
+      var pageH = Math.floor(W * (297 - 24) / 210);   // 위아래 12mm
+      var forced = [].slice.call(doc.querySelectorAll('.rp-pb')).map(function(e){ return e.getBoundingClientRect().top - top0; });
+      var cand = [].slice.call(doc.querySelectorAll('tr, .rp-blk, h2, #rp-bodytext > *, #rp-bodytext > div > div')).map(function(e){ return e.getBoundingClientRect().top - top0; }).concat(forced).sort(function(a, b){ return a - b; });
+      var total = doc.scrollHeight, cuts = [], s = 0;
+      while(s < total - 4){
+        var lim = s + pageH, f = forced.filter(function(v){ return v > s + 20 && v <= lim; })[0];
+        var c = f != null ? f : (lim >= total ? total : (cand.filter(function(v){ return v > s + pageH * 0.4 && v <= lim; }).pop() || lim));
+        cuts.push([s, c]); s = c;
+      }
+      var pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4' });
+      cuts.forEach(function(seg, i){
+        var hpx = Math.round((seg[1] - seg[0]) * scale); if(hpx < 4) return;
+        var pc = document.createElement('canvas'); pc.width = cv.width; pc.height = hpx;
+        var cx = pc.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, pc.width, pc.height);
+        cx.drawImage(cv, 0, Math.round(seg[0] * scale), cv.width, hpx, 0, 0, cv.width, hpx);
+        if(i) pdf.addPage();
+        pdf.addImage(pc.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 12, 210, (seg[1] - seg[0]) * 210 / W);
+        pdf.setFontSize(8); pdf.setTextColor(140); pdf.text((i + 1) + ' / ' + cuts.length, 105, 291, { align: 'center' });
+      });
+      var name = fileBase() + '.pdf', uri = pdf.output('datauristring');
+      pdf.save(name);
+      var up = null;
+      try{ if(typeof uploadFileToGitHub === 'function') up = await uploadFileToGitHub(uri, '보고서/월보고/' + rep.year + '/' + name); }catch(_){}
+      msg('PDF ' + cuts.length + '쪽 저장 · 이 PC에 받음' + (up ? ' · 드라이브 「보고서/월보고/' + rep.year + '」에도 보관' : ''));
+    }catch(e){ msg('PDF 저장 실패: ' + (e.message || e), true); }
+    finally{ busy = false; }
+  }
+  var DOC_CSS = 'body{margin:0;font-family:"Malgun Gothic","맑은 고딕","Noto Sans KR",sans-serif;color:#000}';
+  function printDoc(){
+    if(!rep) return;
+    var css = [].slice.call(document.querySelectorAll('style#bm-v2127-rp')).map(function(s){ return s.textContent; }).join('\n');
+    var w = window.open('', '_blank');
+    if(!w){ msg('팝업이 막혀 있습니다 — 이 사이트의 팝업을 허용해 주세요', true); return; }
+    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>' + esc(fileBase()) + '</title><style>' + DOC_CSS + css +
+      '@page{size:A4;margin:12mm}.rp-doc{width:auto !important;box-shadow:none !important;padding:0 !important}.rp-pb{break-before:page}tr,.rp-blk{break-inside:avoid}</style></head><body><div class="rp-doc">' +
+      document.getElementById('rp-doc').innerHTML + '</div><script>window.onload=function(){setTimeout(function(){print()},300)}<\/script></body></html>');
+    w.document.close();
+  }
+  async function copyBody(){
+    if(!rep) return;
+    var html = '<div style="font-family:\'Malgun Gothic\',sans-serif;font-size:13px;color:#000">' + bodyHtml(rep) + '</div>';
+    var tmp = document.createElement('div'); tmp.innerHTML = html; var text = tmp.innerText;
+    try{
+      if(navigator.clipboard && window.ClipboardItem){
+        await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([text], { type: 'text/plain' }) })]);
+      } else throw new Error('x');
+      msg('본문을 복사했습니다 — 결재 문서 본문에 붙여넣기(Ctrl+V)');
+    }catch(_){
+      var box = document.createElement('div'); box.contentEditable = 'true'; box.style.cssText = 'position:fixed;left:-9999px;top:0'; box.innerHTML = html; document.body.appendChild(box);
+      var rg = document.createRange(); rg.selectNodeContents(box); var sel = getSelection(); sel.removeAllRanges(); sel.addRange(rg);
+      var ok = false; try{ ok = document.execCommand('copy'); }catch(_){}
+      sel.removeAllRanges(); box.remove();
+      msg(ok ? '본문을 복사했습니다 — 결재 문서 본문에 붙여넣기(Ctrl+V)' : '복사하지 못했습니다 — 보고서를 드래그해 복사하세요', !ok);
+    }
+  }
+  async function makeXlsx(){
+    if(!rep || busy) return;
+    busy = true; msg('엑셀 만드는 중… (1분 안팎)');
+    var r = await post('report.monthly', { year: rep.year, month: rep.month, xlsx: true });
+    busy = false;
+    if(!r.success || !r.xlsxUrl){ msg('엑셀 실패: ' + (r.error || r.xlsxError || '알 수 없음'), true); return; }
+    var el = document.getElementById('rp-msg');
+    el.innerHTML = '엑셀을 만들었습니다 · <a href="' + esc(r.xlsxUrl) + '" target="_blank" rel="noopener">엑셀 열기</a> · <a href="' + esc(r.folderUrl) + '" target="_blank" rel="noopener">드라이브 폴더</a>';
+    el.style.color = '#345C12';
+  }
+  function make(){ return load(); }
   window.BMFIND = { run: run, focus: focus };
-  window.BMREPORT = { open: open, make: make };
+  window.BMREPORT = { open: open, make: make, load: load, savePdf: savePdf, copyBody: copyBody, data: function(){ return rep; } };
 })();
 </script>
 <style id="bm-v2125">
@@ -21631,6 +21850,35 @@ button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,inpu
 #adm-pane-dash .dash-card h3{font-weight:700 !important;color:#1E1E1C !important}
 #adm-pane-cfg .cfg-c dt{font-size:13px !important;color:#5A5650 !important;font-weight:400 !important}
 #adm-pane-cfg .cfg-c dd{font-size:14px !important;color:#1E1E1C !important}
+</style>
+<style id="bm-v2127-rp">
+.rp-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+.rp-tools[hidden]{display:none}
+.rp-btn{height:38px;padding:0 16px;border:1px solid #C6C3BB;border-radius:6px;background:#fff;color:#1E1E1C;font:inherit;font-weight:600;cursor:pointer}
+.rp-btn:hover{border-color:#67AF28;background:#F3F9ED}
+.rp-msg{font-size:13px}
+.rp-row label{font-size:14px}
+.rp-scroll{overflow-x:auto;margin-top:14px;padding-bottom:8px}
+.rp-doc{width:794px;box-sizing:border-box;margin:0 auto;padding:44px 56px 48px;background:#fff;color:#000;box-shadow:0 1px 4px rgba(0,0,0,.12);font-family:"Malgun Gothic","맑은 고딕","Noto Sans KR",sans-serif;font-size:13.5px}
+.rp-doc .rp-title{font-size:22px;font-weight:700;text-align:center;margin:0 0 4px;letter-spacing:-.02em}
+.rp-doc .rp-sub{text-align:center;font-size:12px;color:#555;margin-bottom:22px}
+.rp-doc .rp-pb{height:0;margin:28px 0 0;border-top:1px dashed #C6C3BB}
+.rp-doc .rp-h2{font-size:16px;font-weight:700;margin:22px 0 10px}
+.rp-doc .rp-blk{margin:0 0 18px}
+.rp-doc .rp-blk h3{font-size:13.5px;font-weight:700;margin:0 0 6px;color:#1E1E1C}
+.rp-doc .rp-leg{display:flex;gap:16px;font-size:12px;color:#45423D;margin:0 0 4px}
+.rp-doc .rp-leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.rp-doc .rp-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.rp-doc .rp-tiles div{border:1px solid #DDDBD5;border-radius:6px;padding:8px 10px}
+.rp-doc .rp-tiles span{display:block;font-size:11.5px;color:#5A5650}.rp-doc .rp-tiles b{font-size:18px}
+.rp-doc .rp-tbl,.rp-doc .rp-heat{border-collapse:collapse;width:100%;font-size:11.5px}
+.rp-doc .rp-tbl th,.rp-doc .rp-heat th{background:#EEF6E6;color:#345C12;font-weight:600;padding:4px 3px;border:1px solid #DDDBD5;text-align:center}
+.rp-doc .rp-tbl td,.rp-doc .rp-heat td{padding:4px 3px;border:1px solid #ECEBE7;text-align:center}
+.rp-doc .rp-tbl td.l,.rp-doc .rp-heat td.l,.rp-doc .rp-heat th.l{text-align:left;white-space:nowrap}
+.rp-doc .rp-heat td.z{background:#fff}
+.rp-doc .rp-heat th.q,.rp-doc .rp-heat td.q{background:#FAFAF8}
+.rp-doc .rp-note{font-size:11.5px;color:#5A5650;margin:0 0 6px}
+@media (max-width:760px){.rp-tools .rp-go,.rp-tools .rp-btn{flex:1 1 40%}}
 </style>
 </body>
 </html>
