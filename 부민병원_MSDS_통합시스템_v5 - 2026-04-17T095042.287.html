@@ -7391,6 +7391,41 @@ function bmPhotoGrid(list, minH, P){
   return `<div style="flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:5px;min-height:${minH}px">` +
     photos.map((p, i) => `<div style="grid-area:${areas[i]};border:1px solid ${P.border};background-color:#f4f6f9;background-image:url('${p}');background-size:contain;background-position:center;background-repeat:no-repeat;min-height:0"></div>`).join('') + `</div>`;
 }
+/* v21.36 서명 칸 배치
+   · 특별교육: 날짜별 서명 블록(그 날짜 아래로 사람들)을 한 줄에 2일씩 — 1일이면 한 줄 전체 · 5일이면 3줄(마지막은 반 칸)
+   · MSDS: 1명이면 한 줄 · 2명 이상이면 한 줄에 2명씩 아래로 */
+function bmSigPairs(blocks){
+  if(blocks.length <= 1) return blocks.map(b => `<div style="margin-bottom:10px">${b}</div>`).join('');
+  let h = '';
+  for(let i = 0; i < blocks.length; i += 2){
+    h += `<table style="width:100%;border-collapse:collapse;margin-bottom:10px;table-layout:fixed"><tr>
+      <td style="width:50%;vertical-align:top;padding:0 5px 0 0">${blocks[i]}</td>
+      <td style="width:50%;vertical-align:top;padding:0 0 0 5px">${blocks[i + 1] || ''}</td></tr></table>`;
+  }
+  return h;
+}
+function bmSigTwoCol(people, P, FF, rowH){   // people: [{name, join, date, sigHtml, bg, bold}]
+  const th = (t, w) => `<th style="border:1.2px solid ${P.borderHd};padding:6px 4px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;${w ? 'width:' + w + ';' : ''}font-family:${FF};vertical-align:middle;white-space:nowrap;background:${P.bgHead}">${t}</th>`;
+  const td = (v, st) => `<td style="border:1.2px solid ${P.border};font-size:12px;text-align:center;vertical-align:middle;font-family:${FF};${st || ''}">${v == null ? '' : v}</td>`;
+  const no = i => td(i + 1, `font-weight:700;color:${P.navy};background:${P.bgHead}`);
+  const nm = p => td(p.name || '', `font-weight:${p.bold ? 700 : 600};color:${P.txt};background:${p.bg || P.bgWhite}`);
+  const dt = v => td(v || '', `color:${P.txtSub};font-variant-numeric:tabular-nums;background:#fff`);
+  const sg = p => td(p.sigHtml || '', `background:${P.sigBg || '#fafcff'}`);
+  if(people.length <= 1){
+    const p = people[0] || {};
+    return `<table style="width:100%;border-collapse:collapse;table-layout:fixed"><thead><tr>${th('번호', '36px')}${th('성명', '80px')}${th('입사일', '96px')}${th('교육일', '96px')}${th('서명')}</tr></thead>
+      <tbody><tr style="height:${rowH}px" data-sig-row="1">${people.length ? no(0) + nm(p) + dt(p.join) + dt(p.date) + sg(p) : td('') + td('') + td('') + td('') + td('')}</tr></tbody></table>`;
+  }
+  const gap = '<td style="width:10px;border:0;background:#fff"></td>';
+  const head = th('번호', '30px') + th('성명', '64px') + th('입사일', '82px') + th('서명');
+  let rows = '';
+  for(let i = 0; i < people.length; i += 2){
+    const L = people[i], R = people[i + 1];
+    rows += `<tr style="height:${rowH}px" data-sig-row="1">${no(i)}${nm(L)}${dt(L.join)}${sg(L)}${gap}` +
+      (R ? no(i + 1) + nm(R) + dt(R.join) + sg(R) : '<td style="border:0"></td><td style="border:0"></td><td style="border:0"></td><td style="border:0"></td>') + `</tr>`;
+  }
+  return `<table style="width:100%;border-collapse:collapse;table-layout:fixed"><thead><tr>${head}<th style="width:10px;border:0;background:#fff"></th>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+}
 async function pdfRenderPagesProtected(area, cv, pdf, pw, ph, scale, fillSinglePage){
   const ih = (cv.height/cv.width) * pw;
 
@@ -9314,27 +9349,13 @@ function e1BuildPdfHTML(){
       </table>`;
   }
 
-  let sigSection = '';
-  for(let di=0; di<e1.dates.length; di+=2){
-    const hasR = di+1 < e1.dates.length;
-    sigSection += `
-    <table style="width:100%;border-collapse:collapse;margin-bottom:10px">
-      <tr>
-        <td style="width:${hasR?'50%':'100%'};vertical-align:top;padding-right:${hasR?'5px':'0'}">
-          ${makeDateBlock(e1.dates[di], di)}
-        </td>
-        ${hasR?`<td style="width:50%;vertical-align:top;padding-left:5px">
-          ${makeDateBlock(e1.dates[di+1], di+1)}
-        </td>`:''}
-      </tr>
-    </table>`;
-  }
+  const sigSection = bmSigPairs(e1.dates.map((d, di) => makeDateBlock(d, di)));   // v21.36 한 줄에 2일 · 1일이면 한 줄 전체
 
   return `
   <div style="padding:18px 22px;width:794px;min-height:1123px;display:flex;flex-direction:column;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;color:${P.txt};background:#fff;box-sizing:border-box;font-size:12px">
     <div style="display:flex;align-items:center;border-bottom:2px solid ${P.navy};padding-bottom:9px;margin-bottom:8px;gap:14px">
       <div style="flex:1;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
-        <div style="font-size:24px;font-weight:700;letter-spacing:2px;color:${P.navy};line-height:1">특별안전보건교육일지</div>
+        <div style="font-size:34px;font-weight:800;letter-spacing:3px;color:${P.navy};line-height:64px">특별안전보건교육일지</div>
         <div style="font-size:10.5px;color:${P.txtGray};letter-spacing:0.3px;font-weight:400">산업안전보건법 시행규칙 제28조 별표4</div>
       </div>
       <div style="display:inline-flex;border:0.8px solid #1a1a2e;background:#fff;flex-shrink:0;height:64px">
@@ -9562,7 +9583,8 @@ function e2BuildPdfHTML(){
     : `<span style="font-size:12px;font-weight:400;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif">${chem}</span>`;
 
   const plen = e2.parts.length || 1;
-  const e2RowH = Math.max(52, Math.min(90, Math.floor(560 / plen)));   // v21.33 인원이 적으면 서명 줄을 높여 A4 한 장을 채움 (서명하기도 편함)
+  const e2Rows = plen <= 1 ? 1 : Math.ceil(plen / 2);
+  const e2RowH = Math.max(56, Math.min(110, Math.floor(560 / e2Rows)));   // v21.36 한 줄에 2명 기준으로 줄 높이   // v21.33 인원이 적으면 서명 줄을 높여 A4 한 장을 채움 (서명하기도 편함)
   let partRows = '';
   for(let i=0;i<plen;i++){
     const p   = e2.parts[i];
@@ -9583,7 +9605,7 @@ function e2BuildPdfHTML(){
     <div style="margin-bottom:14px">
       <div style="display:flex;align-items:center;padding-bottom:9px;border-bottom:2px solid ${P.navy};width:100%;gap:14px">
         <div style="flex:1;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
-          <div style="font-size:24px;font-weight:700;letter-spacing:2px;color:${P.navy};line-height:1">MSDS 교육일지</div>
+          <div style="font-size:34px;font-weight:800;letter-spacing:3px;color:${P.navy};line-height:64px">MSDS 교육일지</div>
           <div style="font-size:10.5px;color:${P.txtGray};letter-spacing:0.3px;font-weight:400">산업안전보건법 시행규칙 제28조 별표4</div>
         </div>
         <div style="display:inline-flex;border:0.8px solid #1a1a2e;background:#fff;flex-shrink:0;height:64px">
@@ -9637,18 +9659,7 @@ function e2BuildPdfHTML(){
     <div style="background:${P.navy};color:#fff;font-weight:700;font-size:12px;padding:9px 0;text-align:center;letter-spacing:3px;border-radius:3px;margin-top:14px;margin-bottom:0;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif">
       안전보건교육 대상자 서명
     </div>
-    <table style="width:100%;border-collapse:collapse">
-      <thead>
-        <tr style="background:${P.bgHead}">
-          <th style="border:1.2px solid ${P.borderHd};padding:6px 4px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:36px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle;white-space:nowrap">번호</th>
-          <th style="border:1.2px solid ${P.borderHd};padding:6px 4px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:60px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle;white-space:nowrap">성명</th>
-          <th style="border:1.2px solid ${P.borderHd};padding:6px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:90px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle;white-space:nowrap">입사일</th>
-          <th style="border:1.2px solid ${P.borderHd};padding:6px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:90px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle;white-space:nowrap">교육일</th>
-          <th style="border:1.2px solid ${P.borderHd};padding:6px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:130px;font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif;vertical-align:middle;white-space:nowrap">서명</th>
-        </tr>
-      </thead>
-      <tbody>${partRows}</tbody>
-    </table>
+    ${bmSigTwoCol(e2.parts.map((p, i) => ({ name: p && p.name, join: p && p.join, date: ds, sigHtml: e2.sigData[i] ? `<img src="${e2.sigData[i]}" style="height:${Math.min(70, e2RowH - 10)}px;max-width:100%;display:block;margin:0 auto">` : '', bg: i % 2 === 0 ? P.bgWhite : P.bgStripe })), P, "'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif", e2RowH)}
     <div style="margin-top:auto;padding-top:8px;border-top:1.5px solid ${P.border};display:flex;justify-content:space-between">
       <div style="font-size:11px;font-weight:400;color:${P.txtGray};font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif">본 교육일지는 관리자에게 제출하여 보관합니다.</div>
       <div style="font-size:11px;font-weight:400;color:${P.txtGray};font-family:'Nanum Gothic','나눔고딕','Malgun Gothic',sans-serif">인당의료재단 부민병원</div>
@@ -12773,7 +12784,7 @@ function ppeBuildLedgerHTML(persons){
   <div style="padding:20px 26px 22px;width:750px;font-family:${FF};color:${P.txt};background:#fff;box-sizing:border-box">
     <div style="margin-bottom:14px">
       <div style="display:flex;align-items:baseline;padding-bottom:9px;border-bottom:2px solid ${P.navy};width:100%;gap:14px;flex-wrap:wrap">
-        <div style="font-size:24px;font-weight:700;letter-spacing:2px;color:${P.navy};line-height:1">보호구 지급수령증</div>
+        <div style="font-size:34px;font-weight:800;letter-spacing:3px;color:${P.navy};line-height:64px">보호구 지급수령증</div>
         <div style="font-size:10.5px;color:${P.txtGray};letter-spacing:0.3px;font-weight:400">산업안전보건법 제38조 | 인당의료재단 부민병원</div>
       </div>
     </div>
@@ -13929,7 +13940,7 @@ function buildEduPreviewHTML(group, currentRecordId, opts){
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>`;
-  }).join('') : '';
+  }) : [];   // v21.36 날짜 블록 목록 (아래에서 한 줄에 2일씩)
 
   const partRows = partRowsSingle;  // 기존 변수 호환
 
@@ -13967,7 +13978,7 @@ function buildEduPreviewHTML(group, currentRecordId, opts){
   <div style="margin-bottom:14px">
     <div style="display:flex;align-items:center;padding-bottom:9px;border-bottom:2px solid ${P.navy};width:100%;gap:14px">
       <div style="flex:1;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
-        <div style="font-size:22px;font-weight:700;letter-spacing:2px;color:${P.navy};line-height:1">${title}</div>
+        <div style="font-size:34px;font-weight:800;letter-spacing:3px;color:${P.navy};line-height:64px">${title}</div>
         <div style="font-size:10.5px;color:${P.txtGray};letter-spacing:0.3px;font-weight:400">${subTitle}</div>
       </div>
       <!-- 결재란: 도장 -->
@@ -14011,7 +14022,7 @@ function buildEduPreviewHTML(group, currentRecordId, opts){
   <div style="background:${P.navy};color:#fff;font-weight:700;font-size:12px;padding:9px 0;text-align:center;letter-spacing:3px;border-radius:3px;margin-top:14px;margin-bottom:0;font-family:${FF}">
     안전보건교육 대상자 서명${eduDates ? ` (${eduDates.length}일 교육)` : ''}
   </div>
-  ${eduDates ? partRowsMultiDay : `<table style="width:100%;border-collapse:collapse">
+  ${eduDates ? bmSigPairs(partRowsMultiDay) : (isE2 ? bmSigTwoCol(members.map((m, i) => ({ name: (m.name || '') + (currentRecordId && m.recordId === currentRecordId ? ' ◀' : ''), bold: currentRecordId && m.recordId === currentRecordId, join: m.joinDate, date: group.dateStart, bg: currentRecordId && m.recordId === currentRecordId ? '#fef3c7' : (i % 2 === 0 ? P.bgWhite : P.bgStripe), sigHtml: m.sigImg ? `<img src="${m.sigImg}" style="height:44px;max-width:100%;display:block;margin:0 auto">` : ((m.signed || '').includes('✓') ? '<span style="color:#15803d;font-weight:600;font-size:11px">✓ 완료</span>' : '') })), P, FF, 56) : `<table style="width:100%;border-collapse:collapse">
     <thead>
       <tr style="background:${P.bgHead}">
         <th style="border:1.2px solid ${P.borderHd};padding:6px 4px;font-size:12px;text-align:center;color:${P.navy};font-weight:700;width:36px;font-family:${FF};vertical-align:middle;white-space:nowrap">번호</th>
@@ -14022,7 +14033,7 @@ function buildEduPreviewHTML(group, currentRecordId, opts){
       </tr>
     </thead>
     <tbody>${partRows}</tbody>
-  </table>`}
+  </table>`)}
 
   ${(() => {
     // ★ 사진 섹션 (e1만, members[0].photos에 저장됨)

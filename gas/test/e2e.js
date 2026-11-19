@@ -2399,6 +2399,24 @@ function check(name, cond, extra) {
       const v = { side: /교 육 사 진/.test(d.textContent), cells: [...d.querySelectorAll('[style*="grid-area"]')].map(x => x.style.gridArea.replace(/\s/g, '')), bottom: /교육 현장 사진/.test(d.textContent), instr: (d.innerText.match(/소속·직위\s*([^\n]+)/) || [])[1] };
       d.remove(); return v; });
     check('예전 특별교육일지 v21.35: 다시 만들기 · 미리보기도 사진은 교육 내용 옆 4등분(2장 = 위 두 칸) · 강사 소속·직위 부서의 장', oldj.side && JSON.stringify(oldj.cells) === '["1/1/2/2","1/2/2/3"]' && !oldj.bottom && /부서의 장/.test(oldj.instr || ''), oldj);
+    // v21.36 서명 칸: 특별 = 한 줄에 2일(5일이면 3줄) · MSDS = 1명 한 줄 · 2명 이상 한 줄에 2명 · 제목 크기 = 결재 칸 높이
+    const sg = await p3.evaluate(() => {
+      const keep = { parts: e1.parts, dates: e1.dates, sig: e1.sigData, photos: e1.photos, p2: e2.parts, s2: e2.sigData };
+      const mk = html => { const d = document.createElement('div'); d.innerHTML = html; document.body.appendChild(d); return d; };
+      e1.photos = []; e1.sigData = {}; e1.parts = [{ name: 'A' }, { name: 'B' }];
+      const e1rows = n => { e1.dates = Array.from({ length: n }, (_, i) => '2026-11-' + (16 + i)); const d = mk(e1BuildPdfHTML());
+        const rows = [...d.querySelectorAll('table')].filter(t => t.querySelector(':scope > tbody > tr > td > div') && /일차/.test(t.textContent) && !t.closest('td td')).map(t => t.querySelectorAll(':scope > tbody > tr > td').length);
+        const title = getComputedStyle([...d.querySelectorAll('div')].find(x => x.textContent.trim() === '특별안전보건교육일지')).fontSize; d.remove(); return { rows, title }; };
+      const one = e1rows(1), two = e1rows(2), five = e1rows(5);
+      e2.sigData = {};
+      const e2rows = n => { e2.parts = Array.from({ length: n }, (_, i) => ({ name: 'P' + (i + 1), join: '2026-11-16' })); const d = mk(e2BuildPdfHTML());
+        const r = [...d.querySelectorAll('tr[data-sig-row]')].map(tr => [...tr.children].filter(td => /^P\d+$/.test(td.textContent.trim())).length); d.remove(); return r; };
+      const out = { one, two, five, m1: e2rows(1), m5: e2rows(5) };
+      e1.parts = keep.parts; e1.dates = keep.dates; e1.sigData = keep.sig; e1.photos = keep.photos; e2.parts = keep.p2; e2.sigData = keep.s2;
+      return out;
+    });
+    check('서명 칸 v21.36: 특별 1일 = 한 줄 · 2일 = 한 줄 반반 · 5일 = 3줄 · MSDS 1명 한 줄 · 5명 = 한 줄에 2명(2 · 2 · 1) · 제목 34px',
+      sg.one.rows.length === 0 && JSON.stringify(sg.two.rows) === '[2]' && JSON.stringify(sg.five.rows) === '[2,2,2]' && JSON.stringify(sg.m1) === '[1]' && JSON.stringify(sg.m5) === '[2,2,1]' && sg.one.title === '34px', sg);
     // v21.27 월 보고서 (결재 양식) — 서버
     const mm = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7), yy = +mm.slice(0, 4), mo = +mm.slice(5, 7);
     const mr = post({ op: 'report.monthly', year: yy, month: mo, t: tk.a }), mrD = post({ op: 'report.monthly', year: yy, month: mo, t: tk.d }), mrBad = post({ op: 'report.monthly', year: yy, month: 13, t: tk.a });
