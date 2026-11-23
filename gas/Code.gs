@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.42 (2026-11-23)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.44 (2026-11-23)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -866,7 +866,7 @@ function deptEmployees_(list, dept) {
   const same = e => sameDept_(e.dept, dept) || sameDept_(deptAlias_(e.dept), dept);
   let units = {};
   try { units = unitMap_(); } catch (_) {}
-  const inUnit = e => { const u = units[eduKey_(e.empNo, e.name, e.dept)] || units['nm:' + e.name + '|' + normDept_(deptAlias_(e.dept))]; return !!u && sameDept_(u.unit, dept); };
+  const inUnit = e => { const u = unitOf_(units, Object.assign({}, e, { dept: deptAlias_(e.dept) })); return !!u && sameDept_(u.unit, dept); };
   let out = act.filter(e => same(e) || inUnit(e));
   if (!out.length) {
     const base = String(dept || '').replace(/\s*\(.*$/, '').trim();
@@ -1409,6 +1409,21 @@ function syncEmployees_(incoming, fullList, dry) {
         summary.resigned++;
       });
     }
+    // v21.44 근무지 지정은 인사 부서 안의 작업장 → 인사 부서가 바뀌면 자동 해제 (바뀌지 않은 사람 · 새 직원의 근무지는 건드리지 않음)
+    summary.unitRelease = [];
+    try {
+      const um = SS.getSheetByName(UNIT_SHEET);
+      if (um && um.getLastRow() > 1 && summary.deptMoves.length) {
+        const uv = um.getRange(2, 1, um.getLastRow() - 1, UNIT_HEADER.length).getDisplayValues();
+        summary.deptMoves.forEach(m => uv.forEach((r, i) => {
+          if (String(r[7]).trim() || !String(r[3]).trim()) return;
+          const no = String(r[0]).replace(/^'/, '').trim();
+          const same = (/^\d{6,}$/.test(String(m.no)) && no === String(m.no)) || (String(r[1]).trim() === m.name && sameDept_(deptAlias_(r[2]), deptAlias_(m.from)));
+          if (same && !sameDept_(deptAlias_(r[2]), deptAlias_(m.to)) && !summary.unitRelease.some(x => x.row === i + 2))
+            summary.unitRelease.push({ row: i + 2, no: m.no, name: m.name, unit: String(r[3]).trim(), from: m.from, to: m.to });
+        }));
+      }
+    } catch (_) {}
     summary.filledNo = details.filledNo;
     summary.merged = details.merged;
     summary.deleted = details.deleted;
@@ -1426,7 +1441,11 @@ function syncEmployees_(incoming, fullList, dry) {
       if (!mv) { mv = SS.insertSheet('부서이동기록'); mv.appendRow(['반영일', '사번', '이름', '이전 부서', '새 부서', '비고']); }
       summary.deptMoves.forEach(m => mv.appendRow([today, "'" + m.no, safeCell_(m.name), safeCell_(m.from), safeCell_(m.to), '인사 사이트 동기화']));
     }
-    setAdminCfg({ key: 'emp_last_sync', value: nowKst_() + ' (추가 ' + summary.added + ' · 변경 ' + summary.updated + (summary.deptMoves.length ? ' · 부서이동 ' + summary.deptMoves.length : '') + ' · 퇴사표시 ' + summary.resigned +
+    if (summary.unitRelease.length) {
+      const um = SS.getSheetByName(UNIT_SHEET);
+      summary.unitRelease.forEach(u => um.getRange(u.row, 8).setValue(safeCell_(today + ' 인사 부서이동 자동 해제 (' + u.from + ' → ' + u.to + ')')));
+    }
+    setAdminCfg({ key: 'emp_last_sync', value: nowKst_() + ' (추가 ' + summary.added + ' · 변경 ' + summary.updated + (summary.deptMoves.length ? ' · 부서이동 ' + summary.deptMoves.length : '') + (summary.unitRelease.length ? ' · 근무지해제 ' + summary.unitRelease.length : '') + ' · 퇴사표시 ' + summary.resigned +
       (details.filledNo.length ? ' · 사번채움 ' + details.filledNo.length : '') + (details.deleted ? ' · 중복합침 ' + details.deleted : '') + ')' });
     return summary;
   } finally {
@@ -3319,7 +3338,7 @@ function chemraOp_(req, s) {
   const deny = requireAdmin_(s);
   if (deny) return deny;
   switch (req.op) {
-    case 'chemra.list': return { success: true, data: chemraRows_().map(o => { const c = Object.assign({}, o); delete c._row; return c; }), cfg: chemraCfg_(), meas: chemraMeasRows_(), qtys: chemraQtyRows_() };
+    case 'chemra.list': return { success: true, data: chemraRows_().map(o => { const c = Object.assign({}, o); delete c._row; return c; }), cfg: chemraCfg_(), meas: chemraMeasRows_(), qtys: chemraQtyRows_(), qtyInfo: CHEMRA_QTY_INFO };
     case 'chemra.measSave': {   // v21.41 작업환경측정 결과표 한 차수(예: 2026 상반기)를 통째로 저장 (같은 차수는 바꿈)
       const period = String(req.period || '').trim().slice(0, 40);
       if (!period) return { success: false, error: '차수(예: 2026 상반기)를 넣으세요' };
@@ -3413,20 +3432,25 @@ function chemraMeasDel_(sh, period) {
   return n;
 }
 // v21.42 시트 [공정별 화학물질 사용 상태]: 부서(병합 → 빈칸은 위 부서) · 화학물질명 · 사용여부 · 용도 · 월 취급량 · 일취급량 · 단위 · 비고
+let CHEMRA_QTY_INFO = null;   // v21.43 화면에 왜 못 읽었는지 알려 줌 (시트 이름 · 칸 · 읽은 줄 수)
 function chemraQtyRows_() {
   const sh = SS.getSheetByName('공정별 화학물질 사용 상태') || (SS.getSheets ? SS.getSheets() : []).find(x => /공정별|취급량/.test(x.getName()) && !/위험성/.test(x.getName()));
+  CHEMRA_QTY_INFO = { sheet: sh ? sh.getName() : '', header: false, rows: 0 };
   if (!sh || sh.getLastRow() < 2) return [];
   const v = sh.getRange(1, 1, sh.getLastRow(), Math.min(sh.getLastColumn(), 12)).getDisplayValues();
   const H = v[0].map(h => String(h).replace(/\s/g, ''));
   const ix = re => H.findIndex(h => re.test(h));
   const c = { dept: ix(/부서|공정/), name: ix(/화학물질명|물질명|제품명/), use: ix(/사용여부|사용/), usage: ix(/용도/), month: ix(/월/), day: ix(/일취급|하루|일사용/), unit: ix(/단위/), note: ix(/비고/) };
   if (c.name < 0 || c.day < 0) return [];
+  CHEMRA_QTY_INFO.header = true;
   let last = '';
-  return v.slice(1).map(r => {
+  const out = v.slice(1).map(r => {
     const g = k => c[k] >= 0 ? String(r[c[k]] || '').trim() : '';
     const dept = g('dept') || last; last = dept;
     return { dept: dept, name: g('name'), use: g('use'), usage: g('usage'), month: g('month'), day: g('day'), unit: g('unit'), note: g('note') };
   }).filter(o => o.name && o.day && !/미사용|중단/.test(o.use));
+  CHEMRA_QTY_INFO.rows = out.length;
+  return out;
 }
 function chemraCfg_() { try { return JSON.parse(PROPS.getProperty('CHEMRA_CFG') || 'null'); } catch (_) { return null; } }
 
@@ -3603,11 +3627,17 @@ function unitMap_() {
   if (!sh || sh.getLastRow() < 2) return out;
   sh.getRange(2, 1, sh.getLastRow() - 1, UNIT_HEADER.length).getDisplayValues().forEach((r, i) => {
     if (!String(r[1]).trim() || !String(r[3]).trim() || String(r[7]).trim()) return;
-    const o = { row: i + 2, unit: String(r[3]).trim(), note: r[4], date: r[5], by: r[6] };
+    const o = { row: i + 2, unit: String(r[3]).trim(), note: r[4], date: r[5], by: r[6], dept: String(r[2]).trim() };
     out[eduKey_(r[0], r[1], r[2])] = o;
     out['nm:' + String(r[1]).trim() + '|' + normDept_(deptAlias_(r[2]))] = o;
   });
   return out;
+}
+// v21.44 직원의 지금 근무지: 지정할 때의 인사 부서와 지금 인사 부서가 같을 때만 (인사 부서이동하면 근무지는 적용 안 함)
+function unitOf_(units, e) {
+  const u = units[eduKey_(e.empNo, e.name, e.dept)] || units['nm:' + e.name + '|' + normDept_(deptAlias_(e.dept))];
+  if (!u) return null;
+  return !u.dept || sameDept_(deptAlias_(u.dept), deptAlias_(e.dept)) || baseDept_(u.dept) === baseDept_(e.dept) ? u : null;
 }
 /* v20.3 수기(종이) 기록 삭제 — 수기로 넣은 줄만 (앱에서 쓴 서명 일지는 삭제 불가).
    지우기 전에 '교육이력_삭제' 시트에 그대로 옮겨 보관 (누가 · 언제 · 사유) → 필요하면 되살릴 수 있음 */
@@ -3786,7 +3816,7 @@ function eduStatus_(s) {
   emps.forEach(e => {
     if (s.role === 'dept' && !sameDept_(e.dept, s.dept)) return;
     const inc = incl[eduKey_(e.empNo, e.name, e.dept)] || incl['nm:' + e.name + '|' + normDept_(e.dept)];
-    const un = units[eduKey_(e.empNo, e.name, e.dept)] || units['nm:' + e.name + '|' + normDept_(e.dept)];
+    const un = unitOf_(units, e);
     const eR = un ? Object.assign({}, e, { dept: un.unit }) : e;   // 근무지가 있으면 규칙도 근무지로 판단
     const ri = rules.findIndex(r => ruleMatch_(r, eR));
     const rule = ri >= 0 && !(inc && rules[ri].decision === '제외') ? rules[ri] : null;
@@ -4446,7 +4476,7 @@ function eduManual_(req) {
     const hours = Number(String(x.hours || '').replace(/[^\d.]/g, '')) || (type === 'MSDS교육' ? 1 : 0);
     if (!hours) return Object.assign(r, { ok: false, reason: '특별교육은 교육 시간을 적으세요' });
     const dup = (own.get(e) || []).some(q => q.special === (type !== 'MSDS교육') && q.ds === ds2);
-    const un = units[eduKey_(e.empNo, e.name, e.dept)] || units['nm:' + e.name + '|' + normDept_(e.dept)];
+    const un = unitOf_(units, e);
     const chem = String(x.chem || '').trim() || ((un && chemsForDept_(map, un.unit)) || chemsForDept_(map, e.dept) || []).join(', ');
     return Object.assign(r, { ok: !dup, dup: dup, reason: dup ? '같은 날 같은 교육이 이미 있음' : '', emp: { no: e.empNo, name: e.name, dept: e.dept, joinDate: e.joinDate },
       type: type, ds: ds2, de: (de < ds2 || ds2 !== ds) ? ds2 : de, hours: hours, chem: chem, note: String(x.note || '').trim() });
