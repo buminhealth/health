@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.34 (2026-11-19)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.41 (2026-11-22)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -190,6 +190,8 @@ function doPost(e) {
                         result = chemOp_(req, s); break;
       case 'ai.status': case 'ai.setKey': case 'ai.list': case 'ai.analyze': case 'ai.judge': case 'ai.apply': case 'ai.products': case 'ai.compare':
                         result = aiOp_(req, s); break;
+      case 'chemra.list': case 'chemra.save': case 'chemra.delete': case 'chemra.read': case 'chemra.cfg': case 'chemra.setCfg': case 'chemra.measSave': case 'chemra.measDelete':
+                        result = chemraOp_(req, s); break;   // v21.40 화학물질 위험성평가 (KRAS)
       case 'pdf.big':  result = requireAdmin_(s) || pdfBig_(req); break;
       case 'ra.meta': case 'ra.analyze': case 'ra.submit': case 'ra.mine': case 'ra.photo': case 'ra.list': case 'ra.update': case 'ra.delete':
                         result = raOp_(req, s); break;
@@ -2921,10 +2923,15 @@ const AI_PROMPT = [
   '함유량은 문서 표기 그대로(예: "1~5", "<1", "30-40").',
   '{"product":{"name":"제품명","manufacturer":"제조사 또는 공급자","usage":"권고 용도","signalWord":"신호어(위험/경고)",',
   '"pictograms":["MSDS 2번(유해성 · 위험성)의 그림문자를 아래 GHS 코드로만: GHS01 폭발성(터지는 폭탄), GHS02 인화성(불꽃), GHS03 산화성(원 위의 불꽃), GHS04 고압가스(가스 실린더), GHS05 부식성(손 · 금속이 녹음), GHS06 급성독성(해골), GHS07 경고(느낌표), GHS08 건강유해성(사람 가슴 별), GHS09 수생환경유해성(죽은 나무 · 물고기). 문서에 있는 그림만, 예: [\\"GHS02\\",\\"GHS07\\"]"],',
-  '"emergency":{"eye":"4번 눈에 들어갔을 때","skin":"피부에 접촉했을 때","inhalation":"흡입했을 때","ingestion":"먹었을 때"}},',
+  '"emergency":{"eye":"4번 눈에 들어갔을 때","skin":"피부에 접촉했을 때","inhalation":"흡입했을 때","ingestion":"먹었을 때"},',
+  '"ra":{"hcodes":"2번 유해 · 위험 문구의 H코드 전체를 쉼표로(예: H225,H319,H350)","state":"9번 물리적 상태: liquid(액체) · solid(고체) · gas(기체) 중 하나",',
+  '"bp":"9번 끓는점 ℃ 숫자만(범위면 낮은 값, 분해 · 해당없음이면 빈칸)","dust":"고체일 때만 비산성: 1(덩어리 · 부스러지지 않음) 2(결정 · 입자, 먼지 조금) 3(고운 가루, 먼지 많음)"}},',
   '"components":[{"name":"구성성분명","cas":"CAS 번호","amount":"함유량(%)",',
   '"reg15":{"workEnv":"15번 법적규제에서 작업환경측정 대상 여부와 주기(예: 6개월, 해당없음)","healthCheck":"특수건강진단 대상 여부와 주기(예: 12개월, 해당없음)",',
-  '"managed":"관리대상유해물질 해당 여부(해당/해당없음)","special":"특별관리물질 해당 여부(해당/해당없음)"}}],',
+  '"managed":"관리대상유해물질 해당 여부(해당/해당없음)","special":"특별관리물질 해당 여부(해당/해당없음)"},',
+  '"ra":{"oelPpm":"8번 국내 노출기준 TWA ppm 숫자(없으면 빈칸)","oelMg":"8번 국내 노출기준 TWA mg/㎥ 숫자(없으면 빈칸)",',
+  '"c":"발암성 구분(1A · 1B · 2, 2번 또는 11번 · 15번에 적힌 것, 없으면 빈칸)","m":"생식세포 변이원성 구분(1A · 1B · 2)","r":"생식독성 구분(1A · 1B · 2)",',
+  '"hcodes":"이 성분에 해당하는 H코드(문서에 성분별로 없으면 빈칸)","bp":"이 성분의 끓는점 ℃(문서에 있을 때만)"}}],',
   '"warnings":["추출이 불확실한 부분"]}'
 ].join('\n');
 
@@ -3006,7 +3013,7 @@ function aiJudge_(data) {
     const hc = pick(L && L.hc, sheetHc, r15.healthCheck), we = pick(L && L.we, sheetWe, r15.workEnv);
     return {
       name: String(c.name || '').trim(), cas: cas, casRaw: String(c.cas || ''), casOk: ok, casNote: ci.fixed ? ci.why : (ok ? '' : (ci.why || '검증숫자 틀림 · MSDS 확인')),
-      amount: String(c.amount || '').trim(),
+      amount: String(c.amount || '').trim(), ra: chemraCompNorm_(c.ra),
       hc: hc.v, hcSrc: hc.src, we: we.v, weSrc: we.src,
       managed: (L && yes(L.target)) || yes(r15.managed), special: (L && yes(L.special)) || yes(r15.special),
       evidence: { law: L ? { hc: L.hc, we: L.we, target: L.target, special: L.special } : null,
@@ -3028,7 +3035,7 @@ function aiJudge_(data) {
   return {
     product: { name: pname, manufacturer: String(p.manufacturer || '').trim(), usage: String(p.usage || '').trim(), signalWord: String(p.signalWord || '').trim(),
                pictograms: ghsNormalize_(p.pictograms).names, pictoUnknown: ghsNormalize_(p.pictograms).unknown,
-               emergency: p.emergency || {} },
+               emergency: p.emergency || {}, ra: chemraProdNorm_(p.ra) },
     components: comps,
     targetManage: comps.some(c => c.managed), specialManage: comps.some(c => c.special),
     iconKnown: GHS_STD.map(x => x.name), iconSheet: Object.keys(iconMap), duplicate: pname && names.indexOf(pname) >= 0,
@@ -3228,11 +3235,183 @@ function aiApply_(req) {
         if (added.length) eduAdded = newChemAdd_(name, depts, 'MSDS 개정 승인', '성분 추가: ' + added.join(', '));
       }
     } catch (_) {}
-    return { success: true, eduAdded: eduAdded, mode: revise ? 'revise' : 'new', row: start, rows: out.length, oldRows: old ? old.count : 0, pdfUrl: pdfUrl, icons: icons ? icons.split(',').length : 0, iconNames: pic.names, iconsUnknown: pic.unknown, signalWord: signal };
+    let raSaved = '';
+    if (d.ra && typeof d.ra === 'object') {   // v21.40 AI MSDS 검토에서 함께 계산한 위험성평가 → 목록 갱신
+      try { const rr = chemraPut_(Object.assign({}, d.ra, { product: name, dept: (d.departments || []).join(','), src: revise ? 'MSDS 개정 승인' : 'AI MSDS 검토' }), revise ? target : ''); raSaved = rr.success ? '저장' : (rr.error || ''); }
+      catch (e) { raSaved = '실패: ' + e.message; }
+    }
+    return { success: true, raSaved: raSaved, eduAdded: eduAdded, mode: revise ? 'revise' : 'new', row: start, rows: out.length, oldRows: old ? old.count : 0, pdfUrl: pdfUrl, icons: icons ? icons.split(',').length : 0, iconNames: pic.names, iconsUnknown: pic.unknown, signalWord: signal };
   } finally {
     lock.releaseLock();
   }
 }
+
+// ════════════════════════════════════════════════════════════════
+// v21.40 화학물질 위험성평가 (KRAS 화학물질 위험성 평가표 양식 · 지침해설서 부록3 곱셈법)
+//  · 시트 [화학물질위험성평가]: 제품 1줄 (성분 · 조치는 '데이터' 칸 JSON) — 다시 저장하면 이전 줄은 [화학물질위험성평가_이력]
+//  · 점수 계산은 화면(같은 지침 표)에서 하고 서버는 숫자 범위만 확인해 보관
+//  · AI는 MSDS에서 값만 읽음: AI MSDS 검토(새 물질) 또는 [MSDS 읽기](목록에 있는 물질, 하루 CHEMRA_LIMIT회 · 기본 50)
+// ════════════════════════════════════════════════════════════════
+const CHEMRA_SHEET = '화학물질위험성평가', CHEMRA_HIST = '화학물질위험성평가_이력';
+const CHEMRA_HEADER = ['제품명', '부서', '공정명', '평가일', '평가자', '출처', '노출수준', '유해성', '위험성', '등급', '개선후위험성', '데이터', '수정일시'];
+const CHEMRA_LIMIT = 50;
+function chemraNum_(v) { const m = String(v == null ? '' : v).replace(/,/g, '').match(/-?\d+(\.\d+)?/); return m ? m[0] : ''; }
+function chemraCat_(v) { const m = String(v || '').toUpperCase().match(/\b(1A|1B|1|2)\b/); return m ? m[1] : ''; }
+function chemraCodes_(v) { const a = String(v || '').toUpperCase().match(/H\d{3}[A-Z]{0,2}/g) || []; return a.filter((x, i) => a.indexOf(x) === i).join(','); }
+function chemraCompNorm_(r) {
+  r = r || {};
+  return { oelPpm: chemraNum_(r.oelPpm), oelMg: chemraNum_(r.oelMg), c: chemraCat_(r.c), m: chemraCat_(r.m), r: chemraCat_(r.r), hcodes: chemraCodes_(r.hcodes), bp: chemraNum_(r.bp) };
+}
+function chemraProdNorm_(r) {
+  r = r || {};
+  const st = String(r.state || '').toLowerCase();
+  return { hcodes: chemraCodes_(r.hcodes), state: /gas|기체|가스/.test(st) ? 'gas' : /solid|고체|분말|가루|결정/.test(st) ? 'solid' : /liquid|액체|액상/.test(st) ? 'liquid' : '',
+           bp: chemraNum_(r.bp), dust: /^[123]$/.test(String(r.dust || '').trim()) ? String(r.dust).trim() : '' };
+}
+function chemraSheet_(name, head) {
+  let sh = SS.getSheetByName(name);
+  if (!sh) { sh = SS.insertSheet(name); sh.appendRow(head); sh.setFrozenRows(1); }
+  return sh;
+}
+function chemraRows_() {
+  const sh = SS.getSheetByName(CHEMRA_SHEET);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const v = sh.getRange(1, 1, sh.getLastRow(), CHEMRA_HEADER.length).getDisplayValues();
+  const H = v[0].map(String);
+  const ix = k => H.indexOf(k);
+  return v.slice(1).map((r, i) => {
+    let data = {}; try { data = JSON.parse(r[ix('데이터')] || '{}'); } catch (_) {}
+    return { _row: i + 2, product: r[ix('제품명')], dept: r[ix('부서')], proc: r[ix('공정명')], date: r[ix('평가일')], by: r[ix('평가자')], src: r[ix('출처')],
+             e: +r[ix('노출수준')] || 0, sv: +r[ix('유해성')] || 0, risk: +r[ix('위험성')] || 0, grade: r[ix('등급')], after: +r[ix('개선후위험성')] || 0, at: r[ix('수정일시')], data: data };
+  }).filter(o => o.product);
+}
+// 저장(같은 제품명이면 바꿈 · 이전 줄은 이력). oldName: 개정으로 제품명이 바뀐 경우 예전 이름
+function chemraPut_(o, oldName) {
+  const product = String(o.product || '').trim().slice(0, 150);
+  if (!product) return { success: false, error: '제품명이 없습니다' };
+  const comps = Array.isArray(o.comps) ? o.comps.slice(0, 40) : [];
+  if (!comps.length) return { success: false, error: '성분이 없습니다' };
+  const n4 = v => { const x = parseInt(v, 10); return x >= 0 && x <= 4 ? x : 0; }, n16 = v => { const x = parseInt(v, 10); return x >= 0 && x <= 16 ? x : 0; };
+  const data = { comps: comps, vent: n4(o.vent) > 2 ? 0 : n4(o.vent), now: (o.now || []).slice(0, 40).map(String), plan: (o.plan || []).slice(0, 40).map(String),
+                 due: String(o.due || '').slice(0, 10), done: String(o.done || '').slice(0, 10), owner: String(o.owner || '').slice(0, 40),
+                 qty: n4(o.qty) || 1, temp: chemraNum_(o.temp) || '25', amt: String(o.amt || '').slice(0, 20), usage: String(o.usage || '').slice(0, 200), scores: o.scores || [] };
+  const json = JSON.stringify(data);
+  if (json.length > 45000) return { success: false, error: '내용이 너무 깁니다' };
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
+  try {
+    const sh = chemraSheet_(CHEMRA_SHEET, CHEMRA_HEADER);
+    const rows = chemraRows_();
+    const cur = rows.find(r => r.product === product) || (oldName ? rows.find(r => r.product === String(oldName).trim()) : null);
+    const now = nowKst_().replace('T', ' ');
+    const row = [product, String(o.dept || (cur && cur.dept) || '').slice(0, 200), String(o.proc || '').slice(0, 100), String(o.date || todayKst_()).slice(0, 10), String(o.by || '보건관리자').slice(0, 40),
+                 String(o.src || '직접 평가').slice(0, 60), n4(o.e), n4(o.s), n16(o.risk), String(o.grade || '').slice(0, 20), n16(o.after), json, now].map(safeCell_);
+    if (cur) {
+      const old = sh.getRange(cur._row, 1, 1, CHEMRA_HEADER.length).getValues()[0];
+      chemraSheet_(CHEMRA_HIST, ['보관일시'].concat(CHEMRA_HEADER)).appendRow([now].concat(old.map(x => x instanceof Date ? fmtDate_(x) : safeCell_(x))));
+      sh.getRange(cur._row, 1, 1, row.length).setValues([row]);
+    } else sh.appendRow(row);
+    return { success: true, product: product, updated: !!cur };
+  } finally { lock.releaseLock(); }
+}
+function chemraOp_(req, s) {
+  const deny = requireAdmin_(s);
+  if (deny) return deny;
+  switch (req.op) {
+    case 'chemra.list': return { success: true, data: chemraRows_().map(o => { const c = Object.assign({}, o); delete c._row; return c; }), cfg: chemraCfg_(), meas: chemraMeasRows_() };
+    case 'chemra.measSave': {   // v21.41 작업환경측정 결과표 한 차수(예: 2026 상반기)를 통째로 저장 (같은 차수는 바꿈)
+      const period = String(req.period || '').trim().slice(0, 40);
+      if (!period) return { success: false, error: '차수(예: 2026 상반기)를 넣으세요' };
+      const list = (Array.isArray(req.rows) ? req.rows : []).slice(0, 2000).filter(r => String(r.sub || '').trim());
+      if (!list.length) return { success: false, error: '저장할 측정 결과가 없습니다' };
+      const lock = LockService.getScriptLock();
+      if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
+      try {
+        const sh = chemraSheet_(CHEMRA_MEAS, CHEMRA_MEAS_HEADER);
+        const old = chemraMeasDel_(sh, period);
+        const now = nowKst_().replace('T', ' ');
+        const rows = list.map(r => [period, String(req.date || '').slice(0, 10), String(req.org || '').slice(0, 60), String(r.dept || '').slice(0, 60), String(r.place || '').slice(0, 80),
+          String(r.sub || '').slice(0, 80), chemraNum_(r.val), /mg/i.test(String(r.unit || '')) ? 'mg/㎥' : 'ppm', chemraNum_(r.tlv), String(r.ev || '').slice(0, 20), String(r.note || '').slice(0, 60), now].map(safeCell_));
+        sh.getRange(sh.getLastRow() + 1, 1, rows.length, CHEMRA_MEAS_HEADER.length).setValues(rows);
+        return { success: true, saved: rows.length, replaced: old };
+      } finally { lock.releaseLock(); }
+    }
+    case 'chemra.measDelete': {
+      const period = String(req.period || '').trim();
+      const lock = LockService.getScriptLock();
+      if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
+      try {
+        const sh = SS.getSheetByName(CHEMRA_MEAS);
+        const n = sh ? chemraMeasDel_(sh, period) : 0;
+        return n ? { success: true, deleted: n } : { success: false, error: '그 차수의 측정 결과가 없습니다' };
+      } finally { lock.releaseLock(); }
+    }
+    case 'chemra.save': {
+      const list = Array.isArray(req.items) ? req.items.slice(0, 300) : [req.item || req];
+      const out = list.map(o => { try { return chemraPut_(o, ''); } catch (e) { return { success: false, error: e.message, product: o.product }; } });
+      const bad = out.filter(x => !x.success);
+      return { success: !bad.length || bad.length < out.length, saved: out.length - bad.length, failed: bad.map(x => (x.product || '') + ' ' + x.error) };
+    }
+    case 'chemra.delete': {
+      const name = String(req.product || '').trim();
+      const lock = LockService.getScriptLock();
+      if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
+      try {
+        const cur = chemraRows_().find(r => r.product === name);
+        if (!cur) return { success: false, error: '평가를 찾지 못했습니다' };
+        const sh = SS.getSheetByName(CHEMRA_SHEET);
+        const old = sh.getRange(cur._row, 1, 1, CHEMRA_HEADER.length).getValues()[0];
+        chemraSheet_(CHEMRA_HIST, ['보관일시'].concat(CHEMRA_HEADER)).appendRow([nowKst_().replace('T', ' ') + ' (삭제)'].concat(old.map(x => x instanceof Date ? fmtDate_(x) : safeCell_(x))));
+        sh.deleteRow(cur._row);
+        return { success: true };
+      } finally { lock.releaseLock(); }
+    }
+    case 'chemra.read': {   // MSDS 목록에 있는 물질: 등록된 PDF를 AI로 읽어 위험성평가 칸을 채움
+      const name = String(req.name || '').trim();
+      const sh = findChemSheet_();
+      const blk = sh ? chemBlock_(sh, name) : null;
+      if (!blk) return { success: false, error: 'MSDS 목록에서 물질을 찾지 못했습니다' };
+      const pdfId = guidePdfId_(blk.product.pdfUrl);
+      if (!pdfId) return { success: false, noPdf: true, error: '이 물질은 MSDS PDF 링크가 없습니다 — 물질 마스터에서 PDF를 연결하거나 값을 직접 입력하세요' };
+      const cache = CacheService.getScriptCache(), dayKey = 'chemra_read_' + todayKst_();
+      const n = parseInt(cache.get(dayKey) || '0', 10), lim = parseInt(PROPS.getProperty('CHEMRA_LIMIT') || '', 10) || CHEMRA_LIMIT;
+      if (n >= lim) return { success: false, limit: true, error: '오늘 MSDS 읽기 ' + lim + '회를 다 썼습니다 — 내일 다시 하거나 값을 직접 입력하세요' };
+      let bytes;
+      try { bytes = DriveApp.getFileById(pdfId).getBlob().getBytes(); }
+      catch (e) { return { success: false, error: 'MSDS PDF를 열지 못했습니다 (드라이브 권한)' }; }
+      cache.put(dayKey, String(n + 1), 86400);
+      const r = aiCallGemini_(bytes);
+      if (!r.success) return r;
+      const dr = aiJudge_(r.data);
+      return { success: true, model: aiModel_(), draft: dr, sheet: { usage: blk.product.usage || '', dept: blk.product.department || '', comps: blk.components.map(c => ({ name: c.name, cas: c.cas, amount: c.amount })) }, left: lim - n - 1 };
+    }
+    case 'chemra.cfg': return { success: true, cfg: chemraCfg_() };
+    case 'chemra.setCfg': {
+      const j = JSON.stringify(req.cfg || {});
+      if (j.length > 8000) return { success: false, error: '설정이 너무 깁니다' };
+      if (req.cfg) PROPS.setProperty('CHEMRA_CFG', j); else PROPS.deleteProperty('CHEMRA_CFG');
+      return { success: true, cfg: chemraCfg_() };
+    }
+  }
+  return { success: false, error: 'unknown op: ' + req.op };
+}
+// v21.41 작업환경측정 결과 (차수마다 여러 줄)
+const CHEMRA_MEAS = '작업환경측정결과';
+const CHEMRA_MEAS_HEADER = ['차수', '측정일', '측정기관', '부서', '단위작업장소', '유해인자', '측정치', '단위', '노출기준', '평가', '비고', '올린 날짜'];
+function chemraMeasRows_() {
+  const sh = SS.getSheetByName(CHEMRA_MEAS);
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, CHEMRA_MEAS_HEADER.length).getDisplayValues().filter(r => r[0] && r[5])
+    .map(r => ({ period: r[0], date: r[1], org: r[2], dept: r[3], place: r[4], sub: r[5], val: r[6], unit: r[7], tlv: r[8], ev: r[9], note: r[10], at: r[11] }));
+}
+function chemraMeasDel_(sh, period) {
+  if (sh.getLastRow() < 2) return 0;
+  const v = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getDisplayValues();
+  let n = 0;
+  for (let i = v.length - 1; i >= 0; i--) if (String(v[i][0]).trim() === period) { sh.deleteRow(i + 2); n++; }
+  return n;
+}
+function chemraCfg_() { try { return JSON.parse(PROPS.getProperty('CHEMRA_CFG') || 'null'); } catch (_) { return null; } }
 
 // ════════════════════════════════════════════════════════════════
 // 교육이력대장 중복 정리: 같은 사람(사번, 없으면 성명) · 교육구분 · 부서 · 시작일 · 종료일
