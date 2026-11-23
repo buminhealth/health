@@ -12,6 +12,8 @@
   ════════════════════════════════════════════════════════════════════
   부민병원 MSDS 통합시스템 v21.19 (2026-11-16)
 
+  ★★★ v21.49 (2026-11-23) — AI 답 고쳐 읽기 강화 (서버 v21.49): 문자열 안 줄바꿈 · 탭 · 잘못된 역슬래시 · 주석 · NaN · [ ] 감쌈 · 끊긴 답 닫기 · 끊긴 답은 다음 모델(6분 제한) · MSDS 읽기 실패 때 [성분 이름 · CAS로 AI 추정] · 처음 여는 물질도 측정 · 특검 체크
+  ★★★ v21.48 (2026-11-23) — 새 Gemini(3 이상) 응답 읽기 (서버 v21.48): temperature 기본값 · 생각 조각 빼기 · JSON 앞뒤 글 · 끝 쉼표 정리 · 잘린 답은 다시 → 예비 모델 · 못 읽으면 모델 · 까닭 안내
   ★★★ v21.47 (2026-11-23) — AI 모델 자동 전환 (서버 v21.47): Google이 gemini 모델을 없애면(404 · no longer available) 서버가 모델 목록에서 쓸 수 있는 flash 모델을 찾아 바꾸고 기억
   ★★★ v21.46 (2026-11-23) — 위험성평가: AI 검토 때 MSDS 목록의 작업환경측정 · 특수건강진단 칸으로 현재 조치 자동 체크 (HTML만 · 서버 v21.45 그대로):
     - 주기(6개월 · 12개월 등)가 있으면 [작업환경측정 · 특수건강진단을 정기적으로 실시] 체크, 제외(임단시작업 · 비노출 등) · 빈칸이면 체크 해제 · 감소대책으로도 권하지 않음
@@ -5510,7 +5512,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.47';
+  var SERVER_EXPECT = 'v21.49';
   // v21.10: 'v21.9' < 'v21.10'을 글자 순서가 아니라 숫자로 비교
   function bmVerLess(a, b){
     var p = function(v){ return (String(v).match(/v?(\d+(?:\.\d+)*)/) || [,'0'])[1].split('.').map(Number); };
@@ -21370,6 +21372,7 @@ var CRA = (function(){
   }
   function pick(n){
     st.cur = n; var r = savedOf(n); st.it = r ? itemOf(r) : blankItem(n);
+    if(!r) applyChk(st.it, msdsChk(n));
     var d0 = r ? syncDept(st.it) : '';
     var q0 = st.it.qty, cq = applyQty(st.it), ch = applyMeas(st.it); drawList(); drawDetail();
     var msg = [];
@@ -21482,10 +21485,19 @@ var CRA = (function(){
     });
     var ad = $('cra-addc'); if(ad) ad.onclick = function(){ it.comps.push({ comp: '', cas: '', pct: '', state: (it.comps[0] || {}).state || 'liquid', bp: '', dust: '', unit: 'ppm', oel: '', c: '', m: '', r: '', hcodes: '', meas: '', patient: '무' }); re(); };
     var dl = $('cra-delc'); if(dl) dl.onclick = function(){ it.comps.pop(); re(); };
-    var rd = $('cra-read'); if(rd) rd.onclick = async function(){
-      rd.disabled = true; $('cra-rmsg').innerHTML = '<b style="color:#1F4E79">' + (products()[it.product] && products()[it.product].pdfUrl ? 'AI가 MSDS를 읽는 중… (보통 20초~1분)' : 'MSDS PDF가 없어 성분 이름 · CAS로 AI가 추정하는 중…') + '</b>';
-      var x = await post('chemra.read', { name: it.product });
-      if(!x.success){ rd.disabled = false; $('cra-rmsg').innerHTML = '<span style="color:#A3302A">' + esc(x.error || '실패') + '</span>'; return; }
+    var rd = $('cra-read');
+    // v21.49 gs = true: MSDS PDF가 있어도 성분 이름 · CAS로 추정 (PDF 읽기가 안 될 때)
+    var doRead = async function(gs){
+      var hasPdf = !!(products()[it.product] && products()[it.product].pdfUrl);
+      rd.disabled = true; $('cra-rmsg').innerHTML = '<b style="color:#1F4E79">' + (hasPdf && !gs ? 'AI가 MSDS를 읽는 중… (보통 20초~1분)' : (hasPdf ? '' : 'MSDS PDF가 없어 ') + '성분 이름 · CAS로 AI가 추정하는 중…') + '</b>';
+      var x = await post('chemra.read', { name: it.product, guess: !!gs });
+      if(!x.success){
+        rd.disabled = false;
+        $('cra-rmsg').innerHTML = '<span style="color:#A3302A">' + esc(x.error || '실패') + '</span>' +
+          (hasPdf && !gs && !x.limit && !x.noKey && it.comps.some(function(c){ return c.comp; }) ? ' <button type="button" class="cra-btn s" id="cra-guess">성분 이름 · CAS로 AI 추정</button> <span class="cra-sub">MSDS PDF 대신 MSDS 목록의 성분으로 추정합니다 (노란 줄)</span>' : '');
+        var gb = $('cra-guess'); if(gb) gb.onclick = function(){ doRead(true); };
+        return;
+      }
       var base = it.comps.length ? it.comps.map(function(c){ return { name: c.comp, cas: c.cas, amount: c.pct }; }) : (x.sheet && x.sheet.comps || []);
       it.comps = fromDraft(x.draft, base.length ? base : null);
       if(!it.comps.length) it.comps = fromDraft(x.draft, null);
@@ -21501,6 +21513,7 @@ var CRA = (function(){
       re();
       $('cra-rmsg').innerHTML = (x.guess ? '<b style="color:#6E4A00">MSDS PDF가 없어 성분 이름 · CAS로 AI가 추정한 값입니다 (노란 줄).</b> MSDS를 받으면 물질 마스터에 연결하고 다시 읽어 주세요. ' : 'MSDS에서 값을 채웠습니다 (파란 줄). ') + (dd ? 'MSDS 목록 부서로 바꿨습니다 (' + esc(dd) + ' → ' + esc(it.dept) + '). ' : '') + (chg.length ? '현재 조치: ' + esc(chg.join(' · ')) + '. ' : '') + '틀린 칸만 고친 뒤 [평가 저장]을 누르세요.' + ((x.draft && x.draft.warnings || []).length ? ' <span style="color:#6E4A00">AI 확인 필요: ' + esc(x.draft.warnings.join(' · ')) + '</span>' : '') + ' · 오늘 남은 읽기 ' + x.left + '회';
     };
+    if(rd) rd.onclick = function(){ doRead(false); };
     var sv = $('cra-save'); if(sv) sv.onclick = async function(){
       if(!it.comps.some(function(c){ return c.comp; })){ say('성분을 1개 이상 넣으세요', 'err'); return; }
       it.comps = it.comps.filter(function(c){ return c.comp; });
