@@ -12,6 +12,15 @@
   ════════════════════════════════════════════════════════════════════
   부민병원 MSDS 통합시스템 v21.19 (2026-11-16)
 
+  ★★★ v21.44 (2026-11-23) — 근무지 지정 ↔ 인사 사이트 합치기 · 부서이동 (서버 v21.44):
+    - 근무지 지정(드문 경우 관리자가 교육 현황 부서 명단에서)은 합치기를 몇 번 해도 그대로 · 새 직원은 인사 부서로 들어옴
+    - 인사 사이트에서 부서가 바뀐 사람은 지금처럼 부서이동기록 · 부서이동 확인으로 가고, 그 사람의 근무지 지정은 자동 해제
+      (합치기 미리보기 · 결과에 '근무지 자동 해제' 표시 · 근무지지정 시트 해제일 칸에 '인사 부서이동 자동 해제 (이전 → 새)')
+    - 근무지는 지정할 때의 인사 부서와 지금 인사 부서가 같을 때만 적용 (해제가 늦어도 예전 근무지로 판정하지 않음)
+
+  ★★★ v21.43 (2026-11-23) — 취급량 시트를 못 읽을 때 까닭 안내 (서버 v21.43):
+    - [취급량 시트 반영]에서 못 읽으면 까닭을 화면에 남김: 서버가 예전 버전(새 버전 배포 필요) · 시트를 못 찾음 · 칸 이름을 못 찾음 · 읽은 줄 없음
+
   ★★★ v21.42 (2026-11-23) — 공정별 취급량 시트 · 전체 AI 기초평가 · 작업환경측정 PDF 결과표 (서버 v21.42):
     - 하루취급량: 시트 [공정별 화학물질 사용 상태]의 일취급량 · 단위로 자동 (g · ㎖로 바꿔 1,000 미만 소 · 1,000,000 미만 중 · 그 이상 대)
       제품 이름이 조금 달라도(띄어쓰기 · 괄호 · 오타 1~2자) 맞춤 · 같은 부서 줄 우선, 없으면 가장 많은 양 · 직접 고른 값은 그대로
@@ -3868,6 +3877,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       row('새 직원', r.added + '명', li(r.newEmployees || [], function(e){ return esc(e.dept) + ' ' + esc(e.name); })) +
       row('바뀌는 직원', r.updated + '명') +
       ((r.deptMoves || []).length ? row('부서 이동', r.deptMoves.length + '명', li(r.deptMoves, function(e){ return esc(e.name) + ' ' + esc(e.from) + ' → ' + esc(e.to); }), '#345C12') : '') +
+      ((r.unitRelease || []).length ? row('근무지 자동 해제', r.unitRelease.length + '명', li(r.unitRelease, function(e){ return esc(e.name) + ' 근무지 ' + esc(e.unit) + ' (인사 ' + esc(e.from) + ' → ' + esc(e.to) + ')'; }), '#6E4A00') : '') +
       row('사번 채움', r.filledNo.length + '명', li(r.filledNo, function(e){ return esc(e.name) + '(' + esc(e.dept) + ') ' + esc(e.was || '빈칸') + ' → ' + esc(e.no); }), '#345C12') +
       row('같은 사번 두 줄 합침', r.deleted + '줄', li(r.merged, function(e){ return esc(e.name) + ' ' + esc(e.no); })) +
       row('퇴사 표시', r.resigned + '명', '', r.resigned ? '#A3302A' : '') +
@@ -5491,7 +5501,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.42';
+  var SERVER_EXPECT = 'v21.44';
   // v21.10: 'v21.9' < 'v21.10'을 글자 순서가 아니라 숫자로 비교
   function bmVerLess(a, b){
     var p = function(v){ return (String(v).match(/v?(\d+(?:\.\d+)*)/) || [,'0'])[1].split('.').map(Number); };
@@ -21167,6 +21177,8 @@ var CRA = (function(){
   function sameName(a, b){
     a = nk(a); b = nk(b); if(!a || !b) return false; if(a === b) return true;
     if(a.length >= 6 && b.length >= 6 && (a.indexOf(b) === 0 || b.indexOf(a) === 0)) return true;
+    var sh = a.length < b.length ? a : b, lg = a.length < b.length ? b : a;
+    if(sh.length >= 8 && lg.slice(-sh.length) === sh) return true;   // 'Gram Stain-Gram-decolorizer' ↔ 'Gram-decolorizer'
     return a.length >= 6 && Math.abs(a.length - b.length) <= 2 && lev(a, b) <= Math.min(2, Math.floor(a.length / 6));
   }
   function qtyBase(day, unit){
@@ -21200,7 +21212,7 @@ var CRA = (function(){
     body.innerHTML = '<div class="cra-sub">불러오는 중…</div>';
     var x = await post('chemra.list', {});
     if(!x.success){ body.innerHTML = '<div style="color:#A3302A">' + esc(x.error || '실패') + (/unknown op/.test(x.error || '') ? ' — 서버(Code.gs)를 v21.41 이상으로 배포하세요 (Apps Script 새 버전).' : '') + '</div>'; return; }
-    st.rows = x.data || []; CRA.setCfg(x.cfg); st.cfg = x.cfg || null; st.meas = x.meas || []; st.pick = (x.cfg && x.cfg.measPick) || 'latest'; st.qtys = x.qtys || [];
+    st.rows = x.data || []; CRA.setCfg(x.cfg); st.cfg = x.cfg || null; st.meas = x.meas || []; st.pick = (x.cfg && x.cfg.measPick) || 'latest'; st.qtys = x.qtys || []; st.qtyOld = !('qtys' in x); st.qtyInfo = x.qtyInfo || null;
     draw();
   }
   function savedOf(name){ return (st.rows || []).filter(function(r){ return r.product === name; })[0]; }
@@ -21277,9 +21289,17 @@ var CRA = (function(){
       (b.fail.length ? '<div style="color:#A3302A;font-size:12.5px">' + b.fail.map(function(f){ return esc(f[0]) + ': ' + esc(f[1]); }).join(' · ') + '</div>' : '');
     var sb = $('cra-bstop'); if(sb) sb.onclick = function(){ st.bulk.stop = true; sb.disabled = true; sb.textContent = '이 물질까지 하고 멈춤'; };
   }
+  // 취급량 시트를 못 읽은 까닭 (v21.43)
+  function qtyWhy(){
+    if(st.qtyOld) return '서버(Apps Script)가 아직 예전 버전이라 취급량 시트를 보내 주지 않습니다. Apps Script에 새 Code.gs를 붙여넣고 저장한 뒤 [배포 → 배포 관리 → 기존 웹 앱 ✏(연필) → 버전: 새 버전 → 배포]를 해 주세요. 관리자 [설정]의 서버 버전이 v21.43이면 됩니다.';
+    var i = st.qtyInfo || {};
+    if(!i.sheet) return '시트 [공정별 화학물질 사용 상태]를 찾지 못했습니다. 앱이 쓰는 구글시트 파일 안에 이 이름의 시트가 있는지 확인해 주세요.';
+    if(!i.header) return '시트 [' + i.sheet + '] 첫 줄에서 칸 이름(화학물질명 · 일취급량 · 단위)을 찾지 못했습니다.';
+    return '시트 [' + i.sheet + ']에서 읽은 줄이 없습니다 (일취급량이 비었거나 사용여부가 미사용 · 중단).';
+  }
   // 저장된 평가에 공정별 취급량 시트 값 반영 (직접 고른 하루취급량은 그대로) — 바뀌는 것 먼저 보여 줌
   function qtyAll(){
-    if(!st.qtys.length){ say('공정별 취급량 시트(공정별 화학물질 사용 상태)를 읽지 못했습니다', 'err'); return; }
+    if(!st.qtys.length){ $('cra-bmsg').innerHTML = '<div style="color:#A3302A;font-size:13.5px;margin-top:8px;font-weight:700">' + esc(qtyWhy()) + '</div>'; say('공정별 취급량 시트를 읽지 못했습니다 — 아래 안내를 보세요', 'err'); return; }
     var list = [];
     (st.rows || []).forEach(function(o){ var it = itemOf(o), q0 = it.qty, a0 = it.amt, b0 = best(it).r; if(applyQty(it)) list.push({ it: it, from: ['', '소', '중', '대'][q0 || 1] + (a0 ? ' (' + a0 + ')' : ''), to: ['', '소', '중', '대'][it.qty] + ' (' + it.amt + ')', src: it.qtySrc, r0: b0, r1: best(it).r }); });
     var el = $('cra-bmsg');
@@ -21367,7 +21387,7 @@ var CRA = (function(){
         '<label class="cra-f">하루취급량<select class="cra-in" id="cra-qty"><option value="1">소 (g · ㎖)</option><option value="2">중 (㎏ · L)</option><option value="3">대 (톤 · ㎥)</option></select></label>' +
         '<label class="cra-f">일취급량<input class="cra-in" id="cra-amt" value="' + esc(it.amt) + '" style="width:100px"></label>' +
         '<label class="cra-f">사용온도 ℃<input class="cra-in" id="cra-temp" value="' + esc(it.temp) + '" style="width:70px"></label></div>' +
-        (it.qtySrc && !it.qtyManual ? '<div class="cra-sub" style="color:#1F4E79">하루취급량: 공정별 취급량 시트 — ' + esc(it.qtySrc) + '</div>' : (it.qtyManual ? '<div class="cra-sub">하루취급량: 직접 고름</div>' : (st.qtys.length ? '<div class="cra-sub">공정별 취급량 시트에 이 물질이 없습니다 — 하루취급량을 직접 고르세요</div>' : ''))) +
+        (it.qtySrc && !it.qtyManual ? '<div class="cra-sub" style="color:#1F4E79">하루취급량: 공정별 취급량 시트 — ' + esc(it.qtySrc) + '</div>' : (it.qtyManual ? '<div class="cra-sub">하루취급량: 직접 고름</div>' : (st.qtys.length ? '<div class="cra-sub">공정별 취급량 시트에 이 물질이 없습니다 — 하루취급량을 직접 고르세요</div>' : (st.qtyOld ? '<div class="cra-sub" style="color:#A3302A">공정별 취급량 시트를 못 읽음 — 서버를 새 버전으로 배포해야 합니다</div>' : '')))) +
         '<div id="cra-rmsg" class="cra-sub"></div></div>' +
       (it.comps.length ? '' : '<div class="cra-box"><div class="cra-sub">성분이 없습니다. [MSDS 읽기 (AI)]를 누르거나 성분을 추가하세요.</div></div>') +
       '<div class="cra-box"><h3><span class="k">2</span>MSDS 검토 <span class="cra-chip ai">파란 줄 = AI가 채움</span></h3>' + compTable(it) +
