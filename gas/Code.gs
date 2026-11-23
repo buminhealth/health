@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.49 (2026-11-23)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.50 (2026-11-23)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -3430,7 +3430,7 @@ function chemraPut_(o, oldName) {
   const data = { comps: comps, vent: n4(o.vent) > 2 ? 0 : n4(o.vent), now: (o.now || []).slice(0, 40).map(String), plan: (o.plan || []).slice(0, 40).map(String),
                  due: String(o.due || '').slice(0, 10), done: String(o.done || '').slice(0, 10), owner: String(o.owner || '').slice(0, 40),
                  qty: n4(o.qty) || 1, temp: chemraNum_(o.temp) || '25', amt: String(o.amt || '').slice(0, 30), usage: String(o.usage || '').slice(0, 200), scores: o.scores || [],
-                 qtySrc: String(o.qtySrc || '').slice(0, 120), qtyManual: !!o.qtyManual, deptManual: !!o.deptManual, aiGuess: !!o.aiGuess };
+                 qtySrc: String(o.qtySrc || '').slice(0, 120), qtyManual: !!o.qtyManual, deptManual: !!o.deptManual, aiGuess: !!o.aiGuess, ovWhy: String(o.ovWhy || '').slice(0, 300) };
   const json = JSON.stringify(data);
   if (json.length > 45000) return { success: false, error: '내용이 너무 깁니다' };
   const lock = LockService.getScriptLock();
