@@ -12,6 +12,22 @@
   ════════════════════════════════════════════════════════════════════
   부민병원 MSDS 통합시스템 v21.19 (2026-11-16)
 
+  ★★★ v21.41 (2026-11-22) — 작업환경측정 결과표(상반기 · 하반기) 반영 (서버 v21.41):
+    - [화학물질 위험성평가] → [작업환경측정] 탭: 측정기관 결과표를 엑셀 · 표 붙여넣기로 올림(차수 · 측정일 · 측정기관)
+      부서 · 단위작업장소 · 유해인자 · 측정치 · 노출기준 · 평가 칸을 찾아 읽음 (불검출 → 0). 근로자 이름이 있을 수 있어 AI로 보내지 않음
+    - 같은 부서 · 같은 물질(이름 또는 CAS)의 가장 높은 측정치를 노출수준 방법2(측정치 ÷ 노출기준)에 자동 반영
+      평가에 쓸 측정 결과: 가장 최근 차수(기본) · 차수 고르기 · 모든 차수 중 최고값 / 직접 넣은 측정치는 덮지 않음
+      [저장된 평가에 반영하기]: 바뀌는 성분 · 위험성을 먼저 보여 주고 고른 평가만 저장
+    - 서버: 시트 [작업환경측정결과] 새로 만듦
+
+  ★★★ v21.40 (2026-11-20) — 화학물질 위험성평가 (KRAS 양식 · 지침해설서 부록3 곱셈법) (서버 v21.40):
+    - 관리자 메뉴 [화학물질 위험성평가]: MSDS 목록 물질 → [MSDS 읽기 (AI)]로 성분 · CAS · 함유량 · H코드 · CMR · 노출기준 · 성상 ·
+      끓는점 · 비산성을 채우고 노출수준 × 유해성 = 위험성을 지침 표로 자동 계산 (AI는 값만 읽음, 같은 값이면 같은 점수)
+      밀폐 · 환기상태 기본값 '해당없음' — 국소배기 · 완전밀폐를 고르면 바로 반영 / 감소대책 자동 제안 · 개선 후 위험성
+    - 물질별 결과 · 최종 평가표(KRAS 양식) A4 가로 출력 · 엑셀 내려받기 · 기존 KRAS 엑셀 가져오기 (점수 다시 계산해 비교)
+    - AI MSDS 검토(새 물질 · 개정)에도 같은 위험성평가 표가 나오고 [시트에 새 제품으로 추가] · [개정 반영] 때 평가 목록도 갱신
+    - 서버: 시트 [화학물질위험성평가] · [화학물질위험성평가_이력] 새로 만듦 · MSDS 읽기 하루 50회(스크립트 속성 CHEMRA_LIMIT)
+
   ★★★ v21.19 (2026-11-16) — 화학물질 보고서 첫 화면 바꿈 · MSDS 자동 채우기 · 승인 때 MSDS 목록 반영 (서버 v21.19):
     - 화학물질 보고서에 들어가면 우리 부서가 쓰는 물질 목록(MSDS 목록 기준) · 오른쪽 위 [+ 신규사용 보고서]
       물질을 누르면 [사용중단] → '이 물질을 사용중단하시겠습니까?'(사용중단일 · 작성자 · 서명) → 지금과 같은 보고서(PDF)로 제출
@@ -2241,6 +2257,10 @@ input.apv-in[type=text]{width:110px}
           <span class="adm-nav-label">위험성평가</span>
           <span class="adm-nav-badge" id="adm-nav-risk-badge"></span>
         </div>
+        <div class="adm-nav-item" data-pane="chemra" onclick="admSwitchPane('chemra'); BMCRA.open();">
+          <span class="adm-nav-label">화학물질 위험성평가</span>
+          <span class="adm-nav-badge" id="adm-nav-chemra-badge"></span>
+        </div>
         <div class="adm-sidebar-section">기준 정보</div>
 <div class="adm-nav-item" data-pane="ledger" onclick="admSwitchPane('ledger'); BMLEDGER.open();">
 <span class="adm-nav-label">신규사용 · 중단 대장</span>
@@ -2293,6 +2313,14 @@ input.apv-in[type=text]{width:110px}
           <div class="adm-card">
             <div class="adm-card-header"><h2 class="adm-card-title">위험성평가 (근로자 참여 · AI)</h2></div>
             <div class="adm-card-body" id="ra-adm-body"></div>
+          </div>
+        </section>
+
+        <!-- ── v21.40 화학물질 위험성평가 pane — 내용은 BMCRA.open()이 그림 ── -->
+        <section class="adm-pane" id="adm-pane-chemra">
+          <div class="adm-card">
+            <div class="adm-card-header"><h2 class="adm-card-title">화학물질 위험성평가 (KRAS)</h2><span id="cra-stat" class="adm-card-stat"></span></div>
+            <div class="adm-card-body" id="cra-body"></div>
           </div>
         </section>
 
@@ -5455,7 +5483,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.34';
+  var SERVER_EXPECT = 'v21.41';
   // v21.10: 'v21.9' < 'v21.10'을 글자 순서가 아니라 숫자로 비교
   function bmVerLess(a, b){
     var p = function(v){ return (String(v).match(/v?(\d+(?:\.\d+)*)/) || [,'0'])[1].split('.').map(Number); };
@@ -6165,6 +6193,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
           '<label style="font-size:14px;font-weight:700"><input type="checkbox" id="ai-sp"' + (draft.specialManage ? ' checked' : '') + '> 특별관리물질</label>' +
           '<span style="font-size:13px;color:#5A5650">특검 · 측정 빈칸은 미해당으로 등록됩니다</span>' +
         '</div>' +
+        (window.BMCRA ? BMCRA.reviewBox(draft) : '') +   // v21.40 위험성평가 (자동)
         '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 0;border-top:1px solid #ECEBE7">' +
           '<b style="font-size:14px">개정 MSDS면</b><select id="ai-target" style="' + IN + ';width:auto;min-width:240px"><option value="">비교할 기존 제품 선택…</option>' +
             (products || []).map(function(x){ var sel = cmp ? cmp.product.name === x : x === guessTarget(); return '<option' + (sel ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select>' +
@@ -6175,6 +6204,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
           '<button id="ai-apply" style="' + BTN_P + ';padding:10px 18px;font-size:15px">' + (cmp ? '개정 반영 (기존 제품 바꾸기)' : '시트에 새 제품으로 추가') + '</button></div>' +
       '</div>';
     if(pdfUrl) document.getElementById('ai-pdf').onclick = function(){ window.open(pdfUrl, '_blank'); };
+    if(window.BMCRA) BMCRA.bindReview(draft);
     document.getElementById('ai-cmp').onclick = async function(){
       collect();
       var t = document.getElementById('ai-target').value;
@@ -6190,7 +6220,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
     document.getElementById('ai-rejudge').onclick = async function(){
       collect();
       var keep = draft.components.map(function(c){ return { hc: c.hc, we: c.we, memo: c.memo }; });
-      var j = await BMAUTH.post('ai.judge', { data: { product: draft.product, components: draft.components.map(function(c){ return { name: c.name, cas: c.cas, amount: c.amount, reg15: { healthCheck: (c.evidence && c.evidence.msds15 || {}).hc, workEnv: (c.evidence && c.evidence.msds15 || {}).we, managed: (c.evidence && c.evidence.msds15 || {}).managed, special: (c.evidence && c.evidence.msds15 || {}).special } }; }) } });
+      var j = await BMAUTH.post('ai.judge', { data: { product: draft.product, components: draft.components.map(function(c){ return { name: c.name, cas: c.cas, amount: c.amount, ra: c.ra, reg15: { healthCheck: (c.evidence && c.evidence.msds15 || {}).hc, workEnv: (c.evidence && c.evidence.msds15 || {}).we, managed: (c.evidence && c.evidence.msds15 || {}).managed, special: (c.evidence && c.evidence.msds15 || {}).special } }; }) } });
       if(!j.success){ say(j.error || '실패', 'err'); return; }
       var deps = draft.departments;
       draft = j.draft; draft.departments = deps;
@@ -6205,6 +6235,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       var nComp = draft.components.filter(function(c){ return c.name; }).length;
       if(!confirm(cmp ? '기존 "' + cmp.product.name + '" ' + cmp.count + '줄을 새 MSDS 내용(성분 ' + nComp + '개)으로 바꿉니다.\n이전 내용은 개정이력 시트에 보관됩니다.'
                       : '"' + draft.product.name + '" (성분 ' + nComp + '개)를 chemicals 시트에 새 제품으로 추가합니다.')) return;
+      if(window.BMCRA){ try{ draft.ra = BMCRA.reviewRecord(draft); }catch(_){ draft.ra = null; } }   // v21.40 위험성평가도 함께 저장
       var req = { path: srcPath, data: draft };
       if(cmp){ req.mode = 'revise'; req.target = cmp.product.name; }
       if(!srcPath && manualFile){ req.content = await fileB64(manualFile); req.name = manualFile.name; }
@@ -6212,6 +6243,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       if(!x.success){ say(x.error || '실패', 'err'); return; }
       if((x.iconsUnknown || []).length) alert('표준 9종에 없어 빠진 그림문자: ' + x.iconsUnknown.join(', ') + '\n물질 마스터에서 직접 확인해 주세요.');
       say((x.mode === 'revise' ? '개정 반영했습니다 — 기존 ' + x.oldRows + '줄 → ' : '추가했습니다 — ') + '시트 ' + x.row + '행부터 ' + x.rows + '줄' + (x.pdfUrl ? ' · 원본 PDF 링크 연결' : '') + ((x.iconNames || []).length ? ' · 그림문자 ' + x.iconNames.join(', ') : ' · 그림문자 없음') + (x.signalWord ? ' · 신호어 ' + x.signalWord : '') + '. MSDS 목록은 [동기화] 후 보입니다.', 'ok');
+      if(x.raSaved && window.BMCRA){ BMCRA.invalidate(); setTimeout(function(){ say(x.raSaved === '저장' ? '화학물질 위험성평가 목록도 갱신했습니다' : '위험성평가 저장 ' + x.raSaved, x.raSaved === '저장' ? 'ok' : 'err'); }, 3400); }
       document.getElementById('ai-review').innerHTML = '';
       draft = null; cmp = null; products = null;
       open();
@@ -20866,6 +20898,744 @@ self.addEventListener('fetch',e=>{
   window.BMLEDGER = { open: open, _parse: function(t){ return toRows(parseText(t)); } };
 })();
 </script>
+<!-- ★ v21.40 화학물질 위험성평가 (KRAS 화학물질 위험성 평가표 · 지침해설서 부록3 곱셈법) — 관리자 메뉴 [화학물질 위험성평가]
+     · MSDS 목록(chemicals 시트) 물질 → [MSDS 읽기(AI)]로 성분 · CAS · 함유량 · H코드 · CMR · 노출기준 · 성상 · 끓는점 · 비산성 채움
+     · 노출수준 × 유해성 = 위험성은 화면에서 지침 표로 계산 (AI는 값만 읽음) · 밀폐 · 환기 기본값 '해당없음'
+     · AI MSDS 검토(새 물질)에서도 같은 표가 나오고 [시트에 새 제품으로 추가] 때 평가 목록에 함께 저장
+     · 저장: 서버 시트 [화학물질위험성평가] (다시 저장하면 이전 줄은 [화학물질위험성평가_이력])
+     · v21.41 작업환경측정 결과표(상반기 · 하반기): 엑셀 · 표 붙여넣기 → 시트 [작업환경측정결과] → 같은 부서 · 같은 물질의 최고 측정치를 노출수준(방법2)에 자동 반영 -->
+<style>
+#cra-root{display:flex;flex-direction:column;gap:14px;font-size:14px;color:#2B2A27}
+#cra-root .cra-tabs{display:flex;flex-wrap:wrap;gap:2px;border-bottom:2px solid #E4E2DC}
+#cra-root .cra-tab{border:0;background:none;font:inherit;font-weight:700;color:#5A5650;padding:9px 14px;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
+#cra-root .cra-tab.on{color:#345C12;border-bottom-color:#67AF28}
+.cra-btn{border:1px solid #D9D6CE;background:#fff;color:#2B2A27;font:inherit;font-weight:700;font-size:13.5px;padding:7px 13px;border-radius:6px;cursor:pointer}
+.cra-btn.p{background:#3F7518;border-color:#3F7518;color:#fff}
+.cra-btn.s{font-size:12.5px;padding:4px 9px}
+.cra-btn:disabled{opacity:.5;cursor:default}
+.cra-chip{display:inline-flex;align-items:center;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+.cra-chip.g0{background:#E2F1D5;color:#2F6B12}.cra-chip.g1{background:#FFF0C2;color:#7A5600}.cra-chip.g2{background:#FDE3CC;color:#A2410B}.cra-chip.g3{background:#FBDAD6;color:#9E1B14}
+.cra-chip.off{background:#EFEDE8;color:#5A5650}.cra-chip.ai{background:#E4EEF8;color:#1F4E79}.cra-chip.bad{background:#9E1B14;color:#fff}
+.cra-grid{display:grid;grid-template-columns:290px minmax(0,1fr);gap:14px;align-items:start}
+@media (max-width:900px){.cra-grid{grid-template-columns:minmax(0,1fr)}}
+.cra-box{background:#fff;border:1px solid #E4E2DC;border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:9px;min-width:0}
+.cra-box h3{margin:0;font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cra-box h3 .k{color:#8A867E;font-weight:500;font-size:13px}
+.cra-sub{color:#5A5650;font-size:12.5px}
+.cra-row{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.cra-list{display:flex;flex-direction:column;gap:2px;max-height:70vh;overflow:auto}
+.cra-it{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:1px 8px;align-items:center;padding:7px 9px;border-radius:6px;border:1px solid transparent;background:none;text-align:left;font:inherit;color:inherit;cursor:pointer;width:100%}
+.cra-it:hover{background:#F4F3EF}.cra-it.on{background:#EAF3E0;border-color:#67AF28}
+.cra-it b{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cra-it .cra-sub{grid-column:1/-1;font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cra-f{display:flex;flex-direction:column;gap:3px;font-size:12px;font-weight:700;color:#5A5650}
+.cra-in{font:inherit;font-size:13.5px;border:1px solid #D9D6CE;border-radius:5px;padding:4px 7px;background:#fff;color:#2B2A27;min-width:0;box-sizing:border-box}
+.cra-tw{overflow-x:auto;border:1px solid #E4E2DC;border-radius:6px}
+.cra-t{border-collapse:collapse;width:100%;font-size:13px}
+.cra-t th{background:#F1F5EC;color:#345C12;font-size:12px;text-align:left;padding:6px;white-space:nowrap;border-bottom:1px solid #E4E2DC}
+.cra-t td{padding:4px 6px;border-bottom:1px solid #EFEDE8;vertical-align:middle}
+.cra-t td .cra-in{width:100%}
+.cra-t td.c{text-align:center}
+.cra-t tr.ai td{background:#EEF5FC}
+.cra-t tr.ai .cra-in{background:#F5F9FE;border-color:#9DB8DA}
+.cra-mz{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:2px 14px}
+.cra-mz label{display:flex;gap:7px;align-items:flex-start;font-size:13px;padding:2px 0}
+.cra-mz label input{margin-top:3px}
+.cra-mz .g{grid-column:1/-1;font-size:12px;font-weight:800;color:#5A5650;margin-top:4px}
+.cra-vent{display:flex;flex-wrap:wrap;gap:6px}
+.cra-vent label{display:flex;align-items:center;gap:6px;border:1px solid #D9D6CE;border-radius:6px;padding:5px 10px;font-weight:700;font-size:13.5px;cursor:pointer}
+.cra-vent label.on{border-color:#67AF28;background:#EAF3E0;color:#345C12}
+.cra-sc{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:8px}
+.cra-sc > div{border:1px solid #E4E2DC;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:4px}
+.cra-eq{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.cra-eq .n{font-size:26px;font-weight:700;line-height:1}
+.cra-eq .l{font-size:11.5px;color:#5A5650}
+.cra-why{margin:0;padding-left:17px;font-size:12px;color:#5A5650}
+.cra-note{background:#F4F3EF;border-radius:6px;padding:9px 11px;font-size:13px;color:#45423D}
+.cra-kras{min-width:2000px;font-size:11.5px}
+.cra-kras th,.cra-kras td{border:1px solid #D9D6CE;padding:3px 5px;vertical-align:top}
+.cra-kras thead th{text-align:center;vertical-align:middle;background:#F1F5EC;color:#345C12}
+.cra-kras td.n{text-align:center;white-space:nowrap}
+.cra-kras ul{margin:0;padding-left:13px;font-size:10.5px;line-height:1.35}
+</style>
+<script>
+(function(){
+  if(window.BMCRA) return;
+// v21.40 화학물질 위험성평가 계산 — 「위험성평가 지침해설서」(2020, 고용노동부 · 안전보건공단) 부록3 곱셈법
+//  위험성 = 노출수준(가능성 1~4) × 유해성(중대성 1~4). 혼합물은 성분마다 계산해 가장 높은 값이 제품의 위험성
+//  · 노출수준: 방법1 직업병 유소견자 → 4 / 방법2 작업환경측정치 ÷ 노출기준 / 방법3 하루취급량 × 휘발성 · 비산성(표7) − 밀폐 · 환기(표8)
+//  · 유해성: 방법1 CMR(1A · 1B · 2) → 4 / 방법2 노출기준(표10) / 방법3 MSDS H코드
+//  · 위험성 결정(표21): 1~2 낮음 · 3~4 보통 · 5~11 높음 · 12~16 매우 높음 (4 중 노출수준 4 또는 유해성 4는 허용 불가 특례)
+var CRA = (function(){
+  var DEF = {
+    ratio: [100, 50, 10],                       // 초과 4 · 이상 3 · 초과 2 · 이하 1 (%)
+    matrix: { 1: { vapor: [1, 2, 2], dust: [1, 1, 2] }, 2: { vapor: [2, 3, 3], dust: [2, 3, 3] }, 3: { vapor: [2, 3, 4], dust: [2, 4, 4] } },   // [취급량][형태][저 · 중 · 고]
+    bp: [50, 150],                              // 끓는점 50℃ 미만 고 · 150℃ 이하 중 · 넘으면 저
+    vent: { 0: 0, 1: 1, 2: 2 },                 // 해당없음 0 · 국소배기 −1 · 완전밀폐 −2
+    oelPpm: [0.5, 5, 50, 500], oelMg: [0.01, 0.1, 1, 10],   // 이하 4 · 3 · 2 · 1, 넘으면 H코드
+    h4: ['H300', 'H310', 'H330', 'H334', 'H340', 'H341', 'H350'],
+    h3: ['H301', 'H311', 'H314', 'H317', 'H318', 'H331', 'H335', 'H351', 'H360', 'H361', 'H372', 'H373'],
+    h2: ['H302', 'H312', 'H332'],
+    grade: [[1, 2, '낮음', '필요에 따라 개선'], [3, 4, '보통', '연간계획에 따라 개선'], [5, 11, '높음', '가능한 한 빨리 개선'], [12, 16, '매우 높음', '즉시 개선']]
+  };
+  var CFG = JSON.parse(JSON.stringify(DEF));
+  function setCfg(c){ CFG = JSON.parse(JSON.stringify(DEF)); if(c && typeof c === 'object') Object.keys(c).forEach(function(k){ if(k in DEF) CFG[k] = c[k]; }); }
+  var N = function(v){ var x = parseFloat(String(v == null ? '' : v).replace(/,/g, '')); return isNaN(x) ? null : x; };
+  var LV = ['', '저', '중', '고'];
+  function hcodeSev(codes){
+    var c = String(codes || '').toUpperCase().match(/H\d{3}/g) || [], s = 1, hit = '';
+    c.forEach(function(h){ var v = CFG.h4.indexOf(h) >= 0 ? 4 : CFG.h3.indexOf(h) >= 0 ? 3 : CFG.h2.indexOf(h) >= 0 ? 2 : 1; if(v > s){ s = v; hit = h; } });
+    return { v: s, hit: hit };
+  }
+  function cmrOf(x){ return ['c', 'm', 'r'].filter(function(k){ return /^(1A|1B|1|2)$/i.test(String(x[k] || '').trim()); }); }
+  // 유해성(중대성)
+  function severity(x){
+    var cmr = cmrOf(x);
+    if(cmr.length) return { v: 4, how: 'cmr', why: ['방법1 CMR — ' + cmr.map(function(k){ return { c: '발암성', m: '생식세포 변이원성', r: '생식독성' }[k] + ' ' + String(x[k]).toUpperCase(); }).join(' · ') + ' → 4'] };
+    var mg = x.unit === 'mg', oel = N(x.oel), t = mg ? CFG.oelMg : CFG.oelPpm;
+    if(oel > 0 && oel <= t[3]){
+      var v = oel <= t[0] ? 4 : oel <= t[1] ? 3 : oel <= t[2] ? 2 : 1;
+      return { v: v, how: 'oel', why: ['방법2 노출기준 ' + oel + (mg ? ' mg/㎥' : ' ppm') + ' → ' + v] };
+    }
+    var h = hcodeSev(x.hcodes);
+    return { v: h.v, how: 'hcode', why: ['방법3 H코드' + (oel > 0 ? ' (노출기준 ' + oel + (mg ? ' mg/㎥' : ' ppm') + '는 표 범위 밖)' : ' (노출기준 없음)') + (h.hit ? ' — ' + h.hit + ' → ' + h.v : ' — 해당 문구 없음 → 1')] };
+  }
+  function disperse(x){
+    if(x.state === 'solid'){ var d = Math.min(3, Math.max(1, parseInt(x.dust, 10) || 2)); return { form: 'dust', v: d, why: '고체 · 비산성 ' + LV[d] + (x.dust ? '' : '(모름 → 중)') }; }
+    if(x.state === 'gas') return { form: 'vapor', v: 3, why: '기체 → 휘발성 고' };
+    var bp = N(x.bp);
+    if(bp == null) return { form: 'vapor', v: 2, why: '끓는점 모름 → 휘발성 중' };
+    var v = bp < CFG.bp[0] ? 3 : bp <= CFG.bp[1] ? 2 : 1;
+    return { form: 'vapor', v: v, why: '끓는점 ' + bp + '℃ → 휘발성 ' + LV[v] };
+  }
+  // 노출수준(가능성)
+  function exposure(x, vent){
+    if(x.patient === '유') return { v: 4, how: 'patient', why: ['방법1 직업병 유소견자 있음 → 4'] };
+    var oel = N(x.oel), m = N(x.meas);
+    if(m != null && oel > 0){
+      var r = m / oel * 100, v = r > CFG.ratio[0] ? 4 : r >= CFG.ratio[1] ? 3 : r > CFG.ratio[2] ? 2 : 1;
+      return { v: v, how: 'meas', why: ['방법2 작업환경측정 ' + m + ' ÷ 노출기준 ' + oel + ' = ' + (Math.round(r * 10) / 10) + '% → ' + v] };
+    }
+    var q = Math.min(3, Math.max(1, parseInt(x.qty, 10) || 1)), d = disperse(x), base = CFG.matrix[q][d.form][d.v - 1];
+    var why = ['방법3 하루취급량 ' + ['', '소(g · ㎖)', '중(㎏ · L)', '대(톤 · ㎥)'][q] + ' × ' + d.why + ' → ' + base];
+    var vt = parseInt(vent == null ? x.vent : vent, 10) || 0, cut = CFG.vent[vt] || 0, v2 = Math.max(1, base - cut);
+    if(cut) why.push((vt === 2 ? '완전밀폐' : '국소배기장치') + ' −' + cut + ' → ' + v2);
+    return { v: v2, how: 'est', why: why };
+  }
+  function grade(r, e, s){
+    var g = CFG.grade, k = 0;
+    for(var i = 0; i < g.length; i++) if(r >= g[i][0] && r <= g[i][1]) k = i;
+    var bad = r >= 5 || (r === 4 && (e === 4 || s === 4));
+    return { k: k, name: g[k][2], act: g[k][3], bad: bad, ok: bad ? '허용 불가' : '허용 가능' };
+  }
+  function score(x, vent){ var e = exposure(x, vent), s = severity(x), r = e.v * s.v; return { e: e, s: s, r: r, g: grade(r, e.v, s.v) }; }
+  return { DEF: DEF, cfg: function(){ return CFG; }, setCfg: setCfg, score: score, grade: grade, severity: severity, exposure: exposure };
+})();
+
+
+  var esc = function(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
+  var say = function(m, t){ try{ toast(m, t || 'info'); }catch(_){ alert(m); } };
+  var post = function(op, b){ return window.BMAUTH ? BMAUTH.post(op, b || {}).catch(function(e){ return { success: false, error: '서버 연결 실패: ' + e.message }; }) : Promise.resolve({ success: false, error: '로그인 필요' }); };
+  var $ = function(id){ return document.getElementById(id); };
+  var today = function(){ var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  var products = function(){ try{ return productMap || {}; }catch(_){ return {}; } };
+  var MEAS = {
+    lev: ['유해물질 발생 지점에 국소배기장치 설치', '국소배기장치의 후드를 부스형으로 설치', '국소배기장치의 제어풍속을 법적기준으로 유지', '국소배기장치의 성능을 주기적으로 점검'],
+    mgmt: ['유해물질 용기를 별도의 저장장소에 보관', '직접적인 접촉이 없도록 유해물질 취급', '주기적으로 화학물질 취급 공정에 대한 청소 실시', '특수건강진단을 정기적으로 실시', '작업환경측정을 정기적으로 실시', '취급 화학물질에 대한 근로자 교육 실시', '취급 화학물질의 물질안전보건자료 게시·비치', '취급 화학물질의 용기·포장에 경고표지 부착'],
+    ppe: ['개인전용의 호흡용 보호구를 적정하게 지급', '근로자가 작업 중 호흡용 보호구를 착용하도록 관리·감독', '주기적으로 호흡용 보호구의 성능 관리', '작업장에 호흡용 보호구 착용 표지판 설치', '보호구 보관함을 설치하여 청결하게 관리']
+  };
+  var st = { rows: null, cur: '', it: null, tab: 'eval', lf: 'all', q: '', busy: false, meas: [], pick: 'latest', cfg: null, mprev: null, mview: '' };
+
+  /* ── 계산 ── */
+  function cs(it, c, vent){ return CRA.score(Object.assign({ qty: it.qty, temp: it.temp }, c), vent == null ? it.vent : vent); }
+  function best(it, vent){ var b = null; (it.comps || []).forEach(function(c){ var s = cs(it, c, vent); if(!b || s.r > b.r) b = s; }); return b; }
+  function afterVent(it){ return it.plan.indexOf(MEAS.lev[0]) >= 0 ? Math.max(1, it.vent) : it.vent; }
+  function chip(s){ return s ? '<span class="cra-chip g' + s.g.k + '">' + s.g.name + '</span>' + (s.g.bad ? ' <span class="cra-chip bad">허용 불가</span>' : '') : '<span class="cra-chip off">평가 전</span>'; }
+  function suggest(it){
+    var b = best(it); if(!b) return [];
+    var hi = it.comps.some(function(c){ return cs(it, c).s.v >= 3; }), out = [];
+    if(it.vent === 0 && (hi || b.r >= 5)) out = out.concat(MEAS.lev);
+    if(it.comps.some(function(c){ return cs(it, c).s.how === 'cmr'; }) || hi) out = out.concat(['특수건강진단을 정기적으로 실시', '작업환경측정을 정기적으로 실시']);
+    if(hi && it.vent === 0) out = out.concat([MEAS.ppe[0], MEAS.ppe[1], MEAS.ppe[3]]);
+    out = out.concat(['유해물질 용기를 별도의 저장장소에 보관', '취급 화학물질에 대한 근로자 교육 실시', '취급 화학물질의 물질안전보건자료 게시·비치', '취급 화학물질의 용기·포장에 경고표지 부착']);
+    return out.filter(function(m, i){ return out.indexOf(m) === i && it.now.indexOf(m) < 0; });
+  }
+  // 저장할 한 줄 (점수 포함)
+  function record(it){
+    var b = best(it), a = best(it, afterVent(it));
+    return { product: it.product, dept: it.dept, proc: it.proc, date: it.date || today(), by: '보건관리자', src: it.src || '직접 평가', usage: it.usage || '',
+      e: b.e.v, s: b.s.v, risk: b.r, grade: b.g.name + (b.g.bad ? '(허용 불가)' : ''), after: a.r,
+      comps: it.comps, vent: it.vent, now: it.now, plan: it.plan, due: it.due, done: it.done, owner: it.owner, qty: it.qty, temp: it.temp, amt: it.amt,
+      scores: it.comps.map(function(c){ var s = cs(it, c), x = cs(it, c, afterVent(it)); return [s.e.v, s.s.v, s.r, x.e.v, x.s.v, x.r]; }) };
+  }
+  // AI MSDS 검토 결과(draft) → 성분 칸
+  var WATER = /^\s*7732-18-5\s*$/;
+  function fromDraft(draft, base){
+    var p = (draft && draft.product) || {}, pr = p.ra || {};
+    var cmp = (draft && draft.components) || [];
+    var key = function(x){ return String(x || '').replace(/\s/g, ''); };
+    var list = (base && base.length ? base : cmp.map(function(c){ return { name: c.name, cas: c.cas, amount: c.amount }; }));
+    return list.filter(function(c){ return c && c.name; }).map(function(c, i){
+      var d = cmp.filter(function(x){ return x.cas && key(x.cas) === key(c.cas); })[0] || (base ? cmp.filter(function(x){ return key(x.name) === key(c.name); })[0] : cmp[i]) || {};
+      var r = d.ra || {}, unit = r.oelPpm ? 'ppm' : r.oelMg ? 'mg' : (pr.state === 'solid' ? 'mg' : 'ppm');
+      return { comp: c.name, cas: c.cas || d.cas || '', pct: c.amount || d.amount || '', state: pr.state || 'liquid', bp: r.bp || pr.bp || '', dust: pr.dust || '',
+        unit: unit, oel: unit === 'ppm' ? (r.oelPpm || '') : (r.oelMg || ''), c: r.c || '', m: r.m || '', r: r.r || '',
+        // 성분별 H코드가 없으면 제품 전체 H코드 (물 · 유해성 정보가 하나도 없는 성분은 빼고)
+        hcodes: r.hcodes || (WATER.test(String(c.cas || d.cas || '')) || (!r.oelPpm && !r.oelMg && !r.c && !r.m && !r.r && cmp.length > 1 && /^(물|정제수|water|purified water)$/i.test(String(c.name).trim())) ? '' : (pr.hcodes || '')), meas: '', patient: '무', ai: !!(d.ra) };
+    });
+  }
+  function blankItem(name){
+    var p = products()[name] || {};
+    return { product: name, dept: (p.departments || []).join(','), proc: p.usage || '', usage: p.usage || '', src: '', date: '', vent: 0, now: [], plan: [], due: '', done: '', owner: '보건관리자', qty: 1, temp: 25, amt: '',
+      comps: (p.components || []).filter(function(c){ return c.compName; }).map(function(c){ return { comp: c.compName, cas: String(c.casNumber || '').trim(), pct: c.amount || '', state: 'liquid', bp: '', dust: '', unit: 'ppm', oel: '', c: '', m: '', r: '', hcodes: '', meas: '', patient: '무' }; }), fresh: true };
+  }
+  function itemOf(row){
+    var d = row.data || {};
+    return { product: row.product, dept: row.dept, proc: row.proc, usage: d.usage || '', src: row.src, date: row.date, vent: +d.vent || 0, now: d.now || [], plan: d.plan || [], due: d.due || '', done: d.done || '', owner: d.owner || '보건관리자',
+      qty: +d.qty || 1, temp: d.temp || 25, amt: d.amt || '', comps: JSON.parse(JSON.stringify(d.comps || [])) };
+  }
+
+  /* ── v21.41 작업환경측정 결과 → 노출수준(방법2) ──
+     같은 물질(이름 또는 CAS) · 같은 부서(부서 칸 · 공정명 ↔ 결과표 부서 · 단위작업장소)의 측정치 중 가장 높은 값
+     직접 넣은 측정치는 그대로 두고, 측정 결과에서 온 값(measSrc)만 바꿈 */
+  var nzs = function(t){ return String(t || '').toLowerCase().replace(/[\s()\[\]{}·,._\-]/g, ''); };
+  function casOfName(n){ var k = nzs(n), hit = ''; if(k.length < 2) return ''; (window.BMSYN || []).forEach(function(e){ if(!hit && e[1].split(' ').some(function(w){ return nzs(w) === k; })) hit = e[0]; }); return hit; }
+  var dkey = function(d){ return nzs(d).replace(/(실|과|팀|센터)$/, ''); };
+  function periods(){
+    // 측정일 순서 (측정일이 없으면 차수 이름에서: '2026 상반기' → 2026-01 · '2026 하반기' → 2026-07)
+    var o = {}; st.meas.forEach(function(r){ if(!o[r.period]) o[r.period] = r.date || ''; });
+    var k = function(p){ return o[p] || (((String(p).match(/20\d\d/) || [''])[0]) + (/하반기/.test(p) ? '-07' : /상반기/.test(p) ? '-01' : '')); };
+    return Object.keys(o).sort(function(a, b){ return k(b).localeCompare(k(a)) || b.localeCompare(a); });
+  }
+  function pickRows(){
+    var ps = periods(); if(!ps.length) return [];
+    if(st.pick === 'max') return st.meas;
+    var p = ps.indexOf(st.pick) >= 0 ? st.pick : ps[0];
+    return st.meas.filter(function(r){ return r.period === p; });
+  }
+  function subMatch(r, c){
+    var a = nzs(String(r.sub).replace(/\(.*$/, '')), b = nzs(c.comp);
+    if(a && b && (a === b || (a.length >= 3 && b.indexOf(a) >= 0) || (b.length >= 3 && a.indexOf(b) >= 0))) return true;
+    var cas = casOfName(r.sub) || casOfName(String(r.sub).replace(/\(.*$/, ''));
+    return !!cas && cas === String(c.cas || '').trim();
+  }
+  function deptMatch(r, it){
+    var ks = String(it.dept || '').split(/\s*[,/·]\s*/).concat([it.proc || '']).map(dkey).filter(function(k){ return k.length >= 2; });
+    var rs = [dkey(r.dept), dkey(r.place)].filter(function(k){ return k.length >= 2; });
+    return ks.some(function(k){ return rs.some(function(x){ return x === k || x.indexOf(k) >= 0 || k.indexOf(x) >= 0; }); });
+  }
+  function measFor(it, c){
+    var rows = pickRows().filter(function(r){ return subMatch(r, c); });
+    if(!rows.length) return null;
+    var mine = rows.filter(function(r){ return deptMatch(r, it); });
+    if(!mine.length) return { other: rows };
+    var top = mine.reduce(function(a, r){ return (parseFloat(r.val) || 0) > (parseFloat(a.val) || 0) ? r : a; }, mine[0]);
+    return { r: top, n: mine.length };
+  }
+  // force: 직접 넣은 측정치도 결과표 값으로 바꿈 (일괄 반영 때)
+  function applyMeas(it, force){
+    var ch = [];
+    (it.comps || []).forEach(function(c){
+      var manual = c.meas !== '' && c.meas != null && !c.measSrc;
+      if(manual && !force) return;
+      var m = measFor(it, c);
+      if(m && m.r){
+        var nv = String(parseFloat(m.r.val) || 0), src = m.r.period + ' · ' + (m.r.place || m.r.dept) + (m.n > 1 ? ' (' + m.n + '건 중 최고)' : '');
+        if(String(c.meas) !== nv) ch.push({ comp: c.comp, from: c.meas, to: nv, src: src });   // 값이 바뀐 것만 알림 (출처만 붙는 건 조용히)
+        c.meas = nv; c.measSrc = src; c.unit = /mg/i.test(m.r.unit) ? 'mg' : 'ppm';
+        if(parseFloat(m.r.tlv) > 0) c.oel = String(m.r.tlv);
+      } else if(c.measSrc){ ch.push({ comp: c.comp, from: c.meas, to: '', src: '' }); c.meas = ''; c.measSrc = ''; }
+    });
+    return ch;
+  }
+
+  /* ── 열기 · 목록 ── */
+  async function open(){
+    var body = $('cra-body'); if(!body) return;
+    body.innerHTML = '<div class="cra-sub">불러오는 중…</div>';
+    var x = await post('chemra.list', {});
+    if(!x.success){ body.innerHTML = '<div style="color:#A3302A">' + esc(x.error || '실패') + (/unknown op/.test(x.error || '') ? ' — 서버(Code.gs)를 v21.41 이상으로 배포하세요 (Apps Script 새 버전).' : '') + '</div>'; return; }
+    st.rows = x.data || []; CRA.setCfg(x.cfg); st.cfg = x.cfg || null; st.meas = x.meas || []; st.pick = (x.cfg && x.cfg.measPick) || 'latest';
+    draw();
+  }
+  function savedOf(name){ return (st.rows || []).filter(function(r){ return r.product === name; })[0]; }
+  function names(){
+    var pm = products(), out = Object.keys(pm);
+    (st.rows || []).forEach(function(r){ if(out.indexOf(r.product) < 0) out.push(r.product); });
+    return out.sort(function(a, b){ return a.localeCompare(b, 'ko'); });
+  }
+  function draw(){
+    var body = $('cra-body'); if(!body) return;
+    var all = names(), done = all.filter(function(n){ return savedOf(n); }).length;
+    var stat = $('cra-stat'); if(stat) stat.textContent = '평가 ' + done + ' / ' + all.length;
+    var badge = $('adm-nav-chemra-badge'); if(badge) badge.textContent = (all.length - done) || '';
+    body.innerHTML = '<div id="cra-root"><div class="cra-tabs">' + [['eval', '평가하기'], ['res', '물질별 결과'], ['meas', '작업환경측정'], ['out', '평가표 출력'], ['std', '산정기준 · 가져오기']].map(function(t){ return '<button type="button" class="cra-tab' + (st.tab === t[0] ? ' on' : '') + '" data-tab="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div><div id="cra-view"></div></div>';
+    body.querySelector('.cra-tabs').onclick = function(e){ var b = e.target.closest('[data-tab]'); if(b){ st.tab = b.getAttribute('data-tab'); draw(); } };
+    ({ eval: drawEval, res: drawRes, meas: drawMeas, out: drawOut, std: drawStd })[st.tab]();
+  }
+  function drawEval(){
+    $('cra-view').innerHTML = '<div class="cra-grid"><div class="cra-box" style="padding:10px"><div class="cra-row" style="justify-content:space-between"><h3>MSDS 목록</h3><span class="cra-sub" id="cra-n"></span></div>' +
+      '<input class="cra-in" id="cra-q" placeholder="물질명 · 부서 · CAS 찾기" aria-label="물질 찾기" value="' + esc(st.q) + '"><div class="cra-row" id="cra-lf" style="gap:4px"></div><div class="cra-list" id="cra-list"></div></div><div id="cra-detail" style="display:flex;flex-direction:column;gap:12px;min-width:0"></div></div>';
+    $('cra-q').oninput = function(){ st.q = this.value; drawList(); };
+    $('cra-lf').onclick = function(e){ var b = e.target.closest('[data-lf]'); if(b){ st.lf = b.getAttribute('data-lf'); drawList(); } };
+    $('cra-list').onclick = function(e){ var b = e.target.closest('[data-n]'); if(!b) return; pick(b.getAttribute('data-n')); };
+    drawList(); drawDetail();
+  }
+  function pick(n){
+    st.cur = n; var r = savedOf(n); st.it = r ? itemOf(r) : blankItem(n);
+    var ch = applyMeas(st.it); drawList(); drawDetail();
+    if(r && ch.length && $('cra-rmsg')) $('cra-rmsg').innerHTML = '<b style="color:#1F4E79">작업환경측정 결과로 측정치가 바뀌었습니다</b> (' + ch.map(function(x){ return esc(x.comp) + ' ' + esc(x.from === '' || x.from == null ? '없음' : x.from) + ' → ' + esc(x.to === '' ? '없음' : x.to); }).join(' · ') + ') — [평가 저장]을 누르면 반영됩니다.';
+  }
+  function drawList(){
+    var pm = products(), q = st.q.trim().toLowerCase(), all = names();
+    var nT = all.filter(function(n){ return !savedOf(n); }).length;
+    $('cra-n').textContent = all.length + '개';
+    $('cra-lf').innerHTML = [['all', '전체'], ['todo', '평가 전 ' + nT], ['done', '평가 완료 ' + (all.length - nT)], ['bad', '허용 불가']].map(function(f){ return '<button type="button" class="cra-btn s' + (st.lf === f[0] ? ' p' : '') + '" data-lf="' + f[0] + '">' + f[1] + '</button>'; }).join('');
+    $('cra-list').innerHTML = all.filter(function(n){
+      var r = savedOf(n), p = pm[n] || {};
+      if(st.lf === 'todo' && r) return false;
+      if(st.lf === 'done' && !r) return false;
+      if(st.lf === 'bad' && !(r && /허용 불가/.test(r.grade))) return false;
+      if(!q) return true;
+      return (n + ' ' + (p.departments || []).join(' ') + ' ' + (r ? r.proc + ' ' + r.dept : '') + ' ' + (p.components || []).map(function(c){ return c.compName + ' ' + c.casNumber; }).join(' ')).toLowerCase().indexOf(q) >= 0;
+    }).map(function(n){
+      var r = savedOf(n), p = pm[n] || {}, g = r ? CRA.grade(r.risk, r.e, r.sv) : null;
+      return '<button type="button" class="cra-it' + (st.cur === n ? ' on' : '') + '" data-n="' + esc(n) + '"><b>' + esc(n) + '</b>' +
+        (r ? '<span style="font-size:12.5px;font-variant-numeric:tabular-nums">' + r.risk + ' ' + chip({ g: g }) + '</span>' : '<span class="cra-chip off">평가 전</span>') +
+        '<span class="cra-sub">' + esc((r && r.proc) || (p.departments || []).join(', ') || (pm[n] ? '' : 'MSDS 목록에 없음')) + (r ? ' · ' + esc(r.date) : '') + '</span></button>';
+    }).join('') || '<div class="cra-sub" style="padding:8px">찾는 물질이 없습니다.</div>';
+  }
+  var inp = function(i, k, v, w, num){ return '<input class="cra-in" data-c="' + i + '" data-k="' + k + '" value="' + esc(v) + '"' + (num ? ' inputmode="decimal"' : '') + ' style="min-width:' + (w || 60) + 'px" aria-label="' + k + '">'; };
+  var sel = function(i, k, v, o){ return '<select class="cra-in" data-c="' + i + '" data-k="' + k + '" aria-label="' + k + '" style="min-width:' + (k === 'state' || k === 'unit' ? 74 : 60) + 'px">' + o.map(function(x){ return '<option value="' + x[0] + '"' + (String(v) === String(x[0]) ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select>'; };
+  var CMR = [['', '-'], ['1A', '1A'], ['1B', '1B'], ['2', '2']];
+  function measNote(it, c){
+    if(c.measSrc) return '<div class="cra-sub" style="font-size:11px;color:#1F4E79;white-space:nowrap" title="' + esc(c.measSrc) + '">측정 ' + esc(c.measSrc.split(' · ')[0]) + '</div>';
+    if(c.meas !== '' && c.meas != null) return '';
+    var m = st.meas.length ? measFor(it, c) : null;
+    return m && m.other ? '<div class="cra-sub" style="font-size:11px;white-space:nowrap" title="' + esc(m.other.map(function(r){ return r.dept + ' ' + r.val; }).join(', ')) + '">다른 부서 측정만 있음</div>' : '';
+  }
+  // 성분 칸 표 (평가 화면 · AI MSDS 검토에서 같이 씀)
+  function compTable(it){
+    return '<div class="cra-tw"><table class="cra-t" style="min-width:1240px"><tr><th>성분</th><th>CAS</th><th>함유량 %</th><th>성상</th><th>끓는점 ℃</th><th>비산성(고체)</th><th>노출기준</th><th>단위</th><th>발암 C</th><th>변이 M</th><th>생식 R</th><th>H코드</th><th>측정치</th><th>유소견자</th></tr>' +
+      it.comps.map(function(c, i){
+        return '<tr' + (c.ai ? ' class="ai"' : '') + '><td>' + inp(i, 'comp', c.comp, 130) + '</td><td>' + inp(i, 'cas', c.cas, 90) + '</td><td>' + inp(i, 'pct', c.pct, 55) + '</td>' +
+          '<td>' + sel(i, 'state', c.state, [['liquid', '액체'], ['solid', '고체'], ['gas', '기체']]) + '</td><td>' + inp(i, 'bp', c.bp, 55, 1) + '</td>' +
+          '<td>' + sel(i, 'dust', c.dust, [['', '-'], ['1', '저'], ['2', '중'], ['3', '고']]) + '</td><td>' + inp(i, 'oel', c.oel, 60, 1) + '</td><td>' + sel(i, 'unit', c.unit, [['ppm', 'ppm'], ['mg', 'mg/㎥']]) + '</td>' +
+          '<td>' + sel(i, 'c', c.c, CMR) + '</td><td>' + sel(i, 'm', c.m, CMR) + '</td><td>' + sel(i, 'r', c.r, CMR) + '</td><td>' + inp(i, 'hcodes', c.hcodes, 170) + '</td>' +
+          '<td>' + inp(i, 'meas', c.meas, 55, 1) + measNote(it, c) + '</td><td>' + sel(i, 'patient', c.patient, [['무', '무'], ['유', '유']]) + '</td></tr>';
+      }).join('') + '</table></div>';
+  }
+  function scoreCards(it){
+    return '<div class="cra-sc">' + it.comps.map(function(c){
+      var s = cs(it, c);
+      return '<div><b style="font-size:13.5px">' + esc(c.comp || '(성분)') + ' <span class="cra-sub">' + esc(c.cas) + '</span></b>' +
+        '<div class="cra-eq"><span><span class="n">' + s.e.v + '</span> <span class="l">노출수준</span></span>×<span><span class="n">' + s.s.v + '</span> <span class="l">유해성</span></span>=<span><span class="n">' + s.r + '</span> <span class="l">위험성</span></span>' + chip(s) + '</div>' +
+        '<ul class="cra-why">' + s.e.why.concat(s.s.why).map(function(w){ return '<li>' + esc(w) + '</li>'; }).join('') + (c.measSrc ? '<li>측정 결과: ' + esc(c.measSrc) + '</li>' : '') + '</ul>' +
+        (s.e.how === 'meas' && it.vent ? '<div class="cra-sub">측정치로 정한 노출수준에는 환기 효과가 이미 들어 있어 국소배기 보정을 하지 않습니다.</div>' : '') + '</div>';
+    }).join('') + '</div>';
+  }
+  function ventBox(it, nm){
+    return '<div class="cra-vent" role="radiogroup" aria-label="밀폐 · 환기상태">' + [[0, '해당없음 (기본)'], [1, '국소배기장치 (−1)'], [2, '완전밀폐 (−2)']].map(function(v){ return '<label class="' + (it.vent === v[0] ? 'on' : '') + '"><input type="radio" name="' + nm + '" value="' + v[0] + '"' + (it.vent === v[0] ? ' checked' : '') + '>' + v[1] + '</label>'; }).join('') + '</div>';
+  }
+  function drawDetail(){
+    var box = $('cra-detail'), it = st.it; if(!box) return;
+    if(!it){ box.innerHTML = '<div class="cra-box"><h3>왼쪽 MSDS 목록에서 물질을 고르세요</h3><div class="cra-sub">평가 전 물질은 [MSDS 읽기 (AI)]를 누르면 MSDS에 있는 값이 모두 채워지고 점수가 바로 계산됩니다. 새 물질은 [AI MSDS 검토]에서 추가할 때 평가도 함께 저장됩니다.</div></div>'; return; }
+    var p = products()[it.product], b = best(it), sg = suggest(it), a = best(it, afterVent(it));
+    var ck = function(m, k){ return '<label><input type="checkbox" data-' + k + '="' + esc(m) + '"' + (it[k].indexOf(m) >= 0 ? ' checked' : '') + '>' + esc(m) + '</label>'; };
+    box.innerHTML =
+      '<div class="cra-box"><div class="cra-row" style="justify-content:space-between"><h3><span class="k">1</span>' + esc(it.product) + (savedOf(it.product) ? ' <span class="cra-chip off">저장됨 ' + esc(savedOf(it.product).date) + '</span>' : '') + '</h3>' +
+        '<span class="cra-row" style="gap:6px">' + (p && p.pdfUrl ? '<a class="cra-btn s" href="' + esc(p.pdfUrl) + '" target="_blank" rel="noopener">MSDS PDF</a>' : '') + '<button type="button" class="cra-btn p" id="cra-read"' + (p ? '' : ' disabled title="MSDS 목록에 없는 물질"') + '>MSDS 읽기 (AI)</button></span></div>' +
+        '<div class="cra-row"><label class="cra-f" style="flex:1 1 200px">공정명<input class="cra-in" id="cra-proc" value="' + esc(it.proc) + '" placeholder="예: 조직 고정, 방부제"></label>' +
+        '<label class="cra-f" style="flex:1 1 180px">부서<input class="cra-in" id="cra-dept" value="' + esc(it.dept) + '"></label>' +
+        '<label class="cra-f">하루취급량<select class="cra-in" id="cra-qty"><option value="1">소 (g · ㎖)</option><option value="2">중 (㎏ · L)</option><option value="3">대 (톤 · ㎥)</option></select></label>' +
+        '<label class="cra-f">취급량 (숫자)<input class="cra-in" id="cra-amt" value="' + esc(it.amt) + '" style="width:80px"></label>' +
+        '<label class="cra-f">사용온도 ℃<input class="cra-in" id="cra-temp" value="' + esc(it.temp) + '" style="width:70px"></label></div>' +
+        '<div id="cra-rmsg" class="cra-sub"></div></div>' +
+      (it.comps.length ? '' : '<div class="cra-box"><div class="cra-sub">성분이 없습니다. [MSDS 읽기 (AI)]를 누르거나 성분을 추가하세요.</div></div>') +
+      '<div class="cra-box"><h3><span class="k">2</span>MSDS 검토 <span class="cra-chip ai">파란 줄 = AI가 채움</span></h3>' + compTable(it) +
+        '<div class="cra-row"><button type="button" class="cra-btn s" id="cra-addc">+ 성분 추가</button>' + (it.comps.length ? '<button type="button" class="cra-btn s" id="cra-delc">마지막 성분 빼기</button>' : '') +
+        '<span class="cra-sub">측정치는 노출기준과 같은 단위로 넣습니다. [작업환경측정] 탭에 올린 결과표에 같은 부서 · 같은 물질이 있으면 자동으로 들어갑니다. 측정치가 있으면 측정치로, 없으면 하루취급량 × 휘발성(비산성)으로 노출수준을 정합니다.</span></div></div>' +
+      '<div class="cra-box"><h3><span class="k">3</span>현재 안전보건조치 · 밀폐 · 환기상태</h3>' + ventBox(it, 'cra-vent') +
+        '<div class="cra-mz"><div class="g">국소배기장치</div>' + MEAS.lev.map(function(m){ return ck(m, 'now'); }).join('') + '<div class="g">관리 · 교육 · 표지</div>' + MEAS.mgmt.map(function(m){ return ck(m, 'now'); }).join('') + '<div class="g">보호구</div>' + MEAS.ppe.map(function(m){ return ck(m, 'now'); }).join('') + '</div></div>' +
+      (it.comps.length ? '<div class="cra-box"><h3><span class="k">4</span>현재 위험성 ' + chip(b) + '</h3>' + scoreCards(it) + '</div>' +
+      '<div class="cra-box"><h3><span class="k">5</span>감소대책 · 개선 후 위험성</h3><div class="cra-mz">' + sg.concat(it.plan.filter(function(x){ return sg.indexOf(x) < 0; })).map(function(m){ return ck(m, 'plan'); }).join('') + '</div>' +
+        '<div class="cra-row"><span>개선 후 위험성 <b style="font-size:17px;font-variant-numeric:tabular-nums">' + a.e.v + ' × ' + a.s.v + ' = ' + a.r + '</b> ' + chip(a) + (a.r < b.r ? ' <span class="cra-chip g0">' + (b.r - a.r) + ' 낮아짐</span>' : '') + '</span></div>' +
+        '<div class="cra-row"><label class="cra-f">개선예정일<input type="date" class="cra-in" id="cra-due" value="' + esc(it.due) + '"></label><label class="cra-f">완료일<input type="date" class="cra-in" id="cra-done" value="' + esc(it.done) + '"></label>' +
+        '<label class="cra-f">담당자<input class="cra-in" id="cra-owner" value="' + esc(it.owner) + '" style="width:120px"></label><span style="flex:1 1 auto"></span>' +
+        (savedOf(it.product) ? '<button type="button" class="cra-btn" id="cra-del">평가 삭제</button>' : '') + '<button type="button" class="cra-btn p" id="cra-save">평가 저장</button></div></div>' : '');
+    $('cra-qty').value = String(it.qty || 1);
+    bindDetail(it);
+  }
+  function bindDetail(it){
+    var re = function(){ drawDetail(); };
+    var v = function(id, k, num){ var e = $(id); if(e) e.onchange = function(){ it[k] = num ? (parseInt(e.value, 10) || 1) : e.value.trim(); if(k === 'dept' || k === 'proc') applyMeas(it); re(); }; };
+    v('cra-proc', 'proc'); v('cra-dept', 'dept'); v('cra-qty', 'qty', 1); v('cra-amt', 'amt'); v('cra-temp', 'temp'); v('cra-due', 'due'); v('cra-done', 'done'); v('cra-owner', 'owner');
+    bindComps($('cra-detail'), it, re);
+    [].forEach.call(document.querySelectorAll('#cra-detail input[name="cra-vent"]'), function(el){ el.onchange = function(){ setVent(it, +el.value); re(); }; });
+    [].forEach.call(document.querySelectorAll('#cra-detail [data-now]'), function(el){ el.onchange = function(){ var m = el.getAttribute('data-now'); it.now = it.now.filter(function(x){ return x !== m; }); if(el.checked) it.now.push(m);
+      if(m === MEAS.lev[0]){ if(el.checked && !it.vent) it.vent = 1; if(!el.checked && it.vent === 1) it.vent = 0; }
+      it.plan = it.plan.filter(function(x){ return it.now.indexOf(x) < 0; }); re(); }; });
+    [].forEach.call(document.querySelectorAll('#cra-detail [data-plan]'), function(el){ el.onchange = function(){ var m = el.getAttribute('data-plan'); it.plan = it.plan.filter(function(x){ return x !== m; }); if(el.checked) it.plan.push(m); re(); }; });
+    var ad = $('cra-addc'); if(ad) ad.onclick = function(){ it.comps.push({ comp: '', cas: '', pct: '', state: (it.comps[0] || {}).state || 'liquid', bp: '', dust: '', unit: 'ppm', oel: '', c: '', m: '', r: '', hcodes: '', meas: '', patient: '무' }); re(); };
+    var dl = $('cra-delc'); if(dl) dl.onclick = function(){ it.comps.pop(); re(); };
+    var rd = $('cra-read'); if(rd) rd.onclick = async function(){
+      rd.disabled = true; $('cra-rmsg').innerHTML = '<b style="color:#1F4E79">AI가 MSDS를 읽는 중… (보통 20초~1분)</b>';
+      var x = await post('chemra.read', { name: it.product });
+      if(!x.success){ rd.disabled = false; $('cra-rmsg').innerHTML = '<span style="color:#A3302A">' + esc(x.error || '실패') + '</span>'; return; }
+      var base = it.comps.length ? it.comps.map(function(c){ return { name: c.comp, cas: c.cas, amount: c.pct }; }) : (x.sheet && x.sheet.comps || []);
+      it.comps = fromDraft(x.draft, base.length ? base : null);
+      if(!it.comps.length) it.comps = fromDraft(x.draft, null);
+      if(!it.proc) it.proc = (x.sheet && x.sheet.usage) || ((x.draft || {}).product || {}).usage || '';
+      it.usage = it.usage || (x.sheet && x.sheet.usage) || '';
+      if(!it.dept && x.sheet) it.dept = x.sheet.dept || '';
+      it.src = 'MSDS 읽기(AI)'; it.date = today();
+      applyMeas(it);
+      if(!it.plan.length) it.plan = suggest(it);
+      re();
+      $('cra-rmsg').innerHTML = 'MSDS에서 값을 채웠습니다 (파란 줄). 틀린 칸만 고친 뒤 [평가 저장]을 누르세요.' + ((x.draft && x.draft.warnings || []).length ? ' <span style="color:#6E4A00">AI 확인 필요: ' + esc(x.draft.warnings.join(' · ')) + '</span>' : '') + ' · 오늘 남은 읽기 ' + x.left + '회';
+    };
+    var sv = $('cra-save'); if(sv) sv.onclick = async function(){
+      if(!it.comps.some(function(c){ return c.comp; })){ say('성분을 1개 이상 넣으세요', 'err'); return; }
+      it.comps = it.comps.filter(function(c){ return c.comp; });
+      it.date = today(); if(!it.src) it.src = '직접 평가';
+      sv.disabled = true;
+      var x = await post('chemra.save', { item: record(it) });
+      sv.disabled = false;
+      if(!x.success){ say((x.failed || []).join(' / ') || x.error || '실패', 'err'); return; }
+      say('위험성평가를 저장했습니다', 'ok');
+      await reload(); pick(it.product);
+    };
+    var de = $('cra-del'); if(de) de.onclick = async function(){
+      if(!confirm('"' + it.product + '" 위험성평가를 지울까요? (지운 내용은 이력 시트에 남습니다)')) return;
+      var x = await post('chemra.delete', { product: it.product });
+      if(!x.success){ say(x.error || '실패', 'err'); return; }
+      say('지웠습니다', 'ok'); await reload(); pick(it.product);
+    };
+  }
+  function setVent(it, v){
+    it.vent = v; var has = it.now.indexOf(MEAS.lev[0]) >= 0;
+    if(v === 1 && !has) it.now.push(MEAS.lev[0]);
+    if(v === 0) it.now = it.now.filter(function(m){ return MEAS.lev.indexOf(m) < 0; });
+    it.plan = it.plan.filter(function(x){ return it.now.indexOf(x) < 0; });
+  }
+  function bindComps(root, it, re){
+    [].forEach.call(root.querySelectorAll('[data-c][data-k]'), function(el){
+      el.onchange = function(){ var c = it.comps[+el.getAttribute('data-c')]; if(!c) return; var k = el.getAttribute('data-k'), val = el.value.trim();
+        if(k === 'hcodes') val = (val.toUpperCase().match(/H\d{3}[A-Z]{0,2}/g) || []).join(',');
+        if(k === 'state' && val !== 'solid') c.dust = '';
+        if(k === 'meas' || k === 'oel' || k === 'unit') c.measSrc = '';   // 직접 고친 값은 측정 결과로 덮지 않음
+        c[k] = val; c.ai = false; re(); };
+    });
+  }
+  async function reload(){ var x = await post('chemra.list', {}); if(x.success){ st.rows = x.data || []; st.meas = x.meas || []; } }
+
+  /* ── 물질별 결과 ── */
+  function drawRes(){
+    var rows = (st.rows || []).slice().sort(function(a, b){ return b.risk - a.risk || a.product.localeCompare(b.product, 'ko'); });
+    var cnt = [0, 0, 0, 0], bad = 0;
+    rows.forEach(function(r){ var g = CRA.grade(r.risk, r.e, r.sv); cnt[g.k]++; if(g.bad) bad++; });
+    var all = names().length;
+    $('cra-view').innerHTML = '<div class="cra-box"><div class="cra-row" style="justify-content:space-between"><h3>물질별 위험성평가 결과</h3><span class="cra-row" style="gap:5px"><span class="cra-chip off">평가 ' + rows.length + ' / ' + all + '</span>' +
+      CRA.cfg().grade.map(function(g, i){ return '<span class="cra-chip g' + i + '">' + g[2] + ' ' + cnt[i] + '</span>'; }).join('') + '<span class="cra-chip bad">허용 불가 ' + bad + '</span></span></div>' +
+      '<div class="cra-sub">제품의 위험성은 성분 중 가장 높은 값입니다(혼합물 평가 원칙). 줄을 누르면 [평가하기]에서 열립니다.</div>' +
+      '<div class="cra-tw"><table class="cra-t" style="min-width:1100px"><tr><th>제품명</th><th>부서</th><th>공정</th><th>성분 (CAS)</th><th class="c">노출수준</th><th class="c">유해성</th><th class="c">위험성</th><th>결정</th><th>밀폐 · 환기</th><th class="c">개선 후</th><th>평가일 · 출처</th></tr>' +
+      (rows.map(function(r){
+        var g = CRA.grade(r.risk, r.e, r.sv), d = r.data || {};
+        return '<tr data-open="' + esc(r.product) + '" style="cursor:pointer"><td><b>' + esc(r.product) + '</b></td><td>' + esc(r.dept) + '</td><td>' + esc(r.proc) + '</td><td>' + (d.comps || []).map(function(c){ return esc(c.comp) + ' <span class="cra-sub">' + esc(c.cas) + '</span>'; }).join('<br>') + '</td>' +
+          '<td class="c">' + r.e + '</td><td class="c">' + r.sv + '</td><td class="c"><b>' + r.risk + '</b></td><td style="min-width:190px">' + chip({ g: g }) + '<div class="cra-sub">' + g.act + '</div></td>' +
+          '<td>' + ['<span class="cra-chip off">해당없음</span>', '<span class="cra-chip g0">국소배기</span>', '<span class="cra-chip g0">완전밀폐</span>'][+d.vent || 0] + '</td><td class="c">' + (r.after || '') + '</td><td class="cra-sub">' + esc(r.date) + '<br>' + esc(r.src) + '</td></tr>';
+      }).join('') || '<tr><td colspan="11" class="cra-sub" style="padding:14px">아직 저장한 평가가 없습니다. [평가하기]에서 물질을 고르거나 [산정기준 · 가져오기]에서 기존 KRAS 엑셀을 가져오세요.</td></tr>') + '</table></div></div>';
+    $('cra-view').querySelector('table').onclick = function(e){ var r = e.target.closest('[data-open]'); if(!r) return; st.tab = 'eval'; draw(); pick(r.getAttribute('data-open')); };
+  }
+
+  /* ── v21.41 작업환경측정 탭 ── */
+  function lvOf(r){ var v = parseFloat(r.val), t = parseFloat(r.tlv); if(!(t > 0) || isNaN(v)) return null; var x = v / t * 100; return { pct: x, lv: x > 100 ? 4 : x >= 50 ? 3 : x > 10 ? 2 : 1 }; }
+  function linked(r){ return (st.rows || []).filter(function(o){ var it = itemOf(o); return it.comps.some(function(c){ return subMatch(r, c); }) && deptMatch(r, it); }).map(function(o){ return o.product; }); }
+  function measTable(rows, tag){
+    return '<div class="cra-tw" style="max-height:55vh;overflow:auto"><table class="cra-t" style="min-width:980px"><tr><th>부서</th><th>단위작업장소</th><th>유해인자</th><th class="c">측정치</th><th class="c">노출기준</th><th class="c">노출비율</th><th class="c">노출수준</th><th>평가</th><th>' + (tag ? '연결될 평가' : '연결된 평가') + '</th></tr>' +
+      rows.map(function(r){ var l = lvOf(r), ln = linked(r);
+        return '<tr><td>' + esc(r.dept) + '</td><td>' + esc(r.place) + '</td><td><b>' + esc(r.sub) + '</b></td><td class="c">' + esc(r.val) + (r.note ? ' <span class="cra-sub">' + esc(r.note) + '</span>' : '') + '</td><td class="c">' + esc(r.tlv) + ' ' + esc(/mg/i.test(r.unit) ? 'mg/㎥' : 'ppm') + '</td>' +
+          '<td class="c">' + (l ? (Math.round(l.pct * 10) / 10) + '%' : '-') + '</td><td class="c">' + (l ? '<b>' + l.lv + '</b>' : '-') + '</td><td>' + esc(r.ev || (l ? (l.pct > 100 ? '초과' : '미만') : '')) + '</td><td class="cra-sub">' + (ln.length ? esc(ln.join(', ')) : '—') + '</td></tr>'; }).join('') + '</table></div>';
+  }
+  function drawMeas(){
+    var ps = periods(), d = new Date(), def = d.getFullYear() + (d.getMonth() < 6 ? ' 상반기' : ' 하반기');
+    var cnt = function(p){ return st.meas.filter(function(r){ return r.period === p; }).length; };
+    var meta = function(p){ var r = st.meas.filter(function(x){ return x.period === p; })[0] || {}; return [r.date, r.org].filter(Boolean).join(' · '); };
+    if(!st.mview || ps.indexOf(st.mview) < 0) st.mview = ps[0] || '';
+    $('cra-view').innerHTML =
+      '<div class="cra-box"><h3>작업환경측정 결과표 올리기</h3><div class="cra-sub">측정기관 결과표(측정결과 요약)를 엑셀(.xlsx · .xls · .csv)로 올리거나, 엑셀에서 표를 복사해 붙여넣으세요. 부서 · 단위작업장소 · 유해인자 · 측정치 · 노출기준 · 평가 칸을 찾아 읽습니다(불검출은 0). 결과표에는 근로자 이름이 들어 있을 수 있어 AI로 보내지 않고 이 화면에서만 읽습니다.</div>' +
+        '<div class="cra-row"><label class="cra-f">차수<input class="cra-in" id="cra-mp" value="' + esc(def) + '" style="width:130px"></label><label class="cra-f">측정일<input type="date" class="cra-in" id="cra-md"></label><label class="cra-f" style="flex:1 1 200px">측정기관<input class="cra-in" id="cra-mo" placeholder="예: 비아이씨산업보건(주)"></label></div>' +
+        '<div class="cra-row"><input type="file" id="cra-mf" accept=".xlsx,.xls,.csv"><span class="cra-sub">또는</span><textarea class="cra-in" id="cra-mt" rows="2" style="flex:1 1 280px" placeholder="부서	단위작업장소	유해인자	측정치	노출기준	평가"></textarea><button type="button" class="cra-btn s" id="cra-mtgo">붙여넣은 표 읽기</button></div>' +
+        '<div id="cra-mprev"></div></div>' +
+      '<div class="cra-box"><div class="cra-row" style="justify-content:space-between"><h3>저장된 측정 결과</h3>' +
+        (ps.length ? '<label class="cra-f" style="flex-direction:row;align-items:center;gap:6px">평가에 쓸 측정 결과<select class="cra-in" id="cra-mpick"><option value="latest"' + (st.pick === 'latest' || (ps.indexOf(st.pick) < 0 && st.pick !== 'max') ? ' selected' : '') + '>가장 최근 (' + esc(ps[0]) + ')</option>' + ps.map(function(p){ return '<option' + (st.pick === p ? ' selected' : '') + '>' + esc(p) + '</option>'; }).join('') + '<option value="max"' + (st.pick === 'max' ? ' selected' : '') + '>모든 차수 중 가장 높은 값</option></select></label>' : '') + '</div>' +
+        (ps.length ? '<div class="cra-row" style="gap:6px">' + ps.map(function(p){ return '<button type="button" class="cra-btn s' + (st.mview === p ? ' p' : '') + '" data-mv="' + esc(p) + '">' + esc(p) + ' · ' + cnt(p) + '건</button>'; }).join('') + '</div>' +
+          '<div class="cra-row" style="justify-content:space-between"><span class="cra-sub">' + esc(st.mview) + (meta(st.mview) ? ' · ' + esc(meta(st.mview)) : '') + '</span><button type="button" class="cra-btn s" id="cra-mdel">이 차수 지우기</button></div>' +
+          measTable(st.meas.filter(function(r){ return r.period === st.mview; })) +
+          '<div class="cra-row" style="justify-content:space-between"><span class="cra-sub">저장된 위험성평가의 측정치를 위에서 고른 측정 결과로 바꿉니다. 바뀌는 성분을 먼저 보여 줍니다.</span><button type="button" class="cra-btn p" id="cra-mapply">저장된 평가에 반영하기</button></div><div id="cra-mapp"></div>'
+        : '<div class="cra-sub">아직 올린 측정 결과가 없습니다.</div>') + '</div>';
+    var preview = function(rows){
+      st.mprev = rows;
+      $('cra-mprev').innerHTML = rows.length ? '<b style="font-size:13.5px">미리보기 — ' + rows.length + '건</b>' + measTable(rows, 1) +
+        '<div class="cra-row" style="justify-content:flex-end"><span class="cra-sub">' + (cnt($('cra-mp').value.trim()) ? '같은 차수(' + esc($('cra-mp').value.trim()) + ')의 기존 ' + cnt($('cra-mp').value.trim()) + '건은 새 결과로 바뀝니다' : '') + '</span><button type="button" class="cra-btn p" id="cra-msave">' + rows.length + '건 저장</button></div>'
+        : '<div style="color:#A3302A">측정 결과를 찾지 못했습니다 — 유해인자 · 측정치 · 노출기준 칸이 있는지 확인하세요.</div>';
+      var sv = $('cra-msave'); if(sv) sv.onclick = async function(){
+        var per = $('cra-mp').value.trim(); if(!per){ say('차수를 넣으세요 (예: 2026 하반기)', 'err'); return; }
+        sv.disabled = true;
+        var x = await post('chemra.measSave', { period: per, date: $('cra-md').value, org: $('cra-mo').value.trim(), rows: st.mprev });
+        if(!x.success){ sv.disabled = false; say(x.error || '실패', 'err'); return; }
+        say(per + ' 측정 결과 ' + x.saved + '건 저장' + (x.replaced ? ' (기존 ' + x.replaced + '건 바꿈)' : ''), 'ok');
+        await reload(); st.mview = per; st.mprev = null; drawMeas();
+      };
+    };
+    $('cra-mf').onchange = async function(){
+      var f = this.files[0]; if(!f) return;
+      var X; try{ X = await loadXlsx(); }catch(e){ say(e.message, 'err'); return; }
+      var wb = X.read(await f.arrayBuffer(), { type: 'array' });
+      var rows = []; wb.SheetNames.forEach(function(n){ if(!rows.length) rows = parseMeas(X.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: false, defval: '' })); });
+      var m = String(f.name).match(/(20\d\d)\D{0,3}(상반기|하반기)/); if(m) $('cra-mp').value = m[1] + ' ' + m[2];
+      preview(rows);
+    };
+    $('cra-mtgo').onclick = function(){ preview(parseMeas($('cra-mt').value.split(/\r?\n/).map(function(l){ return l.split('\t'); }))); };
+    [].forEach.call(document.querySelectorAll('[data-mv]'), function(b){ b.onclick = function(){ st.mview = b.getAttribute('data-mv'); drawMeas(); }; });
+    var pk = $('cra-mpick'); if(pk) pk.onchange = async function(){
+      st.pick = pk.value; var cfg = Object.assign({}, st.cfg || {}, { measPick: st.pick });
+      var x = await post('chemra.setCfg', { cfg: cfg }); if(x.success){ st.cfg = x.cfg; say('평가에 쓸 측정 결과: ' + pk.options[pk.selectedIndex].text, 'ok'); } else say(x.error || '실패', 'err');
+      drawMeas();
+    };
+    var dl = $('cra-mdel'); if(dl) dl.onclick = async function(){
+      if(!confirm(st.mview + ' 측정 결과 ' + cnt(st.mview) + '건을 지울까요?')) return;
+      var x = await post('chemra.measDelete', { period: st.mview }); if(!x.success){ say(x.error || '실패', 'err'); return; }
+      say('지웠습니다', 'ok'); await reload(); st.mview = ''; drawMeas();
+    };
+    var ap = $('cra-mapply'); if(ap) ap.onclick = function(){
+      var list = [];
+      (st.rows || []).forEach(function(o){ var it = itemOf(o), b = best(it).r, ch = applyMeas(it, true); if(ch.length) list.push({ it: it, ch: ch, from: b, to: best(it).r }); });
+      $('cra-mapp').innerHTML = list.length ? '<div class="cra-tw"><table class="cra-t"><tr><th></th><th>제품</th><th>바뀌는 측정치</th><th class="c">위험성</th></tr>' + list.map(function(x, i){
+          return '<tr><td><input type="checkbox" data-mi="' + i + '" checked aria-label="반영"></td><td><b>' + esc(x.it.product) + '</b></td><td>' + x.ch.map(function(c){ return esc(c.comp) + ' ' + esc(c.from === '' || c.from == null ? '없음' : c.from) + ' → <b>' + esc(c.to === '' ? '없음' : c.to) + '</b> <span class="cra-sub">' + esc(c.src) + '</span>'; }).join('<br>') + '</td><td class="c">' + x.from + ' → <b>' + x.to + '</b></td></tr>'; }).join('') +
+        '</table></div><div class="cra-row" style="justify-content:flex-end"><button type="button" class="cra-btn p" id="cra-mgo">선택한 ' + list.length + '개 평가 저장</button></div>' : '<div class="cra-sub">바뀌는 평가가 없습니다 (같은 부서 · 같은 물질의 측정 결과가 없거나 이미 같은 값).</div>';
+      var go = $('cra-mgo'); if(go) go.onclick = async function(){
+        var sel2 = list.filter(function(x, i){ var c = document.querySelector('[data-mi="' + i + '"]'); return c && c.checked; });
+        if(!sel2.length) return;
+        go.disabled = true;
+        var x = await post('chemra.save', { items: sel2.map(function(o){ var r = record(o.it); r.src = o.it.src || r.src; r.date = today(); return r; }) });
+        if(!x.success){ go.disabled = false; say(x.error || '실패', 'err'); return; }
+        say(x.saved + '개 평가에 측정 결과를 반영했습니다', 'ok'); await reload(); drawMeas();
+      };
+    };
+  }
+  // 결과표 읽기: 제목 줄에서 칸 찾기 (없으면 부서 · 단위작업장소 · 유해인자 · 측정치 · 노출기준 · 평가 순서). 병합된 부서 · 장소 칸은 위 값을 이어받음
+  function parseMeas(a){
+    var s = function(v){ return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); };
+    var h = -1, col = null;
+    for(var i = 0; i < Math.min(a.length, 20) && h < 0; i++){
+      var r = (a[i] || []).map(function(v){ return s(v).replace(/\s/g, ''); });
+      var f = function(re, not){ for(var k = 0; k < r.length; k++) if(re.test(r[k]) && !(not && not.test(r[k]))) return k; return -1; };
+      var sub = f(/유해인자|화학물질|물질명/), val = f(/측정치|측정값|측정결과|노출농도|측정농도/, /단위|기준/), tlv = f(/노출기준|허용기준/);
+      if(sub >= 0 && val >= 0 && tlv >= 0){ h = i; col = { dept: f(/부서|공정/), place: f(/단위작업|작업장소|장소/), sub: sub, val: val, tlv: tlv, unit: f(/^단위$|^단위\(/), ev: f(/평가|판정/), mg: /mg/i.test(r[val] + r[tlv]) }; }
+    }
+    if(h < 0){ col = { dept: 0, place: 1, sub: 2, val: 3, tlv: 4, unit: -1, ev: 5, mg: false }; }
+    var out = [], ld = '', lp = '';
+    for(var j = h + 1; j < a.length; j++){
+      var row = a[j] || [], g = function(k){ return k >= 0 ? s(row[k]) : ''; };
+      var sub2 = g(col.sub); if(!sub2 || /^유해인자$|혼합|소계|합계/.test(sub2)) continue;
+      var dept = g(col.dept) || ld, place = g(col.place) || lp; ld = dept; lp = place;
+      var rv = g(col.val), tv = g(col.tlv), nd = /불검출|N\.?D|미검출|검출한계/i.test(rv);
+      var v = nd ? 0 : parseFloat(rv.replace(/[<,]/g, '')), t = parseFloat(tv.replace(/,/g, ''));
+      if(isNaN(v) || !(t > 0)) continue;
+      var u = g(col.unit) || (col.mg || /mg/i.test(rv + tv) ? 'mg/㎥' : 'ppm');
+      out.push({ dept: dept, place: place || dept, sub: sub2, val: String(v), tlv: String(t), unit: /mg/i.test(u) ? 'mg/㎥' : 'ppm', ev: g(col.ev), note: nd ? '불검출' : '' });
+    }
+    return out;
+  }
+
+  /* ── 평가표 출력 (KRAS 양식 · A4 가로 · 엑셀) ── */
+  var VENT_T = ['0 (해당없음)', '1 (국소배기)', '2 (밀폐)'], QTY_T = ['', 'g, ㎖ (1.저)', '㎏, L (2.중)', '톤, ㎥ (3.고)'], DUST_T = ['', '1.저', '2.중', '3.고'];
+  function outRows(){
+    var out = [];
+    (st.rows || []).slice().sort(function(a, b){ return (a.dept + a.proc + a.product).localeCompare(b.dept + b.proc + b.product, 'ko'); }).forEach(function(r){
+      var it = itemOf(r), av = afterVent(it);
+      it.comps.forEach(function(c, i){
+        var s = cs(it, c), a = cs(it, c, av), mg = c.unit === 'mg';
+        out.push({ first: !i, n: it.comps.length, it: it, r: r, cells: [it.proc, it.product, c.comp, c.cas, c.patient, c.c, c.m, c.r, mg ? 'mg' : 'ppm', mg ? '' : c.meas, mg ? c.meas : '', mg ? '' : c.oel, mg ? c.oel : '',
+          it.amt, it.amt ? QTY_T[it.qty || 1] : '', c.pct, c.state === 'solid' ? '' : it.temp, c.state === 'solid' ? '' : c.bp, c.state === 'solid' ? (DUST_T[+c.dust || 0] || '') : '', VENT_T[it.vent] || VENT_T[0], c.hcodes,
+          s.e.v, s.s.v, s.r, a.e.v, a.s.v, a.r] });
+      });
+    });
+    return out;
+  }
+  var KH1 = '<tr><th rowspan="3">공정명</th><th rowspan="3">제품명</th><th colspan="19">유해 · 위험요인파악</th><th rowspan="3">현재 안전보건조치</th><th colspan="3">현재위험성</th><th rowspan="3">감소대책</th><th colspan="3">개선후 위험성</th><th rowspan="3">개선예정일</th><th rowspan="3">완료일</th><th rowspan="3">담당자</th></tr>' +
+    '<tr><th rowspan="2">화학물질명</th><th rowspan="2">CAS-NO</th><th rowspan="2">직업병 유소견자</th><th colspan="3">CMR물질</th><th rowspan="2">성상</th><th rowspan="2">측정치 (ppm)</th><th rowspan="2">측정치 (mg/㎥)</th><th rowspan="2">노출기준 (ppm)</th><th rowspan="2">노출기준 (mg/㎥)</th><th colspan="3">하루취급량</th><th colspan="2">휘발성</th><th rowspan="2">비산성</th><th rowspan="2">밀폐 · 환기상태</th><th rowspan="2">유해 · 위험문구 (H-Code)</th>' +
+    '<th rowspan="2">노출수준</th><th rowspan="2">유해성</th><th rowspan="2">위험성</th><th rowspan="2">노출수준</th><th rowspan="2">유해성</th><th rowspan="2">위험성</th></tr>' +
+    '<tr><th>C</th><th>M</th><th>R</th><th>취급량</th><th>단위</th><th>함유량(%)</th><th>사용온도</th><th>끓는점</th></tr>';
+  function kBody(){
+    var ul = function(a){ return a.length ? '<ul>' + a.map(function(x){ return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : ''; };
+    return outRows().map(function(o){
+      var c = o.cells, rs = ' rowspan="' + o.n + '"', it = o.it, td = function(v, w){ return '<td class="n"' + (w ? ' style="min-width:' + w + 'px;white-space:normal;text-align:left"' : '') + '>' + esc(v) + '</td>'; };
+      return '<tr>' + (o.first ? '<td' + rs + '>' + esc(c[0]) + '</td><td' + rs + '>' + esc(c[1]) + '</td>' : '') + '<td>' + esc(c[2]) + '</td>' + c.slice(3, 20).map(function(v){ return td(v); }).join('') + td(String(c[20]).replace(/,/g, ', '), 130) +
+        (o.first ? '<td' + rs + ' style="min-width:220px">' + ul(it.now) + '</td>' : '') + td(c[21]) + td(c[22]) + '<td class="n"><b>' + c[23] + '</b></td>' +
+        (o.first ? '<td' + rs + ' style="min-width:220px">' + ul(it.plan) + '</td>' : '') + td(c[24]) + td(c[25]) + td(c[26]) +
+        (o.first ? '<td' + rs + ' class="n">' + esc(it.due) + '</td><td' + rs + ' class="n">' + esc(it.done) + '</td><td' + rs + '>' + esc(it.owner) + '</td>' : '') + '</tr>';
+    }).join('');
+  }
+  function drawOut(){
+    $('cra-view').innerHTML = '<div class="cra-box"><div class="cra-row" style="justify-content:space-between"><h3>최종 화학물질 위험성평가표 (KRAS 양식)</h3><span class="cra-row" style="gap:6px"><button type="button" class="cra-btn" id="cra-xlsx">엑셀(.xlsx) 내려받기</button><button type="button" class="cra-btn p" id="cra-print">A4 가로 출력</button></span></div>' +
+      '<div class="cra-row"><label class="cra-f">사업장명<input class="cra-in" id="cra-org" value="의료법인인당의료재단부민병원" style="width:240px"></label><label class="cra-f">평가일자<input type="date" class="cra-in" id="cra-odate" value="' + today() + '"></label><label class="cra-f">평가자<input class="cra-in" id="cra-oby" value="보건관리자" style="width:140px"></label></div>' +
+      '<div class="cra-tw" style="max-height:65vh;overflow:auto"><table class="cra-kras"><thead>' + KH1 + '</thead><tbody>' + kBody() + '</tbody></table></div></div>';
+    $('cra-print').onclick = printOut;
+    $('cra-xlsx').onclick = xlsxOut;
+  }
+  function head3(){ return { org: ($('cra-org') || {}).value || '', date: ($('cra-odate') || {}).value || today(), by: ($('cra-oby') || {}).value || '' }; }
+  function printOut(){
+    var h = head3(), w = window.open('', '_blank');
+    if(!w){ say('팝업이 막혔습니다 — 팝업을 허용해 주세요', 'err'); return; }
+    w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>화학물질 위험성평가표</title><style>@page{size:A4 landscape;margin:7mm}body{font-family:"Malgun Gothic","Noto Sans KR",sans-serif;margin:0;color:#111}' +
+      'h1{font-size:15px;margin:0 0 3px;text-align:center}.m{font-size:9px;display:flex;justify-content:space-between;margin-bottom:4px}table{border-collapse:collapse;width:100%;font-size:6.6px;table-layout:auto}th,td{border:.6px solid #333;padding:1.5px 2px;vertical-align:top}' +
+      'th{background:#E6EFD8;text-align:center;vertical-align:middle}td.n{text-align:center}ul{margin:0;padding-left:8px}tr{page-break-inside:avoid}thead{display:table-header-group}</style></head><body>' +
+      '<h1>KRAS (화학물질 위험성 평가표)</h1><div class="m"><span>사업장명: ' + esc(h.org) + '</span><span>평가일자: ' + esc(h.date) + ' · 평가자: ' + esc(h.by) + '</span></div><table><thead>' + KH1 + '</thead><tbody>' + kBody().replace(/ style="min-width:\d+px[^"]*"/g, '') + '</tbody></table>' +
+      '<script>window.onload=function(){setTimeout(function(){print()},300)}<\/script></body></html>');
+    w.document.close();
+  }
+  function loadXlsx(){
+    if(window.XLSX) return Promise.resolve(window.XLSX);
+    return new Promise(function(ok, no){ var s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload = function(){ ok(window.XLSX); }; s.onerror = function(){ no(new Error('엑셀 도구를 불러오지 못했습니다 (인터넷 연결 확인)')); }; document.head.appendChild(s); });
+  }
+  async function xlsxOut(){
+    var X; try{ X = await loadXlsx(); }catch(e){ say(e.message, 'err'); return; }
+    var h = head3();
+    var aoa = [['KRAS(화학물질 위험성 평가표)'], ['사업장명: ' + h.org], ['평가일자: ' + h.date + '        평가자: ' + h.by],
+      ['공정명', '제품명', '유해·위험요인파악', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '현재 안전보건조치', '현재위험성', '', '', '감소대책', '개선후 위험성', '', '', '개선예정일', '완료일', '담당자'],
+      ['', '', '화학물질명', 'CAS-NO', '직업병 유소견자', 'CMR물질', '', '', '성상', '측정치(ppm)', '측정치(mg/㎥)', '노출기준(ppm)', '노출기준(mg/㎥)', '하루취급량', '', '', '휘발성', '', '비산성', '밀폐∙환기상태', '유해∙위험문구(H-Code)', '', '노출수준(가능성)', '유해성(중대성)', '위험성', '', '노출수준(가능성)', '유해성(중대성)', '위험성', '', '', ''],
+      ['', '', '', '', '', 'C(발암성)', 'M(변이원성)', 'R(생식독성)', '', '', '', '', '', '취급량', '단위', '함유량(%)', '사용온도', '끓는점', '', '', '', '', '', '', '', '', '', '', '', '', '', '']];
+    var merges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 31 } }];
+    [[3, 0, 5, 0], [3, 1, 5, 1], [3, 2, 3, 20], [3, 21, 5, 21], [3, 22, 3, 24], [3, 25, 5, 25], [3, 26, 3, 28], [3, 29, 5, 29], [3, 30, 5, 30], [3, 31, 5, 31],
+     [4, 2, 5, 2], [4, 3, 5, 3], [4, 4, 5, 4], [4, 5, 4, 7], [4, 8, 5, 8], [4, 9, 5, 9], [4, 10, 5, 10], [4, 11, 5, 11], [4, 12, 5, 12], [4, 13, 4, 15], [4, 16, 4, 17], [4, 18, 5, 18], [4, 19, 5, 19], [4, 20, 5, 20],
+     [4, 22, 5, 22], [4, 23, 5, 23], [4, 24, 5, 24], [4, 26, 5, 26], [4, 27, 5, 27], [4, 28, 5, 28]].forEach(function(m){ merges.push({ s: { r: m[0], c: m[1] }, e: { r: m[2], c: m[3] } }); });
+    outRows().forEach(function(o){
+      var c = o.cells, it = o.it, n = Math.max(o.first ? Math.max(it.now.length, it.plan.length) : 0, 1), r = aoa.length;
+      for(var k = 0; k < n; k++){
+        var row = k ? new Array(32).fill('') : c.slice(0, 21).concat([it.now[0] || '', c[21], c[22], c[23], it.plan[0] || '', c[24], c[25], c[26], o.first ? it.due : '', o.first ? it.done : '', o.first ? it.owner : '']);
+        if(k){ row[21] = it.now[k] || ''; row[25] = it.plan[k] || ''; }
+        if(!o.first && !k){ row[0] = ''; row[1] = ''; row[21] = ''; row[25] = ''; }
+        aoa.push(row);
+      }
+      if(n > 1) [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 23, 24, 26, 27, 28, 29, 30, 31].forEach(function(col){ merges.push({ s: { r: r, c: col }, e: { r: r + n - 1, c: col } }); });
+    });
+    var ws = X.utils.aoa_to_sheet(aoa); ws['!merges'] = merges;
+    ws['!cols'] = [14, 22, 16, 11, 6, 5, 5, 5, 5, 7, 7, 7, 7, 6, 10, 7, 6, 6, 8, 10, 26, 34, 6, 6, 6, 34, 6, 6, 6, 10, 10, 10].map(function(w){ return { wch: w }; });
+    var wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, '화학물질_위험성평가표');
+    X.writeFile(wb, '화학물질_위험성평가표_' + h.date + '.xlsx');
+  }
+
+  /* ── 산정기준 · 기존 KRAS 엑셀 가져오기 ── */
+  function drawStd(){
+    var C = CRA.cfg(), m = C.matrix;
+    var mt = function(form){ return '<table class="cra-t" style="width:auto"><tr><th>하루취급량 \\ ' + (form === 'dust' ? '비산성' : '휘발성') + '</th><th>저</th><th>중</th><th>고</th></tr>' + [1, 2, 3].map(function(q){ return '<tr><td>' + ['', '소 (g · ㎖)', '중 (㎏ · L)', '대 (톤 · ㎥)'][q] + '</td>' + m[q][form].map(function(v){ return '<td class="c"><b>' + v + '</b></td>'; }).join('') + '</tr>'; }).join('') + '</table>'; };
+    $('cra-view').innerHTML =
+      '<div class="cra-box"><h3>기존 KRAS 엑셀 평가표 가져오기</h3><div class="cra-sub">KRAS에서 내려받은 「화학물질_위험성평가표」 엑셀(.xlsx)을 고르면 제품마다 성분 · 측정치 · 노출기준 · 현재 조치 · 감소대책 · 개선예정일을 읽어 미리 보여 줍니다. 점수는 이 프로그램의 기준으로 다시 계산하고, 엑셀 점수와 다르면 표시합니다. 같은 제품명이 이미 있으면 새 값으로 바꾸고 이전 값은 이력 시트에 남습니다.</div>' +
+        '<div class="cra-row"><input type="file" id="cra-imp" accept=".xlsx,.xls"></div><div id="cra-imp-prev"></div></div>' +
+      '<div class="cra-box"><h3>산정기준 — 「위험성평가 지침해설서」(2020, 고용노동부 · 안전보건공단) 부록3 곱셈법</h3>' +
+        '<div class="cra-note"><b>위험성 = 노출수준(가능성 1~4) × 유해성(중대성 1~4)</b>. 혼합물은 성분마다 계산해 가장 높은 값을 제품의 위험성으로 합니다. AI는 MSDS에서 값만 읽고, 점수는 아래 표로 계산하므로 같은 값이면 언제나 같은 점수입니다.</div>' +
+        '<b>1. 노출수준</b><ul class="cra-why" style="font-size:13px;color:#2B2A27"><li>방법1 직업병 유소견자(D1) 있음 → 4</li><li>방법2 작업환경측정치 ÷ 노출기준: 100% 초과 4 · 50~100% 3 · 10~50% 2 · 10% 이하 1 ([작업환경측정] 탭에 올린 결과표에서 같은 부서 · 같은 물질의 최고값을 자동으로 씀)</li>' +
+        '<li>방법3 하루취급량 × 휘발성(액체 · 기체: 끓는점 50℃ 미만 고 · 50~150℃ 중 · 150℃ 초과 저) 또는 비산성(고체) → 아래 표 − 밀폐 · 환기(완전밀폐 −2 · 국소배기 −1 · 해당없음 0), 최소 1</li></ul>' +
+        '<div class="cra-row" style="gap:16px">' + mt('vapor') + mt('dust') + '</div>' +
+        '<b>2. 유해성</b><ul class="cra-why" style="font-size:13px;color:#2B2A27"><li>방법1 CMR(발암성 · 생식세포 변이원성 · 생식독성 1A · 1B · 2 중 하나) → 4</li><li>방법2 노출기준: 증기 0.5ppm 이하 4 · 5 이하 3 · 50 이하 2 · 500 이하 1 / 분진 0.01㎎/㎥ 이하 4 · 0.1 이하 3 · 1 이하 2 · 10 이하 1 (넘으면 방법3)</li>' +
+        '<li>방법3 H코드: 4 — ' + C.h4.join(' ') + ' / 3 — ' + C.h3.join(' ') + ' / 2 — ' + C.h2.join(' ') + ' / 1 — 그 밖의 문구</li></ul>' +
+        '<b>3. 위험성 결정</b><table class="cra-t" style="width:auto"><tr><th>위험성</th><th>등급</th><th>허용</th><th>조치</th></tr>' + C.grade.map(function(g, i){ return '<tr><td class="c">' + g[0] + '~' + g[1] + '</td><td><span class="cra-chip g' + i + '">' + g[2] + '</span></td><td>' + (i >= 2 ? '허용 불가' : '허용 가능' + (i === 1 ? ' (4이면서 노출수준 4 또는 유해성 4는 허용 불가)' : '')) + '</td><td>' + g[3] + '</td></tr>'; }).join('') + '</table></div>';
+    $('cra-imp').onchange = function(){ var f = this.files[0]; if(f) importFile(f); };
+  }
+  async function importFile(f){
+    var box = $('cra-imp-prev'); box.innerHTML = '<div class="cra-sub">읽는 중…</div>';
+    var X; try{ X = await loadXlsx(); }catch(e){ box.innerHTML = '<div style="color:#A3302A">' + esc(e.message) + '</div>'; return; }
+    var wb = X.read(await f.arrayBuffer(), { type: 'array' }), ws = wb.Sheets[wb.SheetNames[0]];
+    var items = parseKras(X.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' }));
+    if(!items.length){ box.innerHTML = '<div style="color:#A3302A">KRAS 평가표 형식(화학물질명 · CAS-NO 칸)을 찾지 못했습니다.</div>'; return; }
+    var diff = 0;
+    box.innerHTML = '<div class="cra-tw" style="max-height:50vh;overflow:auto"><table class="cra-t"><tr><th>공정</th><th>제품명</th><th>성분</th><th class="c">엑셀 위험성</th><th class="c">다시 계산</th><th>현재 조치 · 감소대책</th></tr>' + items.map(function(it){
+      var b = best(it), x = it.xlRisk, same = x == null || x === b.r; if(!same) diff++;
+      return '<tr><td>' + esc(it.proc) + '</td><td><b>' + esc(it.product) + '</b>' + (savedOf(it.product) ? ' <span class="cra-chip off">바꿈</span>' : '') + '</td><td>' + it.comps.map(function(c){ return esc(c.comp) + ' <span class="cra-sub">' + esc(c.cas) + '</span>'; }).join('<br>') + '</td>' +
+        '<td class="c">' + (x == null ? '-' : x) + '</td><td class="c"><b>' + b.r + '</b> ' + chip(b) + (same ? '' : ' <span class="cra-chip g1">다름</span>') + '</td><td class="cra-sub">' + it.now.length + ' · ' + it.plan.length + '개</td></tr>';
+    }).join('') + '</table></div><div class="cra-row" style="justify-content:space-between"><span class="cra-sub">' + items.length + '개 제품' + (diff ? ' · 엑셀과 점수가 다른 제품 ' + diff + '개 (값을 확인하세요)' : ' · 엑셀 점수와 모두 같음') + '</span><button type="button" class="cra-btn p" id="cra-imp-go">' + items.length + '개 저장</button></div>';
+    $('cra-imp-go').onclick = async function(){
+      this.disabled = true;
+      var x = await post('chemra.save', { items: items.map(function(it){ var r = record(it); r.src = 'KRAS 엑셀 (' + f.name.slice(0, 40) + ')'; r.date = it.date || r.date; return r; }) });
+      if(!x.success){ this.disabled = false; say(x.error || (x.failed || []).join(' / ') || '실패', 'err'); return; }
+      say(x.saved + '개 저장했습니다' + ((x.failed || []).length ? ' · 실패 ' + x.failed.length : ''), x.failed && x.failed.length ? 'err' : 'ok');
+      await reload(); st.tab = 'res'; draw();
+    };
+  }
+  // KRAS 평가표: 머리 3줄(제목 · 사업장 · 평가일자) + 칸 머리 3줄, A 공정명 · B 제품명 · F 화학물질명 ~ AI 담당자. 성분 줄 아래 빈 줄에 현재 조치(Y) · 감소대책(AC)
+  function parseKras(a){
+    var h = -1; for(var i = 0; i < Math.min(a.length, 15); i++) if(a[i].some(function(v){ return /화학물질명/.test(String(v)); })){ h = i; break; }
+    if(h < 0) return [];
+    var out = [], cur = null, lastProc = '', s = function(v){ return String(v == null ? '' : v).trim(); };
+    var n = function(v){ var x = s(v); return x === '' ? '' : x.replace(/,/g, ''); };
+    var dt = function(v){ if(typeof v === 'number' && v > 30000){ var d = new Date(Math.round((v - 25569) * 86400000)); return d.toISOString().slice(0, 10); } return s(v).slice(0, 10); };
+    for(var r = h + 2; r < a.length; r++){
+      var row = a[r] || [];
+      if(s(row[5])){
+        var prod = s(row[1]), proc = s(row[0]) || lastProc; lastProc = proc;
+        var unit = /^mg/i.test(s(row[11])) ? 'mg' : 'ppm', dust = (s(row[21]).match(/^(\d)/) || [])[1] || '', qty = (s(row[17]).match(/\((\d)/) || [])[1] || '1';
+        var comp = { comp: s(row[5]), cas: s(row[6]), patient: s(row[7]) === '유' ? '유' : '무', c: s(row[8]).toUpperCase(), m: s(row[9]).toUpperCase(), r: s(row[10]).toUpperCase(), unit: unit,
+          meas: n(unit === 'mg' ? row[13] : row[12]), oel: n(unit === 'mg' ? row[15] : row[14]), pct: n(row[18]), bp: n(row[20]), dust: dust, state: dust ? 'solid' : 'liquid', hcodes: (s(row[23]).toUpperCase().match(/H\d{3}[A-Z]{0,2}/g) || []).join(',') };
+        if(!prod && cur){ cur.comps.push(comp); }
+        else {
+          cur = { product: prod || comp.comp, proc: proc, dept: '', usage: '', src: '', date: dt(row[4]) || '', vent: parseInt(s(row[22]), 10) || 0, now: [], plan: [], due: dt(row[32]), done: dt(row[33]), owner: s(row[34]) || '보건관리자',
+            qty: +qty || 1, temp: n(row[19]) || 25, amt: n(row[16]), comps: [comp], xlRisk: s(row[27]) === '' ? null : +row[27] };
+          var ex = out.filter(function(o){ return o.product === cur.product && o.proc === cur.proc; })[0];
+          if(ex){ ex.comps.push(comp); if(cur.xlRisk != null) ex.xlRisk = Math.max(ex.xlRisk || 0, cur.xlRisk); cur = ex; } else out.push(cur);
+        }
+        if(s(row[27]) !== '') cur.xlRisk = Math.max(cur.xlRisk || 0, +row[27]);
+      }
+      if(cur){ if(s(row[24])) cur.now.push(s(row[24])); if(s(row[28])) cur.plan.push(s(row[28])); }
+    }
+    out.forEach(function(o){ o.now = o.now.filter(function(x, i){ return o.now.indexOf(x) === i; }); o.plan = o.plan.filter(function(x, i){ return o.plan.indexOf(x) === i; }); });
+    return out;
+  }
+
+  /* ── AI MSDS 검토 화면에 넣는 위험성평가 (새 물질 · 개정) ── */
+  function rvItem(draft){
+    var p = draft.product || {};
+    if(!draft.raEdit) draft.raEdit = { proc: p.usage || '', vent: 0, qty: 1, temp: 25, amt: '', now: [], plan: null, due: '', done: '', owner: '보건관리자', comps: null };
+    var e = draft.raEdit, comps = fromDraft(draft, null);
+    if(!e.comps || e.comps.length !== comps.length) e.comps = comps;
+    else e.comps.forEach(function(c, i){ c.comp = comps[i].comp; c.cas = comps[i].cas; c.pct = comps[i].pct; });   // 성분명 · CAS · 함유량은 위 성분 표 값
+    var it = { product: p.name || '', dept: (draft.departments || []).join(','), proc: e.proc, usage: p.usage || '', vent: e.vent, now: e.now, plan: e.plan || [], due: e.due, done: e.done, owner: e.owner, qty: e.qty, temp: e.temp, amt: e.amt, comps: e.comps, src: 'AI MSDS 검토' };
+    applyMeas(it);
+    if(e.plan == null){ e.plan = suggest(it); it.plan = e.plan; }
+    return it;
+  }
+  function reviewBox(draft){
+    if(!draft || !(draft.components || []).some(function(c){ return c.name; })) return '';
+    var it = rvItem(draft), b = best(it), a = best(it, afterVent(it));
+    return '<div id="cra-rv" style="border:1px solid #B9CBE4;border-radius:8px;padding:14px;margin:12px 0;background:#F7FAFD;display:flex;flex-direction:column;gap:10px">' +
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:16px">화학물질 위험성평가 (자동 · KRAS) — 현재 위험성 ' + (b ? b.r : '') + '</b>' + (b ? chip(b) : '') + '</div>' +
+      '<div class="cra-sub">AI가 MSDS에서 읽은 값으로 계산했습니다. 틀린 칸만 고치세요. [시트에 새 제품으로 추가] · [개정 반영]을 누르면 [화학물질 위험성평가] 목록에도 함께 저장됩니다.</div>' +
+      '<div class="cra-row"><label class="cra-f" style="flex:1 1 200px">공정명<input class="cra-in" data-rv="proc" value="' + esc(it.proc) + '"></label><label class="cra-f">하루취급량<select class="cra-in" data-rv="qty">' + [1, 2, 3].map(function(q){ return '<option value="' + q + '"' + (it.qty === q ? ' selected' : '') + '>' + ['', '소 (g · ㎖)', '중 (㎏ · L)', '대 (톤 · ㎥)'][q] + '</option>'; }).join('') + '</select></label>' +
+        '<label class="cra-f">사용온도 ℃<input class="cra-in" data-rv="temp" value="' + esc(it.temp) + '" style="width:70px"></label></div>' +
+      compTable(it) + '<div><b style="font-size:13px">밀폐 · 환기상태</b> ' + ventBox(it, 'cra-rv-vent') + '</div>' + (b ? scoreCards(it) : '') +
+      (b ? '<div class="cra-sub">감소대책 ' + it.plan.length + '개 자동 선택 (평가 화면에서 바꿀 수 있음) · 개선 후 위험성 ' + a.r + '</div>' : '') + '</div>';
+  }
+  function bindReview(draft){
+    var root = $('cra-rv'); if(!root) return;
+    var e = draft.raEdit, it = rvItem(draft);
+    var re = function(){ var h = reviewBox(draft); var tmp = document.createElement('div'); tmp.innerHTML = h; root.replaceWith(tmp.firstChild); bindReview(draft); };
+    [].forEach.call(root.querySelectorAll('[data-rv]'), function(el){ el.onchange = function(){ var k = el.getAttribute('data-rv'); e[k] = k === 'qty' ? (+el.value || 1) : el.value.trim(); e.plan = null; re(); }; });
+    bindComps(root, it, function(){ e.plan = null; re(); });
+    [].forEach.call(root.querySelectorAll('input[name="cra-rv-vent"]'), function(el){ el.onchange = function(){ setVent(it, +el.value); e.vent = it.vent; e.now = it.now; e.plan = null; re(); }; });
+  }
+  function reviewRecord(draft){
+    if(!draft || !draft.raEdit) return null;
+    var it = rvItem(draft); it.comps = it.comps.filter(function(c){ return c.comp; });
+    if(!it.comps.length) return null;
+    it.date = today();
+    return record(it);
+  }
+
+  window.BMCRA = { open: open, reviewBox: reviewBox, bindReview: bindReview, reviewRecord: reviewRecord, invalidate: function(){ st.rows = null; }, _engine: CRA, _parse: parseKras, _suggest: suggest, _record: record, _parseMeas: parseMeas, _applyMeas: applyMeas, _state: st };
+})();
+</script>
+
 
 <!-- ★ v21.19 화학물질 보고서 첫 화면: 우리 부서 물질 목록 + [+ 신규사용 보고서] · 물질 누르면 [사용중단]
      · 사용중단: 확인 창(사용중단일 · 작성자 · 서명) → 지금 보고서 양식(PDF)으로 제출 → 관리자 대장 [승인] 때 MSDS 목록 부서 칸에서 빠짐
@@ -21235,6 +22005,7 @@ self.addEventListener('fetch',e=>{
     ['100-51-6', '벤질알코올 benzylalcohol'],
     ['56-81-5', '글리세린 글리세롤 glycerin glycerol']
   ];
+  window.BMSYN = SYN;   // v21.41 화학물질 위험성평가에서 측정 결과 물질명 ↔ CAS 맞출 때도 씀
   var norm = function(t){ return String(t || '').toLowerCase().replace(/[\s·,()\[\]{}'"\/\-_.]+/g, ''); };
   var STOP = /^(노출|흡입|접촉|피부|어떻게|무엇|응급|조치|방법|증상|됐어|되었|했어|있어|알려|주세요|해줘|물질|화학|화학물질|제품|성분|부서|사용|취급|교육|보호구)/;
   function qTokens(q){
