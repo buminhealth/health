@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.45 (2026-11-23)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.47 (2026-11-23)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -2905,10 +2905,34 @@ function aiBackupModel_() { return (getAdminCfg().data || {})['AI예비모델'] 
 // v21.4 Gemini 호출: 잠시 붐빔(503) · 한도(429) · 서버 오류(500/504)면 잠깐 기다렸다 다시, 그래도 안 되면 예비 모델로
 //  반환: { code, j, model, tried } — code 200이면 j에 응답
 const AI_RETRY_CODES = [429, 500, 502, 503, 504];
+// v21.47 Google이 모델을 없애면(404 · 'no longer available') 쓸 수 있는 모델을 찾아 자동으로 바꾸고 스크립트 속성 AI_AUTO_MODEL에 기억
+function aiAutoModel_() { const a = PROPS.getProperty('AI_AUTO_MODEL') || ''; return a && PROPS.getProperty('AI_AUTO_FOR') === aiModel_() ? a : ''; }
+function aiVer_(m) { const v = String(m).match(/gemini-(\d+(?:\.\d+)?)/); return v ? parseFloat(v[1]) : 0; }
+function aiFindModels_(key, msg, gone) {
+  const out = [];
+  const add = m => { m = String(m || '').replace(/^models\//, '').trim(); if (m && gone.indexOf(m) < 0 && out.indexOf(m) < 0) out.push(m); };
+  const sug = String(msg || '').match(/models\/(gemini-[\w.\-]+)/g) || [];
+  // 모델 목록: 글 생성(generateContent) 되는 gemini flash 중 새 버전 · lite 아닌 것 먼저 (미리보기 · 이미지 · 음성 · 임베딩 제외)
+  try {
+    const res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key }, muteHttpExceptions: true });
+    if (res.getResponseCode() === 200) {
+      const ms = (JSON.parse(res.getContentText()).models || [])
+        .filter(x => (x.supportedGenerationMethods || []).indexOf('generateContent') >= 0)
+        .map(x => String(x.name || '').replace(/^models\//, ''))
+        .filter(m => /^gemini-\d/.test(m) && /flash/.test(m) && !/image|tts|audio|live|embed|thinking|exp|preview|\d{3,}$/.test(m));
+      ms.sort((a, b) => (/lite/.test(a) - /lite/.test(b)) || (aiVer_(b) - aiVer_(a)) || (a.length - b.length));
+      ms.forEach(add);
+    }
+  } catch (_) {}
+  sug.forEach(add);
+  return out.slice(0, 3);
+}
 function geminiCall_(body, key) {
-  const models = [aiModel_(), aiBackupModel_()].filter((m, i, a) => m && a.indexOf(m) === i);
-  let last = { code: 0, j: null, model: models[0], tried: 0 };
-  for (const model of models) {
+  const auto = aiAutoModel_();
+  const models = [auto, aiModel_(), aiBackupModel_()].filter((m, i, a) => m && a.indexOf(m) === i);
+  let last = { code: 0, j: null, model: models[0], tried: 0 }, gone = [], found = false;
+  for (let mi = 0; mi < models.length; mi++) {
+    const model = models[mi];
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent';
     for (let k = 0; k < 3; k++) {
       if (k) Utilities.sleep(k === 1 ? 1500 : 4000);
@@ -2919,8 +2943,18 @@ function geminiCall_(body, key) {
       let j = null;
       try { j = JSON.parse(res.getContentText()); } catch (_) {}
       last = { code: res.getResponseCode(), j: j, model: model, tried: last.tried };
-      if (last.code === 200) return last;
-      if (last.code === 404 || last.code === 400) break;          // 모델 이름 문제 → 다음 모델
+      if (last.code === 200) {
+        if (gone.length && model !== auto) { PROPS.setProperty('AI_AUTO_MODEL', model); PROPS.setProperty('AI_AUTO_FOR', aiModel_()); }
+        if (gone.length) last.switched = { from: gone.slice(), to: model };
+        return last;
+      }
+      if (last.code === 404) {   // 없어진 모델 → 다음 모델, 다 없어졌으면 쓸 수 있는 모델을 찾아 붙임
+        gone.push(model);
+        if (model === auto) PROPS.deleteProperty('AI_AUTO_MODEL');
+        if (!found && mi === models.length - 1) { found = true; aiFindModels_(key, ((j || {}).error || {}).message, gone.concat(models)).forEach(m => models.push(m)); }
+        break;
+      }
+      if (last.code === 400) break;          // 모델 이름 문제 → 다음 모델
       if (AI_RETRY_CODES.indexOf(last.code) < 0) return last;      // 키 오류 등은 다시 해도 같음
     }
   }
@@ -2932,6 +2966,7 @@ function geminiErr_(r, tail) {
   if (r.code === 429) return 'AI 무료 사용 한도를 넘었습니다. 잠시(1분~내일) 후 다시 시도하세요.' + tail;
   if (r.code === 503 || r.code === 500 || r.code === 502 || r.code === 504) return 'AI 서버(Google)가 지금 붐벼서 답하지 못했습니다. 1~2분 뒤 다시 물어봐 주세요.' + tail;
   if (r.code === -1) return 'AI 연결 실패: ' + (r.err || '') + tail;
+  if (r.code === 404) return 'AI 모델(' + (r.model || '') + ')을 Google이 더 이상 제공하지 않고, 쓸 수 있는 다른 모델도 찾지 못했습니다 — 시트 [관리자설정]의 AI모델 칸에 새 모델 이름(예: Google AI Studio에 보이는 gemini-…-flash)을 넣어 주세요.' + tail;
   if (r.code === 401 || r.code === 403) return 'AI 키가 올바르지 않거나 막혔습니다 — 관리자 화면 설정에서 Gemini 키를 확인하세요.' + tail;
   return 'AI 오류 (' + r.code + '): ' + (((r.j || {}).error || {}).message || '').slice(0, 160) + tail;
 }
@@ -3083,7 +3118,7 @@ function aiOp_(req, s) {
   if (deny) return deny;
   switch (req.op) {
     case 'ai.status':
-      return { success: true, hasKey: !!PROPS.getProperty('GEMINI_API_KEY'), model: aiModel_() };
+      return { success: true, hasKey: !!PROPS.getProperty('GEMINI_API_KEY'), model: aiAutoModel_() || aiModel_() };
     case 'ai.setKey': {
       const k = String(req.key || '').trim();
       if (k) PROPS.setProperty('GEMINI_API_KEY', k); else PROPS.deleteProperty('GEMINI_API_KEY');
