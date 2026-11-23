@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.41 (2026-11-22)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.42 (2026-11-23)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -3294,7 +3294,8 @@ function chemraPut_(o, oldName) {
   const n4 = v => { const x = parseInt(v, 10); return x >= 0 && x <= 4 ? x : 0; }, n16 = v => { const x = parseInt(v, 10); return x >= 0 && x <= 16 ? x : 0; };
   const data = { comps: comps, vent: n4(o.vent) > 2 ? 0 : n4(o.vent), now: (o.now || []).slice(0, 40).map(String), plan: (o.plan || []).slice(0, 40).map(String),
                  due: String(o.due || '').slice(0, 10), done: String(o.done || '').slice(0, 10), owner: String(o.owner || '').slice(0, 40),
-                 qty: n4(o.qty) || 1, temp: chemraNum_(o.temp) || '25', amt: String(o.amt || '').slice(0, 20), usage: String(o.usage || '').slice(0, 200), scores: o.scores || [] };
+                 qty: n4(o.qty) || 1, temp: chemraNum_(o.temp) || '25', amt: String(o.amt || '').slice(0, 30), usage: String(o.usage || '').slice(0, 200), scores: o.scores || [],
+                 qtySrc: String(o.qtySrc || '').slice(0, 120), qtyManual: !!o.qtyManual };
   const json = JSON.stringify(data);
   if (json.length > 45000) return { success: false, error: '내용이 너무 깁니다' };
   const lock = LockService.getScriptLock();
@@ -3318,7 +3319,7 @@ function chemraOp_(req, s) {
   const deny = requireAdmin_(s);
   if (deny) return deny;
   switch (req.op) {
-    case 'chemra.list': return { success: true, data: chemraRows_().map(o => { const c = Object.assign({}, o); delete c._row; return c; }), cfg: chemraCfg_(), meas: chemraMeasRows_() };
+    case 'chemra.list': return { success: true, data: chemraRows_().map(o => { const c = Object.assign({}, o); delete c._row; return c; }), cfg: chemraCfg_(), meas: chemraMeasRows_(), qtys: chemraQtyRows_() };
     case 'chemra.measSave': {   // v21.41 작업환경측정 결과표 한 차수(예: 2026 상반기)를 통째로 저장 (같은 차수는 바꿈)
       const period = String(req.period || '').trim().slice(0, 40);
       if (!period) return { success: false, error: '차수(예: 2026 상반기)를 넣으세요' };
@@ -3410,6 +3411,22 @@ function chemraMeasDel_(sh, period) {
   let n = 0;
   for (let i = v.length - 1; i >= 0; i--) if (String(v[i][0]).trim() === period) { sh.deleteRow(i + 2); n++; }
   return n;
+}
+// v21.42 시트 [공정별 화학물질 사용 상태]: 부서(병합 → 빈칸은 위 부서) · 화학물질명 · 사용여부 · 용도 · 월 취급량 · 일취급량 · 단위 · 비고
+function chemraQtyRows_() {
+  const sh = SS.getSheetByName('공정별 화학물질 사용 상태') || (SS.getSheets ? SS.getSheets() : []).find(x => /공정별|취급량/.test(x.getName()) && !/위험성/.test(x.getName()));
+  if (!sh || sh.getLastRow() < 2) return [];
+  const v = sh.getRange(1, 1, sh.getLastRow(), Math.min(sh.getLastColumn(), 12)).getDisplayValues();
+  const H = v[0].map(h => String(h).replace(/\s/g, ''));
+  const ix = re => H.findIndex(h => re.test(h));
+  const c = { dept: ix(/부서|공정/), name: ix(/화학물질명|물질명|제품명/), use: ix(/사용여부|사용/), usage: ix(/용도/), month: ix(/월/), day: ix(/일취급|하루|일사용/), unit: ix(/단위/), note: ix(/비고/) };
+  if (c.name < 0 || c.day < 0) return [];
+  let last = '';
+  return v.slice(1).map(r => {
+    const g = k => c[k] >= 0 ? String(r[c[k]] || '').trim() : '';
+    const dept = g('dept') || last; last = dept;
+    return { dept: dept, name: g('name'), use: g('use'), usage: g('usage'), month: g('month'), day: g('day'), unit: g('unit'), note: g('note') };
+  }).filter(o => o.name && o.day && !/미사용|중단/.test(o.use));
 }
 function chemraCfg_() { try { return JSON.parse(PROPS.getProperty('CHEMRA_CFG') || 'null'); } catch (_) { return null; } }
 
