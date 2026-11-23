@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.44 (2026-11-23)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.45 (2026-11-23)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -3314,7 +3314,7 @@ function chemraPut_(o, oldName) {
   const data = { comps: comps, vent: n4(o.vent) > 2 ? 0 : n4(o.vent), now: (o.now || []).slice(0, 40).map(String), plan: (o.plan || []).slice(0, 40).map(String),
                  due: String(o.due || '').slice(0, 10), done: String(o.done || '').slice(0, 10), owner: String(o.owner || '').slice(0, 40),
                  qty: n4(o.qty) || 1, temp: chemraNum_(o.temp) || '25', amt: String(o.amt || '').slice(0, 30), usage: String(o.usage || '').slice(0, 200), scores: o.scores || [],
-                 qtySrc: String(o.qtySrc || '').slice(0, 120), qtyManual: !!o.qtyManual };
+                 qtySrc: String(o.qtySrc || '').slice(0, 120), qtyManual: !!o.qtyManual, deptManual: !!o.deptManual, aiGuess: !!o.aiGuess };
   const json = JSON.stringify(data);
   if (json.length > 45000) return { success: false, error: '내용이 너무 깁니다' };
   const lock = LockService.getScriptLock();
@@ -3392,10 +3392,17 @@ function chemraOp_(req, s) {
       const blk = sh ? chemBlock_(sh, name) : null;
       if (!blk) return { success: false, error: 'MSDS 목록에서 물질을 찾지 못했습니다' };
       const pdfId = guidePdfId_(blk.product.pdfUrl);
-      if (!pdfId) return { success: false, noPdf: true, error: '이 물질은 MSDS PDF 링크가 없습니다 — 물질 마스터에서 PDF를 연결하거나 값을 직접 입력하세요' };
       const cache = CacheService.getScriptCache(), dayKey = 'chemra_read_' + todayKst_();
       const n = parseInt(cache.get(dayKey) || '0', 10), lim = parseInt(PROPS.getProperty('CHEMRA_LIMIT') || '', 10) || CHEMRA_LIMIT;
       if (n >= lim) return { success: false, limit: true, error: '오늘 MSDS 읽기 ' + lim + '회를 다 썼습니다 — 내일 다시 하거나 값을 직접 입력하세요' };
+      const sheetInfo = { usage: blk.product.usage || '', dept: blk.product.department || '', comps: blk.components.map(c => ({ name: c.name, cas: c.cas, amount: c.amount })) };
+      if (!pdfId) {   // v21.45 MSDS PDF가 없으면 MSDS 목록의 성분 이름 · CAS로 AI가 추정 (화면에 'AI 추정'으로 표시)
+        if (!sheetInfo.comps.length) return { success: false, noPdf: true, error: '이 물질은 MSDS PDF도 성분도 없습니다 — 물질 마스터에서 성분 · CAS를 넣거나 값을 직접 입력하세요' };
+        cache.put(dayKey, String(n + 1), 86400);
+        const g = chemraGuess_(blk);
+        if (!g.success) return g;
+        return { success: true, guess: true, model: aiModel_(), draft: aiJudge_(g.data), sheet: sheetInfo, left: lim - n - 1 };
+      }
       let bytes;
       try { bytes = DriveApp.getFileById(pdfId).getBlob().getBytes(); }
       catch (e) { return { success: false, error: 'MSDS PDF를 열지 못했습니다 (드라이브 권한)' }; }
@@ -3403,7 +3410,7 @@ function chemraOp_(req, s) {
       const r = aiCallGemini_(bytes);
       if (!r.success) return r;
       const dr = aiJudge_(r.data);
-      return { success: true, model: aiModel_(), draft: dr, sheet: { usage: blk.product.usage || '', dept: blk.product.department || '', comps: blk.components.map(c => ({ name: c.name, cas: c.cas, amount: c.amount })) }, left: lim - n - 1 };
+      return { success: true, model: aiModel_(), draft: dr, sheet: sheetInfo, left: lim - n - 1 };
     }
     case 'chemra.cfg': return { success: true, cfg: chemraCfg_() };
     case 'chemra.setCfg': {
@@ -3451,6 +3458,26 @@ function chemraQtyRows_() {
   }).filter(o => o.name && o.day && !/미사용|중단/.test(o.use));
   CHEMRA_QTY_INFO.rows = out.length;
   return out;
+}
+// v21.45 MSDS PDF 없는 물질: 제품명 · 용도 · 성분 이름 · CAS · 함유량만 AI에 보내 일반적으로 알려진 값(국내 노출기준 · GHS 분류)을 받음
+const CHEMRA_GUESS_PROMPT = [
+  '너는 산업보건 전문가다. 아래 제품은 물질안전보건자료(MSDS) PDF가 없다. 성분 이름과 CAS 번호로, 한국 기준(고용노동부 화학물질 및 물리적 인자의 노출기준, GHS 분류 · 표시)에서 일반적으로 알려진 값을 JSON으로만 답하라.',
+  '모르거나 확실하지 않으면 빈 문자열로 두고 warnings에 적어라. 제품 전체 값은 성분 값으로 판단하라.',
+  '{"product":{"name":"제품명 그대로","usage":"용도 그대로","ra":{"hcodes":"제품 전체 H코드 쉼표로","state":"liquid · solid · gas 중 하나","bp":"끓는점 ℃ 숫자(가장 낮은 성분 기준, 모르면 빈칸)","dust":"고체일 때만 1 · 2 · 3"}},',
+  '"components":[{"name":"성분명 그대로","cas":"CAS 그대로","amount":"함유량 그대로","ra":{"oelPpm":"국내 TWA ppm 숫자","oelMg":"국내 TWA mg/㎥ 숫자","c":"발암성 구분(1A · 1B · 2)","m":"생식세포 변이원성 구분","r":"생식독성 구분","hcodes":"이 성분 H코드 쉼표로","bp":"끓는점 ℃"}}],',
+  '"warnings":["추정이 불확실한 부분"]}'
+].join('\n');
+function chemraGuess_(blk) {
+  const key = PROPS.getProperty('GEMINI_API_KEY');
+  if (!key) return { success: false, noKey: true, error: 'AI 키가 없습니다 — 관리자 화면 설정에서 Gemini 키를 저장하세요' };
+  const p = blk.product;
+  const info = '제품명: ' + p.name + '\n용도: ' + (p.usage || '') + '\n성분:\n' + blk.components.map(c => '- ' + c.name + ' (CAS ' + (c.cas || '모름') + ', 함유량 ' + (c.amount || '모름') + ')').join('\n');
+  const body = { contents: [{ parts: [{ text: CHEMRA_GUESS_PROMPT + '\n\n' + info }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
+  const r = geminiCall_(body, key), j = r.j;
+  if (r.code !== 200 || !j) return { success: false, error: geminiErr_(r, ' (값을 직접 입력해도 됩니다)') };
+  const text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(x => x.text || '').join('');
+  try { const d = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); d.warnings = ['MSDS 없이 성분 이름 · CAS로 추정한 값 — MSDS를 받으면 다시 읽어 주세요'].concat(d.warnings || []); return { success: true, data: d }; }
+  catch (_) { return { success: false, error: 'AI 응답을 읽지 못했습니다 — 다시 시도하거나 직접 입력하세요' }; }
 }
 function chemraCfg_() { try { return JSON.parse(PROPS.getProperty('CHEMRA_CFG') || 'null'); } catch (_) { return null; } }
 
