@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.47 (2026-11-23)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.49 (2026-11-23)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -2927,22 +2927,102 @@ function aiFindModels_(key, msg, gone) {
   sug.forEach(add);
   return out.slice(0, 3);
 }
+// v21.48 응답 글: 생각(thought) 조각은 빼고 · JSON은 ``` 표시 · 앞뒤 설명 글 · 끝 쉼표를 정리해서 읽음
+function aiText_(j) { return ((((j || {}).candidates || [])[0] || {}).content || { parts: [] }).parts.filter(p => !p.thought).map(p => p.text || '').join(''); }
+// v21.49 AI 답 고쳐 읽기: 첫 JSON 덩어리만 · 문자열 안 줄바꿈 · 탭 · 잘못된 역슬래시 · 주석 · NaN · 끝 쉼표 · [ {…} ]로 감싼 답 · 중간에 끊긴 답(닫아 줌)
+function aiJsonX_(text) {
+  let t = String(text || '').replace(/^﻿/, '').trim().replace(/^```(?:json)?\s*|\s*```$/g, '');
+  try { const d0 = JSON.parse(t); return { d: aiUnwrap_(d0), cut: false }; } catch (_) {}
+  const a = t.search(/[{\[]/);
+  if (a < 0) throw new Error('JSON 없음');
+  let o = '', st = [], inS = false, i = a, done = false;
+  for (; i < t.length; i++) {
+    const ch = t[i];
+    if (inS) {
+      if (ch === '\\') {
+        const n = t[i + 1];
+        if (n === undefined) break;
+        if ('"\\/bfnrt'.indexOf(n) >= 0) { o += ch + n; i++; }
+        else if (n === 'u' && /^[0-9a-fA-F]{4}$/.test(t.substr(i + 2, 4))) { o += t.substr(i, 6); i += 5; }
+        else o += '\\\\';
+      } else if (ch === '"') { o += ch; inS = false; }
+      else if (ch === '\n') o += '\\n'; else if (ch === '\r') o += '\\r'; else if (ch === '\t') o += '\\t';
+      else if (ch < ' ') o += ' ';
+      else o += ch;
+      continue;
+    }
+    if (ch === '"') { inS = true; o += ch; continue; }
+    if (ch === '/' && t[i + 1] === '/') { const e = t.indexOf('\n', i); i = e < 0 ? t.length : e; continue; }
+    if (ch === '/' && t[i + 1] === '*') { const e = t.indexOf('*/', i + 2); i = e < 0 ? t.length : e + 1; continue; }
+    if (ch === '{' || ch === '[') { st.push(ch === '{' ? '}' : ']'); o += ch; continue; }
+    if (ch === '}' || ch === ']') { st.pop(); o += ch; if (!st.length) { done = true; break; } continue; }
+    const w = t.slice(i).match(/^(NaN|undefined|-?Infinity)\b/);
+    if (w) { o += 'null'; i += w[1].length - 1; continue; }
+    o += ch;
+  }
+  let cut = false;
+  if (!done) {   // 끊긴 답: 열린 문자열 · 괄호를 닫고, 끝에 걸린 쉼표 · 키 조각을 버림
+    cut = true;
+    if (inS) o += '"';
+    o = o.replace(/,\s*"[^"]*"\s*:?\s*$/, '').replace(/([{])\s*"[^"]*"\s*:\s*$/, '$1').replace(/([{])\s*"[^"]*"\s*$/, '$1').replace(/[,:]\s*$/, '');
+    while (st.length) o += st.pop();
+  }
+  o = o.replace(/,\s*([}\]])/g, '$1');
+  let d;
+  try { d = JSON.parse(o); }
+  catch (e) {
+    if (!cut) throw e;
+    // 마지막 미완성 항목을 버리고 다시
+    const k = Math.max(o.lastIndexOf('},'), o.lastIndexOf('],'));
+    if (k < 0) throw e;
+    let o2 = o.slice(0, k + 1), st2 = [], s2 = false;
+    for (let q = 0; q < o2.length; q++) { const c = o2[q]; if (s2) { if (c === '\\') q++; else if (c === '"') s2 = false; continue; } if (c === '"') s2 = true; else if (c === '{') st2.push('}'); else if (c === '[') st2.push(']'); else if (c === '}' || c === ']') st2.pop(); }
+    while (st2.length) o2 += st2.pop();
+    d = JSON.parse(o2);
+  }
+  if (cut && (!d || typeof d !== 'object' || JSON.stringify(d).length < 40)) throw new Error('끊긴 답에 내용이 거의 없음');
+  return { d: aiUnwrap_(d), cut: cut };
+}
+function aiUnwrap_(d) { return Array.isArray(d) && d.length && d[0] && typeof d[0] === 'object' && !Array.isArray(d[0]) && (d[0].product || d[0].components) ? d[0] : d; }
+function aiJson_(text) {
+  const x = aiJsonX_(text), d = x.d;
+  if (x.cut && d && typeof d === 'object' && !Array.isArray(d)) d.warnings = ['AI 답이 중간에 끊겨 일부만 읽었습니다 — 빈 칸을 확인하세요'].concat(Array.isArray(d.warnings) ? d.warnings : []);
+  return d;
+}
+// 못 읽었을 때 까닭 (모델 · 끝난 이유)
+function aiWhy_(r) { const j = (r || {}).j || {}, c = (j.candidates || [])[0] || {}, b = (j.promptFeedback || {}).blockReason; return ' (모델 ' + ((r || {}).model || '') + (c.finishReason && c.finishReason !== 'STOP' ? ' · ' + c.finishReason : '') + (b ? ' · 막힘 ' + b : '') + (!aiText_(j) ? ' · 빈 답' : '') + ')'; }
 function geminiCall_(body, key) {
   const auto = aiAutoModel_();
   const models = [auto, aiModel_(), aiBackupModel_()].filter((m, i, a) => m && a.indexOf(m) === i);
-  let last = { code: 0, j: null, model: models[0], tried: 0 }, gone = [], found = false;
+  let last = { code: 0, j: null, model: models[0], tried: 0 }, gone = [], found = false, keep = null;
+  const t0 = Date.now(), LIMIT_MS = 270000;   // v21.49 Apps Script 6분 제한: 4분 30초가 지나면 더 묻지 않음
   for (let mi = 0; mi < models.length; mi++) {
+    if (mi && Date.now() - t0 > LIMIT_MS) { last.timeUp = true; break; }
     const model = models[mi];
+    // Gemini 3 이상은 temperature를 낮추면 같은 말을 되풀이하다 잘릴 수 있어 기본값(1.0)으로 둠
+    let send = body;
+    if (aiVer_(model) >= 3 && body.generationConfig && 'temperature' in body.generationConfig) { send = JSON.parse(JSON.stringify(body)); delete send.generationConfig.temperature; }
+    const wantJson = !!(body.generationConfig && body.generationConfig.responseMimeType === 'application/json');
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent';
     for (let k = 0; k < 3; k++) {
+      if (k && Date.now() - t0 > LIMIT_MS) { last.timeUp = true; break; }
       if (k) Utilities.sleep(k === 1 ? 1500 : 4000);
       last.tried++;
       let res;
-      try { res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify(body), headers: { 'x-goog-api-key': key }, muteHttpExceptions: true }); }
-      catch (e) { last = { code: -1, j: null, model: model, tried: last.tried, err: e.message }; continue; }
+      try { res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify(send), headers: { 'x-goog-api-key': key }, muteHttpExceptions: true }); }
+      catch (e) { last = { code: -1, j: null, model: model, tried: last.tried, err: e.message }; if (/timed? ?out|시간/i.test(e.message)) break; continue; }   // 시간 초과는 같은 모델로 되묻지 않고 다음 모델
       let j = null;
       try { j = JSON.parse(res.getContentText()); } catch (_) {}
       last = { code: res.getResponseCode(), j: j, model: model, tried: last.tried };
+      if (last.code === 200 && wantJson) {   // v21.49 JSON을 못 읽거나 끊긴 답이면 다음 모델로 (6분 제한 때문에 같은 모델로 다시 묻지 않음) · 끊긴 답은 보관했다가 다 안 되면 고쳐 읽기로
+        let ok = true, fix = false; try { fix = true; ok = !aiJsonX_(aiText_(j)).cut; } catch (_) { ok = false; fix = false; }
+        if (!ok) {
+          if (fix && !keep) keep = Object.assign({}, last);
+          if (mi < models.length - 1) break;
+          if (keep) { keep.tried = last.tried; return keep; }
+          return last;
+        }
+      }
       if (last.code === 200) {
         if (gone.length && model !== auto) { PROPS.setProperty('AI_AUTO_MODEL', model); PROPS.setProperty('AI_AUTO_FOR', aiModel_()); }
         if (gone.length) last.switched = { from: gone.slice(), to: model };
@@ -2958,6 +3038,7 @@ function geminiCall_(body, key) {
       if (AI_RETRY_CODES.indexOf(last.code) < 0) return last;      // 키 오류 등은 다시 해도 같음
     }
   }
+  if (keep && (last.code === 200 || AI_RETRY_CODES.indexOf(last.code) >= 0 || last.code === 404 || last.code === 400 || last.code === -1)) { keep.tried = last.tried; return keep; }   // 다른 모델이 다 안 되면 끊긴 답이라도 고쳐 읽기로
   return last;
 }
 // 사용자에게 보여 줄 오류 문구
@@ -2965,7 +3046,7 @@ function geminiErr_(r, tail) {
   tail = tail || '';
   if (r.code === 429) return 'AI 무료 사용 한도를 넘었습니다. 잠시(1분~내일) 후 다시 시도하세요.' + tail;
   if (r.code === 503 || r.code === 500 || r.code === 502 || r.code === 504) return 'AI 서버(Google)가 지금 붐벼서 답하지 못했습니다. 1~2분 뒤 다시 물어봐 주세요.' + tail;
-  if (r.code === -1) return 'AI 연결 실패: ' + (r.err || '') + tail;
+  if (r.code === -1) return 'AI 연결 실패: ' + (r.err || '') + (/timed? ?out|시간/i.test(r.err || '') ? ' — MSDS가 길어 AI가 늦게 답했습니다. 잠시 뒤 다시 하거나 [성분 이름 · CAS로 AI 추정]을 쓰세요' : '') + tail;
   if (r.code === 404) return 'AI 모델(' + (r.model || '') + ')을 Google이 더 이상 제공하지 않고, 쓸 수 있는 다른 모델도 찾지 못했습니다 — 시트 [관리자설정]의 AI모델 칸에 새 모델 이름(예: Google AI Studio에 보이는 gemini-…-flash)을 넣어 주세요.' + tail;
   if (r.code === 401 || r.code === 403) return 'AI 키가 올바르지 않거나 막혔습니다 — 관리자 화면 설정에서 Gemini 키를 확인하세요.' + tail;
   return 'AI 오류 (' + r.code + '): ' + (((r.j || {}).error || {}).message || '').slice(0, 160) + tail;
@@ -3035,9 +3116,9 @@ function aiCallGemini_(bytes) {
                  generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
   const r = geminiCall_(body, key), j = r.j;
   if (r.code !== 200 || !j) return { success: false, error: geminiErr_(r, ' (직접 입력도 가능)') };
-  const text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(p => p.text || '').join('');
-  try { return { success: true, data: JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')) }; }
-  catch (_) { return { success: false, error: 'AI 응답을 읽지 못했습니다 — 다시 시도하거나 직접 입력하세요' }; }
+  const text = aiText_(j);
+  try { return { success: true, data: aiJson_(text) }; }
+  catch (_) { return { success: false, error: 'AI 응답을 읽지 못했습니다' + aiWhy_(r) + ' — 다시 시도하거나 직접 입력하세요' }; }
 }
 
 // AI 추출값(또는 직접 입력값)에 판정 근거를 붙임
@@ -3431,7 +3512,7 @@ function chemraOp_(req, s) {
       const n = parseInt(cache.get(dayKey) || '0', 10), lim = parseInt(PROPS.getProperty('CHEMRA_LIMIT') || '', 10) || CHEMRA_LIMIT;
       if (n >= lim) return { success: false, limit: true, error: '오늘 MSDS 읽기 ' + lim + '회를 다 썼습니다 — 내일 다시 하거나 값을 직접 입력하세요' };
       const sheetInfo = { usage: blk.product.usage || '', dept: blk.product.department || '', comps: blk.components.map(c => ({ name: c.name, cas: c.cas, amount: c.amount })) };
-      if (!pdfId) {   // v21.45 MSDS PDF가 없으면 MSDS 목록의 성분 이름 · CAS로 AI가 추정 (화면에 'AI 추정'으로 표시)
+      if (!pdfId || req.guess) {   // v21.45 (v21.49 PDF 읽기 실패 때 [성분으로 추정]도) MSDS PDF가 없으면 MSDS 목록의 성분 이름 · CAS로 AI가 추정 (화면에 'AI 추정'으로 표시)
         if (!sheetInfo.comps.length) return { success: false, noPdf: true, error: '이 물질은 MSDS PDF도 성분도 없습니다 — 물질 마스터에서 성분 · CAS를 넣거나 값을 직접 입력하세요' };
         cache.put(dayKey, String(n + 1), 86400);
         const g = chemraGuess_(blk);
@@ -3510,9 +3591,9 @@ function chemraGuess_(blk) {
   const body = { contents: [{ parts: [{ text: CHEMRA_GUESS_PROMPT + '\n\n' + info }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
   const r = geminiCall_(body, key), j = r.j;
   if (r.code !== 200 || !j) return { success: false, error: geminiErr_(r, ' (값을 직접 입력해도 됩니다)') };
-  const text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(x => x.text || '').join('');
-  try { const d = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); d.warnings = ['MSDS 없이 성분 이름 · CAS로 추정한 값 — MSDS를 받으면 다시 읽어 주세요'].concat(d.warnings || []); return { success: true, data: d }; }
-  catch (_) { return { success: false, error: 'AI 응답을 읽지 못했습니다 — 다시 시도하거나 직접 입력하세요' }; }
+  const text = aiText_(j);
+  try { const d = aiJson_(text); d.warnings = ['MSDS 없이 성분 이름 · CAS로 추정한 값 — MSDS를 받으면 다시 읽어 주세요'].concat(d.warnings || []); return { success: true, data: d }; }
+  catch (_) { return { success: false, error: 'AI 응답을 읽지 못했습니다' + aiWhy_(r) + ' — 다시 시도하거나 직접 입력하세요' }; }
 }
 function chemraCfg_() { try { return JSON.parse(PROPS.getProperty('CHEMRA_CFG') || 'null'); } catch (_) { return null; } }
 
@@ -4907,10 +4988,10 @@ function raAnalyze_(req, s) {
                  generationConfig: { temperature: 0.2, responseMimeType: 'application/json' } };
   const r = geminiCall_(body, key), j = r.j;
   if (r.code !== 200 || !j) return { success: false, error: geminiErr_(r, ' [직접 입력]으로도 제출할 수 있습니다.') };
-  const text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(p => p.text || '').join('');
+  const text = aiText_(j);
   let d;
-  try { d = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); }
-  catch (_) { return { success: false, error: 'AI 응답을 읽지 못했습니다 — 다시 시도하거나 [직접 입력]으로 제출하세요' }; }
+  try { d = aiJson_(text); }
+  catch (_) { return { success: false, error: 'AI 응답을 읽지 못했습니다' + aiWhy_(r) + ' — 다시 시도하거나 [직접 입력]으로 제출하세요' }; }
   return Object.assign({ success: true, model: r.model, lawChecked: !!laws }, raNormalize_(d, laws));
 }
 
@@ -5177,9 +5258,9 @@ function guideRead_(bytes, key) {
                  generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
   const r = geminiCall_(body, key), j = r.j;
   if (r.code !== 200 || !j) return { error: geminiErr_(r, '') };
-  const text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(x => x.text || '').join('');
+  const text = aiText_(j);
   let d;
-  try { d = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); }
+  try { d = aiJson_(text); }
   catch (_) { return { error: 'AI가 MSDS를 읽었지만 내용을 정리하지 못했습니다 — 잠시 뒤 다시 눌러 주세요' }; }
   return { g: guideNormalize_(d), model: r.model };
 }
@@ -5496,9 +5577,9 @@ function clLedgerReadFile_(req) {
                  generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
   const r = geminiCall_(body, key), j = r.j;
   if (r.code !== 200 || !j) return { success: false, error: geminiErr_(r, '') };
-  const text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(x => x.text || '').join('');
+  const text = aiText_(j);
   let d;
-  try { d = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); }
+  try { d = aiJson_(text); }
   catch (_) { return { success: false, error: 'AI가 대장을 읽었지만 표로 정리하지 못했습니다 — 다시 시도하거나 엑셀로 올려 주세요' }; }
   const t = v => String(v == null ? '' : v).trim().slice(0, 120);
   const rows = (Array.isArray(d.rows) ? d.rows : []).slice(0, 3000).map(x => ({ dept: t(x.dept), name: t(x.name), sup: t(x.sup), start: t(x.start), stop: t(x.stop) }))
@@ -5541,9 +5622,9 @@ function chemReadMsds_(req, s) {
                  generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
   const r = geminiCall_(body, key), j = r.j;
   if (r.code !== 200 || !j) return { success: false, error: geminiErr_(r, '') };
-  const text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(x => x.text || '').join('');
+  const text = aiText_(j);
   let d;
-  try { d = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); }
+  try { d = aiJson_(text); }
   catch (_) { return { success: false, error: 'MSDS를 읽었지만 칸으로 정리하지 못했습니다 — 직접 입력해 주세요' }; }
   const t = (v, k) => String(v == null ? '' : v).trim().slice(0, k || 120);
   const sup = d.supplier || {};
@@ -5978,9 +6059,9 @@ function helpAsk_(req, s) {
     cache.put(ck, String(n), 86400);   // 답을 못 받은 질문은 하루 횟수에서 빼 줌
     return { success: false, busy: AI_RETRY_CODES.indexOf(r.code) >= 0, error: geminiErr_(r, ' 급하면 보건관리실(내선 3293 · 3034)로 문의하세요.') };
   }
-  const text = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(p => p.text || '').join('');
+  const text = aiText_(j);
   let d;
-  try { d = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch (_) { d = { answer: text.slice(0, 1500), used: [] }; }
+  try { d = aiJson_(text); } catch (_) { d = { answer: text.slice(0, 1500), used: [] }; }
   const used = (d.used || []).map(Number).filter(i => i >= 1 && i <= src.length);
   const sources = used.map(i => src[i - 1]).filter((x, i, a) => a.indexOf(x) === i)
     .map(x => ({ kind: x.kind, title: x.title, url: x.url || '' }));
