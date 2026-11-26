@@ -12,6 +12,7 @@
   ════════════════════════════════════════════════════════════════════
   부민병원 MSDS 통합시스템 v21.19 (2026-11-16)
 
+  ★★★ v21.57 (2026-11-26) — 위험성평가 성분 빈 칸 찾기 (서버 v21.57): 끓는점 · 노출기준 · CMR · H코드가 빈 성분만 CAS로 안전보건공단 화학물질정보(MSDS)를 찾아 AI가 뽑아 채움 (자료 없으면 AI 추정 · 노란 칸) · CMR은 GHS 구분만(IARC · ACGIH 등급 제외)
   ★★★ v21.56 (2026-11-26) — 위험성평가 부서 = 지금 MSDS 목록 부서 (HTML만): MSDS 목록에서 부서를 바꾼 물질이 옛 부서 목록에 나오던 문제 · 열 때 저장된 '전체' 평가 부서도 자동으로 맞춤
   ★★★ v21.55 (2026-11-26) — 위험성평가 목록 점수 = 개선 후 최종 위험성 (HTML만): 현재→개선 후 · 허용 여부 · [최종 허용 불가] 거르기 · 부서별 표도 같음
   ★★★ v21.54 (2026-11-26) — 위험성평가 목록 부서별 (HTML만 · 서버 v21.51 그대로): 부서가 여러 개인 물질은 누르면 부서마다 평가 펼침 · 부서 글자에 마우스 → 부서별 평가 표 · [부서: 전체 물질 / 부서별로 묶어 보기 / 부서 하나] · 물질별 결과 부서 거르기
@@ -5560,7 +5561,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.51';
+  var SERVER_EXPECT = 'v21.57';
   // v21.10: 'v21.9' < 'v21.10'을 글자 순서가 아니라 숫자로 비교
   function bmVerLess(a, b){
     var p = function(v){ return (String(v).match(/v?(\d+(?:\.\d+)*)/) || [,'0'])[1].split('.').map(Number); };
@@ -21025,6 +21026,9 @@ self.addEventListener('fetch',e=>{
 .cra-vent{display:flex;flex-wrap:wrap;gap:6px}
 .cra-vent label{display:flex;align-items:center;gap:6px;border:1px solid #D9D6CE;border-radius:6px;padding:5px 10px;font-weight:700;font-size:13.5px;cursor:pointer}
 .cra-vent label.on{border-color:#67AF28;background:#EAF3E0;color:#345C12}
+.cra-kf.k{background:#E7F3E0!important}.cra-kf.g{background:#FFF4D6!important}
+.cra-kf .cra-in{background:transparent}
+.cra-cfbar{background:#F4F8FC;border:1px dashed #B9CBE4;border-radius:6px;padding:6px 8px}
 .cra-dch{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .cra-dch label{position:relative;display:inline-flex;align-items:center;gap:6px;border:1px solid #DCDDD6;background:#fff;border-radius:999px;padding:4px 12px 4px 9px;font-weight:700;font-size:13px;white-space:nowrap;cursor:pointer}
 .cra-dch label input{position:absolute;opacity:0;width:1px;height:1px;margin:0}
@@ -21619,14 +21623,20 @@ var CRA = (function(){
     return m && m.other ? '<div class="cra-sub" style="font-size:11px;white-space:nowrap" title="' + esc(m.other.map(function(r){ return r.dept + ' ' + r.val; }).join(', ')) + '">다른 부서 측정만 있음</div>' : '';
   }
   // 성분 칸 표 (평가 화면 · AI MSDS 검토에서 같이 씀)
+  // v21.57 성분 빈 칸: 비어 있으면 찾기 대상 · 공단 자료 / AI 추정으로 채운 칸은 색 (title에 출처)
+  var FILL_K = ['bp', 'oel', 'c', 'm', 'r', 'hcodes', 'state'];
+  function needOf(c){ var o = []; if(c.state !== 'solid' && c.state !== 'gas' && (c.bp === '' || c.bp == null)) o.push('끓는점'); if(c.oel === '' || c.oel == null) o.push('노출기준'); if(!c.hcodes) o.push('H코드'); if(!c.c && !c.m && !c.r && !c.fill) o.push('CMR'); if(c.fill && c.fill.tried) o = o.filter(function(x){ return c.fill.tried.indexOf(x) < 0; }); return o; }
+  function fillTd(c, k, html){ var f = c.fill; if(!f || (f.k || []).indexOf(k) < 0) return '<td>' + html + '</td>'; return '<td class="cra-kf ' + (f.src === '공단' ? 'k' : 'g') + '" title="' + esc((f.src === '공단' ? '안전보건공단 화학물질정보' : 'AI 추정 (공단 자료 없음)') + (k === 'c' || k === 'm' || k === 'r' ? (f.why ? ' — ' + f.why : '') : '')) + '">' + html + '</td>'; }
   function compTable(it){
-    return '<div class="cra-tw"><table class="cra-t" style="min-width:1240px"><tr><th>성분</th><th>CAS</th><th>함유량 %</th><th>성상</th><th>끓는점 ℃</th><th>비산성(고체)</th><th>노출기준</th><th>단위</th><th>발암 C</th><th>변이 M</th><th>생식 R</th><th>H코드</th><th>측정치</th><th>유소견자</th></tr>' +
+    var main = it === st.it;
+    return '<div class="cra-tw"><table class="cra-t" style="min-width:1240px"><tr><th>성분</th><th>CAS</th><th>함유량 %</th><th>성상</th><th>끓는점 ℃</th><th>비산성(고체)</th><th>노출기준</th><th>단위</th><th>발암 C</th><th>변이 M</th><th>생식 R</th><th>H코드</th><th>측정치</th><th>유소견자</th>' + (main ? '<th class="c">빈 칸</th>' : '') + '</tr>' +
       it.comps.map(function(c, i){
         return '<tr' + (c.guess ? ' class="guess"' : c.ai ? ' class="ai"' : '') + '><td>' + inp(i, 'comp', c.comp, 130) + '</td><td>' + inp(i, 'cas', c.cas, 90) + '</td><td>' + inp(i, 'pct', c.pct, 55) + '</td>' +
-          '<td>' + sel(i, 'state', c.state, [['liquid', '액체'], ['solid', '고체'], ['gas', '기체']]) + '</td><td>' + inp(i, 'bp', c.bp, 55, 1) + '</td>' +
-          '<td>' + sel(i, 'dust', c.dust, [['', '-'], ['1', '저'], ['2', '중'], ['3', '고']]) + '</td><td>' + inp(i, 'oel', c.oel, 60, 1) + '</td><td>' + sel(i, 'unit', c.unit, [['ppm', 'ppm'], ['mg', 'mg/㎥']]) + '</td>' +
-          '<td>' + sel(i, 'c', c.c, CMR) + '</td><td>' + sel(i, 'm', c.m, CMR) + '</td><td>' + sel(i, 'r', c.r, CMR) + '</td><td>' + inp(i, 'hcodes', c.hcodes, 170) + '</td>' +
-          '<td>' + inp(i, 'meas', c.meas, 55, 1) + measNote(it, c) + '</td><td>' + sel(i, 'patient', c.patient, [['무', '무'], ['유', '유']]) + '</td></tr>';
+          fillTd(c, 'state', sel(i, 'state', c.state, [['liquid', '액체'], ['solid', '고체'], ['gas', '기체']])) + fillTd(c, 'bp', inp(i, 'bp', c.bp, 55, 1)) +
+          '<td>' + sel(i, 'dust', c.dust, [['', '-'], ['1', '저'], ['2', '중'], ['3', '고']]) + '</td>' + fillTd(c, 'oel', inp(i, 'oel', c.oel, 60, 1)) + fillTd(c, 'unit', sel(i, 'unit', c.unit, [['ppm', 'ppm'], ['mg', 'mg/㎥']])) +
+          fillTd(c, 'c', sel(i, 'c', c.c, CMR)) + fillTd(c, 'm', sel(i, 'm', c.m, CMR)) + fillTd(c, 'r', sel(i, 'r', c.r, CMR)) + fillTd(c, 'hcodes', inp(i, 'hcodes', c.hcodes, 170)) +
+          '<td>' + inp(i, 'meas', c.meas, 55, 1) + measNote(it, c) + '</td><td>' + sel(i, 'patient', c.patient, [['무', '무'], ['유', '유']]) + '</td>' +
+          (main ? '<td class="c">' + (needOf(c).length && (c.comp || c.cas) ? '<button type="button" class="cra-btn s" data-cf="' + i + '" title="비어 있는 칸: ' + esc(needOf(c).join(' · ')) + '">찾기</button>' : (c.fill ? '<span class="cra-chip ' + (c.fill.src === '공단' ? 'g0' : 'g1') + '">' + (c.fill.src === '공단' ? '공단' : '추정') + '</span>' : '')) + '</td>' : '') + '</tr>';
       }).join('') + '</table></div>';
   }
   function scoreCards(it){
@@ -21680,6 +21690,8 @@ var CRA = (function(){
         '<div id="cra-addp"></div><div id="cra-rmsg" class="cra-sub"></div></div>' +
       (it.comps.length ? '' : '<div class="cra-box"><div class="cra-sub">성분이 없습니다. [MSDS 읽기 (AI)]를 누르거나 성분을 추가하세요.</div></div>') +
       '<div class="cra-box"><h3><span class="k">2</span>MSDS 검토 <span class="cra-chip ai">파란 줄 = AI가 MSDS에서 읽음</span>' + (it.comps.some(function(c){ return c.guess; }) ? ' <span class="cra-chip g1">노란 줄 = MSDS 없이 AI 추정</span>' : '') + '</h3>' + compTable(it) +
+        (function(){ var nN = it.comps.filter(function(c){ return needOf(c).length && (c.comp || c.cas); }).length;
+          return nN ? '<div class="cra-row cra-cfbar"><button type="button" class="cra-btn p s" id="cra-cfall">빈 칸 찾기 (' + nN + '개 성분)</button><span class="cra-sub">끓는점 · 노출기준 · H코드 · CMR이 빈 성분만 CAS로 <b>안전보건공단 화학물질정보</b>를 찾아 채웁니다 (공단 자료가 없으면 AI 추정 — 노란 칸). 채운 값은 확인 후 [평가 저장].</span><span id="cra-cfmsg" class="cra-sub"></span></div>' : '<span id="cra-cfmsg" class="cra-sub"></span>'; })() +
         '<div class="cra-row"><button type="button" class="cra-btn s" id="cra-addc">+ 성분 추가</button>' + (it.comps.length ? '<button type="button" class="cra-btn s" id="cra-delc">마지막 성분 빼기</button>' : '') +
         '<span class="cra-sub">측정치는 노출기준과 같은 단위로 넣습니다. [작업환경측정] 탭에 올린 결과표에 같은 부서 · 같은 물질이 있으면 자동으로 들어갑니다. 측정치가 있으면 측정치로, 없으면 하루취급량 × 휘발성(비산성)으로 노출수준을 정합니다.</span></div></div>' +
       '<div class="cra-box"><h3><span class="k">3</span>현재 안전보건조치 · 밀폐 · 환기상태</h3>' + ventBox(it, 'cra-vent') +
@@ -21730,6 +21742,32 @@ var CRA = (function(){
       var add = function(){ var t = normM([inp2.value])[0]; if(!t) return; if(it[k].indexOf(t) < 0) it[k].push(t); if(k === 'now') it.plan = it.plan.filter(function(x){ return x !== t; }); re(); };
       b2.onclick = add; inp2.onkeydown = function(e){ if(e.key === 'Enter'){ e.preventDefault(); add(); } };
     });
+    var cfRun = async function(idx, btn){
+      var list = idx.map(function(i){ var c = it.comps[i]; return { i: i, name: c.comp, cas: String(c.cas || '').trim(), need: needOf(c) }; });
+      if(!list.length) return;
+      [].forEach.call(document.querySelectorAll('#cra-detail [data-cf], #cra-cfall'), function(b){ b.disabled = true; });
+      var m = $('cra-cfmsg'); if(m) m.innerHTML = '<b style="color:#1F4E79">' + list.length + '개 성분을 안전보건공단 자료에서 찾는 중… (보통 10~40초)</b>';
+      var x = await post('chemra.compFill', { comps: list.map(function(c){ return { name: c.name, cas: c.cas, need: c.need }; }) });
+      if(!x.success){ [].forEach.call(document.querySelectorAll('#cra-detail [data-cf], #cra-cfall'), function(b){ b.disabled = false; }); if(m) m.innerHTML = '<span style="color:#A3302A">' + esc(x.error || '실패') + (/unknown op/.test(x.error || '') ? ' — 서버(Code.gs)를 v21.57로 배포하세요' : '') + '</span>'; return; }
+      var done = [];
+      list.forEach(function(L, j){
+        var v = (x.comps || [])[j], c = it.comps[L.i]; if(!v || !c) return;
+        var k = [], put = function(key, val){ if(val !== '' && val != null && (c[key] === '' || c[key] == null)){ c[key] = String(val); k.push(key); } };
+        if(v.state && !c.bp && !c.state) put('state', v.state);
+        if(c.state !== 'solid' && c.state !== 'gas') put('bp', v.bp);
+        if(c.oel === '' || c.oel == null){ if(v.oelPpm){ c.oel = v.oelPpm; c.unit = 'ppm'; k.push('oel', 'unit'); } else if(v.oelMg){ c.oel = v.oelMg; c.unit = 'mg'; k.push('oel', 'unit'); } }
+        if(!c.c && !c.m && !c.r){ put('c', v.c); put('m', v.m); put('r', v.r); }
+        if(!c.hcodes) put('hcodes', v.hcodes);
+        if(k.length){ c.fill = { src: v.src, k: k, why: v.cmrWhy || '', tried: L.need }; done.push(esc(c.comp) + ' ' + k.filter(function(z){ return z !== 'unit'; }).map(function(z){ return { bp: '끓는점', oel: '노출기준', c: '발암', m: '변이', r: '생식', hcodes: 'H코드', state: '성상' }[z]; }).join('·') + ' (' + (v.src === '공단' ? '공단' : 'AI 추정') + ')'); }
+        else c.fill = Object.assign(c.fill || { src: v.src, k: [], why: v.cmrWhy || '' }, { tried: L.need });
+      });
+      var kNo = (x.kosha || []).filter(function(z){ return !z.ok; }).length;
+      re();
+      var m2 = $('cra-cfmsg'); if(m2) m2.innerHTML = (done.length ? '<b style="color:#1F6B3A">채움: ' + done.join(' · ') + '</b>' : '<span>새로 채울 값을 찾지 못했습니다</span>') +
+        (kNo ? ' <span style="color:#8A5A00">· 공단 자료 없음 ' + kNo + '개' + (x.hasKey ? '' : ' (공공데이터포털 인증키가 없어 AI 추정만 — 관리자 설정 → AI 도우미 · 공단 API 키)') + '</span>' : '') + ' · 확인 후 [평가 저장] · 오늘 남은 AI ' + x.left + '회';
+    };
+    [].forEach.call(document.querySelectorAll('#cra-detail [data-cf]'), function(b){ b.onclick = function(){ cfRun([+b.getAttribute('data-cf')], b); }; });
+    var cfa = $('cra-cfall'); if(cfa) cfa.onclick = function(){ cfRun(it.comps.map(function(c, i){ return needOf(c).length && (c.comp || c.cas) ? i : -1; }).filter(function(i){ return i >= 0; }), cfa); };
     var ad = $('cra-addc'); if(ad) ad.onclick = function(){ it.comps.push({ comp: '', cas: '', pct: '', state: (it.comps[0] || {}).state || 'liquid', bp: '', dust: '', unit: 'ppm', oel: '', c: '', m: '', r: '', hcodes: '', meas: '', patient: '무' }); re(); };
     var dl = $('cra-delc'); if(dl) dl.onclick = function(){ it.comps.pop(); re(); };
     var rd = $('cra-read');
@@ -21825,7 +21863,7 @@ var CRA = (function(){
         if(k === 'hcodes') val = (val.toUpperCase().match(/H\d{3}[A-Z]{0,2}/g) || []).join(',');
         if(k === 'state' && val !== 'solid') c.dust = '';
         if(k === 'meas' || k === 'oel' || k === 'unit') c.measSrc = '';   // 직접 고친 값은 측정 결과로 덮지 않음
-        c[k] = val; c.ai = false; c.guess = false; re(); };
+        c[k] = val; c.ai = false; c.guess = false; if(c.fill && c.fill.k) c.fill.k = c.fill.k.filter(function(z){ return z !== k; }); re(); };
     });
   }
   async function reload(){ var x = await post('chemra.list', {}); if(x.success){ st.rows = x.data || []; st.meas = x.meas || []; st.qtys = x.qtys || []; await deptSyncAll(); } }
