@@ -12,6 +12,9 @@
   ════════════════════════════════════════════════════════════════════
   부민병원 MSDS 통합시스템 v21.19 (2026-11-16)
 
+  ★★★ v21.55 (2026-11-26) — 위험성평가 목록 점수 = 개선 후 최종 위험성 (HTML만): 현재→개선 후 · 허용 여부 · [최종 허용 불가] 거르기 · 부서별 표도 같음
+  ★★★ v21.54 (2026-11-26) — 위험성평가 목록 부서별 (HTML만 · 서버 v21.51 그대로): 부서가 여러 개인 물질은 누르면 부서마다 평가 펼침 · 부서 글자에 마우스 → 부서별 평가 표 · [부서: 전체 물질 / 부서별로 묶어 보기 / 부서 하나] · 물질별 결과 부서 거르기
+  ★★★ v21.53 (2026-11-26) — 통계 숫자 칸 작게 (HTML만 · 서버 v21.51 그대로): 결재 관리 · 대시보드 · 부서현황 · 대장 · 교육 보고서 · 보고서 — 높이 반 · 폭은 내용만큼 · 이름 위, 숫자 · 설명 한 줄
   ★★★ v21.52 (2026-11-26) — 위험성평가 1번 칸 시안 B (HTML만 · 서버 v21.51 그대로): 왼쪽 평가 대상(사용 용도 · 공정명 · 평가 부서 알약) · 오른쪽 취급 조건(하루취급량 소 · 중 · 대 세 칸 · 일취급량 · 사용온도 ℃)
   ★★★ v21.51 (2026-11-26) — 관리자 왼쪽 메뉴 자동 숨김 · 위험성평가 부서별 평가 (서버 v21.51):
     - 관리자 왼쪽 메뉴: 평소엔 왼쪽 끝 초록 띠 · 마우스를 대면 펼침 · 벗어나면 숨김 (숫자 알림이 있으면 띠에 빨간 점)
@@ -21060,6 +21063,20 @@ self.addEventListener('fetch',e=>{
 @media (max-width:480px){.cra-c2{grid-template-columns:1fr}}
 .cra-addp{border:1px dashed #9DB98A;background:#F5FAF0;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px;margin-top:6px}
 .cra-it.sub{margin-left:14px;width:calc(100% - 14px);padding-top:6px;padding-bottom:6px}
+/* v21.54 목록: 부서 펼침 · 부서별 보기 · 마우스 올리면 부서별 평가 */
+#cra-ld{width:100%;margin:2px 0 4px}
+.cra-fin{font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cra-fin small{color:#8C8E85;font-size:11px;margin-right:1px}
+.cra-car{display:inline-block;width:14px;color:#3B7A22;font-size:11px}
+.cra-dsum{color:#1F4E79;text-decoration:underline dotted;text-underline-offset:2px;cursor:help;border-radius:3px}
+.cra-dsum:focus-visible{outline:2px solid #3B7A22;outline-offset:1px}
+.cra-lg{position:sticky;top:0;z-index:1;background:#F2F8EC;color:#345C12;font-weight:800;font-size:12.5px;padding:5px 9px;border-radius:5px;margin-top:6px}
+.cra-lg small{font-weight:400;color:#5A5650}
+#cra-pop{position:fixed;z-index:200;display:none;max-width:420px;background:#fff;border:1px solid #C9D9BC;border-radius:8px;box-shadow:0 8px 22px rgba(20,40,10,.18);padding:8px 10px;font-size:12.5px;pointer-events:none}
+#cra-pop > b{display:block;margin-bottom:4px;font-size:13px}
+#cra-pop table{border-collapse:collapse;width:100%}
+#cra-pop th,#cra-pop td{padding:3px 6px;border-top:1px solid #EEECE6;text-align:left;white-space:nowrap}
+#cra-pop th{color:#345C12}#cra-pop td.c{font-variant-numeric:tabular-nums}
 .cra-sc{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:8px}
 .cra-sc > div{border:1px solid #E4E2DC;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:4px}
 /* v21.50 직접 고친 점수 */
@@ -21168,7 +21185,7 @@ var CRA = (function(){
   // v21.45 예전 문구('호흡용 보호구') → '보호구' · 같은 문구 두 번은 한 번만
   var normM = function(a){ var o = []; (a || []).forEach(function(t){ t = String(t || '').replace(/호흡용\s*보호구/g, '보호구').trim(); if(t && o.indexOf(t) < 0) o.push(t); }); return o; };
   var ALLM = function(){ return MEAS.lev.concat(MEAS.mgmt, MEAS.ppe); };
-  var st = { rows: null, cur: '', it: null, tab: 'eval', lf: 'all', q: '', busy: false, meas: [], pick: 'latest', cfg: null, mprev: null, mview: '', qtys: [], bulk: null };
+  var st = { open: {}, ld: '', rd: '', rows: null, cur: '', it: null, tab: 'eval', lf: 'all', q: '', busy: false, meas: [], pick: 'latest', cfg: null, mprev: null, mview: '', qtys: [], bulk: null };
 
   /* ── 계산 ── */
   function cs(it, c, vent){ return CRA.score(Object.assign({ qty: it.qty, temp: it.temp }, c), vent == null ? it.vent : vent); }
@@ -21407,10 +21424,18 @@ var CRA = (function(){
     $('cra-view').innerHTML = '<div class="cra-box" style="padding:10px 14px"><div class="cra-row" style="justify-content:space-between"><div><b>한꺼번에 하기</b> <span class="cra-sub">MSDS PDF가 연결된 물질을 AI로 읽어 기초값(성분 · H코드 · CMR · 노출기준 · 성상 · 끓는점)을 채우고, 공정별 취급량 시트의 하루취급량 · 작업환경측정 결과까지 넣어 저장합니다.</span></div>' +
         '<span class="cra-row" style="gap:6px"><select class="cra-in" id="cra-bmode" aria-label="대상"><option value="todo">평가 전 물질만</option><option value="all">모든 물질 다시 (보건조치 · 감소대책 · 직접 넣은 측정치는 유지)</option></select><button type="button" class="cra-btn p" id="cra-bulk">전체 AI 기초평가</button><button type="button" class="cra-btn" id="cra-qall">취급량 시트 반영</button></span></div><div id="cra-bmsg"></div></div>' +
       '<div class="cra-grid"><div class="cra-box" style="padding:10px"><div class="cra-row" style="justify-content:space-between"><h3>MSDS 목록</h3><span class="cra-sub" id="cra-n"></span></div>' +
-      '<input class="cra-in" id="cra-q" placeholder="물질명 · 부서 · CAS 찾기" aria-label="물질 찾기" value="' + esc(st.q) + '"><div class="cra-row" id="cra-lf" style="gap:4px"></div><div class="cra-list" id="cra-list"></div></div><div id="cra-detail" style="display:flex;flex-direction:column;gap:12px;min-width:0"></div></div>';
+      '<input class="cra-in" id="cra-q" placeholder="물질명 · 부서 · CAS 찾기" aria-label="물질 찾기" value="' + esc(st.q) + '"><div class="cra-row" id="cra-lf" style="gap:4px"></div><select class="cra-in" id="cra-ld" aria-label="부서별 보기"></select><div class="cra-list" id="cra-list"></div></div><div id="cra-detail" style="display:flex;flex-direction:column;gap:12px;min-width:0"></div></div>';
     $('cra-q').oninput = function(){ st.q = this.value; drawList(); };
     $('cra-lf').onclick = function(e){ var b = e.target.closest('[data-lf]'); if(b){ st.lf = b.getAttribute('data-lf'); drawList(); } };
-    $('cra-list').onclick = function(e){ var b = e.target.closest('[data-n]'); if(!b) return; pick(b.getAttribute('data-n'), b.hasAttribute('data-k') ? b.getAttribute('data-k') : null); };
+    $('cra-ld').onchange = function(){ st.ld = this.value; drawList(); };
+    $('cra-list').onclick = function(e){ var b = e.target.closest('[data-n]'); if(!b) return; hidePop(); var n = b.getAttribute('data-n');
+      if(b.hasAttribute('data-tg')){ st.open[n] = !st.open[n]; if(st.cur === n && !st.open[n]){ drawList(); return; } }
+      pick(n, b.hasAttribute('data-k') ? b.getAttribute('data-k') : null); };
+    $('cra-list').addEventListener('mouseover', function(e){ var t = e.target.closest('[data-pop]'); if(t) showPop(t); });
+    $('cra-list').addEventListener('mouseout', function(e){ var t = e.target.closest('[data-pop]'); if(t && !t.contains(e.relatedTarget)) hidePop(); });
+    $('cra-list').addEventListener('focusin', function(e){ var t = e.target.closest('[data-pop]'); if(t) showPop(t); });
+    $('cra-list').addEventListener('focusout', hidePop);
+    $('cra-list').addEventListener('scroll', hidePop);
     $('cra-bulk').onclick = function(){ bulkAi($('cra-bmode').value); };
     $('cra-qall').onclick = qtyAll;
     if(st.bulk) bulkShow();
@@ -21510,24 +21535,73 @@ var CRA = (function(){
     var pm = products(), q = st.q.trim().toLowerCase(), all = names();
     var nT = all.filter(function(n){ return !savedOf(n); }).length;
     $('cra-n').textContent = all.length + '개';
-    $('cra-lf').innerHTML = [['all', '전체'], ['todo', '평가 전 ' + nT], ['done', '평가 완료 ' + (all.length - nT)], ['bad', '허용 불가']].map(function(f){ return '<button type="button" class="cra-btn s' + (st.lf === f[0] ? ' p' : '') + '" data-lf="' + f[0] + '">' + f[1] + '</button>'; }).join('');
-    $('cra-list').innerHTML = all.filter(function(n){
-      var r = savedOf(n), p = pm[n] || {};
-      if(st.lf === 'todo' && r) return false;
-      if(st.lf === 'done' && !r) return false;
-      if(st.lf === 'bad' && !(r && /허용 불가/.test(r.grade))) return false;
-      if(!q) return true;
-      return (n + ' ' + (p.departments || []).join(' ') + ' ' + (r ? r.proc + ' ' + r.dept : '') + ' ' + (p.components || []).map(function(c){ return c.compName + ' ' + c.casNumber; }).join(' ')).toLowerCase().indexOf(q) >= 0;
-    }).map(function(n){
-      var rs = rowsOf(n), r = rs[0], p = pm[n] || {}, top = rs.slice().sort(function(a, b){ return b.risk - a.risk; })[0], g = top ? CRA.grade(top.risk, top.e, top.sv) : null;
-      var one = '<button type="button" class="cra-it' + (st.cur === n && (rs.length < 2 || st.curKey === keyOf(r)) ? ' on' : '') + '" data-n="' + esc(n) + '"' + (rs.length > 1 ? ' data-k=""' : '') + '><b>' + esc(n) + '</b>' +
-        (top ? '<span style="font-size:12.5px;font-variant-numeric:tabular-nums">' + top.risk + ' ' + chip({ g: g }) + '</span>' : '<span class="cra-chip off">평가 전</span>') +
-        '<span class="cra-sub">' + (rs.length > 1 ? '부서별 평가 ' + rs.length + '개 · ' + esc(r.dept || '') : esc((r && r.proc) || (p.departments || []).join(', ') || (pm[n] ? '' : 'MSDS 목록에 없음')) + (r ? ' · ' + esc(r.date) : '')) + '</span></button>';
-      if(rs.length < 2) return one;
-      return one.replace(' data-k=""', ' data-k="' + esc(keyOf(r)) + '"') + rs.slice(1).map(function(x){ var gx = CRA.grade(x.risk, x.e, x.sv);
-        return '<button type="button" class="cra-it sub' + (st.cur === n && st.curKey === keyOf(x) ? ' on' : '') + '" data-n="' + esc(n) + '" data-k="' + esc(keyOf(x)) + '"><b>└ ' + esc(x.dept || '(부서 없음)') + '</b><span style="font-size:12.5px;font-variant-numeric:tabular-nums">' + x.risk + ' ' + chip({ g: gx }) + '</span><span class="cra-sub">' + esc(x.proc) + ' · ' + esc(x.date) + '</span></button>'; }).join('');
-    }).join('') || '<div class="cra-sub" style="padding:8px">찾는 물질이 없습니다.</div>';
+    $('cra-lf').innerHTML = [['all', '전체'], ['todo', '평가 전 ' + nT], ['done', '평가 완료 ' + (all.length - nT)], ['bad', '최종 허용 불가']].map(function(f){ return '<button type="button" class="cra-btn s' + (st.lf === f[0] ? ' p' : '') + '" data-lf="' + f[0] + '"' + (f[0] === 'bad' ? ' title="감소대책을 한 뒤(개선 후)에도 허용 불가인 물질"' : '') + '>' + f[1] + '</button>'; }).join('');
+    // v21.54 부서 보기: '' 전체 물질 · '__g' 부서별로 묶어 보기 · 부서 이름 = 그 부서만
+    var dl = allDepts(), ld = $('cra-ld');
+    if(st.ld && st.ld !== '__g' && dl.indexOf(st.ld) < 0) st.ld = '';
+    if(ld) ld.innerHTML = '<option value="">부서: 전체 물질</option><option value="__g"' + (st.ld === '__g' ? ' selected' : '') + '>부서별로 묶어 보기</option>' + dl.map(function(d){ return '<option' + (st.ld === d ? ' selected' : '') + '>' + esc(d) + '</option>'; }).join('');
+    var okLf = function(rows){ if(st.lf === 'todo') return !rows.length; if(st.lf === 'done') return rows.length > 0; if(st.lf === 'bad') return rows.some(function(r){ return finOf(r).g.bad; }); return true; };
+    var okQ = function(n){ if(!q) return true; var p = pm[n] || {}; return (n + ' ' + deptMap(n).map(function(x){ return x.d; }).join(' ') + ' ' + rowsOf(n).map(function(r){ return r.proc; }).join(' ') + ' ' + (p.components || []).map(function(c){ return c.compName + ' ' + c.casNumber; }).join(' ')).toLowerCase().indexOf(q) >= 0; };
+    var rk = function(r){ if(!r) return '<span class="cra-chip off">평가 전</span>'; return finHtml(r); };
+    var kind = function(n, r){ return !r ? '평가 전' : (rowsOf(n).length > 1 ? (keyOf(r) ? '부서별 평가' : '전체 평가') : '한 평가'); };
+    // 한 부서에서 본 물질 한 줄 (그 부서를 맡은 평가)
+    var oneDept = function(n, d){
+      var x = deptMap(n).filter(function(y){ return y.d === d; })[0], r = x && x.r, others = deptMap(n).length - 1;
+      return '<button type="button" class="cra-it' + (st.cur === n && r && st.curKey === keyOf(r) ? ' on' : '') + '" data-n="' + esc(n) + '"' + (r ? ' data-k="' + esc(keyOf(r)) + '"' : '') + '><b>' + esc(n) + '</b>' + rk(r) +
+        '<span class="cra-sub">' + esc(d) + ' · ' + esc(r ? r.proc : (pm[n] || {}).usage || '') + (others > 0 ? ' · <span class="cra-dsum" data-pop="' + esc(n) + '" tabindex="0">외 ' + others + '개 부서</span>' : '') + '</span></button>';
+    };
+    var html = '';
+    if(st.ld && st.ld !== '__g'){
+      html = all.filter(function(n){ var x = deptMap(n).filter(function(y){ return y.d === st.ld; })[0]; return x && okLf(x.r ? [x.r] : []) && okQ(n); }).map(function(n){ return oneDept(n, st.ld); }).join('');
+    }else if(st.ld === '__g'){
+      html = dl.map(function(d){
+        var ns = all.filter(function(n){ var x = deptMap(n).filter(function(y){ return y.d === d; })[0]; return x && okLf(x.r ? [x.r] : []) && okQ(n); });
+        return ns.length ? '<div class="cra-lg">' + esc(d) + ' <small>' + ns.length + '개</small></div>' + ns.map(function(n){ return oneDept(n, d); }).join('') : '';
+      }).join('');
+    }else{
+      html = all.filter(function(n){ return okLf(rowsOf(n)) && okQ(n); }).map(function(n){
+        var rs = rowsOf(n), r = rs[0], p = pm[n] || {}, dm = deptMap(n), top = rs.slice().sort(function(a, b){ return finOf(b).r - finOf(a).r; })[0];
+        var multi = dm.length > 1, open = multi && !!st.open[n];
+        var one = '<button type="button" class="cra-it' + (st.cur === n && (!open || !rs.length) ? ' on' : '') + '" data-n="' + esc(n) + '"' + (multi ? ' data-tg="1" aria-expanded="' + open + '"' : '') + '><b>' + (multi ? '<span class="cra-car" aria-hidden="true">' + (open ? '▾' : '▸') + '</span>' : '') + esc(n) + '</b>' + rk(top) +
+          '<span class="cra-sub">' + (multi ? '<span class="cra-dsum" data-pop="' + esc(n) + '" tabindex="0">부서 ' + dm.length + ' · ' + esc(dm.map(function(x){ return x.d; }).join(', ')) + '</span>' + (rs.length > 1 ? ' · 평가 ' + rs.length + '개' : '') : esc((r && r.proc) || (p.departments || []).join(', ') || (pm[n] ? '' : 'MSDS 목록에 없음')) + (r ? ' · ' + esc(r.date) : '')) + '</span></button>';
+        if(!open) return one;
+        return one + dm.map(function(x){
+          return '<button type="button" class="cra-it sub' + (st.cur === n && x.r && st.curKey === keyOf(x.r) ? ' on' : '') + '" data-n="' + esc(n) + '"' + (x.r ? ' data-k="' + esc(keyOf(x.r)) + '"' : '') + '><b>└ ' + esc(x.d) + '</b>' + rk(x.r) + '<span class="cra-sub">' + kind(n, x.r) + (x.r ? ' · ' + esc(x.r.proc) : '') + '</span></button>';
+        }).join('');
+      }).join('');
+    }
+    $('cra-list').innerHTML = html || '<div class="cra-sub" style="padding:8px">찾는 물질이 없습니다.</div>';
   }
+  // 물질의 부서마다 맡은 평가 (부서별 평가 → 그 부서 · 나머지 MSDS 목록 부서는 '전체' 평가 · 아무 평가에도 없으면 평가 전)
+  function deptMap(n){
+    var rs = rowsOf(n), list = splitD(msdsDept(n)), out = [], seen = {};
+    rs.slice().sort(function(a, b){ return (keyOf(a) ? 0 : 1) - (keyOf(b) ? 0 : 1); }).forEach(function(r){ splitD(r.dept).forEach(function(d){ if(!seen[d]){ seen[d] = 1; out.push({ d: d, r: r }); } }); });
+    var all = rs.filter(function(r){ return !keyOf(r); })[0];
+    list.forEach(function(d){ if(!seen[d]){ seen[d] = 1; out.push({ d: d, r: all && itemOf(all).deptAll ? all : null }); } });
+    var ix = function(d){ var k = list.indexOf(d); return k < 0 ? 999 : k; };
+    return out.sort(function(a, b){ return ix(a.d) - ix(b.d) || a.d.localeCompare(b.d, 'ko'); });
+  }
+  function allDepts(){ var o = []; names().forEach(function(n){ deptMap(n).forEach(function(x){ if(o.indexOf(x.d) < 0) o.push(x.d); }); }); return o.sort(function(a, b){ return a.localeCompare(b, 'ko'); }); }
+  // v21.55 목록에 보이는 점수 = 개선 후 최종 위험성 (성분별 개선 후 점수 중 가장 높은 값 · 허용 여부도 개선 후로)
+  function finOf(r){
+    var sc = (r && r.data && r.data.scores) || [], b = null;
+    sc.forEach(function(x){ if(x && x.length >= 6 && (!b || +x[5] > +b[5])) b = x; });
+    if(b) return { r: +b[5], e: +b[3], s: +b[4], g: CRA.grade(+b[5], +b[3], +b[4]), cur: +r.risk };
+    var v = +r.after || +r.risk || 0; return { r: v, e: 0, s: 0, g: CRA.grade(v, 0, 0), cur: +r.risk };
+  }
+  function finHtml(r){ var f = finOf(r); return '<span class="cra-fin" title="현재 ' + f.cur + ' → 개선 후 ' + f.r + '">' + (f.cur !== f.r ? '<small>' + f.cur + '→</small>' : '') + f.r + ' ' + chip({ g: f.g }) + '</span>'; }
+  // 부서 글자에 마우스를 올리면 부서별 평가 표
+  function showPop(el){
+    var n = el.getAttribute('data-pop'), dm = deptMap(n), box = $('cra-pop');
+    if(!box){ box = document.createElement('div'); box.id = 'cra-pop'; box.setAttribute('role', 'tooltip'); document.body.appendChild(box); }
+    box.innerHTML = '<b>' + esc(n) + ' <small style="font-weight:400;color:#5A5650">개선 후 최종 위험성 (현재 →)</small></b><table>' + dm.map(function(x){ var r = x.r;
+      return '<tr><th>' + esc(x.d) + '</th><td class="c">' + (r ? finHtml(r) : '<span class="cra-chip off">평가 전</span>') + '</td><td>' + (!r ? '' : (rowsOf(n).length > 1 ? (keyOf(r) ? '부서별 평가' : '전체 평가') : '한 평가') + ' · ' + esc(r.proc)) + '</td></tr>'; }).join('') + '</table>';
+    var b = el.getBoundingClientRect(); box.style.display = 'block';
+    var w = box.offsetWidth, h = box.offsetHeight, x = Math.min(b.left, window.innerWidth - w - 8), y = b.bottom + 6;
+    if(y + h > window.innerHeight - 8) y = Math.max(8, b.top - h - 6);
+    box.style.left = Math.max(8, x) + 'px'; box.style.top = y + 'px';
+  }
+  function hidePop(){ var b = $('cra-pop'); if(b) b.style.display = 'none'; }
   var inp = function(i, k, v, w, num){ return '<input class="cra-in" data-c="' + i + '" data-k="' + k + '" value="' + esc(v) + '"' + (num ? ' inputmode="decimal"' : '') + ' style="min-width:' + (w || 60) + 'px" aria-label="' + k + '">'; };
   var sel = function(i, k, v, o){ return '<select class="cra-in" data-c="' + i + '" data-k="' + k + '" aria-label="' + k + '" style="min-width:' + (k === 'state' || k === 'unit' ? 74 : 60) + 'px">' + o.map(function(x){ return '<option value="' + x[0] + '"' + (String(v) === String(x[0]) ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select>'; };
   var CMR = [['', '-'], ['1A', '1A'], ['1B', '1B'], ['2', '2']];
@@ -21751,13 +21825,15 @@ var CRA = (function(){
 
   /* ── 물질별 결과 ── */
   function drawRes(){
-    var rows = (st.rows || []).slice().sort(function(a, b){ return b.risk - a.risk || a.product.localeCompare(b.product, 'ko'); });
+    var dAll = []; (st.rows || []).forEach(function(r){ splitD(r.dept).forEach(function(d){ if(dAll.indexOf(d) < 0) dAll.push(d); }); }); dAll.sort(function(a, b){ return a.localeCompare(b, 'ko'); });
+    if(st.rd && dAll.indexOf(st.rd) < 0) st.rd = '';
+    var rows = (st.rows || []).filter(function(r){ return !st.rd || splitD(r.dept).indexOf(st.rd) >= 0; }).sort(function(a, b){ return b.risk - a.risk || a.product.localeCompare(b.product, 'ko'); });
     var cnt = [0, 0, 0, 0], bad = 0;
     rows.forEach(function(r){ var g = CRA.grade(r.risk, r.e, r.sv); cnt[g.k]++; if(g.bad) bad++; });
     var all = names().length;
     $('cra-view').innerHTML = '<div class="cra-box"><div class="cra-row" style="justify-content:space-between"><h3>물질별 위험성평가 결과</h3><span class="cra-row" style="gap:5px"><span class="cra-chip off">평가 ' + rows.length + ' / ' + all + '</span>' +
       CRA.cfg().grade.map(function(g, i){ return '<span class="cra-chip g' + i + '">' + g[2] + ' ' + cnt[i] + '</span>'; }).join('') + '<span class="cra-chip bad">허용 불가 ' + bad + '</span></span></div>' +
-      '<div class="cra-sub">제품의 위험성은 성분 중 가장 높은 값입니다(혼합물 평가 원칙). 줄을 누르면 [평가하기]에서 열립니다.</div>' +
+      '<div class="cra-row" style="justify-content:space-between"><span class="cra-sub">제품의 위험성은 성분 중 가장 높은 값입니다(혼합물 평가 원칙). 줄을 누르면 [평가하기]에서 열립니다.</span><select class="cra-in" id="cra-rd" aria-label="부서로 거르기"><option value="">부서: 전체</option>' + dAll.map(function(d){ return '<option' + (st.rd === d ? ' selected' : '') + '>' + esc(d) + '</option>'; }).join('') + '</select></div>' +
       '<div class="cra-tw"><table class="cra-t" style="min-width:1100px"><tr><th>제품명</th><th>부서</th><th>공정</th><th>성분 (CAS)</th><th class="c">노출수준</th><th class="c">유해성</th><th class="c">위험성</th><th>결정</th><th>밀폐 · 환기</th><th class="c">개선 후</th><th>평가일 · 출처</th></tr>' +
       (rows.map(function(r){
         var g = CRA.grade(r.risk, r.e, r.sv), d = r.data || {};
@@ -21765,6 +21841,7 @@ var CRA = (function(){
           '<td class="c">' + r.e + '</td><td class="c">' + r.sv + '</td><td class="c"><b>' + r.risk + '</b></td><td style="min-width:190px">' + chip({ g: g }) + '<div class="cra-sub">' + g.act + '</div></td>' +
           '<td>' + ['<span class="cra-chip off">해당없음</span>', '<span class="cra-chip g0">국소배기</span>', '<span class="cra-chip g0">완전밀폐</span>'][+d.vent || 0] + '</td><td class="c">' + (r.after || '') + '</td><td class="cra-sub">' + esc(r.date) + '<br>' + esc(r.src) + '</td></tr>';
       }).join('') || '<tr><td colspan="11" class="cra-sub" style="padding:14px">아직 저장한 평가가 없습니다. [평가하기]에서 물질을 고르거나 [산정기준 · 가져오기]에서 기존 KRAS 엑셀을 가져오세요.</td></tr>') + '</table></div></div>';
+    $('cra-rd').onchange = function(){ st.rd = this.value; drawRes(); };
     $('cra-view').querySelector('table').onclick = function(e){ var r = e.target.closest('[data-open]'); if(!r) return; st.tab = 'eval'; draw(); pick(r.getAttribute('data-open'), r.getAttribute('data-k') || ''); };
   }
 
@@ -22140,7 +22217,7 @@ var CRA = (function(){
     return record(it);
   }
 
-  window.BMCRA = { open: open, reviewBox: reviewBox, bindReview: bindReview, reviewRecord: reviewRecord, invalidate: function(){ st.rows = null; }, _engine: CRA, _parse: parseKras, _suggest: suggest, _record: record, _itemOf: itemOf, _syncDept: syncDept, _parseMeas: parseMeas, _applyMeas: applyMeas, _state: st, _parseMeasPdf: parseMeasPdf, _applyQty: applyQty, _qtyFor: qtyFor, _bulk: bulkAi, _rowsOf: rowsOf, _chkOf: chkOf, _msdsChk: msdsChk, _applyChk: applyChk };
+  window.BMCRA = { open: open, reviewBox: reviewBox, bindReview: bindReview, reviewRecord: reviewRecord, invalidate: function(){ st.rows = null; }, _engine: CRA, _parse: parseKras, _suggest: suggest, _record: record, _itemOf: itemOf, _syncDept: syncDept, _parseMeas: parseMeas, _applyMeas: applyMeas, _state: st, _parseMeasPdf: parseMeasPdf, _applyQty: applyQty, _qtyFor: qtyFor, _bulk: bulkAi, _rowsOf: rowsOf, _deptMap: deptMap, _finOf: finOf, _chkOf: chkOf, _msdsChk: msdsChk, _applyChk: applyChk };
 })();
 </script>
 
@@ -23601,6 +23678,21 @@ button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,inpu
 @container (max-width: 430px){
   #apv-list .apv-row{grid-template-columns:20px minmax(0,1fr) auto !important;grid-template-areas:"c d r" "c w r" "c s t" !important}
   #apv-list .apv-row > :nth-child(2){display:none}
+}
+</style>
+<style id="bm-kpi-compact">
+/* v21.53 통계 숫자 칸 — 결재 관리 · 대시보드 · 부서현황 · 대장 · 교육 보고서 · 보고서 공통: 높이 반, 폭은 내용만큼 */
+.adm-kpi,.dash-kpis.adm-kpi,.lg-kpi,.eb-kpis,.rp-kpis{display:flex!important;flex-wrap:wrap;gap:8px!important;margin-bottom:10px;grid-template-columns:none!important}
+.adm-kpi-c,.lg-kpi button,.eb-kpi,.rp-k,.dv-card{flex:0 1 auto;min-width:150px;max-width:300px;min-height:0!important;display:grid!important;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"l l" "n e";column-gap:8px;row-gap:1px;align-items:baseline;padding:7px 12px!important;border-radius:6px}
+.lg-kpi button.on{padding:6px 11px!important}
+.adm-kpi-c > span,.lg-kpi button > span,.eb-kpi .l,.rp-k > span,.dv-card > span{grid-area:l;font-size:12.5px!important;line-height:1.35}
+.adm-kpi-c > b,.lg-kpi button > b,.eb-kpi .n,.rp-k > b,.dv-card > b{grid-area:n;font-size:20px!important;line-height:1.2!important;font-variant-numeric:tabular-nums;white-space:nowrap}
+.adm-kpi-c > b small,.dv-card > b small{font-size:12.5px!important}
+.adm-kpi-c > em,.eb-kpi .s,.rp-k > em,.dv-card > em{grid-area:e;font-size:12px!important;line-height:1.35;color:#5A5650;min-width:0;overflow-wrap:anywhere}
+.adm-stat-card{padding:6px 10px!important}.adm-stat-n{font-size:20px!important}.adm-stat-l{font-size:12.5px!important}
+@media (max-width:760px){
+  .adm-kpi,.dash-kpis.adm-kpi,.lg-kpi,.eb-kpis,.rp-kpis{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .adm-kpi-c,.lg-kpi button,.eb-kpi,.rp-k,.dv-card{max-width:none}
 }
 </style>
 </body>
