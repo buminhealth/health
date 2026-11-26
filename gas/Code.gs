@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.51 (2026-11-26)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.57 (2026-11-26)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -190,7 +190,7 @@ function doPost(e) {
                         result = chemOp_(req, s); break;
       case 'ai.status': case 'ai.setKey': case 'ai.list': case 'ai.analyze': case 'ai.judge': case 'ai.apply': case 'ai.products': case 'ai.compare':
                         result = aiOp_(req, s); break;
-      case 'chemra.list': case 'chemra.save': case 'chemra.delete': case 'chemra.read': case 'chemra.cfg': case 'chemra.setCfg': case 'chemra.measSave': case 'chemra.measDelete':
+      case 'chemra.list': case 'chemra.save': case 'chemra.delete': case 'chemra.read': case 'chemra.compFill': case 'chemra.cfg': case 'chemra.setCfg': case 'chemra.measSave': case 'chemra.measDelete':
                         result = chemraOp_(req, s); break;   // v21.40 화학물질 위험성평가 (KRAS)
       case 'pdf.big':  result = requireAdmin_(s) || pdfBig_(req); break;
       case 'ra.meta': case 'ra.analyze': case 'ra.submit': case 'ra.mine': case 'ra.photo': case 'ra.list': case 'ra.update': case 'ra.delete':
@@ -3065,7 +3065,7 @@ const AI_PROMPT = [
   '"reg15":{"workEnv":"15번 법적규제에서 작업환경측정 대상 여부와 주기(예: 6개월, 해당없음)","healthCheck":"특수건강진단 대상 여부와 주기(예: 12개월, 해당없음)",',
   '"managed":"관리대상유해물질 해당 여부(해당/해당없음)","special":"특별관리물질 해당 여부(해당/해당없음)"},',
   '"ra":{"oelPpm":"8번 국내 노출기준 TWA ppm 숫자(없으면 빈칸)","oelMg":"8번 국내 노출기준 TWA mg/㎥ 숫자(없으면 빈칸)",',
-  '"c":"발암성 구분(1A · 1B · 2, 2번 또는 11번 · 15번에 적힌 것, 없으면 빈칸)","m":"생식세포 변이원성 구분(1A · 1B · 2)","r":"생식독성 구분(1A · 1B · 2)",',
+  '"c":"발암성 GHS 구분(1A · 1B · 2, 2번 또는 11번 · 15번에 적힌 것, 없으면 빈칸 — IARC 그룹 · ACGIH A등급은 구분으로 옮기지 말 것)","m":"생식세포 변이원성 GHS 구분(1A · 1B · 2)","r":"생식독성 GHS 구분(1A · 1B · 2)",',
   '"hcodes":"이 성분에 해당하는 H코드(문서에 성분별로 없으면 빈칸)","bp":"이 성분의 끓는점 ℃(문서에 있을 때만)"}}],',
   '"warnings":["추출이 불확실한 부분"]}'
 ].join('\n');
@@ -3421,6 +3421,72 @@ function chemraRows_() {
   }).filter(o => o.product);
 }
 // 저장(같은 제품명이면 바꿈 · 이전 줄은 이력). oldName: 개정으로 제품명이 바뀐 경우 예전 이름
+// v21.57 안전보건공단 화학물질정보(MSDS) 오픈API — CAS로 찾고 유해성 · 노출기준 · 물리화학적 특성 · 법적규제 항목 글을 모음 (공공데이터포털 인증키 KOSHA_KEY)
+const KOSHA_MSDS_BASE = ['https://msds.kosha.or.kr/openapi/service/msdschem', 'http://msds.kosha.or.kr/openapi/service/msdschem'];
+function koshaMsdsGet_(path) {
+  const key = PROPS.getProperty('KOSHA_KEY');
+  let last = '';
+  for (const base of KOSHA_MSDS_BASE) {
+    try {
+      const res = UrlFetchApp.fetch(base + path + (path.indexOf('?') >= 0 ? '&' : '?') + 'serviceKey=' + encodeURIComponent(key), { muteHttpExceptions: true });
+      const t = res.getContentText() || '';
+      if (res.getResponseCode() === 200 && /<item>|<items/.test(t)) return { ok: true, text: t };
+      last = (t.match(/<returnAuthMsg>([^<]+)/) || t.match(/<resultMsg>([^<]+)/) || [])[1] || ('응답 ' + res.getResponseCode());
+    } catch (e) { last = e.message; }
+  }
+  return { ok: false, why: last };
+}
+function xmlTag_(x, tag) { const m = String(x).match(new RegExp('<' + tag + '>([\\s\\S]*?)</' + tag + '>')); return m ? m[1].replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<[^>]+>/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim() : ''; }
+function koshaMsds_(cas) {
+  if (!PROPS.getProperty('KOSHA_KEY')) return { ok: false, why: '공공데이터포털 인증키 없음' };
+  const ck = 'kmsds_' + cas, cache = CacheService.getScriptCache(), hit = cache.get(ck);
+  if (hit) { try { return JSON.parse(hit); } catch (_) {} }
+  const ls = koshaMsdsGet_('/chemlist?searchWrd=' + encodeURIComponent(cas) + '&searchCnd=1&numOfRows=5&pageNo=1');
+  if (!ls.ok) return { ok: false, why: '공단 목록 조회 실패: ' + ls.why };
+  const items = ls.text.match(/<item>[\s\S]*?<\/item>/g) || [];
+  const hitItem = items.find(x => xmlTag_(x, 'casNo') === cas) || items[0];
+  if (!hitItem) return { ok: false, why: '공단 자료에 없는 CAS' };
+  const id = xmlTag_(hitItem, 'chemId'), name = xmlTag_(hitItem, 'chemNameKor');
+  if (!id) return { ok: false, why: '공단 자료 번호 없음' };
+  const parts = [];
+  ['02', '08', '09', '11', '15'].forEach(no => {   // 02 유해성 · 위험성 · 08 노출방지(노출기준) · 09 물리화학적 특성 · 11 독성(발암성 등) · 15 법적규제
+    const d = koshaMsdsGet_('/chemdetail' + no + '?chemId=' + encodeURIComponent(id));
+    if (!d.ok) return;
+    const rows = (d.text.match(/<item>[\s\S]*?<\/item>/g) || []).map(x => { const k = xmlTag_(x, 'msdsItemNameKor'), v = xmlTag_(x, 'itemDetail'); return v && v !== '자료없음' ? (k ? k + ': ' : '') + v : ''; }).filter(Boolean);
+    if (rows.length) parts.push('[' + { '02': '유해성 · 위험성', '08': '노출기준 · 보호구', '09': '물리화학적 특성', '11': '독성 정보', '15': '법적 규제' }[no] + ']\n' + rows.join('\n').slice(0, 2500));
+  });
+  const out = parts.length ? { ok: true, name: name, text: parts.join('\n\n').slice(0, 9000) } : { ok: false, why: '공단 상세 자료를 읽지 못함' };
+  try { cache.put(ck, JSON.stringify(out), 6 * 3600); } catch (_) {}
+  return out;
+}
+// 성분마다 빈 칸 값: 공단 자료가 있으면 그 글에서만 · 없으면 일반적으로 알려진 값(추정)
+const CHEMRA_COMP_PROMPT = [
+  '너는 산업보건 전문가다. 아래 성분마다 화학물질 위험성평가에 쓸 값을 JSON으로만 답하라.',
+  '[공단 자료]가 붙은 성분은 그 자료에 적힌 값만 쓰고 src를 "공단"으로, 자료가 없는 성분은 한국 기준(고용노동부 노출기준 고시 · GHS)에서 일반적으로 알려진 값을 쓰고 src를 "추정"으로 하라.',
+  '발암성 c · 생식세포 변이원성 m · 생식독성 r는 GHS 분류 구분(1A · 1B · 2)만 적는다. IARC 그룹(1 · 2A · 2B · 3), ACGIH(A1~A5), NTP 같은 다른 기관 등급은 구분으로 옮기지 말고, 분류되지 않음 · 해당없음 · 자료없음이면 빈칸으로 둔다. 근거 글을 cmrWhy에 짧게 적는다.',
+  '끓는점 bp는 ℃ 숫자만(범위면 낮은 값, 분해 · 해당없음이면 빈칸). 노출기준은 국내 TWA 우선(oelPpm 또는 oelMg 숫자). 모르면 빈칸 — 지어내지 마라.',
+  '{"comps":[{"cas":"CAS 그대로","name":"성분명 그대로","src":"공단 또는 추정","state":"liquid · solid · gas","bp":"","oelPpm":"","oelMg":"","c":"","m":"","r":"","cmrWhy":"","hcodes":"H코드 쉼표로","note":"짧은 메모"}]}'
+].join('\n');
+function chemraCompAi_(list, kosha) {
+  const key = PROPS.getProperty('GEMINI_API_KEY');
+  if (!key) return { success: false, noKey: true, error: 'AI 키가 없습니다 — 관리자 화면 설정에서 Gemini 키를 저장하세요' };
+  const info = list.map((c, i) => '■ 성분 ' + (i + 1) + ': ' + c.name + ' (CAS ' + (c.cas || '모름') + ')' + (c.need.length ? ' — 특히 필요한 칸: ' + c.need.join(', ') : '') +
+    (kosha[i] && kosha[i].ok ? '\n[공단 자료 — ' + (kosha[i].name || '') + ']\n' + kosha[i].text : '\n(공단 자료 없음: ' + ((kosha[i] && kosha[i].why) || '') + ')')).join('\n\n');
+  const body = { contents: [{ parts: [{ text: CHEMRA_COMP_PROMPT + '\n\n' + info }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
+  const r = geminiCall_(body, key), j = r.j;
+  if (r.code !== 200 || !j) return { success: false, error: geminiErr_(r, ' (값을 직접 입력해도 됩니다)') };
+  let d; try { d = aiJson_(aiText_(j)); } catch (_) { return { success: false, error: 'AI 응답을 읽지 못했습니다' + aiWhy_(r) + ' — 다시 시도하거나 직접 입력하세요' }; }
+  const cm = v => { v = String(v || '').trim().toUpperCase(); return /^(1A|1B|2)$/.test(v) ? v : (v === '1' ? '1A' : ''); };
+  const num = v => { const m = String(v == null ? '' : v).replace(/,/g, '').match(/-?\d+(\.\d+)?/); return m ? m[0] : ''; };
+  const comps = (Array.isArray(d.comps) ? d.comps : []).slice(0, list.length).map((c, i) => {
+    const k = kosha[i] && kosha[i].ok;
+    return { cas: list[i].cas, name: list[i].name, src: k && c.src !== '추정' ? '공단' : '추정',
+             state: /^(liquid|solid|gas)$/.test(c.state) ? c.state : '', bp: num(c.bp), oelPpm: num(c.oelPpm), oelMg: num(c.oelMg),
+             c: cm(c.c), m: cm(c.m), r: cm(c.r), cmrWhy: String(c.cmrWhy || '').slice(0, 200),
+             hcodes: (String(c.hcodes || '').toUpperCase().match(/H\d{3}[A-Z]{0,2}/g) || []).join(','), note: String(c.note || '').slice(0, 200) };
+  });
+  return { success: true, comps: comps };
+}
 function chemraKey_(k) { return String(k || '').replace(/[^\w-]/g, '').slice(0, 40); }
 function chemraPut_(o, oldName) {
   const product = String(o.product || '').trim().slice(0, 150);
@@ -3543,6 +3609,18 @@ function chemraOp_(req, s) {
       return { success: true, model: aiModel_(), draft: dr, sheet: sheetInfo, left: lim - n - 1 };
     }
     case 'chemra.cfg': return { success: true, cfg: chemraCfg_() };
+    case 'chemra.compFill': {   // v21.57 성분 빈 칸 찾기
+      const list = (Array.isArray(req.comps) ? req.comps : []).slice(0, 12).map(c => ({ name: String(c.name || '').trim().slice(0, 120), cas: String(c.cas || '').trim().slice(0, 30), need: (Array.isArray(c.need) ? c.need : []).map(String).slice(0, 12) })).filter(c => c.name || c.cas);
+      if (!list.length) return { success: false, error: '찾을 성분이 없습니다' };
+      const cache = CacheService.getScriptCache(), dayKey = 'chemra_read_' + todayKst_();
+      const n = parseInt(cache.get(dayKey) || '0', 10), lim = parseInt(PROPS.getProperty('CHEMRA_LIMIT') || '', 10) || CHEMRA_LIMIT;
+      if (n >= lim) return { success: false, limit: true, error: '오늘 AI 읽기 ' + lim + '회를 다 썼습니다 — 내일 다시 하거나 값을 직접 입력하세요' };
+      const kosha = list.map(c => casCheck_(c.cas) === true ? koshaMsds_(c.cas) : { ok: false, why: c.cas ? 'CAS 확인 필요' : 'CAS 없음' });
+      cache.put(dayKey, String(n + 1), 86400);
+      const r = chemraCompAi_(list, kosha);
+      if (!r.success) return r;
+      return { success: true, comps: r.comps, kosha: kosha.map(k => ({ ok: !!k.ok, why: k.why || '', name: k.name || '' })), hasKey: !!PROPS.getProperty('KOSHA_KEY'), left: lim - n - 1 };
+    }
     case 'chemra.setCfg': {
       const j = JSON.stringify(req.cfg || {});
       if (j.length > 8000) return { success: false, error: '설정이 너무 깁니다' };
