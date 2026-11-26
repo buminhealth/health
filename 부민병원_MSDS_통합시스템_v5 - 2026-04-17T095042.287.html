@@ -12,6 +12,7 @@
   ════════════════════════════════════════════════════════════════════
   부민병원 MSDS 통합시스템 v21.19 (2026-11-16)
 
+  ★★★ v21.56 (2026-11-26) — 위험성평가 부서 = 지금 MSDS 목록 부서 (HTML만): MSDS 목록에서 부서를 바꾼 물질이 옛 부서 목록에 나오던 문제 · 열 때 저장된 '전체' 평가 부서도 자동으로 맞춤
   ★★★ v21.55 (2026-11-26) — 위험성평가 목록 점수 = 개선 후 최종 위험성 (HTML만): 현재→개선 후 · 허용 여부 · [최종 허용 불가] 거르기 · 부서별 표도 같음
   ★★★ v21.54 (2026-11-26) — 위험성평가 목록 부서별 (HTML만 · 서버 v21.51 그대로): 부서가 여러 개인 물질은 누르면 부서마다 평가 펼침 · 부서 글자에 마우스 → 부서별 평가 표 · [부서: 전체 물질 / 부서별로 묶어 보기 / 부서 하나] · 물질별 결과 부서 거르기
   ★★★ v21.53 (2026-11-26) — 통계 숫자 칸 작게 (HTML만 · 서버 v21.51 그대로): 결재 관리 · 대시보드 · 부서현황 · 대장 · 교육 보고서 · 보고서 — 높이 반 · 폭은 내용만큼 · 이름 위, 숫자 · 설명 한 줄
@@ -21403,7 +21404,9 @@ var CRA = (function(){
     var x = await post('chemra.list', {});
     if(!x.success){ body.innerHTML = '<div style="color:#A3302A">' + esc(x.error || '실패') + (/unknown op/.test(x.error || '') ? ' — 서버(Code.gs)를 v21.41 이상으로 배포하세요 (Apps Script 새 버전).' : '') + '</div>'; return; }
     st.rows = x.data || []; CRA.setCfg(x.cfg); st.cfg = x.cfg || null; st.meas = x.meas || []; st.pick = (x.cfg && x.cfg.measPick) || 'latest'; st.qtys = x.qtys || []; st.qtyOld = !('qtys' in x); st.qtyInfo = x.qtyInfo || null;
+    var nSync = await deptSyncAll();
     draw();
+    if(nSync) say('MSDS 목록에서 부서가 바뀐 평가 ' + nSync + '개의 부서를 맞췄습니다 (' + (st.deptSyncLog || []).slice(0, 3).join(' · ') + (nSync > 3 ? ' 외' : '') + ')', 'ok');
   }
   function savedOf(name){ return rowsOf(name)[0]; }
   function names(){
@@ -21546,16 +21549,16 @@ var CRA = (function(){
     var kind = function(n, r){ return !r ? '평가 전' : (rowsOf(n).length > 1 ? (keyOf(r) ? '부서별 평가' : '전체 평가') : '한 평가'); };
     // 한 부서에서 본 물질 한 줄 (그 부서를 맡은 평가)
     var oneDept = function(n, d){
-      var x = deptMap(n).filter(function(y){ return y.d === d; })[0], r = x && x.r, others = deptMap(n).length - 1;
+      var x = findDept(n, d), r = x && x.r, others = deptMap(n).length - 1;
       return '<button type="button" class="cra-it' + (st.cur === n && r && st.curKey === keyOf(r) ? ' on' : '') + '" data-n="' + esc(n) + '"' + (r ? ' data-k="' + esc(keyOf(r)) + '"' : '') + '><b>' + esc(n) + '</b>' + rk(r) +
         '<span class="cra-sub">' + esc(d) + ' · ' + esc(r ? r.proc : (pm[n] || {}).usage || '') + (others > 0 ? ' · <span class="cra-dsum" data-pop="' + esc(n) + '" tabindex="0">외 ' + others + '개 부서</span>' : '') + '</span></button>';
     };
     var html = '';
     if(st.ld && st.ld !== '__g'){
-      html = all.filter(function(n){ var x = deptMap(n).filter(function(y){ return y.d === st.ld; })[0]; return x && okLf(x.r ? [x.r] : []) && okQ(n); }).map(function(n){ return oneDept(n, st.ld); }).join('');
+      html = all.filter(function(n){ var x = findDept(n, st.ld); return x && okLf(x.r ? [x.r] : []) && okQ(n); }).map(function(n){ return oneDept(n, st.ld); }).join('');
     }else if(st.ld === '__g'){
       html = dl.map(function(d){
-        var ns = all.filter(function(n){ var x = deptMap(n).filter(function(y){ return y.d === d; })[0]; return x && okLf(x.r ? [x.r] : []) && okQ(n); });
+        var ns = all.filter(function(n){ var x = findDept(n, d); return x && okLf(x.r ? [x.r] : []) && okQ(n); });
         return ns.length ? '<div class="cra-lg">' + esc(d) + ' <small>' + ns.length + '개</small></div>' + ns.map(function(n){ return oneDept(n, d); }).join('') : '';
       }).join('');
     }else{
@@ -21575,12 +21578,16 @@ var CRA = (function(){
   // 물질의 부서마다 맡은 평가 (부서별 평가 → 그 부서 · 나머지 MSDS 목록 부서는 '전체' 평가 · 아무 평가에도 없으면 평가 전)
   function deptMap(n){
     var rs = rowsOf(n), list = splitD(msdsDept(n)), out = [], seen = {};
-    rs.slice().sort(function(a, b){ return (keyOf(a) ? 0 : 1) - (keyOf(b) ? 0 : 1); }).forEach(function(r){ splitD(r.dept).forEach(function(d){ if(!seen[d]){ seen[d] = 1; out.push({ d: d, r: r }); } }); });
+    rs.slice().sort(function(a, b){ return (keyOf(a) ? 0 : 1) - (keyOf(b) ? 0 : 1); }).forEach(function(r){ var it = itemOf(r), ds = it.deptAll && list.length ? availD(it) : splitD(r.dept); ds.forEach(function(d){ if(!seen[d]){ seen[d] = 1; out.push({ d: d, r: r }); } }); });
     var all = rs.filter(function(r){ return !keyOf(r); })[0];
     list.forEach(function(d){ if(!seen[d]){ seen[d] = 1; out.push({ d: d, r: all && itemOf(all).deptAll ? all : null }); } });
     var ix = function(d){ var k = list.indexOf(d); return k < 0 ? 999 : k; };
     return out.sort(function(a, b){ return ix(a.d) - ix(b.d) || a.d.localeCompare(b.d, 'ko'); });
   }
+  // v21.56 MSDS 관리 화면과 같은 부서 맞추기: 끝말(실 · 과 · 팀)만 다른 이름은 같은 부서 · '병동' 공통 물질은 각 병동에도
+  function sameD(a, b){ try{ if(typeof bmSameDept === 'function') return bmSameDept(a, b); }catch(_){} return a === b; }
+  function isWard(d){ try{ if(typeof bmIsWard === 'function') return bmIsWard(d); }catch(_){} return /병동/.test(d); }
+  function findDept(n, d){ var dm = deptMap(n); return dm.filter(function(y){ return y.d === d; })[0] || dm.filter(function(y){ return sameD(y.d, d); })[0] || (isWard(d) && d !== '병동' ? dm.filter(function(y){ return y.d === '병동'; })[0] : null) || null; }
   function allDepts(){ var o = []; names().forEach(function(n){ deptMap(n).forEach(function(x){ if(o.indexOf(x.d) < 0) o.push(x.d); }); }); return o.sort(function(a, b){ return a.localeCompare(b, 'ko'); }); }
   // v21.55 목록에 보이는 점수 = 개선 후 최종 위험성 (성분별 개선 후 점수 중 가장 높은 값 · 허용 여부도 개선 후로)
   function finOf(r){
@@ -21821,7 +21828,20 @@ var CRA = (function(){
         c[k] = val; c.ai = false; c.guess = false; re(); };
     });
   }
-  async function reload(){ var x = await post('chemra.list', {}); if(x.success){ st.rows = x.data || []; st.meas = x.meas || []; st.qtys = x.qtys || []; } }
+  async function reload(){ var x = await post('chemra.list', {}); if(x.success){ st.rows = x.data || []; st.meas = x.meas || []; st.qtys = x.qtys || []; await deptSyncAll(); } }
+  // v21.56 MSDS 목록에서 부서를 바꾸면 '전체' 평가의 저장된 부서도 맞춤 (예: 내시경실 → 특수내시경실) — 부서별 평가(일부 선택)는 그대로
+  async function deptSyncAll(){
+    if(!Object.keys(products()).length || st.syncing) return 0;
+    var items = [], log = [];
+    (st.rows || []).forEach(function(r){ if(!products()[r.product]) return; var it = itemOf(r), old = it.dept; if(it.deptAll && syncDept(it)){ items.push(record(it)); log.push(r.product + ': ' + (old || '(없음)') + ' → ' + it.dept); } });
+    if(!items.length) return 0;
+    st.syncing = true;
+    try{
+      var sv = await post('chemra.save', { items: items });
+      if(sv.success){ var x = await post('chemra.list', {}); if(x.success) st.rows = x.data || []; st.deptSyncLog = log; }
+    }finally{ st.syncing = false; }
+    return items.length;
+  }
 
   /* ── 물질별 결과 ── */
   function drawRes(){
