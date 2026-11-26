@@ -12,6 +12,10 @@
   ════════════════════════════════════════════════════════════════════
   부민병원 MSDS 통합시스템 v21.19 (2026-11-16)
 
+  ★★★ v21.52 (2026-11-26) — 위험성평가 1번 칸 시안 B (HTML만 · 서버 v21.51 그대로): 왼쪽 평가 대상(사용 용도 · 공정명 · 평가 부서 알약) · 오른쪽 취급 조건(하루취급량 소 · 중 · 대 세 칸 · 일취급량 · 사용온도 ℃)
+  ★★★ v21.51 (2026-11-26) — 관리자 왼쪽 메뉴 자동 숨김 · 위험성평가 부서별 평가 (서버 v21.51):
+    - 관리자 왼쪽 메뉴: 평소엔 왼쪽 끝 초록 띠 · 마우스를 대면 펼침 · 벗어나면 숨김 (숫자 알림이 있으면 띠에 빨간 점)
+    - 같은 물질을 부서마다 따로 평가 (예: 뉴젠자임폼 병동 · 중환자실 · 수술실): 부서 전체 · 일부 선택, [+ 다른 부서 평가 추가]
   ★★★ v21.50 (2026-11-23) — 위험성평가: 현재 · 개선 후 위험성 직접 고침 (서버 v21.50: 직접 고친 까닭 저장): 성분별 노출수준 · 유해성 선택(비우면 자동) · 직접 고친 까닭 · 모두 지우기 · 평가표 · 엑셀에도 고친 값
   ★★★ v21.49 (2026-11-23) — AI 답 고쳐 읽기 강화 (서버 v21.49): 문자열 안 줄바꿈 · 탭 · 잘못된 역슬래시 · 주석 · NaN · [ ] 감쌈 · 끊긴 답 닫기 · 끊긴 답은 다음 모델(6분 제한) · MSDS 읽기 실패 때 [성분 이름 · CAS로 AI 추정] · 처음 여는 물질도 측정 · 특검 체크
   ★★★ v21.48 (2026-11-23) — 새 Gemini(3 이상) 응답 읽기 (서버 v21.48): temperature 기본값 · 생각 조각 빼기 · JSON 앞뒤 글 · 끝 쉼표 정리 · 잘린 답은 다시 → 예비 모델 · 못 읽으면 모델 · 까닭 안내
@@ -1160,6 +1164,18 @@ b.hm-f{font-weight:700}
   .dv-sec{padding:12px}
   .dv-tab{padding:12px 10px}
 }
+/* v21.51 관리자 왼쪽 메뉴 자동 숨김 (PC · 태블릿) */
+.adm-edge{display:none}
+@media (min-width:769px){
+  .adm-shell{position:relative}
+  .adm-edge{display:flex;flex:none;width:14px;align-items:center;justify-content:center;position:relative;background:#345C12;color:#C5E2AB;border:0;padding:0;cursor:pointer}
+  .adm-edge:hover,.adm-edge:focus-visible{background:#4E8F2C;color:#fff}
+  .adm-edge svg{width:9px;height:9px}
+  .adm-edge i{position:absolute;top:10px;left:3px;width:8px;height:8px;border-radius:50%;background:#E0483E}
+  .adm-shell > .adm-sidebar{position:absolute;left:0;top:0;bottom:0;z-index:60;width:232px!important;transform:translateX(-100%);visibility:hidden;transition:transform .18s ease-out,visibility 0s linear .18s}
+  .adm-shell > .adm-sidebar.open{transform:none;visibility:visible;transition:transform .18s ease-out;box-shadow:6px 0 22px rgba(20,40,10,.22)}
+}
+@media (prefers-reduced-motion:reduce){.adm-shell > .adm-sidebar,.adm-shell > .adm-sidebar.open{transition:none}}
 /* v19.5 — 관리자 (최종 시안 A-8: 진한 초록 왼쪽 메뉴 · 요약 · 결재 표 · PDF 원본 보기) */
 #admin-main{background:#F5F5F2!important}
 .adm-topbar{padding:12px 24px;box-shadow:none;border-bottom:1px solid var(--bm-line)}
@@ -3190,6 +3206,33 @@ input.apv-in[type=text]{width:110px}
   });
 })();
 
+/* v21.51 관리자 왼쪽 메뉴 자동 숨김 */
+(function(){
+  function init(){
+    var sh = document.querySelector('.adm-shell'), nav = sh && sh.querySelector(':scope > .adm-sidebar');
+    if(!nav || sh.querySelector('.adm-edge')) return;
+    var b = document.createElement('button'), t = null;
+    b.type = 'button'; b.className = 'adm-edge'; b.setAttribute('aria-label', '관리자 메뉴 열기'); b.setAttribute('aria-expanded', 'false'); b.title = '관리자 메뉴 (마우스를 대면 열림)';
+    b.innerHTML = '<svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 1l4 4-4 4"/></svg><i hidden></i>';
+    sh.insertBefore(b, nav);
+    var open = function(){ clearTimeout(t); nav.classList.add('open'); b.setAttribute('aria-expanded', 'true'); };
+    var close = function(){ clearTimeout(t); nav.classList.remove('open'); b.setAttribute('aria-expanded', 'false'); };
+    var later = function(){ clearTimeout(t); t = setTimeout(close, 400); };
+    b.addEventListener('mouseenter', open); b.addEventListener('mouseleave', later);
+    nav.addEventListener('mouseenter', open); nav.addEventListener('mouseleave', later);
+    b.addEventListener('click', function(){ nav.classList.contains('open') ? close() : open(); });
+    nav.addEventListener('focusin', open);
+    nav.addEventListener('focusout', function(e){ if(!nav.contains(e.relatedTarget) && e.relatedTarget !== b) later(); });
+    nav.addEventListener('click', function(e){ if(e.target.closest('.adm-nav-item')) setTimeout(close, 120); });
+    document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && nav.classList.contains('open')) close(); });
+    document.addEventListener('pointerdown', function(e){ if(nav.classList.contains('open') && !nav.contains(e.target) && !b.contains(e.target)) close(); });
+    // 메뉴에 결재 대기 같은 숫자가 있으면 띠에 빨간 점
+    var dot = b.querySelector('i'), upd = function(){ dot.hidden = ![].some.call(nav.querySelectorAll('.adm-nav-badge'), function(x){ var v = String(x.textContent || '').trim(); return v && v !== '0' && getComputedStyle(x).display !== 'none'; }); };
+    try{ new MutationObserver(upd).observe(nav, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['style', 'class'] }); }catch(_){}
+    upd();
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
 /* ★★★ v18.4 — 서명·사진을 브라우저 저장소(localStorage)에 두지 않음 (용량 근본 해결)
    [문제] 교육·보호구 기록마다 서명 이미지(base64)가 들어 있어 PC 저장소 한도(5MB)에 근접
    [방식]
@@ -5513,7 +5556,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.50';
+  var SERVER_EXPECT = 'v21.51';
   // v21.10: 'v21.9' < 'v21.10'을 글자 순서가 아니라 숫자로 비교
   function bmVerLess(a, b){
     var p = function(v){ return (String(v).match(/v?(\d+(?:\.\d+)*)/) || [,'0'])[1].split('.').map(Number); };
@@ -20978,6 +21021,45 @@ self.addEventListener('fetch',e=>{
 .cra-vent{display:flex;flex-wrap:wrap;gap:6px}
 .cra-vent label{display:flex;align-items:center;gap:6px;border:1px solid #D9D6CE;border-radius:6px;padding:5px 10px;font-weight:700;font-size:13.5px;cursor:pointer}
 .cra-vent label.on{border-color:#67AF28;background:#EAF3E0;color:#345C12}
+.cra-dch{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.cra-dch label{position:relative;display:inline-flex;align-items:center;gap:6px;border:1px solid #DCDDD6;background:#fff;border-radius:999px;padding:4px 12px 4px 9px;font-weight:700;font-size:13px;white-space:nowrap;cursor:pointer}
+.cra-dch label input{position:absolute;opacity:0;width:1px;height:1px;margin:0}
+.cra-dch label::before{content:"";width:13px;height:13px;border-radius:50%;border:1.5px solid #A2A49B;box-sizing:border-box;flex:none}
+.cra-dch label:has(input:checked){background:#E7F1DF;border-color:#B9D6A3;color:#345C12}
+.cra-dch label:has(input:checked)::before{border-color:#3B7A22;background:#3B7A22 radial-gradient(circle,#fff 0 2.5px,transparent 3px)}
+.cra-dch label.all{border-style:dashed}
+.cra-dch label.all:has(input:checked){border-style:solid;background:#3B7A22;border-color:#3B7A22;color:#fff}
+.cra-dch label.all:has(input:checked)::before{border-color:#fff;background:#fff radial-gradient(circle,#3B7A22 0 2.5px,transparent 3px)}
+.cra-dch label.off,.cra-dch label:has(input:disabled){color:#A2A49B;background:#F7F8F4;border-style:dotted;cursor:not-allowed}
+.cra-dch label:has(input:focus-visible){outline:2px solid #3B7A22;outline-offset:2px}
+.cra-dch small{font-weight:400;font-size:11.5px}
+.cra-dch .sep{width:1px;align-self:stretch;background:#DCDDD6;margin:0 2px}
+.cra-dadd{display:inline-flex;gap:4px}
+.cra-dadd .cra-in{width:140px;height:30px;min-height:0;border-radius:999px;padding:0 10px}
+.cra-dadd .cra-btn{border-radius:999px;white-space:nowrap;height:30px;padding:0 10px}
+/* v21.52 1번 칸 (시안 B): 왼쪽 평가 대상 · 오른쪽 취급 조건 */
+.cra-g2{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:12px;margin-top:4px}
+.cra-grp{border:1px solid #DCDDD6;border-radius:8px;padding:12px;background:#F7F8F4;display:flex;flex-direction:column;gap:10px;min-width:0}
+.cra-grp h4{margin:0;font-size:13px;color:#345C12;display:flex;align-items:center;gap:6px}
+.cra-grp h4::before{content:"";width:4px;height:14px;border-radius:2px;background:#3B7A22}
+.cra-grp h4 small{font-weight:400;color:#6B6E64}
+.cra-grp .cra-f > span{font-size:12.5px;font-weight:700;color:#5A5650;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+.cra-grp .cra-f > span small{font-weight:400;color:#8C8E85}
+.cra-grp .cra-in{width:100%}
+.cra-ro{border:1px dashed #DCDDD6;border-radius:5px;padding:4px 7px;font-size:13.5px;font-weight:400;color:#2B2A27;line-height:1.5;background:#fff;height:auto;min-height:0;display:flex;align-items:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.cra-c2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cra-c2 .full{grid-column:1/-1}
+.cra-seg{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid #DCDDD6;border-radius:6px;overflow:hidden;background:#fff}
+.cra-seg button{border:0;border-right:1px solid #DCDDD6;background:none;padding:5px 6px;cursor:pointer;font:inherit;font-weight:700;line-height:1.15;display:flex;flex-direction:column;align-items:center}
+.cra-seg button:last-child{border-right:0}
+.cra-seg button small{font-size:10.5px;font-weight:400;color:#6B6E64}
+.cra-seg button[aria-pressed="true"]{background:#E7F1DF;color:#345C12;box-shadow:inset 0 -3px 0 #3B7A22}
+.cra-unit{position:relative;display:block}.cra-unit .cra-in{padding-right:28px}.cra-unit i{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-style:normal;color:#6B6E64;font-size:12.5px}
+.cra-vh{position:absolute!important;width:1px!important;height:1px!important;opacity:0;pointer-events:none}
+@media (max-width:1100px){.cra-g2{grid-template-columns:1fr}}
+@media (max-width:480px){.cra-c2{grid-template-columns:1fr}}
+.cra-addp{border:1px dashed #9DB98A;background:#F5FAF0;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.cra-it.sub{margin-left:14px;width:calc(100% - 14px);padding-top:6px;padding-bottom:6px}
 .cra-sc{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:8px}
 .cra-sc > div{border:1px solid #E4E2DC;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:4px}
 /* v21.50 직접 고친 점수 */
@@ -21122,7 +21204,7 @@ var CRA = (function(){
     var b = best(it), a = best(it, true);
     return { product: it.product, dept: it.dept, proc: it.proc, date: it.date || today(), by: '보건관리자', src: it.src || '직접 평가', usage: it.usage || '',
       e: b.e.v, s: b.s.v, risk: b.r, grade: b.g.name + (b.g.bad ? '(허용 불가)' : ''), after: a.r,
-      comps: it.comps, vent: it.vent, now: it.now, plan: it.plan, deptManual: !!it.deptManual, aiGuess: !!it.aiGuess, due: it.due, done: it.done, owner: it.owner, qty: it.qty, temp: it.temp, amt: it.amt, qtySrc: it.qtySrc || '', qtyManual: !!it.qtyManual,
+      comps: it.comps, vent: it.vent, now: it.now, plan: it.plan, key: it.key || '', deptAll: !!it.deptAll, deptManual: !it.deptAll, aiGuess: !!it.aiGuess, due: it.due, done: it.done, owner: it.owner, qty: it.qty, temp: it.temp, amt: it.amt, qtySrc: it.qtySrc || '', qtyManual: !!it.qtyManual,
       ovWhy: it.ovWhy || '', scores: it.comps.map(function(c){ var s = csO(it, c), x = csO(it, c, true); return [s.e.v, s.s.v, s.r, x.e.v, x.s.v, x.r]; }) };
   }
   // AI MSDS 검토 결과(draft) → 성분 칸
@@ -21143,10 +21225,27 @@ var CRA = (function(){
   }
   // v21.45 MSDS 목록(chemicals 시트)의 부서 = 평가의 부서 (MSDS 목록에서 부서를 바꾸면 평가도 따라감 · 평가 화면에서 직접 고친 것만 그대로)
   function msdsDept(name){ var p = products()[name]; return p ? (p.departments || []).join(',') : ''; }
+  // v21.51 한 물질에 부서별 평가 여러 개 (예: 뉴젠자임폼 병동 · 중환자실 · 수술실) — 전체 = MSDS 목록 부서에서 다른 평가 부서를 뺀 나머지
+  function splitD(x){ var o = []; String(x || '').split(/\s*,\s*/).forEach(function(d){ d = d.trim(); if(d && o.indexOf(d) < 0) o.push(d); }); return o; }
+  function keyOf(r){ return (r && r.data && r.data.key) || ''; }
+  function rowsOf(name){ return (st.rows || []).filter(function(r){ return r.product === name; }).sort(function(a, b){ return (keyOf(a) ? 1 : 0) - (keyOf(b) ? 1 : 0) || String(keyOf(a)).localeCompare(String(keyOf(b))); }); }
+  function rowOf(name, key){ return rowsOf(name).filter(function(r){ return keyOf(r) === (key || ''); })[0]; }
+  function othersD(it){ var o = []; rowsOf(it.product).forEach(function(r){ if(keyOf(r) !== (it.key || '')) splitD(r.dept).forEach(function(d){ if(o.indexOf(d) < 0) o.push(d); }); }); return o; }
+  function availD(it){ var ot = othersD(it); return splitD(msdsDept(it.product)).filter(function(d){ return ot.indexOf(d) < 0; }); }
   function syncDept(it){
-    if(it.deptManual) return '';
-    var d = msdsDept(it.product); if(!d || d === it.dept) return '';
+    if(!it.deptAll) return '';
+    var d = availD(it).join(','); if(!d || d === it.dept) return '';
     var old = it.dept; it.dept = d; return old || '(없음)';
+  }
+  function deptBox(it){
+    var mine = splitD(it.dept), ot = othersD(it), list = splitD(msdsDept(it.product)), all = list.slice();
+    mine.forEach(function(d){ if(all.indexOf(d) < 0) all.push(d); });
+    var many = rowsOf(it.product).length > 1 || !!it.key;
+    return '<div class="cra-f"><span>평가 부서 <small>' + (it.deptAll ? (many ? '전체 = MSDS 목록 부서 중 다른 평가 부서를 뺀 나머지' : '전체 = MSDS 목록 부서를 따라감') : '일부 선택 · MSDS 목록: ' + esc(list.join(', ') || '없음')) + '</small></span>' +
+      '<div class="cra-dch" role="group" aria-label="평가 부서"><label class="all"><input type="checkbox" id="cra-dall"' + (it.deptAll ? ' checked' : '') + '>전체</label><span class="sep" aria-hidden="true"></span>' +
+      all.map(function(d){ var o = ot.indexOf(d) >= 0, on = mine.indexOf(d) >= 0, gone = list.indexOf(d) < 0;
+        return '<label' + (o ? ' class="off" title="같은 물질의 다른 평가에 있는 부서"' : '') + '><input type="checkbox" data-dp="' + esc(d) + '"' + (on ? ' checked' : '') + (o ? ' disabled' : '') + '>' + esc(d) + (o ? ' <small>(다른 평가)</small>' : '') + (gone && !o ? ' <small>(MSDS 목록에 없음)</small>' : '') + '</label>'; }).join('') +
+      '<span class="cra-dadd"><input class="cra-in" id="cra-dadd" placeholder="목록에 없는 부서" aria-label="목록에 없는 부서 추가"><button type="button" class="cra-btn s" id="cra-daddb">+ 추가</button></span></div></div>';
   }
   // v21.46 MSDS 목록의 작업환경측정 · 특수건강진단 칸 → 현재 조치 자동 체크 (주기가 있으면 체크 · 제외(임단시작업 등) · 빈칸이면 해제)
   var CHK = { we: '작업환경측정을 정기적으로 실시', hc: '특수건강진단을 정기적으로 실시' }, CHKN = { we: '작업환경측정', hc: '특수건강진단' };
@@ -21179,12 +21278,12 @@ var CRA = (function(){
   function chkNote(o){ return o ? '<div class="cra-sub" style="grid-column:1/-1">MSDS 목록: ' + ['we', 'hc'].map(function(k){ return CHKN[k] + ' <b style="color:' + (o[k].on ? '#1F6B3A' : '#8A5A00') + '">' + esc(o[k].why) + '</b>'; }).join(' · ') + ' — AI 검토할 때 위 체크를 자동으로 맞춤</div>' : ''; }
   function blankItem(name){
     var p = products()[name] || {};
-    return { product: name, dept: (p.departments || []).join(','), proc: p.usage || '', usage: p.usage || '', src: '', date: '', vent: 0, now: [], plan: [], due: '', done: '', owner: '보건관리자', qty: 1, temp: 25, amt: '',
+    return { product: name, dept: (p.departments || []).join(','), key: '', deptAll: true, proc: p.usage || '', usage: p.usage || '', src: '', date: '', vent: 0, now: [], plan: [], due: '', done: '', owner: '보건관리자', qty: 1, temp: 25, amt: '',
       comps: (p.components || []).filter(function(c){ return c.compName; }).map(function(c){ return { comp: c.compName, cas: String(c.casNumber || '').trim(), pct: c.amount || '', state: 'liquid', bp: '', dust: '', unit: 'ppm', oel: '', c: '', m: '', r: '', hcodes: '', meas: '', patient: '무' }; }), fresh: true };
   }
   function itemOf(row){
     var d = row.data || {};
-    return { product: row.product, dept: row.dept, deptManual: !!d.deptManual, proc: row.proc, usage: d.usage || '', src: row.src, date: row.date, vent: +d.vent || 0, now: normM(d.now), plan: normM(d.plan), due: d.due || '', done: d.done || '', owner: d.owner || '보건관리자',
+    return { product: row.product, dept: row.dept, key: d.key || '', deptAll: 'deptAll' in d ? !!d.deptAll : !d.deptManual, deptManual: !!d.deptManual, proc: row.proc, usage: d.usage || '', src: row.src, date: row.date, vent: +d.vent || 0, now: normM(d.now), plan: normM(d.plan), due: d.due || '', done: d.done || '', owner: d.owner || '보건관리자',
       qty: +d.qty || 1, temp: d.temp || 25, amt: d.amt || '', qtySrc: d.qtySrc || '', qtyManual: !!d.qtyManual, ovWhy: d.ovWhy || '', comps: JSON.parse(JSON.stringify(d.comps || [])) };
   }
 
@@ -21289,7 +21388,7 @@ var CRA = (function(){
     st.rows = x.data || []; CRA.setCfg(x.cfg); st.cfg = x.cfg || null; st.meas = x.meas || []; st.pick = (x.cfg && x.cfg.measPick) || 'latest'; st.qtys = x.qtys || []; st.qtyOld = !('qtys' in x); st.qtyInfo = x.qtyInfo || null;
     draw();
   }
-  function savedOf(name){ return (st.rows || []).filter(function(r){ return r.product === name; })[0]; }
+  function savedOf(name){ return rowsOf(name)[0]; }
   function names(){
     var pm = products(), out = Object.keys(pm);
     (st.rows || []).forEach(function(r){ if(out.indexOf(r.product) < 0) out.push(r.product); });
@@ -21311,7 +21410,7 @@ var CRA = (function(){
       '<input class="cra-in" id="cra-q" placeholder="물질명 · 부서 · CAS 찾기" aria-label="물질 찾기" value="' + esc(st.q) + '"><div class="cra-row" id="cra-lf" style="gap:4px"></div><div class="cra-list" id="cra-list"></div></div><div id="cra-detail" style="display:flex;flex-direction:column;gap:12px;min-width:0"></div></div>';
     $('cra-q').oninput = function(){ st.q = this.value; drawList(); };
     $('cra-lf').onclick = function(e){ var b = e.target.closest('[data-lf]'); if(b){ st.lf = b.getAttribute('data-lf'); drawList(); } };
-    $('cra-list').onclick = function(e){ var b = e.target.closest('[data-n]'); if(!b) return; pick(b.getAttribute('data-n')); };
+    $('cra-list').onclick = function(e){ var b = e.target.closest('[data-n]'); if(!b) return; pick(b.getAttribute('data-n'), b.hasAttribute('data-k') ? b.getAttribute('data-k') : null); };
     $('cra-bulk').onclick = function(){ bulkAi($('cra-bmode').value); };
     $('cra-qall').onclick = qtyAll;
     if(st.bulk) bulkShow();
@@ -21331,7 +21430,8 @@ var CRA = (function(){
       var n = list[i]; st.bulk.cur = n; bulkShow();
       var x = await post('chemra.read', { name: n });
       if(!x.success){ st.bulk.fail.push([n, x.error || '실패']); if(x.limit){ st.bulk.limit = list.slice(i).length; break; } bulkShow(); continue; }
-      var r = savedOf(n), it = r ? itemOf(r) : blankItem(n);
+      var its = rowsOf(n).length ? rowsOf(n).map(itemOf) : [blankItem(n)];
+      for(var ii = 0; ii < its.length; ii++){ var it = its[ii];
       var keep = {}; it.comps.forEach(function(c){ if(c.meas !== '' && c.meas != null && !c.measSrc) keep[nzs(c.cas || c.comp)] = c.meas; });
       var base = it.comps.length ? it.comps.map(function(c){ return { name: c.comp, cas: c.cas, amount: c.pct }; }) : ((x.sheet && x.sheet.comps) || []);
       var comps = fromDraft(x.draft, base.length ? base : null); if(!comps.length) comps = fromDraft(x.draft, null);
@@ -21345,9 +21445,11 @@ var CRA = (function(){
       applyQty(it); applyMeas(it); applyChk(it, msdsChk(n));
       if(!it.plan.length) it.plan = suggest(it);
       it.src = x.guess ? 'AI 추정(MSDS 없음)' : 'AI 기초평가'; it.date = today();
-      if(!it.comps.length){ st.bulk.fail.push([n, 'AI가 성분을 찾지 못함']); continue; }
+      if(!it.comps.length){ st.bulk.fail.push([n, 'AI가 성분을 찾지 못함']); break; }
       var sv = await post('chemra.save', { item: record(it) });
-      if(sv.success){ var b = best(it); st.bulk.done.push([n, b.r, b.g.name + (b.g.bad ? ' · 허용 불가' : '')]); } else st.bulk.fail.push([n, (sv.failed || []).join(' ') || sv.error || '저장 실패']);
+      var nm = n + (its.length > 1 ? ' (' + it.dept + ')' : '');
+      if(sv.success){ var b = best(it); st.bulk.done.push([nm, b.r, b.g.name + (b.g.bad ? ' · 허용 불가' : '')]); } else st.bulk.fail.push([nm, (sv.failed || []).join(' ') || sv.error || '저장 실패']);
+      }
       bulkShow();
     }
     st.bulk.run = false; st.bulk.cur = '';
@@ -21391,10 +21493,11 @@ var CRA = (function(){
       say(x.saved + '개 평가에 공정별 취급량을 반영했습니다', 'ok'); await reload(); drawEval();
     };
   }
-  function pick(n){
-    st.cur = n; var r = savedOf(n); st.it = r ? itemOf(r) : blankItem(n);
+  function pick(n, key){
+    var r = key != null ? rowOf(n, key) : savedOf(n);
+    st.cur = n; st.curKey = r ? keyOf(r) : ''; st.it = r ? itemOf(r) : blankItem(n);
     if(!r) applyChk(st.it, msdsChk(n));
-    var d0 = r ? syncDept(st.it) : '';
+    var d0 = r ? syncDept(st.it) : (syncDept(st.it), '');
     var q0 = st.it.qty, cq = applyQty(st.it), ch = applyMeas(st.it); drawList(); drawDetail();
     var msg = [];
     if(d0) msg.push('MSDS 목록 부서가 바뀌어 평가 부서도 바꿨습니다 (' + esc(d0) + ' → ' + esc(st.it.dept) + ')');
@@ -21416,10 +21519,13 @@ var CRA = (function(){
       if(!q) return true;
       return (n + ' ' + (p.departments || []).join(' ') + ' ' + (r ? r.proc + ' ' + r.dept : '') + ' ' + (p.components || []).map(function(c){ return c.compName + ' ' + c.casNumber; }).join(' ')).toLowerCase().indexOf(q) >= 0;
     }).map(function(n){
-      var r = savedOf(n), p = pm[n] || {}, g = r ? CRA.grade(r.risk, r.e, r.sv) : null;
-      return '<button type="button" class="cra-it' + (st.cur === n ? ' on' : '') + '" data-n="' + esc(n) + '"><b>' + esc(n) + '</b>' +
-        (r ? '<span style="font-size:12.5px;font-variant-numeric:tabular-nums">' + r.risk + ' ' + chip({ g: g }) + '</span>' : '<span class="cra-chip off">평가 전</span>') +
-        '<span class="cra-sub">' + esc((r && r.proc) || (p.departments || []).join(', ') || (pm[n] ? '' : 'MSDS 목록에 없음')) + (r ? ' · ' + esc(r.date) : '') + '</span></button>';
+      var rs = rowsOf(n), r = rs[0], p = pm[n] || {}, top = rs.slice().sort(function(a, b){ return b.risk - a.risk; })[0], g = top ? CRA.grade(top.risk, top.e, top.sv) : null;
+      var one = '<button type="button" class="cra-it' + (st.cur === n && (rs.length < 2 || st.curKey === keyOf(r)) ? ' on' : '') + '" data-n="' + esc(n) + '"' + (rs.length > 1 ? ' data-k=""' : '') + '><b>' + esc(n) + '</b>' +
+        (top ? '<span style="font-size:12.5px;font-variant-numeric:tabular-nums">' + top.risk + ' ' + chip({ g: g }) + '</span>' : '<span class="cra-chip off">평가 전</span>') +
+        '<span class="cra-sub">' + (rs.length > 1 ? '부서별 평가 ' + rs.length + '개 · ' + esc(r.dept || '') : esc((r && r.proc) || (p.departments || []).join(', ') || (pm[n] ? '' : 'MSDS 목록에 없음')) + (r ? ' · ' + esc(r.date) : '')) + '</span></button>';
+      if(rs.length < 2) return one;
+      return one.replace(' data-k=""', ' data-k="' + esc(keyOf(r)) + '"') + rs.slice(1).map(function(x){ var gx = CRA.grade(x.risk, x.e, x.sv);
+        return '<button type="button" class="cra-it sub' + (st.cur === n && st.curKey === keyOf(x) ? ' on' : '') + '" data-n="' + esc(n) + '" data-k="' + esc(keyOf(x)) + '"><b>└ ' + esc(x.dept || '(부서 없음)') + '</b><span style="font-size:12.5px;font-variant-numeric:tabular-nums">' + x.risk + ' ' + chip({ g: gx }) + '</span><span class="cra-sub">' + esc(x.proc) + ' · ' + esc(x.date) + '</span></button>'; }).join('');
     }).join('') || '<div class="cra-sub" style="padding:8px">찾는 물질이 없습니다.</div>';
   }
   var inp = function(i, k, v, w, num){ return '<input class="cra-in" data-c="' + i + '" data-k="' + k + '" value="' + esc(v) + '"' + (num ? ' inputmode="decimal"' : '') + ' style="min-width:' + (w || 60) + 'px" aria-label="' + k + '">'; };
@@ -21473,15 +21579,24 @@ var CRA = (function(){
     var p = products()[it.product], b = best(it), sg = suggest(it), a = best(it, true);
     var ck = function(m, k){ return '<label><input type="checkbox" data-' + k + '="' + esc(m) + '"' + (it[k].indexOf(m) >= 0 ? ' checked' : '') + '>' + esc(m) + '</label>'; };
     box.innerHTML =
-      '<div class="cra-box"><div class="cra-row" style="justify-content:space-between"><h3><span class="k">1</span>' + esc(it.product) + (savedOf(it.product) ? ' <span class="cra-chip off">저장됨 ' + esc(savedOf(it.product).date) + '</span>' : '') + '</h3>' +
-        '<span class="cra-row" style="gap:6px">' + (p && p.pdfUrl ? '<a class="cra-btn s" href="' + esc(p.pdfUrl) + '" target="_blank" rel="noopener">MSDS PDF</a>' : '') + '<button type="button" class="cra-btn p" id="cra-read"' + (p ? '' : ' disabled title="MSDS 목록에 없는 물질"') + '>' + (p && !p.pdfUrl ? 'AI로 추정 (MSDS 없음)' : 'MSDS 읽기 (AI)') + '</button></span></div>' +
-        '<div class="cra-row"><label class="cra-f" style="flex:1 1 200px">공정명<input class="cra-in" id="cra-proc" value="' + esc(it.proc) + '" placeholder="예: 조직 고정, 방부제"></label>' +
-        '<label class="cra-f" style="flex:1 1 180px">부서 <span style="font-weight:400">' + (it.deptManual ? '(직접 고침 · MSDS 목록: ' + esc(msdsDept(it.product) || '없음') + ' <button type="button" class="cra-btn s" id="cra-dsync" style="padding:0 6px">MSDS 목록 부서로</button>)' : '(MSDS 목록 부서)') + '</span><input class="cra-in" id="cra-dept" value="' + esc(it.dept) + '"></label>' +
-        '<label class="cra-f">하루취급량<select class="cra-in" id="cra-qty"><option value="1">소 (g · ㎖)</option><option value="2">중 (㎏ · L)</option><option value="3">대 (톤 · ㎥)</option></select></label>' +
-        '<label class="cra-f">일취급량<input class="cra-in" id="cra-amt" value="' + esc(it.amt) + '" style="width:100px"></label>' +
-        '<label class="cra-f">사용온도 ℃<input class="cra-in" id="cra-temp" value="' + esc(it.temp) + '" style="width:70px"></label></div>' +
-        (it.qtySrc && !it.qtyManual ? '<div class="cra-sub" style="color:#1F4E79">하루취급량: 공정별 취급량 시트 — ' + esc(it.qtySrc) + '</div>' : (it.qtyManual ? '<div class="cra-sub">하루취급량: 직접 고름</div>' : (st.qtys.length ? '<div class="cra-sub">공정별 취급량 시트에 이 물질이 없습니다 — 하루취급량을 직접 고르세요</div>' : (st.qtyOld ? '<div class="cra-sub" style="color:#A3302A">공정별 취급량 시트를 못 읽음 — 서버를 새 버전으로 배포해야 합니다</div>' : '')))) +
-        '<div id="cra-rmsg" class="cra-sub"></div></div>' +
+      '<div class="cra-box"><div class="cra-row" style="justify-content:space-between"><h3><span class="k">1</span>' + esc(it.product) + (rowsOf(it.product).length > 1 || it.key ? ' <span class="cra-chip ai">부서별 평가 · ' + esc(it.dept || '부서 선택') + '</span>' : '') + (rowOf(it.product, it.key) ? ' <span class="cra-chip off">저장됨 ' + esc(rowOf(it.product, it.key).date) + '</span>' : ' <span class="cra-chip off">저장 전</span>') + '</h3>' +
+        '<span class="cra-row" style="gap:6px">' + (savedOf(it.product) ? '<button type="button" class="cra-btn s" id="cra-addev" title="같은 물질을 부서마다 따로 평가 (사용 환경이 다를 때)">+ 다른 부서 평가 추가</button>' : '') + (p && p.pdfUrl ? '<a class="cra-btn s" href="' + esc(p.pdfUrl) + '" target="_blank" rel="noopener">MSDS PDF</a>' : '') + '<button type="button" class="cra-btn p" id="cra-read"' + (p ? '' : ' disabled title="MSDS 목록에 없는 물질"') + '>' + (p && !p.pdfUrl ? 'AI로 추정 (MSDS 없음)' : 'MSDS 읽기 (AI)') + '</button></span></div>' +
+        '<div class="cra-g2">' +
+          '<div class="cra-grp"><h4>평가 대상</h4>' +
+            '<div class="cra-f"><span>사용 용도 <small>MSDS 목록 · 보기 전용</small></span><div class="cra-ro">' + (esc((p && p.usage) || it.usage || '') || '<span class="cra-sub">MSDS 목록에 용도가 없습니다</span>') + '</div></div>' +
+            '<label class="cra-f"><span>공정명 <small>처음엔 용도와 같음 · 부서 작업에 맞게 고침</small></span><input class="cra-in" id="cra-proc" value="' + esc(it.proc) + '" placeholder="예: 조직 고정, 방부제"></label>' +
+            deptBox(it) + '</div>' +
+          '<div class="cra-grp"><h4>취급 조건 <small>노출수준(방법3)에 쓰임</small></h4>' +
+            '<div class="cra-c2">' +
+              '<div class="cra-f full"><span>하루취급량</span><div class="cra-seg" role="group" aria-label="하루취급량">' + [[1, '소', 'g · ㎖'], [2, '중', '㎏ · L'], [3, '대', '톤 · ㎥']].map(function(q){ return '<button type="button" data-qb="' + q[0] + '" aria-pressed="' + ((it.qty || 1) === q[0]) + '">' + q[1] + '<small>' + q[2] + '</small></button>'; }).join('') + '</div>' +
+                '<select class="cra-in cra-vh" id="cra-qty" aria-hidden="true" tabindex="-1"><option value="1">소 (g · ㎖)</option><option value="2">중 (㎏ · L)</option><option value="3">대 (톤 · ㎥)</option></select></div>' +
+              '<label class="cra-f"><span>일취급량</span><input class="cra-in" id="cra-amt" value="' + esc(it.amt) + '" placeholder="예: 130㎖"></label>' +
+              '<label class="cra-f"><span>사용온도</span><span class="cra-unit"><input class="cra-in" id="cra-temp" value="' + esc(it.temp) + '" inputmode="decimal"><i>℃</i></span></label>' +
+            '</div>' +
+            (it.qtySrc && !it.qtyManual ? '<div class="cra-sub" style="color:#1F4E79">하루취급량: 공정별 취급량 시트 — ' + esc(it.qtySrc) + '</div>' : (it.qtyManual ? '<div class="cra-sub">하루취급량: 직접 고름</div>' : (st.qtys.length ? '<div class="cra-sub">공정별 취급량 시트에 이 물질이 없습니다 — 하루취급량을 직접 고르세요</div>' : (st.qtyOld ? '<div class="cra-sub" style="color:#A3302A">공정별 취급량 시트를 못 읽음 — 서버를 새 버전으로 배포해야 합니다</div>' : '')))) +
+          '</div>' +
+        '</div>' +
+        '<div id="cra-addp"></div><div id="cra-rmsg" class="cra-sub"></div></div>' +
       (it.comps.length ? '' : '<div class="cra-box"><div class="cra-sub">성분이 없습니다. [MSDS 읽기 (AI)]를 누르거나 성분을 추가하세요.</div></div>') +
       '<div class="cra-box"><h3><span class="k">2</span>MSDS 검토 <span class="cra-chip ai">파란 줄 = AI가 MSDS에서 읽음</span>' + (it.comps.some(function(c){ return c.guess; }) ? ' <span class="cra-chip g1">노란 줄 = MSDS 없이 AI 추정</span>' : '') + '</h3>' + compTable(it) +
         '<div class="cra-row"><button type="button" class="cra-btn s" id="cra-addc">+ 성분 추가</button>' + (it.comps.length ? '<button type="button" class="cra-btn s" id="cra-delc">마지막 성분 빼기</button>' : '') +
@@ -21498,17 +21613,24 @@ var CRA = (function(){
         (anyOv(it) ? '<div class="cra-row"><label class="cra-f" style="flex:1 1 320px">직접 고친 까닭 (평가표 비고 · 이력에 남음)<input class="cra-in" id="cra-ovwhy" value="' + esc(it.ovWhy || '') + '" placeholder="예: 실제 사용량이 적고 밀폐 용기에서만 사용"></label><button type="button" class="cra-btn s" id="cra-ovclr">직접 고친 점수 모두 지우기</button></div>' : '') +
         '<div class="cra-row"><label class="cra-f">개선예정일<input type="date" class="cra-in" id="cra-due" value="' + esc(it.due) + '"></label><label class="cra-f">완료일<input type="date" class="cra-in" id="cra-done" value="' + esc(it.done) + '"></label>' +
         '<label class="cra-f">담당자<input class="cra-in" id="cra-owner" value="' + esc(it.owner) + '" style="width:120px"></label><span style="flex:1 1 auto"></span>' +
-        (savedOf(it.product) ? '<button type="button" class="cra-btn" id="cra-del">평가 삭제</button>' : '') + '<button type="button" class="cra-btn p" id="cra-save">평가 저장</button></div></div>' : '');
+        (rowOf(it.product, it.key) ? '<button type="button" class="cra-btn" id="cra-del">평가 삭제</button>' : '') + '<button type="button" class="cra-btn p" id="cra-save">평가 저장</button></div></div>' : '');
     $('cra-qty').value = String(it.qty || 1);
     bindDetail(it);
   }
   function bindDetail(it){
     var re = function(){ drawDetail(); };
     var v = function(id, k, num){ var e = $(id); if(e) e.onchange = function(){ it[k] = num ? (parseInt(e.value, 10) || 1) : e.value.trim(); if(k === 'dept' || k === 'proc'){ applyMeas(it); applyQty(it); } re(); }; };
-    v('cra-proc', 'proc'); v('cra-dept', 'dept'); v('cra-qty', 'qty', 1);
-    var dp = $('cra-dept'); if(dp){ var df = dp.onchange; dp.onchange = function(){ it.deptManual = dp.value.trim() !== msdsDept(it.product); df(); }; }
-    var dsync = $('cra-dsync'); if(dsync) dsync.onclick = function(){ it.deptManual = false; syncDept(it); applyMeas(it); applyQty(it); re(); };
-    var qs = $('cra-qty'); if(qs){ var qf = qs.onchange; qs.onchange = function(){ it.qtyManual = true; it.qtySrc = ''; qf(); }; } v('cra-amt', 'amt'); v('cra-temp', 'temp'); v('cra-due', 'due'); v('cra-done', 'done'); v('cra-owner', 'owner');
+    v('cra-proc', 'proc'); v('cra-qty', 'qty', 1);
+    var dchg = function(){ applyMeas(it); applyQty(it); re(); };
+    [].forEach.call(document.querySelectorAll('#cra-detail [data-dp]'), function(el){ el.onchange = function(){
+      var sel = [].filter.call(document.querySelectorAll('#cra-detail [data-dp]'), function(x){ return x.checked && !x.disabled; }).map(function(x){ return x.getAttribute('data-dp'); });
+      var av = availD(it); it.dept = sel.join(','); it.deptAll = av.length > 0 && sel.length === av.length && av.every(function(d){ return sel.indexOf(d) >= 0; }); dchg(); }; });
+    var dall = $('cra-dall'); if(dall) dall.onchange = function(){ it.deptAll = dall.checked; if(it.deptAll){ it.dept = ''; syncDept(it); } dchg(); };
+    var dadd = $('cra-daddb'); if(dadd) dadd.onclick = function(){ var t = $('cra-dadd').value.trim(); if(!t) return; var m = splitD(it.dept); if(m.indexOf(t) < 0) m.push(t); it.dept = m.join(','); it.deptAll = false; dchg(); };
+    var dai = $('cra-dadd'); if(dai) dai.onkeydown = function(e){ if(e.key === 'Enter'){ e.preventDefault(); dadd.onclick(); } };
+    var aev = $('cra-addev'); if(aev) aev.onclick = function(){ addEvalPanel(it); };
+    var qs = $('cra-qty'); if(qs){ var qf = qs.onchange; qs.onchange = function(){ it.qtyManual = true; it.qtySrc = ''; qf(); }; }
+    [].forEach.call(document.querySelectorAll('#cra-detail [data-qb]'), function(b){ b.onclick = function(){ if(!qs || +qs.value === +b.getAttribute('data-qb')) return; qs.value = b.getAttribute('data-qb'); qs.onchange(); }; }); v('cra-amt', 'amt'); v('cra-temp', 'temp'); v('cra-due', 'due'); v('cra-done', 'done'); v('cra-owner', 'owner');
     bindComps($('cra-detail'), it, re);
     [].forEach.call(document.querySelectorAll('#cra-detail input[name="cra-vent"]'), function(el){ el.onchange = function(){ setVent(it, +el.value); re(); }; });
     [].forEach.call(document.querySelectorAll('#cra-detail [data-ov]'), function(el){ el.onchange = function(){
@@ -21567,13 +21689,47 @@ var CRA = (function(){
       sv.disabled = false;
       if(!x.success){ say((x.failed || []).join(' / ') || x.error || '실패', 'err'); return; }
       say('위험성평가를 저장했습니다', 'ok');
-      await reload(); pick(it.product);
+      await reload(); await resyncAll(it.product); pick(it.product, it.key || '');
     };
     var de = $('cra-del'); if(de) de.onclick = async function(){
-      if(!confirm('"' + it.product + '" 위험성평가를 지울까요? (지운 내용은 이력 시트에 남습니다)')) return;
-      var x = await post('chemra.delete', { product: it.product });
+      if(!confirm('"' + it.product + '"' + (rowsOf(it.product).length > 1 ? ' (' + it.dept + ')' : '') + ' 위험성평가를 지울까요? (지운 내용은 이력 시트에 남습니다)')) return;
+      var x = await post('chemra.delete', { product: it.product, key: it.key || '' });
       if(!x.success){ say(x.error || '실패', 'err'); return; }
-      say('지웠습니다', 'ok'); await reload(); pick(it.product);
+      say('지웠습니다', 'ok'); await reload(); await resyncAll(it.product); pick(it.product);
+    };
+  }
+  // 부서별 평가를 저장 · 삭제하면 '전체' 평가의 부서를 다시 맞춰 저장 (다른 평가 부서 빼기 · 지운 평가 부서 돌려받기)
+  async function resyncAll(name){
+    var ch = 0;
+    for(var i = 0, rs = rowsOf(name); i < rs.length; i++){
+      var x = itemOf(rs[i]); if(!x.deptAll) continue;
+      if(syncDept(x)){ var sv = await post('chemra.save', { item: record(x) }); if(sv.success) ch++; }
+    }
+    if(ch) await reload();
+  }
+  // 같은 물질 다른 부서 평가 추가: 부서 고르기 → 지금 평가를 복사(MSDS 검토 값 · 조치) · 측정치 · 직접 고친 점수는 비움
+  function addEvalPanel(it){
+    var box = $('cra-addp'); if(!box) return;
+    var taken = []; rowsOf(it.product).forEach(function(r){ var x = itemOf(r); if(!x.deptAll) splitD(r.dept).forEach(function(d){ taken.push(d); }); });
+    var list = splitD(msdsDept(it.product));
+    box.innerHTML = '<div class="cra-addp"><b>같은 물질 · 다른 부서 평가 추가</b> <span class="cra-sub">사용 환경이 다른 부서를 고르세요. 지금 평가를 복사해서 만들고, 고른 부서는 \'전체\' 평가에서 빠집니다.</span>' +
+      '<div class="cra-dch">' + list.map(function(d){ var o = taken.indexOf(d) >= 0; return '<label' + (o ? ' class="off"' : '') + '><input type="checkbox" data-np="' + esc(d) + '"' + (o ? ' disabled' : '') + '>' + esc(d) + (o ? ' <small>(다른 평가)</small>' : '') + '</label>'; }).join('') +
+      '<span class="cra-row" style="gap:4px;flex-wrap:nowrap"><input class="cra-in" id="cra-np-in" placeholder="목록에 없는 부서" aria-label="목록에 없는 부서" style="width:130px"></span></div>' +
+      '<div class="cra-row" style="gap:6px"><button type="button" class="cra-btn p" id="cra-np-go">평가 만들기</button><button type="button" class="cra-btn s" id="cra-np-x">취소</button><span id="cra-np-msg" class="cra-sub"></span></div></div>';
+    $('cra-np-x').onclick = function(){ box.innerHTML = ''; };
+    $('cra-np-go').onclick = function(){
+      var sel = [].filter.call(box.querySelectorAll('[data-np]'), function(x){ return x.checked; }).map(function(x){ return x.getAttribute('data-np'); });
+      var extra = $('cra-np-in').value.trim(); if(extra && sel.indexOf(extra) < 0) sel.push(extra);
+      if(!sel.length){ $('cra-np-msg').textContent = '부서를 1개 이상 고르세요'; return; }
+      var pa = rowsOf(it.product).map(itemOf).filter(function(x){ return x.deptAll; })[0], rem = pa ? availD(pa) : [];
+      if(rem.length && rem.every(function(d){ return sel.indexOf(d) >= 0; })){ $('cra-np-msg').textContent = '모든 부서를 고르면 따로 평가할 까닭이 없습니다 — 일부 부서만 고르세요'; return; }
+      var n = JSON.parse(JSON.stringify(it));
+      n.key = 'k' + Date.now().toString(36); n.dept = sel.join(','); n.deptAll = false; n.date = ''; n.src = '부서별 평가'; n.ovWhy = ''; n.due = ''; n.done = '';
+      n.comps.forEach(function(c){ if(c.measSrc){ c.meas = ''; c.measSrc = ''; } delete c.oE; delete c.oS; delete c.aE; delete c.aS; });
+      n.qtyManual = false; n.qtySrc = '';
+      applyMeas(n); applyQty(n);
+      st.it = n; st.curKey = n.key; drawList(); drawDetail();
+      if($('cra-rmsg')) $('cra-rmsg').innerHTML = '<b style="color:#1F4E79">' + esc(n.dept) + ' 평가를 만들었습니다 (지금 평가를 복사).</b> 이 부서의 사용 환경(하루취급량 · 환기 · 보건조치 · 측정치)에 맞게 고친 뒤 [평가 저장]을 누르세요.';
     };
   }
   function setVent(it, v){
@@ -21605,11 +21761,11 @@ var CRA = (function(){
       '<div class="cra-tw"><table class="cra-t" style="min-width:1100px"><tr><th>제품명</th><th>부서</th><th>공정</th><th>성분 (CAS)</th><th class="c">노출수준</th><th class="c">유해성</th><th class="c">위험성</th><th>결정</th><th>밀폐 · 환기</th><th class="c">개선 후</th><th>평가일 · 출처</th></tr>' +
       (rows.map(function(r){
         var g = CRA.grade(r.risk, r.e, r.sv), d = r.data || {};
-        return '<tr data-open="' + esc(r.product) + '" style="cursor:pointer"><td><b>' + esc(r.product) + '</b></td><td>' + esc(r.dept) + '</td><td>' + esc(r.proc) + '</td><td>' + (d.comps || []).map(function(c){ return esc(c.comp) + ' <span class="cra-sub">' + esc(c.cas) + '</span>'; }).join('<br>') + '</td>' +
+        return '<tr data-open="' + esc(r.product) + '" data-k="' + esc(keyOf(r)) + '" style="cursor:pointer"><td><b>' + esc(r.product) + '</b></td><td>' + esc(r.dept) + '</td><td>' + esc(r.proc) + '</td><td>' + (d.comps || []).map(function(c){ return esc(c.comp) + ' <span class="cra-sub">' + esc(c.cas) + '</span>'; }).join('<br>') + '</td>' +
           '<td class="c">' + r.e + '</td><td class="c">' + r.sv + '</td><td class="c"><b>' + r.risk + '</b></td><td style="min-width:190px">' + chip({ g: g }) + '<div class="cra-sub">' + g.act + '</div></td>' +
           '<td>' + ['<span class="cra-chip off">해당없음</span>', '<span class="cra-chip g0">국소배기</span>', '<span class="cra-chip g0">완전밀폐</span>'][+d.vent || 0] + '</td><td class="c">' + (r.after || '') + '</td><td class="cra-sub">' + esc(r.date) + '<br>' + esc(r.src) + '</td></tr>';
       }).join('') || '<tr><td colspan="11" class="cra-sub" style="padding:14px">아직 저장한 평가가 없습니다. [평가하기]에서 물질을 고르거나 [산정기준 · 가져오기]에서 기존 KRAS 엑셀을 가져오세요.</td></tr>') + '</table></div></div>';
-    $('cra-view').querySelector('table').onclick = function(e){ var r = e.target.closest('[data-open]'); if(!r) return; st.tab = 'eval'; draw(); pick(r.getAttribute('data-open')); };
+    $('cra-view').querySelector('table').onclick = function(e){ var r = e.target.closest('[data-open]'); if(!r) return; st.tab = 'eval'; draw(); pick(r.getAttribute('data-open'), r.getAttribute('data-k') || ''); };
   }
 
   /* ── v21.41 작업환경측정 탭 ── */
@@ -21805,7 +21961,7 @@ var CRA = (function(){
       var it = itemOf(r), av = afterVent(it);
       it.comps.forEach(function(c, i){
         var s = csO(it, c), a = csO(it, c, true), mg = c.unit === 'mg';
-        out.push({ first: !i, n: it.comps.length, it: it, r: r, cells: [it.proc, it.product, c.comp, c.cas, c.patient, c.c, c.m, c.r, mg ? 'mg' : 'ppm', mg ? '' : c.meas, mg ? c.meas : '', mg ? '' : c.oel, mg ? c.oel : '',
+        out.push({ first: !i, n: it.comps.length, it: it, r: r, cells: [it.proc + (rowsOf(it.product).length > 1 ? ' (' + it.dept + ')' : ''), it.product, c.comp, c.cas, c.patient, c.c, c.m, c.r, mg ? 'mg' : 'ppm', mg ? '' : c.meas, mg ? c.meas : '', mg ? '' : c.oel, mg ? c.oel : '',
           it.amt, it.amt ? QTY_T[it.qty || 1] : '', c.pct, c.state === 'solid' ? '' : it.temp, c.state === 'solid' ? '' : c.bp, c.state === 'solid' ? (DUST_T[+c.dust || 0] || '') : '', VENT_T[it.vent] || VENT_T[0], c.hcodes,
           s.e.v, s.s.v, s.r, a.e.v, a.s.v, a.r] });
       });
@@ -21928,7 +22084,7 @@ var CRA = (function(){
           meas: n(unit === 'mg' ? row[13] : row[12]), oel: n(unit === 'mg' ? row[15] : row[14]), pct: n(row[18]), bp: n(row[20]), dust: dust, state: dust ? 'solid' : 'liquid', hcodes: (s(row[23]).toUpperCase().match(/H\d{3}[A-Z]{0,2}/g) || []).join(',') };
         if(!prod && cur){ cur.comps.push(comp); }
         else {
-          cur = { product: prod || comp.comp, proc: proc, dept: '', usage: '', src: '', date: dt(row[4]) || '', vent: parseInt(s(row[22]), 10) || 0, now: [], plan: [], due: dt(row[32]), done: dt(row[33]), owner: s(row[34]) || '보건관리자',
+          cur = { product: prod || comp.comp, proc: proc, dept: '', deptAll: true, usage: '', src: '', date: dt(row[4]) || '', vent: parseInt(s(row[22]), 10) || 0, now: [], plan: [], due: dt(row[32]), done: dt(row[33]), owner: s(row[34]) || '보건관리자',
             qty: +qty || 1, temp: n(row[19]) || 25, amt: n(row[16]), comps: [comp], xlRisk: s(row[27]) === '' ? null : +row[27] };
           var ex = out.filter(function(o){ return o.product === cur.product && o.proc === cur.proc; })[0];
           if(ex){ ex.comps.push(comp); if(cur.xlRisk != null) ex.xlRisk = Math.max(ex.xlRisk || 0, cur.xlRisk); cur = ex; } else out.push(cur);
@@ -21948,7 +22104,7 @@ var CRA = (function(){
     var e = draft.raEdit, comps = fromDraft(draft, null);
     if(!e.comps || e.comps.length !== comps.length) e.comps = comps;
     else e.comps.forEach(function(c, i){ c.comp = comps[i].comp; c.cas = comps[i].cas; c.pct = comps[i].pct; });   // 성분명 · CAS · 함유량은 위 성분 표 값
-    var it = { product: p.name || '', dept: (draft.departments || []).join(','), proc: e.proc, usage: p.usage || '', vent: e.vent, now: e.now, plan: e.plan || [], due: e.due, done: e.done, owner: e.owner, qty: e.qty, temp: e.temp, amt: e.amt, qtyManual: !!e.qtyManual, comps: e.comps, src: 'AI MSDS 검토' };
+    var it = { product: p.name || '', dept: (draft.departments || []).join(','), key: '', deptAll: true, proc: e.proc, usage: p.usage || '', vent: e.vent, now: e.now, plan: e.plan || [], due: e.due, done: e.done, owner: e.owner, qty: e.qty, temp: e.temp, amt: e.amt, qtyManual: !!e.qtyManual, comps: e.comps, src: 'AI MSDS 검토' };
     if(!e.qtyManual){ applyQty(it); e.qty = it.qty; e.amt = it.amt; }
     applyMeas(it);
     it.chk = chkOf((draft.components || []).filter(function(c){ return c.name; }).map(function(c){ return { we: c.we, hc: c.hc }; }));
@@ -21984,7 +22140,7 @@ var CRA = (function(){
     return record(it);
   }
 
-  window.BMCRA = { open: open, reviewBox: reviewBox, bindReview: bindReview, reviewRecord: reviewRecord, invalidate: function(){ st.rows = null; }, _engine: CRA, _parse: parseKras, _suggest: suggest, _record: record, _itemOf: itemOf, _syncDept: syncDept, _parseMeas: parseMeas, _applyMeas: applyMeas, _state: st, _parseMeasPdf: parseMeasPdf, _applyQty: applyQty, _qtyFor: qtyFor, _bulk: bulkAi, _chkOf: chkOf, _msdsChk: msdsChk, _applyChk: applyChk };
+  window.BMCRA = { open: open, reviewBox: reviewBox, bindReview: bindReview, reviewRecord: reviewRecord, invalidate: function(){ st.rows = null; }, _engine: CRA, _parse: parseKras, _suggest: suggest, _record: record, _itemOf: itemOf, _syncDept: syncDept, _parseMeas: parseMeas, _applyMeas: applyMeas, _state: st, _parseMeasPdf: parseMeasPdf, _applyQty: applyQty, _qtyFor: qtyFor, _bulk: bulkAi, _rowsOf: rowsOf, _chkOf: chkOf, _msdsChk: msdsChk, _applyChk: applyChk };
 })();
 </script>
 
