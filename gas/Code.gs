@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.50 (2026-11-23)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.51 (2026-11-26)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -3421,6 +3421,7 @@ function chemraRows_() {
   }).filter(o => o.product);
 }
 // 저장(같은 제품명이면 바꿈 · 이전 줄은 이력). oldName: 개정으로 제품명이 바뀐 경우 예전 이름
+function chemraKey_(k) { return String(k || '').replace(/[^\w-]/g, '').slice(0, 40); }
 function chemraPut_(o, oldName) {
   const product = String(o.product || '').trim().slice(0, 150);
   if (!product) return { success: false, error: '제품명이 없습니다' };
@@ -3430,24 +3431,36 @@ function chemraPut_(o, oldName) {
   const data = { comps: comps, vent: n4(o.vent) > 2 ? 0 : n4(o.vent), now: (o.now || []).slice(0, 40).map(String), plan: (o.plan || []).slice(0, 40).map(String),
                  due: String(o.due || '').slice(0, 10), done: String(o.done || '').slice(0, 10), owner: String(o.owner || '').slice(0, 40),
                  qty: n4(o.qty) || 1, temp: chemraNum_(o.temp) || '25', amt: String(o.amt || '').slice(0, 30), usage: String(o.usage || '').slice(0, 200), scores: o.scores || [],
-                 qtySrc: String(o.qtySrc || '').slice(0, 120), qtyManual: !!o.qtyManual, deptManual: !!o.deptManual, aiGuess: !!o.aiGuess, ovWhy: String(o.ovWhy || '').slice(0, 300) };
+                 qtySrc: String(o.qtySrc || '').slice(0, 120), qtyManual: !!o.qtyManual, deptManual: !!o.deptManual, aiGuess: !!o.aiGuess, ovWhy: String(o.ovWhy || '').slice(0, 300),
+                 key: chemraKey_(o.key), deptAll: o.deptAll !== false && !o.deptManual };
   const json = JSON.stringify(data);
   if (json.length > 45000) return { success: false, error: '내용이 너무 깁니다' };
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
   try {
     const sh = chemraSheet_(CHEMRA_SHEET, CHEMRA_HEADER);
-    const rows = chemraRows_();
-    const cur = rows.find(r => r.product === product) || (oldName ? rows.find(r => r.product === String(oldName).trim()) : null);
+    const rows = chemraRows_(), key = data.key;
+    const same = (r, nm) => r.product === nm && chemraKey_(r.data.key) === key;
+    const cur = rows.find(r => same(r, product)) || (oldName ? rows.find(r => same(r, String(oldName).trim())) : null);
     const now = nowKst_().replace('T', ' ');
-    const row = [product, String(o.dept || (cur && cur.dept) || '').slice(0, 200), String(o.proc || '').slice(0, 100), String(o.date || todayKst_()).slice(0, 10), String(o.by || '보건관리자').slice(0, 40),
+    // 전체 부서 평가: 같은 물질의 다른 평가 부서는 뺌 (예: 뉴젠자임폼 병동 · 중환자실 · 수술실 → 수술실을 따로 평가하면 이 평가는 병동 · 중환자실)
+    let dept = String(o.dept || (cur && cur.dept) || '');
+    const oldNm = cur && cur.product !== product ? cur.product : '';
+    if (data.deptAll) {
+      const others = [];
+      rows.filter(r => (r.product === product || (oldNm && r.product === oldNm)) && chemraKey_(r.data.key) !== key).forEach(r => String(r.dept || '').split(/\s*,\s*/).forEach(d => d && others.push(d)));
+      if (others.length) dept = dept.split(/\s*,\s*/).filter(d => d && others.indexOf(d) < 0).join(',');
+    }
+    const row = [product, dept.slice(0, 200), String(o.proc || '').slice(0, 100), String(o.date || todayKst_()).slice(0, 10), String(o.by || '보건관리자').slice(0, 40),
                  String(o.src || '직접 평가').slice(0, 60), n4(o.e), n4(o.s), n16(o.risk), String(o.grade || '').slice(0, 20), n16(o.after), json, now].map(safeCell_);
     if (cur) {
       const old = sh.getRange(cur._row, 1, 1, CHEMRA_HEADER.length).getValues()[0];
       chemraSheet_(CHEMRA_HIST, ['보관일시'].concat(CHEMRA_HEADER)).appendRow([now].concat(old.map(x => x instanceof Date ? fmtDate_(x) : safeCell_(x))));
       sh.getRange(cur._row, 1, 1, row.length).setValues([row]);
+      // 제품명이 바뀐 개정: 같은 물질의 다른 부서 평가도 새 이름으로
+      if (oldNm) rows.filter(r => r.product === oldNm && r._row !== cur._row).forEach(r => sh.getRange(r._row, 1).setValue(safeCell_(product)));
     } else sh.appendRow(row);
-    return { success: true, product: product, updated: !!cur };
+    return { success: true, product: product, key: key, dept: dept, updated: !!cur };
   } finally { lock.releaseLock(); }
 }
 function chemraOp_(req, s) {
@@ -3493,7 +3506,8 @@ function chemraOp_(req, s) {
       const lock = LockService.getScriptLock();
       if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
       try {
-        const cur = chemraRows_().find(r => r.product === name);
+        const key = chemraKey_(req.key);
+        const cur = chemraRows_().find(r => r.product === name && chemraKey_(r.data.key) === key);
         if (!cur) return { success: false, error: '평가를 찾지 못했습니다' };
         const sh = SS.getSheetByName(CHEMRA_SHEET);
         const old = sh.getRange(cur._row, 1, 1, CHEMRA_HEADER.length).getValues()[0];
