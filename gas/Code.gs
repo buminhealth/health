@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.57 (2026-11-26)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.59 (2026-11-26)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -190,7 +190,7 @@ function doPost(e) {
                         result = chemOp_(req, s); break;
       case 'ai.status': case 'ai.setKey': case 'ai.list': case 'ai.analyze': case 'ai.judge': case 'ai.apply': case 'ai.products': case 'ai.compare':
                         result = aiOp_(req, s); break;
-      case 'chemra.list': case 'chemra.save': case 'chemra.delete': case 'chemra.read': case 'chemra.compFill': case 'chemra.cfg': case 'chemra.setCfg': case 'chemra.measSave': case 'chemra.measDelete':
+      case 'chemra.list': case 'chemra.save': case 'chemra.delete': case 'chemra.read': case 'chemra.compFill': case 'chemra.annualSave': case 'chemra.annualList': case 'chemra.annualGet': case 'chemra.cfg': case 'chemra.setCfg': case 'chemra.measSave': case 'chemra.measDelete':
                         result = chemraOp_(req, s); break;   // v21.40 화학물질 위험성평가 (KRAS)
       case 'pdf.big':  result = requireAdmin_(s) || pdfBig_(req); break;
       case 'ra.meta': case 'ra.analyze': case 'ra.submit': case 'ra.mine': case 'ra.photo': case 'ra.list': case 'ra.update': case 'ra.delete':
@@ -3388,6 +3388,8 @@ function aiApply_(req) {
 //  · AI는 MSDS에서 값만 읽음: AI MSDS 검토(새 물질) 또는 [MSDS 읽기](목록에 있는 물질, 하루 CHEMRA_LIMIT회 · 기본 50)
 // ════════════════════════════════════════════════════════════════
 const CHEMRA_SHEET = '화학물질위험성평가', CHEMRA_HIST = '화학물질위험성평가_이력';
+const CHEMRA_ANNUAL = '화학물질위험성평가_정기';
+const CHEMRA_ANNUAL_HEADER = ['차수', '확정일시', '확정자', '제품명', '부서', '공정명', '평가일', '출처', '노출수준', '유해성', '위험성', '등급', '개선후위험성', '데이터', '점검'];
 const CHEMRA_HEADER = ['제품명', '부서', '공정명', '평가일', '평가자', '출처', '노출수준', '유해성', '위험성', '등급', '개선후위험성', '데이터', '수정일시'];
 const CHEMRA_LIMIT = 50;
 function chemraNum_(v) { const m = String(v == null ? '' : v).replace(/,/g, '').match(/-?\d+(\.\d+)?/); return m ? m[0] : ''; }
@@ -3498,7 +3500,9 @@ function chemraPut_(o, oldName) {
                  due: String(o.due || '').slice(0, 10), done: String(o.done || '').slice(0, 10), owner: String(o.owner || '').slice(0, 40),
                  qty: n4(o.qty) || 1, temp: chemraNum_(o.temp) || '25', amt: String(o.amt || '').slice(0, 30), usage: String(o.usage || '').slice(0, 200), scores: o.scores || [],
                  qtySrc: String(o.qtySrc || '').slice(0, 120), qtyManual: !!o.qtyManual, deptManual: !!o.deptManual, aiGuess: !!o.aiGuess, ovWhy: String(o.ovWhy || '').slice(0, 300),
-                 key: chemraKey_(o.key), deptAll: o.deptAll !== false && !o.deptManual };
+                 key: chemraKey_(o.key), deptAll: o.deptAll !== false && !o.deptManual,
+                 measLog: (Array.isArray(o.measLog) ? o.measLog : []).slice(-12).map(x => { x = x || {}; const pr = a => [n16(Array.isArray(a) ? a[0] : 0), n16(Array.isArray(a) ? a[1] : 0)];
+                   return { period: String(x.period || '').slice(0, 40), date: String(x.date || '').slice(0, 10), from: pr(x.from), to: pr(x.to), text: String(x.text || '').slice(0, 300) }; }) };
   const json = JSON.stringify(data);
   if (json.length > 45000) return { success: false, error: '내용이 너무 깁니다' };
   const lock = LockService.getScriptLock();
@@ -3621,9 +3625,42 @@ function chemraOp_(req, s) {
       if (!r.success) return r;
       return { success: true, comps: r.comps, kosha: kosha.map(k => ({ ok: !!k.ok, why: k.why || '', name: k.name || '' })), hasKey: !!PROPS.getProperty('KOSHA_KEY'), left: lim - n - 1 };
     }
+    // v21.59 정기평가 확정: 지금 평가를 '2027 정기' 같은 차수로 시트 '화학물질위험성평가_정기'에 통째로 복사 (나중에 평가를 고쳐도 그대로)
+    case 'chemra.annualSave': {
+      const period = String(req.period || '').trim().slice(0, 40);
+      if (!/^\d{4}/.test(period)) return { success: false, error: '차수가 없습니다 (예: 2027 정기)' };
+      const lock = LockService.getScriptLock();
+      if (!lock.tryLock(30000)) return { success: false, error: '서버가 바쁩니다' };
+      try {
+        const sh = chemraSheet_(CHEMRA_ANNUAL, CHEMRA_ANNUAL_HEADER);
+        if (sh.getLastRow() > 1 && sh.getRange(2, 1, sh.getLastRow() - 1, 1).getDisplayValues().some(r => String(r[0]).trim() === period)) return { success: false, exists: true, error: period + '는 이미 확정했습니다 — 다시 확정하려면 차수 이름을 바꾸세요 (예: ' + period + ' 2차)' };
+        const rows = chemraRows_();
+        if (!rows.length) return { success: false, error: '확정할 평가가 없습니다' };
+        const now = nowKst_().replace('T', ' '), by = String(req.by || '보건관리자').slice(0, 40), chk = JSON.stringify(req.check || {}).slice(0, 20000);
+        const sv = rows.map((r, i) => [period, now, by, r.product, r.dept, r.proc, r.date, r.src, r.e, r.sv, r.risk, r.grade, r.after, JSON.stringify(r.data || {}), i ? '' : chk].map(safeCell_));
+        sh.getRange(sh.getLastRow() + 1, 1, sv.length, CHEMRA_ANNUAL_HEADER.length).setValues(sv);
+        return { success: true, period: period, saved: sv.length };
+      } finally { lock.releaseLock(); }
+    }
+    case 'chemra.annualList': {
+      const sh = SS.getSheetByName(CHEMRA_ANNUAL);
+      if (!sh || sh.getLastRow() < 2) return { success: true, list: [] };
+      const v = sh.getRange(2, 1, sh.getLastRow() - 1, CHEMRA_ANNUAL_HEADER.length).getDisplayValues(), m = {};
+      v.forEach(r => { const k = String(r[0]).trim(); if (!k) return; const o = m[k] = m[k] || { period: k, date: r[1], by: r[2], n: 0, risk: [], check: null };
+        o.n++; o.risk.push([+r[10] || 0, +r[12] || 0]); if (r[14] && !o.check) { try { o.check = JSON.parse(r[14]); } catch (_) {} } });
+      return { success: true, list: Object.keys(m).map(k => m[k]).sort((a, b) => String(b.date).localeCompare(String(a.date))) };
+    }
+    case 'chemra.annualGet': {
+      const period = String(req.period || '').trim(), sh = SS.getSheetByName(CHEMRA_ANNUAL);
+      if (!sh || sh.getLastRow() < 2) return { success: false, error: '확정본이 없습니다' };
+      const v = sh.getRange(2, 1, sh.getLastRow() - 1, CHEMRA_ANNUAL_HEADER.length).getDisplayValues().filter(r => String(r[0]).trim() === period);
+      if (!v.length) return { success: false, error: period + ' 확정본을 찾지 못했습니다' };
+      return { success: true, period: period, date: v[0][1], rows: v.map(r => { let d = {}; try { d = JSON.parse(r[13] || '{}'); } catch (_) {}
+        return { product: r[3], dept: r[4], proc: r[5], date: r[6], src: r[7], e: +r[8] || 0, sv: +r[9] || 0, risk: +r[10] || 0, grade: r[11], after: +r[12] || 0, data: d }; }) };
+    }
     case 'chemra.setCfg': {
       const j = JSON.stringify(req.cfg || {});
-      if (j.length > 8000) return { success: false, error: '설정이 너무 깁니다' };
+      if (j.length > 8800) return { success: false, error: '설정이 너무 깁니다' };
       if (req.cfg) PROPS.setProperty('CHEMRA_CFG', j); else PROPS.deleteProperty('CHEMRA_CFG');
       return { success: true, cfg: chemraCfg_() };
     }
