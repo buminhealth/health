@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.59 (2026-11-26)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.62 (2026-11-27)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -182,7 +182,7 @@ function doPost(e) {
       case 'rec.has':   result = requireLogin_(s) || recHas_(req, s); break;
       case 'backup.status': case 'backup.run': case 'backup.schedule':
                         result = requireAdmin_(s) || backupOp_(req); break;
-      case 'emp.status': case 'emp.sync': case 'emp.merge': case 'hr.fetch':
+      case 'emp.status': case 'emp.sync': case 'emp.merge': case 'hr.fetch': case 'emp.review': case 'emp.purgePreview': case 'emp.purge':
       case 'nh.list': case 'nh.answer': case 'nh.resend': case 'nh.run': case 'nh.detect': case 'nh.add': case 'nh.delete': case 'nh.restore':
                         result = staffOp_(req, s); break;
       case 'chem.readMsds': result = chemReadMsds_(req, s); break;   // v21.19 부서: 보고서에 올린 MSDS로 칸 채우기
@@ -1136,7 +1136,7 @@ function deleteSheetRecords(p) {
   // v21.9: scope=dup(결재 관리 삭제 · 중복 정리)이면 그 교육의 대장 줄을 하나는 꼭 남김 — 결재 목록의 사본을 지웠는데
   //        교육이력대장의 실제 이수 기록까지 지워져 '미이수'로 바뀌던 문제. scope=all(현황에서 직접 삭제)만 모두 지움.
   //        지우는 줄은 모두 '{교육|보호구}이력_삭제' 시트에 먼저 옮겨 둠 (되살리기 가능)
-  const scope = p.scope === 'all' ? 'all' : 'dup';
+  const scope = p.scope === 'all' ? 'all' : p.scope === 'one' ? 'one' : 'dup';
   const targets = ids.map(id => String(id).split('|')).filter(a => a.length >= 6)
     .map(a => ({ name: a[1].replace(/\s+/g, ''), dept: a[3].replace(/\s+/g, ''), type: a[4], date: a[5].slice(0, 10) }));
   if (!targets.length) return { success: true, deleted: 0, kept: 0 };
@@ -1178,7 +1178,8 @@ function deleteSheetRecords(p) {
         const keep = rows.slice().sort((a, b) => sig(b) - sig(a) || a - b)[0];
         rows.forEach(r => { if (r !== keep) del.add(r); });
         kept++;
-      } else rows.forEach(r => del.add(r));
+      } else if (scope === 'one') del.add(rows[rows.length - 1]);
+      else rows.forEach(r => del.add(r));
     });
     if (del.size) {
       const bak = eduSheet_(sheetName.replace('대장', '_삭제'), head.concat(['삭제일시', '삭제자', '삭제사유']));
@@ -1189,6 +1190,7 @@ function deleteSheetRecords(p) {
   } finally {
     lock.releaseLock();
   }
+  try { eduCacheClear_(); } catch (_) {}   // v21.62 교육 현황 · 보고서가 지운 기록을 바로 빼도록
   return { success: true, deleted: deleted, kept: kept, scope: scope };
 }
 
@@ -1357,6 +1359,8 @@ function syncEmployees_(incoming, fullList, dry) {
 
     const seen = new Set();
     const summary = { added: 0, updated: 0, resigned: 0, unchanged: 0, newEmployees: [], unknownDepts: unknownNames, deptMoves: [] };
+    const chg = [];   // v21.61 변경 기록 (이메일 · 직위는 값 없이 '바뀜'만)
+    const LBL = { name: '이름', dept: '부서', joinDate: '입사일', status: '재직상태', leaveDate: '퇴사일', email: '이메일', position: '직위' };
     incoming.forEach(e => {
       const kn = noKey(e.empNo), km = nmKey(e.name, e.joinDate), kd = ndKey(e.name, e.dept);
       let at = kn ? pos[kn] : undefined;
@@ -1386,17 +1390,22 @@ function syncEmployees_(incoming, fullList, dry) {
         data.push(row);
         summary.added++;
         summary.newEmployees.push({ name: e.name, dept: e.dept, joinDate: e.joinDate });
+        chg.push(['추가', e.empNo || '', e.name, e.dept, '입사일 ' + (e.joinDate || '-') + (e.status && e.status !== '재직' ? ' · ' + e.status : '')]);
         return;
       }
       const row = data[at];
       let changed = false;
       const fromDept = fmtDate_(row[idx.dept]);
       if (e.dept && fromDept && baseDept_(fromDept) !== baseDept_(e.dept)) summary.deptMoves.push({ no: e.empNo || String(row[idx.empNo] || ''), name: e.name || String(row[idx.name] || ''), from: fromDept, to: e.dept });
+      const parts = [];
       ['name','dept','joinDate','status','leaveDate','email','position'].forEach(f => {
         if (!e[f]) return;
-        if (fmtDate_(row[idx[f]]) !== e[f]) { row[idx[f]] = e[f]; changed = true; }
+        const was = fmtDate_(row[idx[f]]);
+        if (was !== e[f]) { row[idx[f]] = e[f]; changed = true; parts.push(f === 'email' || f === 'position' ? LBL[f] + ' 바뀜' : LBL[f] + ' ' + (was || '빈칸') + ' → ' + e[f]); }
       });
-      if (!e.status && isResigned_({ status: fmtDate_(row[idx.status]) })) { row[idx.status] = '재직'; changed = true; }   // 재입사
+      if (!e.status && isResigned_({ status: fmtDate_(row[idx.status]) })) { row[idx.status] = '재직'; changed = true; parts.push('재입사 (퇴사 → 재직)'); }   // 재입사
+      if (e._filled) parts.push('사번 채움');
+      if (parts.length) chg.push([parts.some(t => /^부서 /.test(t)) ? '부서이동' : '변경', e.empNo || String(row[idx.empNo] || ''), e.name || String(row[idx.name] || ''), e.dept || fromDept, parts.join(' · ')]);
       row[idx.lastSeen] = today;
       if (changed || e._filled) summary.updated++; else summary.unchanged++;
     });
@@ -1407,6 +1416,7 @@ function syncEmployees_(incoming, fullList, dry) {
         row[idx.status] = '퇴사(명단없음)';
         if (!fmtDate_(row[idx.leaveDate])) row[idx.leaveDate] = today;
         summary.resigned++;
+        chg.push(['퇴사표시', String(row[idx.empNo] || ''), String(row[idx.name] || ''), fmtDate_(row[idx.dept]), '인사 사이트 전체 명단에 없음 → 퇴사(명단없음)']);
       });
     }
     // v21.44 근무지 지정은 인사 부서 안의 작업장 → 인사 부서가 바뀌면 자동 해제 (바뀌지 않은 사람 · 새 직원의 근무지는 건드리지 않음)
@@ -1445,6 +1455,11 @@ function syncEmployees_(incoming, fullList, dry) {
       const um = SS.getSheetByName(UNIT_SHEET);
       summary.unitRelease.forEach(u => um.getRange(u.row, 8).setValue(safeCell_(today + ' 인사 부서이동 자동 해제 (' + u.from + ' → ' + u.to + ')')));
     }
+    try {
+      if (details.deleted) chg.push(['중복합침', '', '', '', '같은 사번 ' + details.deleted + '줄을 합침']);
+      (unknownNames || []).forEach(n => chg.push(['모르는 부서', '', '', n, '부서매핑 시트에 확인 필요로 추가']));
+      empLogWrite_(chg, summary, fullList);
+    } catch (_) {}
     setAdminCfg({ key: 'emp_last_sync', value: nowKst_() + ' (추가 ' + summary.added + ' · 변경 ' + summary.updated + (summary.deptMoves.length ? ' · 부서이동 ' + summary.deptMoves.length : '') + (summary.unitRelease.length ? ' · 근무지해제 ' + summary.unitRelease.length : '') + ' · 퇴사표시 ' + summary.resigned +
       (details.filledNo.length ? ' · 사번채움 ' + details.filledNo.length : '') + (details.deleted ? ' · 중복합침 ' + details.deleted : '') + ')' });
     return summary;
@@ -1453,6 +1468,101 @@ function syncEmployees_(incoming, fullList, dry) {
   }
 }
 
+// v21.61 직원 동기화 기록 (시트 '직원동기화기록' · 1년 지나면 자동 삭제) — 동기화마다 요약 한 줄 + 바뀐 사람마다 한 줄
+const EMP_LOG = '직원동기화기록', EMP_LOG_HEADER = ['일시', '방식', '구분', '사번', '이름', '부서', '내용'];
+let EMP_SYNC_MODE = '화면 합치기';
+function empLogWrite_(chg, summary, fullList) {
+  let sh = SS.getSheetByName(EMP_LOG);
+  if (!sh) { sh = SS.insertSheet(EMP_LOG); sh.appendRow(EMP_LOG_HEADER); sh.setFrozenRows(1); }
+  const now = nowKst_().replace('T', ' '), mode = EMP_SYNC_MODE + (fullList ? ' (전체)' : '');
+  const rows = [[now, mode, '요약', '', '', '', '추가 ' + summary.added + ' · 변경 ' + summary.updated + ' · 부서이동 ' + summary.deptMoves.length + ' · 퇴사표시 ' + summary.resigned + (chg.length ? '' : ' · 바뀐 것 없음')]]
+    .concat(chg.slice(0, 500).map(c => [now, mode].concat(c.map(v => safeCell_(String(v == null ? '' : v))))));
+  rows.forEach(r => { r[3] = r[3] ? "'" + String(r[3]).replace(/^'/, '') : ''; });
+  sh.getRange(sh.getLastRow() + 1, 1, rows.length, EMP_LOG_HEADER.length).setValues(rows);
+  empLogPrune_(sh);
+}
+function empLogPrune_(sh) {
+  const n = sh.getLastRow() - 1; if (n < 1) return 0;
+  const cut = addDays_(todayKst_(), -365), v = sh.getRange(2, 1, n, 1).getDisplayValues();
+  let k = 0; while (k < v.length && String(v[k][0]).slice(0, 10) < cut) k++;
+  if (k) sh.deleteRows(2, k);
+  return k;
+}
+// 확인 필요: 퇴사(명단없음) · 사번 없는 재직자 · 모르는 부서 · 같은 부서 같은 이름
+function empReview_(days) {
+  const list = readEmployees_() || [];
+  const act = list.filter(e => !isResigned_(e));
+  const out = { noList: [], noNo: [], unknownDepts: [], dupNames: [], log: [] };
+  list.forEach(e => { if (/명단없음/.test(e.status || '')) out.noList.push({ no: e.empNo, name: e.name, dept: e.dept, date: e.leaveDate }); });
+  act.forEach(e => { const no = String(e.empNo || '').replace(/^'/, '').trim(); if (!no || /#N\/A|^-+$/i.test(no)) out.noNo.push({ no: e.empNo, name: e.name, dept: e.dept, join: e.joinDate }); });
+  const m = {}; act.forEach(e => { const k = String(e.dept).trim() + '|' + String(e.name).trim(); (m[k] = m[k] || []).push(e.empNo || ''); });
+  Object.keys(m).forEach(k => { if (m[k].length > 1) out.dupNames.push({ dept: k.split('|')[0], name: k.split('|')[1], n: m[k].length, nos: m[k].join(', ') }); });
+  try {
+    const msh = SS.getSheetByName('부서매핑');
+    if (msh && msh.getLastRow() > 1) msh.getRange(2, 1, msh.getLastRow() - 1, 3).getDisplayValues().forEach(r => { if (/확인 필요/.test(r[2]) && !String(r[1]).trim()) out.unknownDepts.push(String(r[0]).trim()); });
+  } catch (_) {}
+  const sh = SS.getSheetByName(EMP_LOG);
+  if (sh && sh.getLastRow() > 1) {
+    const cut = addDays_(todayKst_(), -(days || 30)), n = sh.getLastRow() - 1, from = Math.max(2, sh.getLastRow() - 1999);
+    out.log = sh.getRange(from, 1, sh.getLastRow() - from + 1, EMP_LOG_HEADER.length).getDisplayValues().filter(r => String(r[0]).slice(0, 10) >= cut).reverse().slice(0, 600)
+      .map(r => ({ at: r[0], mode: r[1], kind: r[2], no: String(r[3]).replace(/^'/, ''), name: r[4], dept: r[5], text: r[6] }));
+  }
+  out.total = out.noList.length + out.noNo.length + out.unknownDepts.length + out.dupNames.length;
+  return out;
+}
+// 아침 자동 확인 뒤: 확인 필요가 새로 생겼으면 보건관리자에게 숫자만 메일 (같은 내용이면 다시 안 보냄)
+function empReviewMail_() {
+  const cfg = sysCfg_(); if (!cfg.adminEmail) return false;
+  const r = empReview_(1);
+  const key = sha256Hex_(JSON.stringify([r.noList.map(x => x.no + x.name), r.noNo.map(x => x.name + x.dept), r.unknownDepts, r.dupNames.map(x => x.dept + x.name)])).slice(0, 16);
+  if (!r.total || (getAdminCfg().data || {}).emp_review_key === key) return false;
+  setAdminCfg({ key: 'emp_review_key', value: key });
+  MailApp.sendEmail({ to: cfg.adminEmail, name: '부민병원 보건관리', subject: '[보건관리] 직원 동기화 확인 필요 ' + r.total + '건',
+    htmlBody: '<div style="font-family:sans-serif;font-size:14px;line-height:1.7"><p>인사 사이트와 직원목록을 맞추다가 사람이 확인해야 할 것이 있습니다.</p><ul>' +
+      (r.noList.length ? '<li>인사 사이트 명단에 없어 퇴사로 표시한 직원 <b>' + r.noList.length + '명</b></li>' : '') + (r.noNo.length ? '<li>사번이 없는 재직자 <b>' + r.noNo.length + '명</b></li>' : '') +
+      (r.unknownDepts.length ? '<li>앱에 없는 부서 이름 <b>' + r.unknownDepts.length + '개</b></li>' : '') + (r.dupNames.length ? '<li>같은 부서에 같은 이름 <b>' + r.dupNames.length + '건</b></li>' : '') +
+      '</ul><p>관리자 모드 → 직원정보관리 → <b>동기화 확인 필요</b>에서 이름을 확인하세요. (이 메일에는 이름을 적지 않습니다)</p></div>' });
+  return true;
+}
+// v21.61 퇴사자 개인정보 보관 기간 정리: 퇴사 후 N년 지난 직원의 이메일 · 입사일 · 직위를 지움 (사번 · 이름 · 부서 · 퇴사일은 남김)
+//  · 신규입사알림: 만든 지 N년 지난 줄의 부서장 이메일 · 회신메모를 지움
+function empPurge_(years, apply) {
+  years = Math.max(1, Math.min(20, parseInt(years, 10) || 3));
+  const cut = addDays_(todayKst_(), -Math.round(years * 365.25)), out = { years: years, cut: cut, emp: [], nh: 0 };
+  const sh = findEmpSheet_();
+  if (sh && sh.getLastRow() > 1) {
+    const v = sh.getDataRange().getValues(), idx = empColIndex_(v[0].map(h => String(h).trim()));
+    const clr = ['email', 'joinDate', 'position'].map(f => idx[f]).filter(i => i >= 0), hit = [];
+    v.slice(1).forEach((row, i) => {
+      if (!isResigned_({ status: fmtDate_(row[idx.status]) })) return;
+      const d = fmtDate_(row[idx.leaveDate] || '') || fmtDate_(idx.lastSeen >= 0 ? row[idx.lastSeen] : '');
+      if (!/^\d{4}-\d{2}-\d{2}/.test(d) || d.slice(0, 10) >= cut) return;
+      if (!clr.some(c => String(row[c] || '').trim())) return;
+      out.emp.push({ row: i + 2, name: String(row[idx.name] || ''), dept: fmtDate_(row[idx.dept]), leave: d.slice(0, 10) });
+      hit.push(i + 1);
+    });
+    if (apply && hit.length) clr.forEach(c => {   // 열마다 한 번에 쓰기
+      const col = v.slice(1).map(r => [r[c] instanceof Date ? r[c] : r[c]]);
+      hit.forEach(k => { col[k - 1] = ['']; });
+      sh.getRange(2, c + 1, col.length, 1).setValues(col);
+    });
+  }
+  const nh = SS.getSheetByName(NH_SHEET);
+  if (nh && nh.getLastRow() > 1) {
+    const h = nh.getRange(1, 1, 1, nh.getLastColumn()).getValues()[0].map(String), iC = h.indexOf('생성일시'), iE = h.indexOf('부서장이메일'), iM = h.indexOf('회신메모');
+    if (iC >= 0) nh.getRange(2, 1, nh.getLastRow() - 1, h.length).getDisplayValues().forEach((r, i) => {
+      if (String(r[iC]).slice(0, 10) >= cut || !((iE >= 0 && r[iE]) || (iM >= 0 && r[iM]))) return;
+      out.nh++;
+      if (apply) { if (iE >= 0) nh.getRange(i + 2, iE + 1).setValue(''); if (iM >= 0) nh.getRange(i + 2, iM + 1).setValue(''); }
+    });
+  }
+  if (apply) {
+    setAdminCfg({ key: '개인정보보관년수', value: String(years) });
+    try { EMP_SYNC_MODE = '보관 기간 정리'; empLogWrite_([['정리', '', '', '', '퇴사 ' + years + '년 지난 직원 ' + out.emp.length + '명 이메일 · 입사일 · 직위 지움 · 신규입사알림 ' + out.nh + '줄 부서장 이메일 · 메모 지움']], { added: 0, updated: 0, deptMoves: [], resigned: 0 }, false); } catch (_) {}
+  }
+  out.emp = out.emp.map(x => ({ name: x.name, dept: x.dept, leave: x.leave }));
+  return Object.assign({ success: true, applied: !!apply }, out);
+}
 function empStatus_() {
   const list = readEmployees_() || [];
   const cfg = getAdminCfg().data || {};
@@ -1473,6 +1583,7 @@ function empStatus_() {
     deptCheck: deptCheck_(list),
     zeroLogin: zeroLoginDepts_(list),
     serverVersion: SERVER_VERSION,
+    keepYears: parseInt(cfg['개인정보보관년수'] || '3', 10) || 3,
   };
 }
 
@@ -2341,6 +2452,7 @@ function runAutoCheck_(forceFull) {
     if (!forceFull && lastFull && !sunday && addDays_(lastFull, 7) > today) {
       try { part = hrPartialFetch_(); } catch (e) { if (String(e.message) === FB_QUOTA_MSG) throw e; part = null; }
     }
+    EMP_SYNC_MODE = '자동 확인';
     if (part) {
       const list = part.rows.length ? rowsToEmployees_(part.headers, part.rows) : [];
       out.sync = list.length ? syncEmployees_(list, false) : { added: 0, updated: 0, resigned: 0, unchanged: 0, newEmployees: [], unknownDepts: [] };
@@ -2359,6 +2471,7 @@ function runAutoCheck_(forceFull) {
     }
     setAdminCfg({ key: 'hr_last_check', value: today });
     out.created = detectNewHires_();
+    try { out.reviewMailed = empReviewMail_(); } catch (_) {}
     setAdminCfg({ key: 'hr_last_error', value: '' });
     try { eduCacheClear_(); out.reconciled = nhReconcile_(null, true); } catch (_) {}
     try { out.ppeRepaired = ppeRepair_().added; } catch (_) {}   // v21.31 시트에만 있는 보호구 기록 복구   // v21.23 재알림 전에 교육 현황과 맞춤 (일지 낸 사람에게 재알림 안 감) · 직원 동기화 뒤라 새로 계산
@@ -2408,6 +2521,9 @@ function staffOp_(req, s) {
   const deny = requireAdmin_(s);
   switch (req.op) {
     case 'emp.status': return deny || empStatus_();
+    case 'emp.review': return deny || Object.assign({ success: true }, empReview_(parseInt(req.days, 10) || 30));
+    case 'emp.purgePreview': return deny || empPurge_(req.years, false);
+    case 'emp.purge': return deny || (req.confirm === true ? empPurge_(req.years, true) : { success: false, error: '확인이 필요합니다' });
     case 'emp.sync': {
       if (deny) return deny;
       const list = rowsToEmployees_(req.headers || [], req.rows || []);
@@ -4495,7 +4611,8 @@ function monthlyReport_(req) {
   const emps = (readEmployees_() || []).map(e => Object.assign({}, e, { dept: deptAlias_(e.dept) }));
   const empBy = {};
   emps.forEach(e => { empBy[pkey_(e.empNo, e.name)] = e; });
-  const recs = ledgerRows_();
+  const recsAll = ledgerRows_(), orphan = eduOrphans_(recsAll);
+  const recs = recsAll.filter(r => !orphan.has(r.row));
   const moves = deptMoves_();
   const mvc = moveConfirms_();
   const pBy = {};
@@ -4541,7 +4658,15 @@ function monthlyReport_(req) {
   };
   const joinOf = r => { const e = empBy[pkey_(r.no, r.name)]; return e ? normDate_(e.joinDate) || '' : ''; };
   const movedIn = (r) => moves.some(m => pkey_(m.no, m.name) === pkey_(r.no, r.name) && inR(m.date, from, to) && String(r.ds) >= m.date && sameDept_(deptAlias_(m.to), deptAlias_(r.dept)));
-  const roster = conducted.map(r => ({ type: r.special ? '특별안전보건교육' : 'MSDS교육', special: r.special, moved: movedIn(r), dept: deptAlias_(r.dept), name: r.name, no: r.no,
+  // v21.62 교육 실시 구분: 신규입사(입사 30일 안) · 부서이동(이동 기록) · 부서이동 추정(입사 30일 넘었는데 이동 기록 없음) · 확인 필요(입사일 없음)
+  const kindOf = r => {
+    if (movedIn(r)) return '부서이동';
+    const k = pkey_(r.no, r.name), j = joinOf(r), ds = String(r.ds || '').slice(0, 10);
+    if (moves.some(m => pkey_(m.no, m.name) === k && m.date <= ds && sameDept_(deptAlias_(m.to), deptAlias_(r.dept)))) return '부서이동';
+    if (!j || !/^\d{4}-\d{2}-\d{2}$/.test(ds)) return '확인 필요';
+    return ds <= addDays_(j, NH_LATE_DAYS) ? '신규입사' : '부서이동 추정';
+  };
+  const roster = conducted.map(r => ({ type: r.special ? '특별안전보건교육' : 'MSDS교육', special: r.special, moved: movedIn(r), kind: kindOf(r), dept: deptAlias_(r.dept), name: r.name, no: r.no,
              join: joinOf(r), ds: r.ds, de: r.de, hrs: r.hrs, chem: r.chem, manual: r.manual }))
     .sort((a, b) => (a.special - b.special) || String(a.ds).localeCompare(String(b.ds)) || String(a.dept).localeCompare(String(b.dept), 'ko') || String(a.name).localeCompare(String(b.name), 'ko'));
   const missing = targets.filter(x => !x.done).map(x => ({ name: x.name, no: x.no, dept: x.dept, need: x.need, kind: x.kind, date: x.date, status: x.status, deadline: x.deadline || '', from: x.from || '' }));
@@ -4604,7 +4729,9 @@ function monthlyReport_(req) {
   const out = {
     success: true, from: from, to: to, label: label, tag: tag, oneMonth: oneMonth, year: fy, month: fm, ym: tag, made: todayKst_(),
     summary: { target: targets.length, newHire: targets.filter(x => x.kind === '신규입사').length, moved: targets.filter(x => x.kind === '부서이동').length,
-               done: total.done, rate: total.rate, conducted: total.conducted, rows: total.rows },
+               done: total.done, rate: total.rate, conducted: total.conducted, rows: total.rows,
+               byKind: ['신규입사', '부서이동', '부서이동 추정', '확인 필요'].reduce((o, k) => { o[k] = Object.keys(roster.filter(x => x.kind === k).reduce((a, x) => { a[pkey_(x.no, x.name)] = 1; return a; }, {})).length; return o; }, {}) },
+    excluded: recsAll.filter(r => orphan.has(r.row) && inR(r.ds, from, to)).map(r => ({ name: r.name, dept: deptAlias_(r.dept), ds: r.ds, type: r.special ? '특별안전보건교육' : 'MSDS교육' })),
     byType: { '특별': typeStat('특별'), 'MSDS': typeStat('MSDS') },
     targets: targets.map(x => ({ name: x.name, dept: x.dept, need: x.need, kind: x.kind, date: x.date, done: x.done })),
     roster: roster, missing: missing, ppe: ppe, chem: chem,
@@ -4618,6 +4745,18 @@ function monthlyReport_(req) {
   if (req.xlsx) {
     try { Object.assign(out, monthlyXlsx_(out)); } catch (e) { out.xlsxError = String(e.message || e); }
   }
+  return out;
+}
+// v21.62 지운 교육 기록: 관리자가 지운 기록(묘비)인데 교육이력대장에 줄이 남았고, 남은 기록 파일에는 그 사람 · 날짜 · 종류 기록이 없는 줄 (수기 등록은 제외)
+function eduOrphans_(recs) {
+  const out = new Set();
+  try {
+    const tomb = deletedIds_('edu'); if (!tomb.size) return out;
+    const nm = v => String(v || '').replace(/\s+/g, ''), dy = v => String(v || '').slice(0, 10), sp = t => /특별/.test(String(t || '')) ? 'S' : 'M';
+    const dead = new Set(); tomb.forEach(id => { const a = String(id).split('|'); if (a.length >= 6) dead.add(nm(a[1]) + '|' + dy(a[5]) + '|' + sp(a[4])); });
+    const live = new Set(recJson_('records/edu_records.json').filter(r => !tomb.has(r.recordId)).map(r => nm(r.name) + '|' + dy(r.dateStart || r.date) + '|' + sp(r.type)));
+    recs.forEach(r => { if (r.manual) return; const k = nm(r.name) + '|' + dy(r.ds) + '|' + (r.special ? 'S' : 'M'); if (dead.has(k) && !live.has(k)) out.add(r.row); });
+  } catch (_) {}
   return out;
 }
 function monthlyXlsx_(r) {
