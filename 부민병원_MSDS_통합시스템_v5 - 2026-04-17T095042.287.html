@@ -12,6 +12,8 @@
   ════════════════════════════════════════════════════════════════════
   부민병원 MSDS 통합시스템 v21.19 (2026-11-16)
 
+  ★★★ v21.62 (2026-11-27) — 교육 현황 전체 선택 유지 · 교육 보고서 통계 (서버 v21.62): 표를 다시 그려도 체크 유지 · 지운 기록은 통계에서 뺌(결재 삭제는 그 기록만) · 교육 실시를 신규입사 / 부서이동 / 부서이동 추정으로
+  ★★★ v21.61 (2026-11-27) — 직원 동기화 확인 · 보관 정리 (서버 v21.61): 직원동기화기록 시트(누가 · 무엇이 바뀌었는지, 1년 보관) · 확인 필요(퇴사(명단없음) · 사번 없음 · 모르는 부서 · 같은 부서 같은 이름) · 아침 요약 메일(숫자만) · 퇴사 N년 지난 직원 이메일 · 입사일 · 직위 정리
   ★★★ v21.60 (2026-11-27) — 신규입사 알림 입사월로 거르기 (HTML만 · 서버 v21.59 그대로)
   ★★★ v21.59 (2026-11-26) — 측정 반영 검토 · 정기평가 (서버 v21.59): 결과표를 올리면 측정치만 바꿔 다시 계산(노출기준 · 조치 · H코드 그대로 · 이번 차수에 없으면 이전 값 유지 · 직접 입력은 선택) → 점수 바뀜 / 측정치만 / 측정 없음 / 변화 없음 → 고른 것만 저장(측정 반영 기록) · [정기평가] 탭: 점검 다섯 묶음 → 연도 차수 확정본 · 확정본 엑셀 · 작년과 비교
   ★★★ v21.58 (2026-11-26) — 평가표 엑셀 병합 (HTML만 · 서버 v21.57 그대로): 물질 하나를 한 덩어리로 — 공정명 · 제품명 · 하루취급량 · 밀폐환기 · 개선예정일 · 완료일 · 담당자는 성분 줄 전체 병합, 남는 줄은 마지막 성분 · 조치 칸 병합
@@ -3650,6 +3652,14 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
           '<b>전체 동기화:</b> ' + esc(st.hrLastFull || '아직') + ' <span style="color:#5A5650">(주 1회 · 평소엔 신규입사 · 퇴사 · 휴직만 조건 조회)</span>' : '') +
         '<div style="margin-top:6px;color:#5A5650;font-size:12px">퇴사자는 목록에서 지우지 않고 "퇴사"로만 표시합니다. 교육·보호구 기록은 그대로 보존됩니다.</div>' +
       '</div>' +
+      '<div style="' + BOX + '"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px"><div style="font-weight:800;color:#3F7518">동기화 확인 필요 · 변경 기록</div>' +
+        '<div id="staff-rv-tabs" style="display:flex;gap:6px"></div></div>' +
+        '<div style="font-size:12px;color:#5A5650;margin:4px 0 8px">인사 사이트와 맞출 때마다 누가 · 무엇이 바뀌었는지 시트 <b>직원동기화기록</b>에 남깁니다 (1년 지나면 자동 삭제). 사람이 확인해야 할 것이 새로 생기면 아침에 보건관리자 메일로 숫자만 알려 드립니다.</div>' +
+        '<div id="staff-rv"><span style="font-size:12px;color:#5A5650">불러오는 중…</span></div></div>' +
+      '<div style="' + BOX + '"><div style="font-weight:800;color:#3F7518;margin-bottom:4px">퇴사자 개인정보 보관 정리</div>' +
+        '<div style="font-size:12px;color:#5A5650;margin-bottom:8px">퇴사 후 정한 기간이 지난 직원은 <b>이메일 · 입사일 · 직위</b>를 지우고 사번 · 이름 · 부서 · 퇴사일만 남깁니다 (교육 · 보호구 기록은 그대로). 신규입사알림은 그 기간이 지난 줄의 부서장 이메일 · 회신메모를 지웁니다. 지운 값은 되돌릴 수 없어 <b>대상을 먼저 보고</b> 정리합니다. 보관 기간은 교육 기록 등 법정 보존기간을 확인해 정하세요.</div>' +
+        '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><label style="font-size:13px">퇴사 후 <input id="staff-keep" class="fc" type="number" min="1" max="20" value="' + (st.keepYears || 3) + '" style="width:64px"> 년 지난 직원</label>' +
+        '<button id="staff-purge-pv" style="' + BTN + '">대상 보기</button></div><div id="staff-purge-out" style="margin-top:8px"></div></div>' +
       '<div style="' + BOX + '">' +
         '<div style="font-weight:800;color:#3F7518;margin-bottom:8px">① 인사 사이트에서 가져오기</div>' +
         (st.hrConnector
@@ -3696,6 +3706,45 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
       '</div>' +
       '<div style="' + BOX + '"><div style="font-weight:800;color:#3F7518;margin-bottom:6px">④ 부서 매칭 · 교육 대상 규칙</div><div id="staff-rules"></div></div>';
 
+    // v21.61 확인 필요 · 변경 기록
+    (async function(){
+      var box = document.getElementById('staff-rv'), tabs = document.getElementById('staff-rv-tabs'); if(!box) return;
+      var r = await post('emp.review', { days: 30 });
+      if(!r.success){ box.innerHTML = '<span style="font-size:12px;color:#A3302A">' + esc(r.error || '불러오지 못함') + (/unknown op/.test(r.error || '') ? ' — 서버(Code.gs)를 v21.61로 배포하세요' : '') + '</span>'; return; }
+      var mode = r.total ? 'chk' : 'log', cell = 'padding:5px 7px;border:1px solid #e2e8f0;white-space:nowrap;font-size:12px';
+      var tbl = function(hd, rows){ return rows.length ? '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%"><tr>' + hd.map(function(h){ return '<th style="' + cell + ';background:#f8fafc;text-align:left">' + h + '</th>'; }).join('') + '</tr>' + rows.map(function(rw){ return '<tr>' + rw.map(function(v){ return '<td style="' + cell + '">' + esc(v == null ? '' : v) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table></div>' : ''; };
+      var grp = function(t, why, n, html){ return n ? '<div style="margin-bottom:10px"><div style="font-weight:800;font-size:13px;margin-bottom:4px">' + t + ' <span style="color:#A3302A">' + n + '</span></div><div style="font-size:12px;color:#5A5650;margin-bottom:4px">' + why + '</div>' + html + '</div>' : ''; };
+      var draw = function(){
+        tabs.innerHTML = [['chk', '확인 필요 ' + r.total], ['log', '최근 30일 변경 ' + r.log.filter(function(x){ return x.kind !== '요약'; }).length]].map(function(t){ return '<button type="button" data-rvt="' + t[0] + '" style="' + BTN + (mode === t[0] ? ';background:#3F7518;color:#fff;border-color:#3F7518' : '') + '">' + t[1] + '</button>'; }).join('');
+        if(mode === 'chk') box.innerHTML = r.total ? (
+          grp('인사 사이트 명단에 없어 퇴사로 표시', '전체 동기화 때 인사 사이트 명단에 없던 재직자입니다. 실제 퇴사면 그대로, 아니면 인사 사이트 등록을 확인하세요.', r.noList.length, tbl(['사번', '이름', '부서', '표시일'], r.noList.map(function(x){ return [x.no, x.name, x.dept, x.date]; }))) +
+          grp('사번이 없는 재직자', '사번이 없으면 이름 · 입사일로만 맞춰 동명이인을 헷갈릴 수 있습니다. 인사 사이트에서 사번을 확인하세요.', r.noNo.length, tbl(['이름', '부서', '입사일'], r.noNo.map(function(x){ return [x.name, x.dept, x.join]; }))) +
+          grp('앱에 없는 부서 이름', '시트 부서매핑에서 앱 부서명을 넣어 주세요 (③ 부서 이름 점검).', r.unknownDepts.length, tbl(['인사 사이트 부서명'], r.unknownDepts.map(function(x){ return [x]; }))) +
+          grp('같은 부서에 같은 이름', '서로 다른 사람인지 사번으로 확인하세요.', r.dupNames.length, tbl(['부서', '이름', '인원', '사번'], r.dupNames.map(function(x){ return [x.dept, x.name, x.n, x.nos]; })))
+        ) : '<span style="font-size:12px;color:#3F7518">확인할 것이 없습니다.</span>';
+        else box.innerHTML = r.log.length ? tbl(['일시', '방식', '구분', '사번', '이름', '부서', '내용'], r.log.map(function(x){ return [x.at, x.mode, x.kind, x.no, x.name, x.dept, x.text]; })) : '<span style="font-size:12px;color:#5A5650">최근 30일 기록이 없습니다.</span>';
+      };
+      tabs.onclick = function(e){ var b = e.target.closest('[data-rvt]'); if(b){ mode = b.getAttribute('data-rvt'); draw(); } };
+      draw();
+    })();
+    // v21.61 퇴사자 개인정보 보관 정리 (대상 보기 → 정리하기)
+    var pv = document.getElementById('staff-purge-pv');
+    if(pv) pv.onclick = async function(){
+      var y = parseInt(document.getElementById('staff-keep').value, 10) || 3, out = document.getElementById('staff-purge-out');
+      out.innerHTML = '<span style="font-size:12px;color:#5A5650">찾는 중…</span>';
+      var r = await post('emp.purgePreview', { years: y });
+      if(!r.success){ out.innerHTML = '<span style="color:#A3302A;font-size:12px">' + esc(r.error || '실패') + '</span>'; return; }
+      if(!r.emp.length && !r.nh){ out.innerHTML = '<span style="font-size:12px;color:#3F7518">정리할 대상이 없습니다 (퇴사일 ' + esc(r.cut) + ' 이전 · 지울 값이 남은 직원 없음).</span>'; return; }
+      out.innerHTML = '<div style="font-size:13px;margin-bottom:6px">퇴사일 <b>' + esc(r.cut) + '</b> 이전 직원 <b>' + r.emp.length + '명</b>의 이메일 · 입사일 · 직위, 신규입사알림 <b>' + r.nh + '줄</b>의 부서장 이메일 · 회신메모를 지웁니다.</div>' +
+        (r.emp.length ? '<div style="max-height:180px;overflow:auto;font-size:12px;border:1px solid #e2e8f0;border-radius:6px;padding:6px 8px;margin-bottom:6px">' + r.emp.map(function(x){ return esc(x.name) + ' <span style="color:#5A5650">' + esc(x.dept) + ' · 퇴사 ' + esc(x.leave) + '</span>'; }).join('<br>') + '</div>' : '') +
+        '<button id="staff-purge-go" style="' + BTN + ';background:#A3302A;border-color:#A3302A;color:#fff">정리하기 (되돌릴 수 없음)</button>';
+      document.getElementById('staff-purge-go').onclick = async function(){
+        if(!confirm('퇴사 ' + y + '년 지난 직원 ' + r.emp.length + '명 · 신규입사알림 ' + r.nh + '줄의 개인정보를 지웁니다. 되돌릴 수 없습니다. 진행할까요?')) return;
+        this.disabled = true;
+        var x = await post('emp.purge', { years: y, confirm: true });
+        out.innerHTML = x.success ? '<span style="font-size:13px;color:#3F7518">정리했습니다 — 직원 ' + x.emp.length + '명 · 신규입사알림 ' + x.nh + '줄. 직원동기화기록에 남겼습니다.</span>' : '<span style="color:#A3302A">' + esc(x.error || '실패') + '</span>';
+      };
+    };
     var hrFetch = async function(btn, id, pwEl, fresh){
       if(pwEl && !pwEl.value){ say('비밀번호를 입력하세요', 'err'); return; }
       btn.disabled = true;
@@ -5570,7 +5619,7 @@ var BM_HOME = '';   // 예: 'https://bumin-msds.github.io/' — 새 주소가 �
    - 설정: 결재자 · 알림 메일 · 서버 버전 · AI 키 상태 · 이 PC 저장 공간을 한 화면에서 확인 */
 (function(){
   if(window.BMDASH) return;
-  var SERVER_EXPECT = 'v21.59';
+  var SERVER_EXPECT = 'v21.62';
   // v21.10: 'v21.9' < 'v21.10'을 글자 순서가 아니라 숫자로 비교
   function bmVerLess(a, b){
     var p = function(v){ return (String(v).match(/v?(\d+(?:\.\d+)*)/) || [,'0'])[1].split('.').map(Number); };
@@ -13413,7 +13462,15 @@ function clearAdmFilters(){
 }
 
 /* ── 교육이력 테이블 렌더링 ── */
-function renderAdminTable(data){
+function bmKeepChecks(pre, run){
+  var sel = {}, key = function(c){ return c.getAttribute('data-rid') || c.getAttribute('data-bmchk'); };
+  document.querySelectorAll('input[data-bmchk^="' + pre + '"]:checked').forEach(function(c){ sel[key(c)] = 1; });
+  var r = run(), head = document.querySelector('th input[type=checkbox][onclick*="' + pre + '"]');
+  document.querySelectorAll('input[data-bmchk^="' + pre + '"]').forEach(function(c){ if((head && head.checked) || sel[key(c)]) c.checked = true; });
+  return r;
+}
+function renderAdminTable(data){ return bmKeepChecks('admchk', function(){ return renderAdminTable0(data); }); }
+function renderAdminTable0(data){
   const tbody=document.getElementById('admin-tbody');
   if(!tbody){ console.warn('admin-tbody 없음'); return; }
 
@@ -14826,7 +14883,8 @@ function clearPpeFilters(){
 }
 
 /* ── 보호구 테이블 렌더링 ── */
-function renderPpeAdminTable(data){
+function renderPpeAdminTable(data){ return bmKeepChecks('ppechk', function(){ return renderPpeAdminTable0(data); }); }
+function renderPpeAdminTable0(data){
   const tbody=document.getElementById('ppe-admin-tbody');
   if(!tbody) return;
 
@@ -16023,7 +16081,7 @@ BM.markDeleted = async function(category, recordIds, reason){
       const idsParam = encodeURIComponent(JSON.stringify(recordIds));
       const nksParam = encodeURIComponent(JSON.stringify([...nkTombs].slice(-recordIds.length)));
       // v21.9: 결재 관리 삭제 · 중복 정리는 교육이력대장의 이수 기록을 하나는 남김(scope=dup). 현황에서 직접 지운 것만 모두 지움(scope=all) — 지운 줄은 서버가 '_삭제' 시트에 보관
-      const scope = /결재|중복/.test(String(reason || '')) ? 'dup' : 'all';
+      const scope = /중복/.test(String(reason || '')) ? 'dup' : /결재/.test(String(reason || '')) ? 'one' : 'all';   // v21.62 결재 삭제는 그 기록(대장 한 줄)만
       sc.src = `${CFG.url}?action=deleteRecords&category=${category}&ids=${idsParam}&nks=${nksParam}&scope=${scope}&reason=${encodeURIComponent(String(reason || '').slice(0, 80))}&callback=${cb}`;
       sc.onerror = () => { delete window[cb]; };
       document.head.appendChild(sc);
@@ -16515,7 +16573,8 @@ window.addEventListener('load', ()=>{
 /* ════════════════════════════════════════════════════════════
    ★★★ 화학물질 보고서 관리자 함수 ★★★
    ════════════════════════════════════════════════════════════ */
-function renderChemAdminTable(data){
+function renderChemAdminTable(data){ return bmKeepChecks('chemchk', function(){ return renderChemAdminTable0(data); }); }
+function renderChemAdminTable0(data){
   const tbody = document.getElementById('chem-admin-tbody');
   if(!tbody) return;
   if(!data.length){
@@ -23384,11 +23443,13 @@ button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,inpu
     var S = r.summary, T = r.byType, ppl = {};
     r.ppe.forEach(function(x){ ppl[x.name + '|' + x.dept] = 1; });
     var h = '<div class="rp-sh"><b>' + esc(r.label) + ' 현황</b><span>' + esc(dot(r.from)) + ' ~ ' + esc(dot(r.to)) + ' · ' + esc(r.made) + ' 기준</span></div>' +
+      ((r.excluded || []).length ? '<details class="rp-note"><summary>관리자가 지운 교육 기록 ' + r.excluded.length + '건은 통계에서 뺐습니다 (교육이력대장에 줄이 남아 있던 것)</summary><div>' + r.excluded.map(function(x){ return esc(x.ds) + ' · ' + esc(x.dept) + ' · ' + esc(x.name) + ' · ' + esc(x.type); }).join('<br>') + '</div></details>' : '') +
+      (r.summary.byKind && r.summary.byKind['부서이동 추정'] ? '<div class="rp-note">입사 후 30일이 넘어 교육했는데 부서이동 기록이 없는 직원 <b>' + r.summary.byKind['부서이동 추정'] + '명</b> — 부서이동(또는 새 물질) 교육일 가능성이 있어 교육자 명단에 \'부서이동 추정\'으로 표시했습니다. 교육 대상자 수에는 넣지 않습니다.</div>' : '') +
       '<div class="rp-kpis">' +
         tile('교육 대상자', S.target + '명', '신규입사 ' + S.newHire + ' · 부서이동 ' + S.moved) +
         tile('이수율', pctTxt(S.rate), '이수 ' + S.done + ' / 대상 ' + S.target) +
         tile('미이수', r.missing.length + '명', r.missing.length ? '아래 [미이수자]' : '없음', r.missing.length) +
-        tile('교육 실시 인원', S.conducted + '명', '교육 기록 ' + S.rows + '줄') +
+        tile('교육 실시 인원', S.conducted + '명', S.byKind ? '신규입사 ' + S.byKind['신규입사'] + ' · 부서이동 ' + S.byKind['부서이동'] + (S.byKind['부서이동 추정'] ? ' · 이동 추정 ' + S.byKind['부서이동 추정'] : '') + (S.byKind['확인 필요'] ? ' · 확인 ' + S.byKind['확인 필요'] : '') : '교육 기록 ' + S.rows + '줄', S.byKind && S.byKind['부서이동 추정']) +
         tile('특별안전보건교육', pctTxt(T['특별'].rate), '대상 ' + T['특별'].target + ' · 이수 ' + T['특별'].done + ' · 실시 ' + T['특별'].persons) +
         tile('MSDS 교육', pctTxt(T['MSDS'].rate), '대상 ' + T['MSDS'].target + ' · 이수 ' + T['MSDS'].done + ' · 실시 ' + T['MSDS'].persons) +
         tile('보호구 지급', r.ppe.length + '건', Object.keys(ppl).length + '명') +
@@ -23414,7 +23475,7 @@ button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,inpu
     if(t === 'chem') return tbl(['제출일', '문서번호', '구분', '부서', '물질명', '사용 · 중단일', '처리'], r.chem.map(function(x){ return [esc(x.date), esc(x.docNo), esc(x.kind), esc(x.dept), esc(x.name), esc(x.useDate), esc(x.status)]; }), '이 기간 화학물질 보고서가 없습니다.');
     if(t === 'month'){ var S = r.series; return tbl(['구분', '교육 대상자', '이수', '이수율', '교육 실시', '특별', 'MSDS'], S.months.map(function(m){ return [m.label, m.target, m.done, pctTxt(m.rate), m.conducted, m.special, m.msds]; })
       .concat(S.quarters.map(function(q){ return ['<b>' + q.label + '</b>', q.target, q.done, pctTxt(q.rate), q.conducted, '', '']; })).concat([['<b>기간 누계</b>', '<b>' + S.total.target + '</b>', '<b>' + S.total.done + '</b>', '<b>' + pctTxt(S.total.rate) + '</b>', '<b>' + S.total.conducted + '</b>', '', '']]), ''); }
-    return tbl(['번호', '교육구분', '교육부서', '성명', '입사일', '교육일', '교육시간', '취급물질'], r.roster.map(function(x, i){ return [i + 1, (x.special ? '특별안전보건교육' : 'MSDS교육') + (x.moved ? ' <span class="fd-mute">(부서이동)</span>' : ''), esc(x.dept), esc(x.name), esc(x.join || '-'), esc(x.ds) + (x.de && x.de !== x.ds ? '~' + esc(x.de) : ''), x.hrs ? x.hrs + '시간' : '', esc(x.chem)]; }), '이 기간 교육 기록이 없습니다.');
+    return tbl(['번호', '교육구분', '교육부서', '성명', '입사일', '교육일', '교육시간', '취급물질'], r.roster.map(function(x, i){ return [i + 1, (x.special ? '특별안전보건교육' : 'MSDS교육') + (x.kind && x.kind !== '신규입사' ? ' <span class="fd-mute' + (x.kind === '부서이동 추정' ? ' rp-est' : '') + '">(' + esc(x.kind) + ')</span>' : (x.moved ? ' <span class="fd-mute">(부서이동)</span>' : '')), esc(x.dept), esc(x.name), esc(x.join || '-'), esc(x.ds) + (x.de && x.de !== x.ds ? '~' + esc(x.de) : ''), x.hrs ? x.hrs + '시간' : '', esc(x.chem)]; }), '이 기간 교육 기록이 없습니다.');
   }
   function bindScreen(){
     document.querySelectorAll('#rp-out [data-rt]').forEach(function(b){ b.onclick = function(){
@@ -23438,7 +23499,7 @@ button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,inpu
               '3. 교육 이수율 : ' + (S.target ? pctTxt(S.rate) + ' (이수 ' + S.done + '명 / 대상 ' + S.target + '명)' : '해당 없음 (이 기간 교육 대상자 없음)'), '4. 교육 구분별 현황 :'],
       type: { head: ['구분', '교육 대상자', '이수', '이수율', '교육 실시 인원'], rows: [['특별안전보건교육', T['특별']], ['MSDS 교육', T['MSDS']]].map(function(x){ var t = x[1]; return [x[0], t.target + '명', t.done + '명', pctTxt(t.rate), t.persons + '명']; }).concat([['계', S.target + '명', S.done + '명', pctTxt(S.rate), S.conducted + '명']]) },
       roster: { title: '5. 교육자 명단 :', head: ['번호', '교육구분', '교육부서', '성명', '입사일', '교육일', '교육시간', '취급물질'], w: [6, 13, 12, 9, 13, 14, 10, 23],
-        rows: r.roster.map(function(x, i){ return [String(i + 1), (x.special ? '특별안전\n보건교육' : 'MSDS교육') + (x.moved ? '\n(부서이동)' : ''), x.dept, x.name, x.join || '-', x.ds + (x.de && x.de !== x.ds ? '~\n' + x.de : ''), x.hrs ? x.hrs + '시간' : '', x.chem || '']; }) },
+        rows: r.roster.map(function(x, i){ return [String(i + 1), (x.special ? '특별안전\n보건교육' : 'MSDS교육') + (x.kind === '부서이동' || x.moved ? '\n(부서이동)' : x.kind === '부서이동 추정' ? '\n(부서이동 추정)' : ''), x.dept, x.name, x.join || '-', x.ds + (x.de && x.de !== x.ds ? '~\n' + x.de : ''), x.hrs ? x.hrs + '시간' : '', x.chem || '']; }) },
       blocks: []
     };
     if(r.missing.length) out.blocks.push({ title: (n++) + '. 미이수자 : ' + r.missing.length + '명', head: ['번호', '성명', '부서', '교육', '구분', '입사 · 이동일', '기한', '상태'], w: [7, 12, 14, 12, 15, 15, 13, 12],
@@ -23933,6 +23994,9 @@ button:focus-visible,a:focus-visible,.fc:focus-visible,select:focus-visible,inpu
 .rp-sh{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;margin:18px 0 10px}.rp-sh b{font-size:18px;color:#1E1E1C}.rp-sh span{font-size:13px;color:#5A5650}
 .rp-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
 .rp-k{background:#fff;border:1px solid #DDDBD5;border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.rp-note{margin:6px 0;padding:7px 10px;border:1px solid #E9C46A;background:#FFF8E6;border-radius:8px;font-size:12.5px;color:#6E4A00}
+.rp-note summary{cursor:pointer;font-weight:700}.rp-note div{margin-top:6px;max-height:160px;overflow:auto}
+.rp-est{color:#8A5A00!important;font-weight:700}
 .rp-k span{font-size:13px;color:#45423D;font-weight:600}.rp-k b{font-size:24px;color:#1E1E1C;letter-spacing:-.02em}.rp-k em{font-style:normal;font-size:12px;color:#5A5650}
 .rp-k.warn b{color:#A3302A}
 .rp-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
