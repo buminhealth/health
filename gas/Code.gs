@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
-const SERVER_VERSION = 'v21.62 (2026-11-27)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
+const SERVER_VERSION = 'v21.63 (2026-11-28)';   // 관리자 화면에 표시 — 배포된 서버가 최신인지 확인용
 const PROPS = PropertiesService.getScriptProperties();
 const TZ = 'Asia/Seoul';
 
@@ -4618,6 +4618,16 @@ function monthlyReport_(req) {
   const pBy = {};
   people.forEach(p => { pBy[pkey_(p.no, p.name)] = p; });
   const recsOf = k => recs.filter(r => pkey_(r.no, r.name) === k);
+  const joinOf = r => { const e = empBy[pkey_(r.no, r.name)]; return e ? normDate_(e.joinDate) || '' : ''; };
+  const movedIn = (r) => moves.some(m => pkey_(m.no, m.name) === pkey_(r.no, r.name) && inR(m.date, from, to) && String(r.ds) >= m.date && sameDept_(deptAlias_(m.to), deptAlias_(r.dept)));
+  // v21.62 교육 실시 구분: 신규입사(입사 30일 안) · 부서이동(이동 기록) · 부서이동 추정(입사 30일 넘었는데 이동 기록 없음) · 확인 필요(입사일 없음)
+  const kindOf = r => {
+    if (movedIn(r)) return '부서이동';
+    const k = pkey_(r.no, r.name), j = joinOf(r), ds = String(r.ds || '').slice(0, 10);
+    if (moves.some(m => pkey_(m.no, m.name) === k && m.date <= ds && sameDept_(deptAlias_(m.to), deptAlias_(r.dept)))) return '부서이동';
+    if (!j || !/^\d{4}-\d{2}-\d{2}$/.test(ds)) return '확인 필요';
+    return ds <= addDays_(j, NH_LATE_DAYS) ? '신규입사' : '부서이동 추정';
+  };
 
   // 기간 안 교육 대상자: 신규입사(입사일) + 부서이동(이동일)
   const targetsOf = (a, b) => {
@@ -4645,6 +4655,14 @@ function monthlyReport_(req) {
       add({ key: k, name: p.name, no: p.no, dept: p.dept, need: p.need, kind: '부서이동', date: m.date, from: m.from,
             done: fresh.length > 0, status: fresh.length ? '이수' : '미이수', lastEdu: fresh[0] || '' });
     });
+    // v21.63 이 기간에 교육했는데 대상에 없는 사람 중 부서이동(기록) · 부서이동 추정(입사 30일 넘음 · 이동 기록 없음)은 그 부서의 부서이동 대상 · 이수로 셈
+    //  (예: 공급실 교육 실시 1명인데 대상 0 · 이수 0으로 보이던 문제)
+    recs.filter(r => inR(r.ds, a, b)).forEach(r => {
+      const k = pkey_(r.no, r.name); if (out[k]) return;
+      const kd = kindOf(r); if (kd !== '부서이동' && kd !== '부서이동 추정') return;
+      add({ key: k, name: r.name, no: r.no, dept: deptAlias_(r.dept), need: r.special ? '특별' : 'MSDS', kind: '부서이동', est: kd === '부서이동 추정',
+            date: String(r.ds || '').slice(0, 10), done: true, status: '이수', lastEdu: String(r.ds || '').slice(0, 10) });
+    });
     return list;
   };
   const conductedOf = (a, b) => recs.filter(r => inR(r.ds, a, b));
@@ -4655,16 +4673,6 @@ function monthlyReport_(req) {
   const typeStat = need => {
     const t = targets.filter(x => x.need === need), c = conducted.filter(r => (need === '특별') === !!r.special);
     return { target: t.length, done: t.filter(x => x.done).length, rate: pct(t.filter(x => x.done).length, t.length), rows: c.length, persons: persons(c) };
-  };
-  const joinOf = r => { const e = empBy[pkey_(r.no, r.name)]; return e ? normDate_(e.joinDate) || '' : ''; };
-  const movedIn = (r) => moves.some(m => pkey_(m.no, m.name) === pkey_(r.no, r.name) && inR(m.date, from, to) && String(r.ds) >= m.date && sameDept_(deptAlias_(m.to), deptAlias_(r.dept)));
-  // v21.62 교육 실시 구분: 신규입사(입사 30일 안) · 부서이동(이동 기록) · 부서이동 추정(입사 30일 넘었는데 이동 기록 없음) · 확인 필요(입사일 없음)
-  const kindOf = r => {
-    if (movedIn(r)) return '부서이동';
-    const k = pkey_(r.no, r.name), j = joinOf(r), ds = String(r.ds || '').slice(0, 10);
-    if (moves.some(m => pkey_(m.no, m.name) === k && m.date <= ds && sameDept_(deptAlias_(m.to), deptAlias_(r.dept)))) return '부서이동';
-    if (!j || !/^\d{4}-\d{2}-\d{2}$/.test(ds)) return '확인 필요';
-    return ds <= addDays_(j, NH_LATE_DAYS) ? '신규입사' : '부서이동 추정';
   };
   const roster = conducted.map(r => ({ type: r.special ? '특별안전보건교육' : 'MSDS교육', special: r.special, moved: movedIn(r), kind: kindOf(r), dept: deptAlias_(r.dept), name: r.name, no: r.no,
              join: joinOf(r), ds: r.ds, de: r.de, hrs: r.hrs, chem: r.chem, manual: r.manual }))
@@ -4728,12 +4736,12 @@ function monthlyReport_(req) {
 
   const out = {
     success: true, from: from, to: to, label: label, tag: tag, oneMonth: oneMonth, year: fy, month: fm, ym: tag, made: todayKst_(),
-    summary: { target: targets.length, newHire: targets.filter(x => x.kind === '신규입사').length, moved: targets.filter(x => x.kind === '부서이동').length,
+    summary: { target: targets.length, newHire: targets.filter(x => x.kind === '신규입사').length, moved: targets.filter(x => x.kind === '부서이동').length, movedEst: targets.filter(x => x.est).length,
                done: total.done, rate: total.rate, conducted: total.conducted, rows: total.rows,
                byKind: ['신규입사', '부서이동', '부서이동 추정', '확인 필요'].reduce((o, k) => { o[k] = Object.keys(roster.filter(x => x.kind === k).reduce((a, x) => { a[pkey_(x.no, x.name)] = 1; return a; }, {})).length; return o; }, {}) },
     excluded: recsAll.filter(r => orphan.has(r.row) && inR(r.ds, from, to)).map(r => ({ name: r.name, dept: deptAlias_(r.dept), ds: r.ds, type: r.special ? '특별안전보건교육' : 'MSDS교육' })),
     byType: { '특별': typeStat('특별'), 'MSDS': typeStat('MSDS') },
-    targets: targets.map(x => ({ name: x.name, dept: x.dept, need: x.need, kind: x.kind, date: x.date, done: x.done })),
+    targets: targets.map(x => ({ name: x.name, dept: x.dept, need: x.need, kind: x.kind, est: !!x.est, date: x.date, done: x.done })),
     roster: roster, missing: missing, ppe: ppe, chem: chem,
     deptNow: (st.depts || []).map(d => ({ dept: d.dept, total: d.total || 0, done: d.done || 0, rate: pct(d.done || 0, d.total || 0) })),   // v21.31 부서 전체 이수율 (지금 직원 기준)
     series: { months: months, quarters: quarters.map(q => { const c = Object.assign({}, q); delete c.idx; return c; }), year: total, total: total, depts: depts }
